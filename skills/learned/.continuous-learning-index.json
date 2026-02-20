@@ -1,0 +1,34 @@
+{
+  "session_history": [
+    {
+      "fingerprint": "c81a5ce9d16c",
+      "session_id": "dry-run-session-home-001",
+      "timestamp": "2026-02-17T14:19:32.536Z",
+      "generated": [
+        "learned-project_specific-b00ddd17c49d.draft.md",
+        "learned-debugging_techniques-28ba356fe6a1.draft.md",
+        "learned-error_resolution-190decbf80a9.draft.md"
+      ]
+    }
+  ],
+  "skill_signatures": [
+    {
+      "signature": "b00ddd17c49d",
+      "category": "project_specific",
+      "file": "learned-project_specific-b00ddd17c49d.draft.md",
+      "timestamp": "2026-02-17T14:19:32.535Z"
+    },
+    {
+      "signature": "28ba356fe6a1",
+      "category": "debugging_techniques",
+      "file": "learned-debugging_techniques-28ba356fe6a1.draft.md",
+      "timestamp": "2026-02-17T14:19:32.536Z"
+    },
+    {
+      "signature": "190decbf80a9",
+      "category": "error_resolution",
+      "file": "learned-error_resolution-190decbf80a9.draft.md",
+      "timestamp": "2026-02-17T14:19:32.536Z"
+    }
+  ]
+}

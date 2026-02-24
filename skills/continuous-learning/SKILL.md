@@ -38,6 +38,16 @@ This skill runs as a **Stop hook** at the end of each OpenCode session:
      - Tagged by pattern type(s)
      - Saved with a short “When to use / Steps / Examples / Caveats” template
 
+## Learned File Naming
+
+Learned skills are written with human-friendly names derived from the pattern title,
+plus a date stamp to avoid collisions:
+
+- `learned-<title-slug>-YYYY-MM-DD.draft.md`
+- `learned-<title-slug>-YYYY-MM-DD-2.draft.md` (if multiple in same day)
+
+The content also includes a `signature:` in frontmatter for deduplication.
+
 ## Files / Layout
 
 Recommended structure:

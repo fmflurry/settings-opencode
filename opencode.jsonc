@@ -9,6 +9,7 @@
     "skills/tdd-workflow/SKILL.md",
     "skills/security-review/SKILL.md",
     "skills/coding-standards/SKILL.md",
+    "skills/learned-skillbook/SKILL.md",
   ],
   "agent": {
     "build": {

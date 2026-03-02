@@ -12,6 +12,5 @@
   ],
   "ignore_patterns": ["simple_typos", "one_time_fixes", "external_api_issues"],
   "max_skills_per_session": 3,
-  "skill_name_prefix": "learned-",
   "dedupe_window_sessions": 20
 }

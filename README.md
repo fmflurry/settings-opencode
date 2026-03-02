@@ -64,6 +64,7 @@ Ce depot est un "dotfiles repo" pour OpenCode. Il versionne une configuration co
 ### Structure du repo
 
 - Entree: `opencode.jsonc`
+- TUI (theme): `tui.json`
 - Skills (instructions): `skills/*/SKILL.md`
 - Prompts agents: `prompts/agents/*.txt`
 - Commandes slash (templates): `commands/*.md`
@@ -90,7 +91,7 @@ npm ci
 `opencode.jsonc` est la couche "wiring":
 
 - `instructions`: charge des skills globaux au debut de chaque session.
-  - Dans ce setup: `skills/tdd-workflow/SKILL.md`, `skills/security-review/SKILL.md`, `skills/coding-standards/SKILL.md`, `skills/learned-skillbook/SKILL.md`.
+  - Dans ce setup: `skills/tdd-workflow/SKILL.md`, `skills/security-review/SKILL.md`, `skills/coding-standards/SKILL.md`.
 - `default_agent`: `build` (agent principal pour la plupart des taches).
 - `agent`: definit les sous-agents specialises (planning, review, securite, TDD, etc.) et leurs prompts (`prompts/agents/*.txt`).
 - `command`: mappe des slash commands (`/plan`, `/tdd`, `/security`, ...) vers des templates dans `commands/*.md`.
@@ -130,7 +131,6 @@ Les skills dans `skills/` sont chargees via `instructions`.
 - `skills/tdd-workflow/SKILL.md`: tests avant code, strategie unit/integration/e2e, cible 80%+.
 - `skills/security-review/SKILL.md`: checklist securite (secrets, validation, authz, XSS/CSRF, deps).
 - `skills/coding-standards/SKILL.md`: conventions TypeScript/JS (naming, immutabilite, erreurs, perf).
-- `skills/learned-skillbook/SKILL.md`: bundle de patterns "learned" curates.
 
 Pourquoi: les skills sont le garde-fou "toujours actif". Les commandes changent le mode de travail, mais les skills restent le cadre.
 
@@ -174,7 +174,7 @@ But: transformer une session "utile" en patterns reutilisables.
   - detecte des patterns (debug, corrections user, conventions, etc.)
   - ecrit des drafts dans `~/.config/opencode/skills/learned/` selon `skills/continuous-learning/config.json`
 
-Pourquoi: capturer automatiquement les "bonnes manieres" observees, puis les reincorporer dans le contexte via `skills/learned-skillbook/SKILL.md`.
+Pourquoi: capturer automatiquement les "bonnes manieres" observees, puis les garder dans `skills/learned/` pour curation et reuse.
 
 <a id="flow-fr"></a>
 ### Comment tout s'emboite
@@ -217,6 +217,7 @@ This is an OpenCode dotfiles repo. It versions a complete setup: main + speciali
 ### Repository layout
 
 - Entry point: `opencode.jsonc`
+- TUI (theme): `tui.json`
 - Skills (instructions): `skills/*/SKILL.md`
 - Agent prompts: `prompts/agents/*.txt`
 - Slash commands (templates): `commands/*.md`
@@ -281,7 +282,6 @@ Skills are loaded via `instructions` and apply continuously.
 - `skills/tdd-workflow/SKILL.md`: tests-first, unit/integration/e2e strategy, 80%+ target.
 - `skills/security-review/SKILL.md`: security checklist (secrets, validation, authz, XSS/CSRF, deps).
 - `skills/coding-standards/SKILL.md`: TypeScript/JS conventions.
-- `skills/learned-skillbook/SKILL.md`: curated bundle of learned patterns.
 
 Why: commands change the workflow, but skills define the baseline expectations.
 
@@ -325,7 +325,7 @@ Goal: turn a "valuable" session into reusable patterns.
   - detects patterns (debugging flow, user corrections, conventions, etc.)
   - writes draft skills to `~/.config/opencode/skills/learned/` based on `skills/continuous-learning/config.json`
 
-Why: automatically capture effective behaviors and re-inject them into future sessions via `skills/learned-skillbook/SKILL.md`.
+Why: automatically capture effective behaviors and keep them in `skills/learned/` for curation and reuse.
 
 <a id="flow-en"></a>
 ### How it fits together

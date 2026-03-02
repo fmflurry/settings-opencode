@@ -1,15 +1,11 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  // Theme configuration
-  // "theme": "nord",
-  "theme": "kanagawa",
   "autoupdate": true,
   "default_agent": "build",
   "instructions": [
     "skills/tdd-workflow/SKILL.md",
     "skills/security-review/SKILL.md",
     "skills/coding-standards/SKILL.md",
-    "skills/learned-skillbook/SKILL.md",
   ],
   "agent": {
     "build": {

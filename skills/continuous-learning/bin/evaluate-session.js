@@ -19,7 +19,6 @@ const DEFAULT_CONFIG = {
   ],
   ignore_patterns: ["simple_typos", "one_time_fixes", "external_api_issues"],
   max_skills_per_session: 3,
-  skill_name_prefix: "learned-",
   dedupe_window_sessions: 20,
 };
 
@@ -178,6 +177,46 @@ function expandHome(input) {
   return input;
 }
 
+function slugifyAscii(input) {
+  return String(input || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+/, "")
+    .replace(/-+$/, "");
+}
+
+async function fileExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function pickLearnedFileName({ learnedRoot, baseName, extension }) {
+  const normalizedBase = slugifyAscii(baseName);
+  const initial = `${normalizedBase}${extension}`;
+  const initialPath = path.join(learnedRoot, initial);
+  if (!(await fileExists(initialPath))) {
+    return initial;
+  }
+
+  let counter = 2;
+  // Avoid unbounded loops; we will never hit this in practice.
+  while (counter < 1000) {
+    const candidate = `${normalizedBase}-${counter}${extension}`;
+    const candidatePath = path.join(learnedRoot, candidate);
+    if (!(await fileExists(candidatePath))) {
+      return candidate;
+    }
+    counter += 1;
+  }
+
+  throw new Error("Unable to pick a unique learned skill filename");
+}
+
 async function readJsonFile(filePath, fallback) {
   try {
     const raw = await fs.readFile(filePath, "utf8");
@@ -211,7 +250,7 @@ function isSafeSessionId(value) {
     return false;
   }
 
-  if (value.includes("\"") || value.includes("'") || value.includes(";")) {
+  if (value.includes('"') || value.includes("'") || value.includes(";")) {
     return false;
   }
 
@@ -227,11 +266,9 @@ function sqliteJsonQuery(dbPath, sql) {
   }
 
   try {
-    const result = spawnSync(
-      "sqlite3",
-      ["-cmd", ".mode json", dbPath, sql],
-      { encoding: "utf8" },
-    );
+    const result = spawnSync("sqlite3", ["-cmd", ".mode json", dbPath, sql], {
+      encoding: "utf8",
+    });
 
     if (!result || typeof result.status !== "number" || result.status !== 0) {
       return [];
@@ -322,8 +359,12 @@ function buildTranscriptFromOpencodeSqlite(sessionId) {
     const parts = partsByMessageID.get(messageID);
     const content = Array.isArray(parts)
       ? parts
-          .filter((part) => part && typeof part === "object" && part.type === "text")
-          .map((part) => (typeof part.text === "string" ? part.text.trim() : ""))
+          .filter(
+            (part) => part && typeof part === "object" && part.type === "text",
+          )
+          .map((part) =>
+            typeof part.text === "string" ? part.text.trim() : "",
+          )
           .filter((value) => value.length > 0)
           .join("\n\n")
       : "";
@@ -375,7 +416,11 @@ function renderPartToText(part) {
 
   if (part.type === "tool" && typeof part.tool === "string") {
     const state = part.state;
-    if (state && typeof state === "object" && typeof state.status === "string") {
+    if (
+      state &&
+      typeof state === "object" &&
+      typeof state.status === "string"
+    ) {
       if (state.status === "completed") {
         const title = typeof state.title === "string" ? state.title : "";
         return title
@@ -437,7 +482,8 @@ async function buildTranscriptFromOpencodeStorage(sessionId) {
       if (msg.sessionID !== sessionId) continue;
       if (typeof msg.id !== "string" || typeof msg.role !== "string") continue;
 
-      const created = msg.time && typeof msg.time.created === "number" ? msg.time.created : 0;
+      const created =
+        msg.time && typeof msg.time.created === "number" ? msg.time.created : 0;
       messages.push({
         id: msg.id,
         role: msg.role,
@@ -616,8 +662,199 @@ function collectExamples(text, keywords) {
   );
 }
 
+/**
+ * Extract a meaningful, descriptive slug from the session transcript
+ * by finding the most distinctive keyword phrases that co-occur with
+ * the pattern keywords. Produces names like "angular-facade-correction"
+ * instead of generic "error-resolution-pattern".
+ */
+function deriveDescriptiveSlug(text, patternName, keywords) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  // Collect lines that match pattern keywords
+  const matchingLines = [];
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    const hit = keywords.some((kw) => lower.includes(kw.toLowerCase()));
+    if (hit && line.length > 10 && line.length < 300) {
+      matchingLines.push(lower);
+    }
+    if (matchingLines.length >= 20) break;
+  }
+
+  if (matchingLines.length === 0) {
+    return slugifyAscii(patternName);
+  }
+
+  // Extract meaningful nouns/terms from matching lines
+  // Filter out common stop words and pattern keywords themselves
+  const stopWords = new Set([
+    "the",
+    "a",
+    "an",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "being",
+    "have",
+    "has",
+    "had",
+    "do",
+    "does",
+    "did",
+    "will",
+    "would",
+    "could",
+    "should",
+    "may",
+    "might",
+    "shall",
+    "can",
+    "need",
+    "must",
+    "to",
+    "of",
+    "in",
+    "for",
+    "on",
+    "with",
+    "at",
+    "by",
+    "from",
+    "as",
+    "into",
+    "through",
+    "during",
+    "before",
+    "after",
+    "above",
+    "below",
+    "between",
+    "under",
+    "again",
+    "further",
+    "then",
+    "once",
+    "here",
+    "there",
+    "when",
+    "where",
+    "why",
+    "how",
+    "all",
+    "each",
+    "every",
+    "both",
+    "few",
+    "more",
+    "most",
+    "other",
+    "some",
+    "such",
+    "no",
+    "not",
+    "only",
+    "own",
+    "same",
+    "so",
+    "than",
+    "too",
+    "very",
+    "just",
+    "because",
+    "but",
+    "and",
+    "or",
+    "if",
+    "while",
+    "this",
+    "that",
+    "these",
+    "those",
+    "it",
+    "its",
+    "i",
+    "you",
+    "he",
+    "she",
+    "we",
+    "they",
+    "me",
+    "him",
+    "her",
+    "us",
+    "them",
+    "my",
+    "your",
+    "his",
+    "our",
+    "their",
+    "what",
+    "which",
+    "who",
+    "whom",
+    "user",
+    "assistant",
+    "message",
+    "tool",
+    "text",
+    "file",
+    "line",
+    "error",
+    "fix",
+    "use",
+    "using",
+    "used",
+    "also",
+    "like",
+    "get",
+    "set",
+    "new",
+    "old",
+    "see",
+    "try",
+    "run",
+    "make",
+    "let",
+    "put",
+  ]);
+
+  const patternKwSet = new Set(keywords.map((k) => k.toLowerCase()));
+
+  const wordFreq = new Map();
+  const joined = matchingLines.join(" ");
+  const words = joined.match(/[a-z][a-z0-9]{2,}/g) || [];
+
+  for (const word of words) {
+    if (stopWords.has(word) || patternKwSet.has(word)) continue;
+    wordFreq.set(word, (wordFreq.get(word) || 0) + 1);
+  }
+
+  // Pick top 2-3 most frequent distinctive terms
+  const sorted = [...wordFreq.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([word]) => word);
+
+  if (sorted.length === 0) {
+    return slugifyAscii(patternName);
+  }
+
+  // Combine with a short category hint
+  const categoryHint = patternName.replace(/_/g, "-");
+  const descriptive = sorted.join("-");
+  return slugifyAscii(`${descriptive}-${categoryHint}`);
+}
+
 function buildSkillContent({
   skillName,
+  signature,
   title,
   category,
   tags,
@@ -635,6 +872,7 @@ function buildSkillContent({
     "---",
     `name: ${skillName}`,
     `title: ${title}`,
+    signature ? `signature: ${signature}` : null,
     "version: 1.0.0",
     "source: continuous-learning",
     `category: ${category}`,
@@ -643,7 +881,9 @@ function buildSkillContent({
     `message_count: ${messageCount}`,
     `tags: [${tags.join(", ")}]`,
     "---",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   const sectionExamples = examples.map((e) => `- ${e}`).join("\n");
   const sectionSteps = steps.map((s, i) => `${i + 1}. ${s}`).join("\n");
@@ -705,7 +945,9 @@ async function main() {
     try {
       rawTranscript = await fs.readFile(transcriptPath, "utf8");
     } catch {
-      process.stdout.write("Transcript file not readable; skipping extraction\n");
+      process.stdout.write(
+        "Transcript file not readable; skipping extraction\n",
+      );
       return;
     }
   } else if (sessionId) {
@@ -783,14 +1025,27 @@ async function main() {
       continue;
     }
 
-    const skillName = `${config.skill_name_prefix || "learned-"}${item.name}-${signature}`;
     const extension = config.auto_approve ? ".md" : ".draft.md";
-    const fileName = `${skillName}${extension}`;
+
+    const descriptiveSlug = deriveDescriptiveSlug(
+      normalized.text,
+      item.name,
+      def.keywords,
+    );
+
+    const fileName = await pickLearnedFileName({
+      learnedRoot,
+      baseName: descriptiveSlug,
+      extension,
+    });
+
+    const skillName = path.basename(fileName, extension);
     const outputPath = path.join(learnedRoot, fileName);
     const examples = collectExamples(normalized.text, def.keywords);
 
     const content = buildSkillContent({
       skillName,
+      signature,
       title: def.title,
       category: item.name,
       tags: def.tags,

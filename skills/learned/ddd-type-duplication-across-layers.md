@@ -16,7 +16,6 @@ grep -r "'Value1'.*'Value2'.*'Value3'" src/app/<domain>/
 ```
 
 Common locations for duplicated types in this codebase:
-
 - `domains/models/` - Domain type (primary)
 - `infrastructure/api/request/` - API request types
 - `infrastructure/api/response/` - API response types
@@ -26,16 +25,11 @@ Common locations for duplicated types in this codebase:
 
 ```typescript
 // Domain model (updated)
-export type CalculationBase =
-  | "AmountExclTax"
-  | "Hectoliter"
-  | "Quantity"
-  | "Kilogram"
-  | "Liter";
+export type CalculationBase = 'AmountExclTax' | 'Hectoliter' | 'Quantity' | 'Kilogram' | 'Liter';
 
 // API request model (forgotten) - build break
 export interface CreateTaxRequest {
-  calculationBase: "AmountExclTax" | "Hectoliter" | "Quantity"; // missing new values!
+  calculationBase: 'AmountExclTax' | 'Hectoliter' | 'Quantity'; // missing new values!
 }
 ```
 

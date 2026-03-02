@@ -1,12 +1,13 @@
 ---
-name: learned-project_specific-b00ddd17c49d
+name: clean-src-app-project-specific-2
 title: Project-Specific Convention Pattern
+signature: e7993a2e8c6f
 version: 1.0.0
 source: continuous-learning
 category: project_specific
 status: review-required
-session_id: dry-run-session-home-001
-message_count: 12
+session_id: ses_353cf4fd4ffejqs3ph0fJ2loZX
+message_count: 38
 tags: [project-conventions, consistency]
 ---
 
@@ -22,8 +23,8 @@ Use this pattern when handling recurring project specific workflows.
 4. List anti-patterns that should be rejected in future work.
 
 ## Examples
-- user: Actually, use the existing facade pattern instead of calling use cases directly.
-- assistant: Good correction. I will revise the implementation to keep architecture conventions.
+- We currently have a 'mixed architecture', because this is an existing webapp with 'modules to refactor'.
+- The architecture we want to promote is the 'Clean Architecture" such as implemented in @src/app/sales/
 
 ## Caveats
 - Conventions evolve; revalidate periodically against source docs.

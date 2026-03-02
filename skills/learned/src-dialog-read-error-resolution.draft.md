@@ -1,12 +1,13 @@
 ---
-name: learned-error_resolution-190decbf80a9
+name: src-dialog-read-error-resolution
 title: Error Resolution Pattern
+signature: ce3a1952d80a
 version: 1.0.0
 source: continuous-learning
 category: error_resolution
 status: review-required
-session_id: dry-run-session-home-001
-message_count: 12
+session_id: ses_3ad90ab6effeAHtCvfRFiURQXX
+message_count: 318
 tags: [error-resolution, stability]
 ---
 
@@ -22,8 +23,8 @@ Use this pattern when handling recurring error resolution workflows.
 4. Document guardrails to avoid recurrence.
 
 ## Examples
-- user: I hit an error in checkout and now tests are failing with a stack trace.
-- assistant: Let's reproduce the issue and inspect logs before applying a fix.
+- [tool:read] src/shared/ui/components/dialog/mobile-error-dialog/mobile-error-dialog.component.html
+- [tool:read] src/shared/ui/components/dialog/mobile-error-dialog/mobile-error-dialog.component.scss
 
 ## Caveats
 - Do not overfit to a single failing example if broader behavior differs.

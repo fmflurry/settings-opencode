@@ -1,12 +1,13 @@
 ---
-name: learned-debugging_techniques-28ba356fe6a1
+name: config-opencode-skills-debugging-techniques
 title: Structured Debugging Pattern
+signature: e59717f35e0c
 version: 1.0.0
 source: continuous-learning
 category: debugging_techniques
 status: review-required
-session_id: dry-run-session-home-001
-message_count: 12
+session_id: ses_3636de0c5ffeb9npORZrmfI454
+message_count: 59
 tags: [debugging, analysis]
 ---
 
@@ -22,8 +23,8 @@ Use this pattern when handling recurring debugging techniques workflows.
 4. Validate fix with focused and then broader checks.
 
 ## Examples
-- user: I hit an error in checkout and now tests are failing with a stack trace.
-- assistant: Let's reproduce the issue and inspect logs before applying a fix.
+- user: can you investigate to ensure that my 'learning' skill and scripts are running effectively when I end a session ?
+- - `~/.config/opencode/skills/learned/dialog-mobile-info-debugging-techniques.draft.md`
 
 ## Caveats
 - Avoid noisy instrumentation that obscures signal.

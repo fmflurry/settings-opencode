@@ -40,12 +40,13 @@ This skill runs as a **Stop hook** at the end of each OpenCode session:
 
 ## Learned File Naming
 
-Learned skills are written with human-friendly names derived from the pattern title,
-plus a date stamp to avoid collisions:
+Learned skills are written with meaningful, descriptive names derived from the
+session content rather than generic pattern categories:
 
-- `learned-<title-slug>-YYYY-MM-DD.draft.md`
-- `learned-<title-slug>-YYYY-MM-DD-2.draft.md` (if multiple in same day)
+- `<descriptive-slug>.draft.md` (e.g., `angular-facade-debugging.draft.md`)
+- `<descriptive-slug>-2.draft.md` (counter suffix for collisions)
 
+The slug is built from the most distinctive terms found in the session transcript.
 The content also includes a `signature:` in frontmatter for deduplication.
 
 ## Files / Layout
@@ -81,7 +82,6 @@ Edit `config.json`:
   ],
   "ignore_patterns": ["simple_typos", "one_time_fixes", "external_api_issues"],
   "max_skills_per_session": 3,
-  "skill_name_prefix": "learned-",
   "dedupe_window_sessions": 20
 }
 ```

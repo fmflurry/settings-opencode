@@ -18,26 +18,26 @@ TranslocoTestingModule.forRoot({
     taxes: {
       create: {
         summary: {
-          calculation: { base: { kilogram: "kilogrammes" } },
-        },
-      },
-    },
-  },
-});
+          calculation: { base: { kilogram: 'kilogrammes' } }
+        }
+      }
+    }
+  }
+})
 
 // CORRECT - works for both directives and translate() calls
 TranslocoTestingModule.forRoot({
   langs: {
-    "fr-FR": {
-      "taxes.create.summary.calculation.base.kilogram": "kilogrammes",
-      "taxes.create.summary.calculation.base.liter": "litres",
-    },
+    'fr-FR': {
+      'taxes.create.summary.calculation.base.kilogram': 'kilogrammes',
+      'taxes.create.summary.calculation.base.liter': 'litres',
+    }
   },
   translocoConfig: {
-    availableLangs: ["fr-FR"],
-    defaultLang: "fr-FR",
-  },
-});
+    availableLangs: ['fr-FR'],
+    defaultLang: 'fr-FR',
+  }
+})
 ```
 
 ## When to Use

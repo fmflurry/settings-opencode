@@ -13,9 +13,7 @@ const PLUGINS: NamedPlugin[] = [
   { name: "continuous-learning-stop-hook", plugin: ContinuousLearningStopHookPlugin },
 ];
 
-function isHookFunction(
-  value: unknown,
-): value is (...args: readonly unknown[]) => unknown {
+function isHookFunction(value: unknown): value is (...args: readonly unknown[]) => unknown {
   return typeof value === "function";
 }
 
@@ -43,10 +41,7 @@ async function safeLog(
   }
 }
 
-function mergeHooks(
-  input: PluginInput,
-  namedHooks: Array<{ name: string; hooks: Hooks }>,
-): Hooks {
+function mergeHooks(input: PluginInput, namedHooks: Array<{ name: string; hooks: Hooks }>): Hooks {
   const merged: Record<string, unknown> = {};
 
   const toolMaps: Array<Record<string, unknown>> = [];
@@ -62,10 +57,7 @@ function mergeHooks(
   }
 
   const authHooks = namedHooks
-    .map((item) => ({
-      name: item.name,
-      auth: (item.hooks as Record<string, unknown>).auth,
-    }))
+    .map((item) => ({ name: item.name, auth: (item.hooks as Record<string, unknown>).auth }))
     .filter((item) => item.auth !== undefined);
   if (authHooks.length > 1) {
     void safeLog(input.client, "warn", "Multiple auth hooks detected; using first", {

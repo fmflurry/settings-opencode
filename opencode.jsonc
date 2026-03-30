@@ -7,6 +7,7 @@
     "skills/tdd-workflow/SKILL.md",
     "skills/security-review/SKILL.md",
     "skills/coding-standards/SKILL.md",
+    "skills/git-workflow/SKILL.md",
     "skills/learned-skillbook/SKILL.md",
   ],
   "agent": {
@@ -164,8 +165,29 @@
         "glob": true,
       },
     },
+    "git-specialist": {
+      "description": "Git workflow specialist for branch naming, commit messages, safe staging, commits, pushes, and PR-ready git hygiene.",
+      "mode": "subagent",
+      "model": "openai/gpt-5.4-mini",
+      "reasoningEffort": "medium",
+      "prompt": "{.config/opencode/prompts/agents/git-specialist.txt}",
+      "tools": {
+        "bash": true,
+        "read": false,
+        "write": false,
+        "edit": false,
+        "grep": false,
+        "glob": false,
+      },
+    },
   },
   "command": {
+    "git": {
+      "description": "Handle git operations with enforced branch and commit conventions",
+      "template": "{file:commands/git.md}\n\n$ARGUMENTS",
+      "agent": "git-specialist",
+      "subtask": true,
+    },
     "plan": {
       "description": "Create a detailed implementation plan for complex features",
       "template": "{file:commands/plan.md}\n\n$ARGUMENTS",

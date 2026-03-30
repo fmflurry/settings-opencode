@@ -1,0 +1,13 @@
+{
+	"$schema": "https://ocx.kdco.dev/schemas/profile.json",
+	"registries": {},
+	"renameWindow": true,
+	"exclude": [
+		"**/CLAUDE.md",
+		"**/CONTEXT.md",
+		"**/.opencode/**",
+		"**/opencode.jsonc",
+		"**/opencode.json"
+	],
+	"include": []
+}

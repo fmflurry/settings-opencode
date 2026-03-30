@@ -18,7 +18,8 @@ Use this skill when you want:
 - Automatic pattern extraction from OpenCode sessions
 - A **Stop hook** that evaluates the just-finished session transcript
 - A workflow to review/curate learned skills in:
-  - `~/.config/opencode/skills/learned/`
+  - `~/.config/opencode/skills/<learned-skill>/SKILL.md`
+  - `~/.config/opencode/skills/learned/.continuous-learning-index.json`
 - Tuning for extraction thresholds, categories, and auto-approval
 - Comparing skill-based v1 extraction vs “instinct-based” v2 approaches
 
@@ -31,20 +32,22 @@ This skill runs as a **Stop hook** at the end of each OpenCode session:
 2. **Pattern Detection**
    - Scans transcript for repeated solutions, corrections, debugging flows, and conventions
 3. **Skill Extraction**
-   - Writes one or more skill files into:
-     - `~/.config/opencode/skills/learned/`
-   - Each extracted skill is:
-     - Named deterministically
-     - Tagged by pattern type(s)
-     - Saved with a short “When to use / Steps / Examples / Caveats” template
+    - Writes one or more skill directories into:
+      - `~/.config/opencode/skills/<descriptive-slug>/SKILL.md`
+    - Stores learning metadata in:
+      - `~/.config/opencode/skills/learned/.continuous-learning-index.json`
+    - Each extracted skill is:
+      - Named deterministically
+      - Tagged by pattern type(s)
+      - Saved with a short “When to use / Steps / Examples / Caveats” template
 
 ## Learned File Naming
 
 Learned skills are written with meaningful, descriptive names derived from the
 session content rather than generic pattern categories:
 
-- `<descriptive-slug>.draft.md` (e.g., `angular-facade-debugging.draft.md`)
-- `<descriptive-slug>-2.draft.md` (counter suffix for collisions)
+- `<descriptive-slug>/SKILL.md` (e.g., `angular-facade-debugging/SKILL.md`)
+- `<descriptive-slug>-2/SKILL.md` (counter suffix for collisions)
 
 The slug is built from the most distinctive terms found in the session transcript.
 The content also includes a `signature:` in frontmatter for deduplication.
@@ -61,7 +64,8 @@ Recommended structure:
 
 Learned output:
 
-- `~/.config/opencode/skills/learned/*.md`
+- `~/.config/opencode/skills/<descriptive-slug>/SKILL.md`
+- `~/.config/opencode/skills/learned/.continuous-learning-index.json`
 
 ## Configuration
 
@@ -72,7 +76,8 @@ Edit `config.json`:
   "min_session_length": 10,
   "extraction_threshold": "medium",
   "auto_approve": false,
-  "learned_skills_path": "~/.config/opencode/skills/learned/",
+  "skills_root_path": "~/.config/opencode/skills/",
+  "learned_metadata_path": "~/.config/opencode/skills/learned/",
   "patterns_to_detect": [
     "error_resolution",
     "user_corrections",
@@ -85,3 +90,11 @@ Edit `config.json`:
   "dedupe_window_sessions": 20
 }
 ```
+
+Legacy note: `learned_skills_path` is still supported for backward compatibility.
+If it points to `.../skills/learned/`, the generator will still write skills to
+`.../skills/<slug>/SKILL.md` and keep metadata in the `learned` directory.
+
+Shared setup note: if you want learned skills shared between OpenCode and
+ClaudeCode, point `skills_root_path` to `~/.claude/skills/` and
+`learned_metadata_path` to `~/.claude/skills/learned/`.

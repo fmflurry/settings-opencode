@@ -1,0 +1,91 @@
+{
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "env": {
+    "API_TIMEOUT_MS": "3000000",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "80"
+  },
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "Bash",
+      "AskUserQuestion",
+      "Task",
+      "TaskCreate",
+      "TaskGet",
+      "TaskUpdate",
+      "TaskList"
+    ],
+    "deny": [
+      "Write(*.env)",
+      "Write(*secrets*)",
+      "Write(*.key)",
+      "Write(*.pem)",
+      "Write(*credentials*)",
+      "Edit(*.env)",
+      "Edit(*secrets*)",
+      "Edit(*.key)",
+      "Edit(*.pem)",
+      "Edit(*credentials*)",
+      "Bash(sudo*)",
+      "Bash(*> /dev/)",
+      "Bash(chmod 777*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/pre-tool-use.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/plugins/marketplaces/everything-claude-code/skills/continuous-learning-v2/hooks/observe.sh pre"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/plugins/marketplaces/everything-claude-code/skills/continuous-learning-v2/hooks/observe.sh post"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/stop.sh"
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "everything-claude-code@everything-claude-code": true,
+    "csharp-lsp@claude-plugins-official": true
+  },
+  "skipDangerousModePermissionPrompt": true
+}

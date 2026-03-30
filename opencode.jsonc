@@ -2,16 +2,18 @@
   "$schema": "https://opencode.ai/config.json",
   "autoupdate": true,
   "default_agent": "build",
+  "plugin": ["@tarquinen/opencode-dcp@latest"],
   "instructions": [
     "skills/tdd-workflow/SKILL.md",
     "skills/security-review/SKILL.md",
     "skills/coding-standards/SKILL.md",
+    "skills/learned-skillbook/SKILL.md",
   ],
   "agent": {
     "build": {
       "description": "Primary coding agent for development work",
       "mode": "primary",
-      "model": "openai/gpt-5.2",
+      "model": "openai/gpt-5.4",
       "reasoningEffort": "high",
       "tools": {
         "write": true,
@@ -23,7 +25,8 @@
     "planner": {
       "description": "Expert planning specialist for complex features and refactoring. Use for implementation planning, architectural changes, or complex refactoring.",
       "mode": "subagent",
-      "model": "anthropic/claude-opus-4-5",
+      "model": "openai/gpt-5.4",
+      "reasoningEffort": "xhigh",
       "prompt": "{.config/opencode/prompts/agents/planner.txt}",
       "tools": {
         "read": true,
@@ -35,7 +38,7 @@
     "architect": {
       "description": "Software architecture specialist for system design, scalability, and technical decision-making.",
       "mode": "subagent",
-      "model": "openai/gpt-5.2",
+      "model": "openai/gpt-5.4",
       "reasoningEffort": "high",
       "prompt": "{.config/opencode/prompts/agents/architect.txt}",
       "tools": {
@@ -48,7 +51,7 @@
     "code-reviewer": {
       "description": "Expert code review specialist. Reviews code for quality, security, and maintainability. Use immediately after writing or modifying code.",
       "mode": "subagent",
-      "model": "openai/gpt-5.2",
+      "model": "openai/gpt-5.4",
       "reasoningEffort": "high",
       "prompt": "{.config/opencode/prompts/agents/code-reviewer.txt}",
       "tools": {
@@ -62,7 +65,7 @@
     "security-reviewer": {
       "description": "Security vulnerability detection and remediation specialist. Use after writing code that handles user input, authentication, API endpoints, or sensitive data.",
       "mode": "subagent",
-      "model": "openai/gpt-5.2",
+      "model": "openai/gpt-5.4",
       "reasoningEffort": "high",
       "prompt": "{.config/opencode/prompts/agents/security-reviewer.txt}",
       "tools": {
@@ -77,7 +80,7 @@
     "tdd-guide": {
       "description": "Test-Driven Development specialist enforcing write-tests-first methodology. Use when writing new features, fixing bugs, or refactoring code. Ensures 80%+ test coverage.",
       "mode": "subagent",
-      "model": "openai/gpt-5.3-codex",
+      "model": "openai/gpt-5.4",
       "reasoningEffort": "high",
       "prompt": "{.config/opencode/prompts/agents/tdd-guide.txt}",
       "tools": {
@@ -91,7 +94,7 @@
     "build-error-resolver": {
       "description": "Build and TypeScript error resolution specialist. Use when build fails or type errors occur. Fixes build/type errors only with minimal diffs.",
       "mode": "subagent",
-      "model": "openai/gpt-5.3-codex",
+      "model": "openai/gpt-5.4",
       "reasoningEffort": "high",
       "prompt": "{.config/opencode/prompts/agents/build-error-resolver.txt}",
       "tools": {
@@ -106,7 +109,7 @@
     "e2e-runner": {
       "description": "End-to-end testing specialist using Playwright. Generates, maintains, and runs E2E tests for critical user flows.",
       "mode": "subagent",
-      "model": "zai-coding-plan/glm-5",
+      "model": "openai/gpt-5.4",
       "prompt": "{.config/opencode/prompts/agents/e2e-runner.txt}",
       "tools": {
         "read": true,
@@ -120,7 +123,7 @@
     "doc-updater": {
       "description": "Documentation and codemap specialist. Use for updating codemaps and documentation.",
       "mode": "subagent",
-      "model": "openai/gpt-5.2",
+      "model": "openai/gpt-5.4",
       "reasoningEffort": "high",
       "prompt": "{.config/opencode/prompts/agents/doc-updater.txt}",
       "tools": {
@@ -135,7 +138,7 @@
     "refactor-cleaner": {
       "description": "Dead code cleanup and consolidation specialist. Use for removing unused code, duplicates, and refactoring.",
       "mode": "subagent",
-      "model": "openai/gpt-5.3-codex",
+      "model": "openai/gpt-5.4",
       "reasoningEffort": "high",
       "prompt": "{.config/opencode/prompts/agents/refactor-cleaner.txt}",
       "tools": {
@@ -150,7 +153,7 @@
     "database-reviewer": {
       "description": "PostgreSQL database specialist for query optimization, schema design, security, and performance. Incorporates Supabase best practices.",
       "mode": "subagent",
-      "model": "anthropic/claude-opus-4-5",
+      "model": "openai/gpt-5.4",
       "prompt": "{.config/opencode/prompts/agents/database-reviewer.txt}",
       "tools": {
         "read": true,
@@ -271,31 +274,6 @@
     },
   },
   "mcp": {
-    "zai-mcp-server": {
-      "type": "local",
-      "command": ["npx", "-y", "@z_ai/mcp-server"],
-      "environment": {
-        // Redacted: configure this via env vars on the target machine.
-        "Z_AI_API_KEY": "",
-        "Z_AI_MODE": "ZAI",
-      },
-    },
-    "web-search-prime": {
-      "type": "remote",
-      "url": "https://api.z.ai/api/mcp/web_search_prime/mcp",
-      "headers": {
-        // Redacted: configure this via env vars on the target machine.
-        "Authorization": "",
-      },
-    },
-    "web-reader": {
-      "type": "remote",
-      "url": "https://api.z.ai/api/mcp/web_reader/mcp",
-      "headers": {
-        // Redacted: configure this via env vars on the target machine.
-        "Authorization": "",
-      },
-    },
     "context7": {
       "type": "local",
       "command": ["npx", "-y", "@upstash/context7-mcp@latest"],
@@ -309,35 +287,6 @@
       "url": "https://mcp.figma.com/mcp",
       "headers": {},
       "enabled": false,
-    },
-  },
-  "provider": {
-    "kimi-for-coding": {
-      "name": "Kimi For Coding",
-      "npm": "@ai-sdk/anthropic",
-      "options": {
-        "baseURL": "https://api.kimi.com/coding/v1",
-      },
-      "models": {
-        "k2p5": {
-          "name": "Kimi K2.5",
-          "reasoning": true,
-          "attachment": false,
-          "limit": {
-            "context": 262144,
-            "output": 32768,
-          },
-          "modalities": {
-            "input": ["text", "image", "video"],
-            "output": ["text"],
-          },
-          "options": {
-            "interleaved": {
-              "field": "reasoning_content",
-            },
-          },
-        },
-      },
     },
   },
 }

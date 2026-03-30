@@ -1,6 +1,6 @@
 # OpenCode Setup (This Repo)
 
-This repository is a versioned OpenCode configuration: agents, skills, slash commands, plugins/hooks, and custom tools.
+This repository versions the current OpenCode setup and the stable Claude user settings: agents, skills, slash commands, plugins/hooks, custom tools, rules, and hooks.
 
 ## Table of contents
 
@@ -34,7 +34,7 @@ This repository is a versioned OpenCode configuration: agents, skills, slash com
 <a id="francais"></a>
 ## Français
 
-Ce depot est un "dotfiles repo" pour OpenCode. Il versionne une configuration complete (agent principal + sous-agents), des skills (regles de qualite), des commandes slash, des plugins (hooks) et des outils custom.
+Ce depot est un "dotfiles repo" pour OpenCode et pour la partie stable de `~/.claude`. Il versionne une configuration complete (agent principal + sous-agents), des skills (regles de qualite), des commandes slash, des plugins (hooks), des regles Claude et des outils custom.
 
 <a id="plan-fr"></a>
 ### Plan de lecture (navigation)
@@ -72,18 +72,21 @@ Ce depot est un "dotfiles repo" pour OpenCode. Il versionne une configuration co
 - Outils custom (OpenCode tools): `tools/*.ts`
 - Contextes (memos de mode): `contexts/*.md`
 - Scripts utilitaires: `scripts/*`
+- Mirror Claude: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/rules/**`, `.claude/skills/**`, `.claude/hooks/**`, `.claude/commands/**`
+- Exclusions volontaires: etat runtime local (`sessions/`, `history.jsonl`, caches, backups, telemetry, tasks, plugin marketplaces)
 
 <a id="installation-fr"></a>
 ### Installation
 
-1. Placer ce depot dans `~/.config/opencode/` (clone direct) ou creer un lien symbolique vers ce dossier.
+1. Utiliser la racine du depot pour `~/.config/opencode/` (clone direct ou lien symbolique).
 2. Installer les dependances (plugins/outils):
 
 ```bash
 npm ci
 ```
 
-3. Lancer OpenCode: il charge `~/.config/opencode/opencode.jsonc` et les fichiers references.
+3. Pour Claude Code, recopier ou lier selectivement le contenu versionne sous `.claude/` vers `~/.claude/`.
+4. Lancer OpenCode: il charge `~/.config/opencode/opencode.jsonc` et les fichiers references.
 
 <a id="config-fr"></a>
 ### Configuration: `opencode.jsonc`
@@ -187,7 +190,7 @@ Pourquoi: capturer automatiquement les "bonnes manieres" observees, puis les gar
 <a id="english"></a>
 ## English
 
-This is an OpenCode dotfiles repo. It versions a complete setup: main + specialist agents, global skills (quality rules), slash-command templates, plugins/hooks, and custom tools.
+This repo versions the current OpenCode setup plus the stable part of `~/.claude`: main + specialist agents, global skills, slash-command templates, plugins/hooks, custom tools, Claude rules, and Claude hooks.
 
 <a id="plan-en"></a>
 ### Reading plan (navigation)
@@ -225,18 +228,21 @@ This is an OpenCode dotfiles repo. It versions a complete setup: main + speciali
 - Custom tools (OpenCode tools): `tools/*.ts`
 - Context notes (mode memos): `contexts/*.md`
 - Utility scripts: `scripts/*`
+- Claude mirror: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/rules/**`, `.claude/skills/**`, `.claude/hooks/**`, `.claude/commands/**`
+- Intentional exclusions: local runtime state such as `sessions/`, `history.jsonl`, caches, backups, telemetry, tasks, and downloaded plugin marketplaces
 
 <a id="install-en"></a>
 ### Install
 
-1. Put this repo at `~/.config/opencode/` (direct clone) or symlink it there.
+1. Use the repo root for `~/.config/opencode/` (direct clone or symlink).
 2. Install dependencies (plugins/tools):
 
 ```bash
 npm ci
 ```
 
-3. Start OpenCode: it will load `~/.config/opencode/opencode.jsonc` and referenced files.
+3. For Claude Code, selectively copy or symlink the versioned `.claude/` subtree into `~/.claude/`.
+4. Start OpenCode: it will load `~/.config/opencode/opencode.jsonc` and referenced files.
 
 <a id="config-en"></a>
 ### Configuration: `opencode.jsonc`

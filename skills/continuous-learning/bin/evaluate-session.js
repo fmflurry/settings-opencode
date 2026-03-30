@@ -9,6 +9,8 @@ const DEFAULT_CONFIG = {
   min_session_length: 10,
   extraction_threshold: "medium",
   auto_approve: false,
+  skills_root_path: "",
+  learned_metadata_path: "",
   learned_skills_path: "~/.config/opencode/skills/learned/",
   patterns_to_detect: [
     "error_resolution",
@@ -195,26 +197,74 @@ async function fileExists(filePath) {
   }
 }
 
-async function pickLearnedFileName({ learnedRoot, baseName, extension }) {
+function trimTrailingSeparators(input) {
+  const value = String(input || "");
+  if (!value) {
+    return value;
+  }
+
+  return value.replace(/[\\/]+$/, "") || value;
+}
+
+function resolveLearnedStoragePaths(config) {
+  const explicitSkillsRoot = trimTrailingSeparators(
+    expandHome(config.skills_root_path || ""),
+  );
+  const explicitMetadataRoot = trimTrailingSeparators(
+    expandHome(config.learned_metadata_path || ""),
+  );
+  const legacyLearnedRoot = trimTrailingSeparators(
+    expandHome(config.learned_skills_path || ""),
+  );
+
+  if (explicitSkillsRoot) {
+    return {
+      skillsRoot: explicitSkillsRoot,
+      learnedMetadataRoot:
+        explicitMetadataRoot || path.join(explicitSkillsRoot, "learned"),
+    };
+  }
+
+  if (!legacyLearnedRoot) {
+    return {
+      skillsRoot: "",
+      learnedMetadataRoot: "",
+    };
+  }
+
+  if (path.basename(legacyLearnedRoot) === "learned") {
+    return {
+      skillsRoot: path.dirname(legacyLearnedRoot),
+      learnedMetadataRoot: legacyLearnedRoot,
+    };
+  }
+
+  return {
+    skillsRoot: legacyLearnedRoot,
+    learnedMetadataRoot: path.join(legacyLearnedRoot, "learned"),
+  };
+}
+
+async function pickLearnedSkillDirectoryName({ skillsRoot, baseName }) {
   const normalizedBase = slugifyAscii(baseName);
-  const initial = `${normalizedBase}${extension}`;
-  const initialPath = path.join(learnedRoot, initial);
-  if (!(await fileExists(initialPath))) {
+  const initial = normalizedBase || "learned-skill";
+  const initialDirectoryPath = path.join(skillsRoot, initial);
+  if (!(await fileExists(initialDirectoryPath))) {
     return initial;
   }
 
   let counter = 2;
   // Avoid unbounded loops; we will never hit this in practice.
   while (counter < 1000) {
-    const candidate = `${normalizedBase}-${counter}${extension}`;
-    const candidatePath = path.join(learnedRoot, candidate);
-    if (!(await fileExists(candidatePath))) {
+    const candidate = `${initial}-${counter}`;
+    const candidateDirectoryPath = path.join(skillsRoot, candidate);
+    if (!(await fileExists(candidateDirectoryPath))) {
       return candidate;
     }
     counter += 1;
   }
 
-  throw new Error("Unable to pick a unique learned skill filename");
+  throw new Error("Unable to pick a unique learned skill directory");
 }
 
 async function readJsonFile(filePath, fallback) {
@@ -867,10 +917,12 @@ function buildSkillContent({
 }) {
   const statusLine = autoApprove ? "approved" : "review-required";
   const safeSessionId = sessionId || "unknown-session";
+  const description = `Use this pattern when handling recurring ${category.replaceAll("_", " ")} workflows.`;
 
   const yaml = [
     "---",
     `name: ${skillName}`,
+    `description: ${description}`,
     `title: ${title}`,
     signature ? `signature: ${signature}` : null,
     "version: 1.0.0",
@@ -895,7 +947,7 @@ function buildSkillContent({
     `# ${title}`,
     "",
     "## When to use",
-    `Use this pattern when handling recurring ${category.replaceAll("_", " ")} workflows.`,
+    description,
     "",
     "## Steps",
     sectionSteps,
@@ -928,16 +980,17 @@ async function main() {
   }
 
   const config = await loadConfig(configPath);
-  const learnedRoot = expandHome(config.learned_skills_path);
+  const { skillsRoot, learnedMetadataRoot } = resolveLearnedStoragePaths(config);
   const sessionId = args["session-id"] || process.env.OPENCODE_SESSION_ID || "";
 
-  if (!learnedRoot) {
-    process.stderr.write("Unable to resolve learned skills output path\n");
+  if (!skillsRoot || !learnedMetadataRoot) {
+    process.stderr.write("Unable to resolve learned skills storage paths\n");
     process.exitCode = 1;
     return;
   }
 
-  await fs.mkdir(learnedRoot, { recursive: true });
+  await fs.mkdir(skillsRoot, { recursive: true });
+  await fs.mkdir(learnedMetadataRoot, { recursive: true });
 
   let rawTranscript;
   const transcriptPath = args.transcript || "";
@@ -989,7 +1042,10 @@ async function main() {
     return;
   }
 
-  const indexPath = path.join(learnedRoot, ".continuous-learning-index.json");
+  const indexPath = path.join(
+    learnedMetadataRoot,
+    ".continuous-learning-index.json",
+  );
   const indexData = await readJsonFile(indexPath, {
     session_history: [],
     skill_signatures: [],
@@ -1025,22 +1081,21 @@ async function main() {
       continue;
     }
 
-    const extension = config.auto_approve ? ".md" : ".draft.md";
-
     const descriptiveSlug = deriveDescriptiveSlug(
       normalized.text,
       item.name,
       def.keywords,
     );
 
-    const fileName = await pickLearnedFileName({
-      learnedRoot,
+    const skillDirectoryName = await pickLearnedSkillDirectoryName({
+      skillsRoot,
       baseName: descriptiveSlug,
-      extension,
     });
 
-    const skillName = path.basename(fileName, extension);
-    const outputPath = path.join(learnedRoot, fileName);
+    const skillName = skillDirectoryName;
+    const skillDirectoryPath = path.join(skillsRoot, skillDirectoryName);
+    const outputPath = path.join(skillDirectoryPath, "SKILL.md");
+    const relativeSkillPath = path.relative(skillsRoot, outputPath);
     const examples = collectExamples(normalized.text, def.keywords);
 
     const content = buildSkillContent({
@@ -1057,6 +1112,7 @@ async function main() {
       autoApprove: Boolean(config.auto_approve),
     });
 
+    await fs.mkdir(skillDirectoryPath, { recursive: true });
     await fs.writeFile(outputPath, content, "utf8");
     created.push(outputPath);
 
@@ -1065,7 +1121,7 @@ async function main() {
       {
         signature,
         category: item.name,
-        file: fileName,
+        file: relativeSkillPath,
         timestamp: new Date().toISOString(),
       },
     ];
@@ -1077,7 +1133,7 @@ async function main() {
       fingerprint: sessionFingerprint,
       session_id: sessionId || null,
       timestamp: new Date().toISOString(),
-      generated: created.map((file) => path.basename(file)),
+      generated: created.map((file) => path.relative(skillsRoot, file)),
     },
   ];
 
@@ -1101,8 +1157,18 @@ async function main() {
   );
 }
 
-main().catch((error) => {
-  const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`continuous-learning failed: ${message}\n`);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`continuous-learning failed: ${message}\n`);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = {
+  buildSkillContent,
+  deriveDescriptiveSlug,
+  main,
+  pickLearnedSkillDirectoryName,
+  resolveLearnedStoragePaths,
+};

@@ -45,6 +45,7 @@ For each error:
 | `Object is possibly 'undefined'` | Optional chaining `?.` or null check                      |
 | `Property does not exist`        | Add to interface or use optional `?`                      |
 | `Cannot find module`             | Check tsconfig paths, install package, or fix import path |
+| `typescript:S3863` / duplicate imports | Merge imports from the same module and remove repeated specifiers |
 | `Type 'X' not assignable to 'Y'` | Parse/convert type or fix the type                        |
 | `Generic constraint`             | Add `extends { ... }`                                     |
 | `Hook called conditionally`      | Move hooks to top level                                   |
@@ -57,6 +58,7 @@ For each error:
 - Add type annotations where missing
 - Add null checks where needed
 - Fix imports/exports
+- Merge duplicate imports from the same module when safely possible
 - Add missing dependencies
 - Update type definitions
 - Fix configuration files

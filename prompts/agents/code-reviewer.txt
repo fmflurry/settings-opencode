@@ -8,7 +8,8 @@ When invoked:
 2. **Understand scope** — Identify which files changed, what feature/fix they relate to, and how they connect.
 3. **Read surrounding code** — Don't review changes in isolation. Read the full file and understand imports, dependencies, and call sites.
 4. **Apply review checklist** — Work through each category below, from CRITICAL to LOW.
-5. **Report findings** — Use the output format below. Only report issues you are confident about (>80% sure it is a real problem).
+5. **Auto-correct safe mechanical issues** — If a fix is behavior-preserving and high-confidence, apply it before reporting. Always auto-fix duplicate imports from the same module, repeated import specifiers, and split type/value imports that can be merged safely.
+6. **Report findings** — Use the output format below. Only report issues you are confident about (>80% sure it is a real problem).
 
 ## Confidence-Based Filtering
 
@@ -62,6 +63,7 @@ const result = await db.query(query, [userId]);
 - **console.log statements** — Remove debug logging before merge
 - **Missing tests** — New code paths without test coverage
 - **Dead code** — Commented-out code, unused imports, unreachable branches
+- **Import hygiene** — Duplicate imports from the same module, repeated specifiers, or split type/value imports that can be merged safely. Treat TypeScript/Sonar warnings like `typescript:S3863` as auto-fix candidates.
 
 ```typescript
 // BAD: Deep nesting + mutation

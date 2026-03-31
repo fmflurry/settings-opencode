@@ -6,23 +6,21 @@ const crypto = require("node:crypto");
 const { spawnSync } = require("node:child_process");
 
 const DEFAULT_CONFIG = {
-  min_session_length: 10,
+  min_session_length: 20,
   extraction_threshold: "medium",
   auto_approve: false,
   skills_root_path: "",
   learned_metadata_path: "",
   learned_skills_path: "~/.config/opencode/skills/learned/",
-  patterns_to_detect: [
-    "error_resolution",
-    "user_corrections",
-    "workarounds",
-    "debugging_techniques",
-    "project_specific",
-  ],
+  patterns_to_detect: ["user_corrections", "project_specific"],
   ignore_patterns: ["simple_typos", "one_time_fixes", "external_api_issues"],
-  max_skills_per_session: 3,
+  max_skills_per_session: 1,
   dedupe_window_sessions: 20,
+  min_matching_messages: 2,
+  min_distinct_keywords: 2,
 };
+
+const ALLOWED_PATTERN_NAMES = new Set(["user_corrections", "project_specific"]);
 
 const PATTERN_DEFS = {
   error_resolution: {
@@ -245,26 +243,26 @@ function resolveLearnedStoragePaths(config) {
   };
 }
 
-async function pickLearnedSkillDirectoryName({ skillsRoot, baseName }) {
+async function pickLearnedDraftFileName({ learnedMetadataRoot, baseName }) {
   const normalizedBase = slugifyAscii(baseName);
-  const initial = normalizedBase || "learned-skill";
-  const initialDirectoryPath = path.join(skillsRoot, initial);
-  if (!(await fileExists(initialDirectoryPath))) {
+  const initial = `${normalizedBase || "learned-skill"}.draft.md`;
+  const initialFilePath = path.join(learnedMetadataRoot, initial);
+  if (!(await fileExists(initialFilePath))) {
     return initial;
   }
 
   let counter = 2;
   // Avoid unbounded loops; we will never hit this in practice.
   while (counter < 1000) {
-    const candidate = `${initial}-${counter}`;
-    const candidateDirectoryPath = path.join(skillsRoot, candidate);
-    if (!(await fileExists(candidateDirectoryPath))) {
+    const candidate = `${normalizedBase || "learned-skill"}-${counter}.draft.md`;
+    const candidateFilePath = path.join(learnedMetadataRoot, candidate);
+    if (!(await fileExists(candidateFilePath))) {
       return candidate;
     }
     counter += 1;
   }
 
-  throw new Error("Unable to pick a unique learned skill directory");
+  throw new Error("Unable to pick a unique learned draft file");
 }
 
 async function readJsonFile(filePath, fallback) {
@@ -582,6 +580,89 @@ async function buildTranscriptFromOpencodeStorage(sessionId) {
   return JSON.stringify(transcript);
 }
 
+function normalizeMessage(role, content) {
+  const normalizedRole = String(role || "message").trim() || "message";
+  const normalizedContent = String(content || "")
+    .replace(/\r\n/g, "\n")
+    .trim();
+
+  return {
+    role: normalizedRole,
+    content: normalizedContent,
+  };
+}
+
+function entryToMessage(entry) {
+  if (typeof entry === "string") {
+    return normalizeMessage("message", entry);
+  }
+
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+
+  const role = String(entry.role || entry.type || "message");
+  const content = String(entry.content || entry.message || entry.text || "");
+  return normalizeMessage(role, content);
+}
+
+function parseRoleDelimitedTranscript(raw) {
+  const lines = String(raw || "").replace(/\r\n/g, "\n").split("\n");
+  const rolePattern = /^\s*(user|assistant|system|tool|commentary)\s*[:|-]\s*(.*)$/i;
+  const messages = [];
+  let currentRole = "message";
+  let currentLines = [];
+
+  function pushCurrentMessage() {
+    if (currentLines.length === 0) {
+      return;
+    }
+
+    const message = normalizeMessage(currentRole, currentLines.join("\n"));
+    if (message.content) {
+      messages.push(message);
+    }
+    currentLines = [];
+  }
+
+  for (const line of lines) {
+    const match = line.match(rolePattern);
+    if (match) {
+      pushCurrentMessage();
+      currentRole = match[1].toLowerCase();
+      currentLines = [match[2]];
+      continue;
+    }
+
+    currentLines.push(line);
+  }
+
+  pushCurrentMessage();
+  return messages;
+}
+
+function parsePlainTextTranscript(raw) {
+  const normalizedRaw = String(raw || "").replace(/\r\n/g, "\n").trim();
+  if (!normalizedRaw) {
+    return [];
+  }
+
+  const paragraphBlocks = normalizedRaw
+    .split(/\n\s*\n/g)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  const blocks =
+    paragraphBlocks.length > 1
+      ? paragraphBlocks
+      : normalizedRaw
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean);
+
+  return blocks.map((block) => normalizeMessage("message", block));
+}
+
 function normalizeTranscript(raw) {
   let payload;
   try {
@@ -590,28 +671,11 @@ function normalizeTranscript(raw) {
     payload = null;
   }
 
-  if (Array.isArray(payload)) {
-    const merged = payload
-      .map((entry) => {
-        if (typeof entry === "string") {
-          return entry;
-        }
-        if (entry && typeof entry === "object") {
-          const role = String(entry.role || "message");
-          const text = String(entry.content || entry.text || "");
-          return `${role}: ${text}`;
-        }
-        return "";
-      })
-      .filter(Boolean)
-      .join("\n");
-    return {
-      text: merged,
-      messageCount: payload.length,
-    };
-  }
+  let messages = [];
 
-  if (payload && typeof payload === "object") {
+  if (Array.isArray(payload)) {
+    messages = payload.map((entry) => entryToMessage(entry)).filter(Boolean);
+  } else if (payload && typeof payload === "object") {
     const candidates = [
       payload.messages,
       payload.events,
@@ -620,49 +684,44 @@ function normalizeTranscript(raw) {
     ];
     const firstArray = candidates.find(Array.isArray);
     if (firstArray) {
-      const merged = firstArray
-        .map((entry) => {
-          if (typeof entry === "string") {
-            return entry;
-          }
-          if (entry && typeof entry === "object") {
-            const role = String(entry.role || entry.type || "message");
-            const text = String(
-              entry.content || entry.message || entry.text || "",
-            );
-            return `${role}: ${text}`;
-          }
-          return "";
-        })
-        .filter(Boolean)
-        .join("\n");
-      return {
-        text: merged,
-        messageCount: firstArray.length,
-      };
+      messages = firstArray.map((entry) => entryToMessage(entry)).filter(Boolean);
     }
   }
 
-  const lines = raw.split(/\r?\n/);
-  const rolePattern = /^\s*(user|assistant|system|tool)\s*[:|-]/i;
-  const roleLines = lines.filter((line) => rolePattern.test(line));
-  const approxMessages = roleLines.length > 0 ? roleLines.length : lines.length;
+  if (messages.length === 0) {
+    messages = parseRoleDelimitedTranscript(raw);
+  }
+
+  if (messages.length === 0) {
+    messages = parsePlainTextTranscript(raw);
+  }
+
+  if (messages.length === 0) {
+    messages = [normalizeMessage("message", raw)].filter(
+      (message) => message.content.length > 0,
+    );
+  }
+
+  const text = messages
+    .map((message) => `${message.role}: ${message.content}`)
+    .join("\n\n");
 
   return {
-    text: raw,
-    messageCount: approxMessages,
+    text,
+    messages,
+    messageCount: messages.length,
   };
 }
 
 function thresholdValue(threshold) {
   switch (String(threshold || "").toLowerCase()) {
     case "low":
-      return 1;
+      return 4;
     case "high":
-      return 3;
+      return 10;
     case "medium":
     default:
-      return 2;
+      return 7;
   }
 }
 
@@ -670,46 +729,59 @@ function extractSessionFingerprint(text) {
   return crypto.createHash("sha1").update(text).digest("hex").slice(0, 12);
 }
 
-function scorePattern(textLower, patternName) {
+function scorePatternAnalysis(messages, patternName) {
   const def = PATTERN_DEFS[patternName];
   if (!def) {
-    return 0;
+    return {
+      patternName,
+      score: 0,
+      matchingMessages: [],
+      distinctKeywordHits: [],
+      userMatchCount: 0,
+    };
   }
 
-  return def.keywords.reduce((score, keyword) => {
-    return score + (textLower.includes(keyword.toLowerCase()) ? 1 : 0);
-  }, 0);
-}
+  const distinctKeywordHits = new Set();
+  const matchingMessages = [];
+  let userMatchCount = 0;
 
-function collectExamples(text, keywords) {
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+  for (const message of messages) {
+    if (!message || typeof message !== "object") {
+      continue;
+    }
 
-  const picks = [];
-  for (const line of lines) {
-    const lower = line.toLowerCase();
-    const hit = keywords.some((keyword) =>
+    const content = String(message.content || "");
+    const lower = content.toLowerCase();
+    const hits = def.keywords.filter((keyword) =>
       lower.includes(keyword.toLowerCase()),
     );
-    if (hit) {
-      picks.push(line);
+
+    if (hits.length === 0) {
+      continue;
     }
-    if (picks.length >= 2) {
-      break;
+
+    for (const hit of hits) {
+      distinctKeywordHits.add(hit.toLowerCase());
     }
+
+    if (String(message.role || "").toLowerCase() === "user") {
+      userMatchCount += 1;
+    }
+
+    matchingMessages.push({
+      role: String(message.role || "message"),
+      content,
+      keywordHits: hits,
+    });
   }
 
-  if (picks.length === 0) {
-    return [
-      "No direct excerpt available; inferred from recurring session flow.",
-    ];
-  }
-
-  return picks.map((line) =>
-    line.length > 160 ? `${line.slice(0, 157)}...` : line,
-  );
+  return {
+    patternName,
+    score: matchingMessages.length * 2 + distinctKeywordHits.size,
+    matchingMessages,
+    distinctKeywordHits: [...distinctKeywordHits],
+    userMatchCount,
+  };
 }
 
 /**
@@ -718,24 +790,12 @@ function collectExamples(text, keywords) {
  * the pattern keywords. Produces names like "angular-facade-correction"
  * instead of generic "error-resolution-pattern".
  */
-function deriveDescriptiveSlug(text, patternName, keywords) {
-  const lines = text
-    .split(/\r?\n/)
-    .map((l) => l.trim())
+function deriveDescriptiveSlug(matchingMessages, patternName, keywords) {
+  const matchingTexts = matchingMessages
+    .map((message) => redactSensitiveText(String(message.content || "")).toLowerCase())
     .filter(Boolean);
 
-  // Collect lines that match pattern keywords
-  const matchingLines = [];
-  for (const line of lines) {
-    const lower = line.toLowerCase();
-    const hit = keywords.some((kw) => lower.includes(kw.toLowerCase()));
-    if (hit && line.length > 10 && line.length < 300) {
-      matchingLines.push(lower);
-    }
-    if (matchingLines.length >= 20) break;
-  }
-
-  if (matchingLines.length === 0) {
+  if (matchingTexts.length === 0) {
     return slugifyAscii(patternName);
   }
 
@@ -784,6 +844,9 @@ function deriveDescriptiveSlug(text, patternName, keywords) {
     "before",
     "after",
     "above",
+    "apikey",
+    "authorization",
+    "bearer",
     "below",
     "between",
     "under",
@@ -873,12 +936,15 @@ function deriveDescriptiveSlug(text, patternName, keywords) {
     "make",
     "let",
     "put",
+    "redacted",
+    "redacted_api_key",
+    "redacted_token",
   ]);
 
   const patternKwSet = new Set(keywords.map((k) => k.toLowerCase()));
 
   const wordFreq = new Map();
-  const joined = matchingLines.join(" ");
+  const joined = matchingTexts.join(" ");
   const words = joined.match(/[a-z][a-z0-9]{2,}/g) || [];
 
   for (const word of words) {
@@ -902,58 +968,233 @@ function deriveDescriptiveSlug(text, patternName, keywords) {
   return slugifyAscii(`${descriptive}-${categoryHint}`);
 }
 
+function pickEvidenceMessages(matchingMessages) {
+  if (!Array.isArray(matchingMessages) || matchingMessages.length === 0) {
+    return [];
+  }
+
+  return matchingMessages.slice(0, 3).map((message) => ({
+    role: String(message.role || "message"),
+    content: redactSensitiveText(String(message.content || "").trim()),
+  }));
+}
+
+function redactSensitiveText(text) {
+  return String(text || "")
+    .replace(/sk-[A-Za-z0-9_-]{12,}/g, "[REDACTED_API_KEY]")
+    .replace(/(Authorization\s*:\s*Bearer\s+)[^\s]+/gi, "$1[REDACTED_TOKEN]")
+    .replace(
+      /((?:api[_-]?key|token|password|secret)\s*[:=]\s*["']?)[^\s"']+(["']?)/gi,
+      "$1[REDACTED]$2",
+    );
+}
+
+function buildRuleKey(patternName, descriptiveSlug) {
+  const normalizedDescriptor = slugifyAscii(descriptiveSlug || patternName);
+  const normalizedPattern = slugifyAscii(patternName);
+
+  if (
+    normalizedDescriptor === normalizedPattern ||
+    normalizedDescriptor.endsWith(`-${normalizedPattern}`)
+  ) {
+    return normalizedDescriptor;
+  }
+
+  return slugifyAscii(`${normalizedDescriptor}-${normalizedPattern}`);
+}
+
+function buildRuleSignature(patternName, ruleKey) {
+  return crypto
+    .createHash("sha1")
+    .update(`${patternName}:${ruleKey}`)
+    .digest("hex")
+    .slice(0, 12);
+}
+
+function extractRuleTerms(matchingMessages, keywords) {
+  const ignoredWords = new Set([
+    "about",
+    "across",
+    "apikey",
+    "after",
+    "again",
+    "aligned",
+    "apply",
+    "assistant",
+    "authorization",
+    "bearer",
+    "before",
+    "built",
+    "change",
+    "configuration",
+    "consistent",
+    "content",
+    "correction",
+    "direction",
+    "everywhere",
+    "explicit",
+    "keep",
+    "match",
+    "message",
+    "naming",
+    "project",
+    "related",
+    "response",
+    "redacted",
+    "redacted_api_key",
+    "redacted_token",
+    "revised",
+    "setup",
+    "shape",
+    "should",
+    "switch",
+    "this",
+    "through",
+    "understood",
+    "update",
+    "user",
+    "version",
+    "will",
+    "wiring",
+  ]);
+  const keywordSet = new Set(keywords.map((keyword) => keyword.toLowerCase()));
+  const joinedText = matchingMessages
+    .map((message) => redactSensitiveText(String(message.content || "")).toLowerCase())
+    .join(" ");
+  const words = joinedText.match(/[a-z][a-z0-9]{3,}/g) || [];
+  const termFrequency = new Map();
+
+  for (const word of words) {
+    if (ignoredWords.has(word) || keywordSet.has(word)) {
+      continue;
+    }
+
+    termFrequency.set(word, (termFrequency.get(word) || 0) + 1);
+  }
+
+  return [...termFrequency.entries()]
+    .sort((left, right) => {
+      if (right[1] !== left[1]) {
+        return right[1] - left[1];
+      }
+
+      return left[0].localeCompare(right[0]);
+    })
+    .slice(0, 8)
+    .map(([word]) => word);
+}
+
+function hasSimilarRule(indexData, patternName, ruleSignature, ruleTerms) {
+  const existingRules = indexData.rule_signatures || [];
+
+  for (const entry of existingRules) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+
+    if (entry.signature === ruleSignature) {
+      return true;
+    }
+
+    if (entry.category !== patternName || !Array.isArray(entry.rule_terms)) {
+      continue;
+    }
+
+    const existingTerms = entry.rule_terms.filter(
+      (term) => typeof term === "string" && term.length > 0,
+    );
+    const candidateTerms = ruleTerms.filter(
+      (term) => typeof term === "string" && term.length > 0,
+    );
+
+    if (existingTerms.length === 0 || candidateTerms.length === 0) {
+      continue;
+    }
+
+    const existingSet = new Set(existingTerms);
+    const overlapCount = candidateTerms.filter((term) => existingSet.has(term)).length;
+    const overlapRatio = overlapCount / Math.max(existingTerms.length, candidateTerms.length);
+
+    if (overlapCount >= 3 && overlapRatio >= 0.5) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function buildSkillContent({
   skillName,
-  signature,
+  ruleKey,
+  ruleSignature,
   title,
   category,
   tags,
-  examples,
+  evidenceMessages,
   steps,
   caveats,
   sessionId,
   messageCount,
-  autoApprove,
+  distinctKeywordHits,
+  ruleTerms,
 }) {
-  const statusLine = autoApprove ? "approved" : "review-required";
   const safeSessionId = sessionId || "unknown-session";
-  const description = `Use this pattern when handling recurring ${category.replaceAll("_", " ")} workflows.`;
+  const description = `Draft extracted from recurring ${category.replaceAll("_", " ")} evidence for later curation.`;
 
   const yaml = [
     "---",
     `name: ${skillName}`,
     `description: ${description}`,
     `title: ${title}`,
-    signature ? `signature: ${signature}` : null,
+    ruleKey ? `rule_key: ${ruleKey}` : null,
+    ruleSignature ? `rule_signature: ${ruleSignature}` : null,
     "version: 1.0.0",
     "source: continuous-learning",
     `category: ${category}`,
-    `status: ${statusLine}`,
+    "status: draft",
     `session_id: ${safeSessionId}`,
     `message_count: ${messageCount}`,
+    `evidence_messages: ${evidenceMessages.length}`,
+    `distinct_keyword_hits: ${distinctKeywordHits.length}`,
+    `rule_terms: [${ruleTerms.join(", ")}]`,
     `tags: [${tags.join(", ")}]`,
     "---",
   ]
     .filter(Boolean)
     .join("\n");
 
-  const sectionExamples = examples.map((e) => `- ${e}`).join("\n");
   const sectionSteps = steps.map((s, i) => `${i + 1}. ${s}`).join("\n");
   const sectionCaveats = caveats.map((c) => `- ${c}`).join("\n");
+  const sectionEvidence = evidenceMessages.length
+    ? evidenceMessages
+        .map((message) => {
+          return [`### ${message.role}`, message.content].join("\n\n");
+        })
+        .join("\n\n")
+    : "No direct evidence captured.";
+  const candidateRuleLines = [
+    `- Rule key: ${ruleKey}`,
+    `- Category: ${category}`,
+    `- Rule terms: ${ruleTerms.join(", ") || "none"}`,
+    `- Distinct keyword hits: ${distinctKeywordHits.join(", ") || "none"}`,
+  ].join("\n");
 
   return [
     yaml,
     "",
     `# ${title}`,
     "",
-    "## When to use",
+    "## Draft Purpose",
     description,
+    "",
+    "## Candidate Rule",
+    candidateRuleLines,
     "",
     "## Steps",
     sectionSteps,
     "",
-    "## Examples",
-    sectionExamples,
+    "## Evidence",
+    sectionEvidence,
     "",
     "## Caveats",
     sectionCaveats,
@@ -966,6 +1207,122 @@ async function loadConfig(configPath) {
   return {
     ...DEFAULT_CONFIG,
     ...parsed,
+  };
+}
+
+function resolveEnabledPatterns(config) {
+  const requestedPatterns = new Set(config.patterns_to_detect || []);
+  const ignoredPatterns = new Set(config.ignore_patterns || []);
+
+  return [...ALLOWED_PATTERN_NAMES].filter((patternName) => {
+    return requestedPatterns.has(patternName) && !ignoredPatterns.has(patternName);
+  });
+}
+
+function resolveUnsupportedPatterns(config) {
+  const requestedPatterns = new Set(config.patterns_to_detect || []);
+  return [...requestedPatterns].filter(
+    (patternName) => !ALLOWED_PATTERN_NAMES.has(patternName),
+  );
+}
+
+function meetsEvidenceBar(analysis, config) {
+  if (!analysis || typeof analysis !== "object") {
+    return false;
+  }
+
+  const minMatchingMessages = Number(config.min_matching_messages || 2);
+  const minDistinctKeywords = Number(config.min_distinct_keywords || 2);
+  const threshold = thresholdValue(config.extraction_threshold);
+
+  if (analysis.matchingMessages.length < minMatchingMessages) {
+    return false;
+  }
+
+  if (analysis.distinctKeywordHits.length < minDistinctKeywords) {
+    return false;
+  }
+
+  if (
+    analysis.patternName === "user_corrections" &&
+    analysis.userMatchCount < 1
+  ) {
+    return false;
+  }
+
+  return analysis.score >= threshold;
+}
+
+function extractLegacyRuleKey(filePath) {
+  if (typeof filePath !== "string" || filePath.length === 0) {
+    return "";
+  }
+
+  if (filePath.endsWith("/SKILL.md")) {
+    return path.basename(path.dirname(filePath));
+  }
+
+  if (filePath.endsWith(".draft.md")) {
+    return path.basename(filePath, ".draft.md");
+  }
+
+  if (filePath.endsWith(".md")) {
+    return path.basename(filePath, ".md");
+  }
+
+  return path.basename(filePath);
+}
+
+function migrateLegacySkillSignatures(indexData) {
+  if (
+    Array.isArray(indexData.rule_signatures) &&
+    indexData.rule_signatures.length > 0
+  ) {
+    return indexData;
+  }
+
+  const legacyEntries = Array.isArray(indexData.skill_signatures)
+    ? indexData.skill_signatures
+    : [];
+
+  if (legacyEntries.length === 0) {
+    return {
+      ...indexData,
+      rule_signatures: Array.isArray(indexData.rule_signatures)
+        ? indexData.rule_signatures
+        : [],
+    };
+  }
+
+  const migratedRuleSignatures = legacyEntries
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
+
+      const category = typeof entry.category === "string" ? entry.category : "";
+      const ruleKey = extractLegacyRuleKey(entry.file);
+      if (!category || !ruleKey) {
+        return null;
+      }
+
+      return {
+        signature: buildRuleSignature(category, ruleKey),
+        rule_key: ruleKey,
+        category,
+        rule_terms: [],
+        file: entry.file,
+        timestamp:
+          typeof entry.timestamp === "string"
+            ? entry.timestamp
+            : new Date().toISOString(),
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    ...indexData,
+    rule_signatures: migratedRuleSignatures,
   };
 }
 
@@ -1022,20 +1379,19 @@ async function main() {
     return;
   }
 
-  const textLower = normalized.text.toLowerCase();
-  const threshold = thresholdValue(config.extraction_threshold);
-  const allowPatterns = new Set(config.patterns_to_detect || []);
-  const ignorePatterns = new Set(config.ignore_patterns || []);
+  const unsupportedPatterns = resolveUnsupportedPatterns(config);
+  if (unsupportedPatterns.length > 0) {
+    process.stdout.write(
+      `Ignoring unsupported pattern categories: ${unsupportedPatterns.join(", ")}\n`,
+    );
+  }
 
-  const ranked = Object.keys(PATTERN_DEFS)
-    .filter((name) => allowPatterns.has(name) && !ignorePatterns.has(name))
-    .map((name) => ({
-      name,
-      score: scorePattern(textLower, name),
-    }))
-    .filter((item) => item.score >= threshold)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, Number(config.max_skills_per_session || 3));
+  const enabledPatterns = resolveEnabledPatterns(config);
+
+  const ranked = enabledPatterns
+    .map((name) => scorePatternAnalysis(normalized.messages, name))
+    .filter((analysis) => meetsEvidenceBar(analysis, config))
+    .sort((a, b) => b.score - a.score);
 
   if (ranked.length === 0) {
     process.stdout.write("No strong patterns detected; no skills generated\n");
@@ -1046,10 +1402,11 @@ async function main() {
     learnedMetadataRoot,
     ".continuous-learning-index.json",
   );
-  const indexData = await readJsonFile(indexPath, {
+  const loadedIndexData = await readJsonFile(indexPath, {
     session_history: [],
-    skill_signatures: [],
+    rule_signatures: [],
   });
+  const indexData = migrateLegacySkillSignatures(loadedIndexData);
 
   const sessionFingerprint = extractSessionFingerprint(normalized.text);
   const alreadyProcessed = (indexData.session_history || []).some(
@@ -1064,63 +1421,68 @@ async function main() {
   }
 
   const created = [];
+  const maxSkillsPerSession = Number(config.max_skills_per_session || 1);
 
-  for (const item of ranked) {
-    const def = PATTERN_DEFS[item.name];
-    const signatureBase = `${item.name}:${sessionFingerprint}`;
-    const signature = crypto
-      .createHash("sha1")
-      .update(signatureBase)
-      .digest("hex")
-      .slice(0, 12);
+  for (const analysis of ranked) {
+    if (created.length >= maxSkillsPerSession) {
+      break;
+    }
 
-    const existing = (indexData.skill_signatures || []).some(
-      (entry) => entry && entry.signature === signature,
+    const def = PATTERN_DEFS[analysis.patternName];
+    const descriptiveSlug = deriveDescriptiveSlug(
+      analysis.matchingMessages,
+      analysis.patternName,
+      def.keywords,
+    );
+    const ruleTerms = extractRuleTerms(analysis.matchingMessages, def.keywords);
+    const ruleKey = buildRuleKey(analysis.patternName, descriptiveSlug);
+    const ruleSignature = buildRuleSignature(analysis.patternName, ruleKey);
+
+    const existing = hasSimilarRule(
+      indexData,
+      analysis.patternName,
+      ruleSignature,
+      ruleTerms,
     );
     if (existing) {
       continue;
     }
 
-    const descriptiveSlug = deriveDescriptiveSlug(
-      normalized.text,
-      item.name,
-      def.keywords,
-    );
-
-    const skillDirectoryName = await pickLearnedSkillDirectoryName({
-      skillsRoot,
-      baseName: descriptiveSlug,
+    const draftFileName = await pickLearnedDraftFileName({
+      learnedMetadataRoot,
+      baseName: ruleKey,
     });
-
-    const skillName = skillDirectoryName;
-    const skillDirectoryPath = path.join(skillsRoot, skillDirectoryName);
-    const outputPath = path.join(skillDirectoryPath, "SKILL.md");
-    const relativeSkillPath = path.relative(skillsRoot, outputPath);
-    const examples = collectExamples(normalized.text, def.keywords);
+    const skillName = path.basename(draftFileName, ".draft.md");
+    const outputPath = path.join(learnedMetadataRoot, draftFileName);
+    const relativeSkillPath = path.relative(learnedMetadataRoot, outputPath);
+    const evidenceMessages = pickEvidenceMessages(analysis.matchingMessages);
 
     const content = buildSkillContent({
       skillName,
-      signature,
+      ruleKey,
+      ruleSignature,
       title: def.title,
-      category: item.name,
+      category: analysis.patternName,
       tags: def.tags,
-      examples,
+      evidenceMessages,
       steps: def.steps,
       caveats: def.caveats,
       sessionId,
       messageCount: normalized.messageCount,
-      autoApprove: Boolean(config.auto_approve),
+      distinctKeywordHits: analysis.distinctKeywordHits,
+      ruleTerms,
     });
 
-    await fs.mkdir(skillDirectoryPath, { recursive: true });
     await fs.writeFile(outputPath, content, "utf8");
     created.push(outputPath);
 
-    indexData.skill_signatures = [
-      ...(indexData.skill_signatures || []),
+    indexData.rule_signatures = [
+      ...(indexData.rule_signatures || []),
       {
-        signature,
-        category: item.name,
+        signature: ruleSignature,
+        rule_key: ruleKey,
+        category: analysis.patternName,
+        rule_terms: ruleTerms,
         file: relativeSkillPath,
         timestamp: new Date().toISOString(),
       },
@@ -1133,15 +1495,15 @@ async function main() {
       fingerprint: sessionFingerprint,
       session_id: sessionId || null,
       timestamp: new Date().toISOString(),
-      generated: created.map((file) => path.relative(skillsRoot, file)),
+      generated: created.map((file) => path.relative(learnedMetadataRoot, file)),
     },
   ];
 
   const dedupeWindow = Number(config.dedupe_window_sessions || 20);
   if (Number.isFinite(dedupeWindow) && dedupeWindow > 0) {
     indexData.session_history = indexData.session_history.slice(-dedupeWindow);
-    indexData.skill_signatures = indexData.skill_signatures.slice(
-      -dedupeWindow * 3,
+    indexData.rule_signatures = (indexData.rule_signatures || []).slice(
+      -dedupeWindow * 5,
     );
   }
 
@@ -1167,8 +1529,10 @@ if (require.main === module) {
 
 module.exports = {
   buildSkillContent,
+  buildRuleKey,
+  buildRuleSignature,
   deriveDescriptiveSlug,
   main,
-  pickLearnedSkillDirectoryName,
+  pickLearnedDraftFileName,
   resolveLearnedStoragePaths,
 };

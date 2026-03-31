@@ -136,6 +136,20 @@
         "glob": true,
       },
     },
+    "learned-skill-curator": {
+      "description": "Review learned draft skills and promote the high-signal ones into real reusable skills.",
+      "mode": "subagent",
+      "model": "openai/gpt-5.4-xhigh",
+      "prompt": "{.config/opencode/prompts/agents/learned-skill-curator.txt}",
+      "tools": {
+        "read": true,
+        "write": true,
+        "edit": true,
+        "bash": true,
+        "grep": true,
+        "glob": true,
+      },
+    },
     "refactor-cleaner": {
       "description": "Dead code cleanup and consolidation specialist. Use for removing unused code, duplicates, and refactoring.",
       "mode": "subagent",
@@ -185,6 +199,12 @@
     "git": {
       "description": "Handle git operations with enforced branch and commit conventions",
       "template": "{file:commands/git.md}\n\n$ARGUMENTS",
+      "agent": "git-specialist",
+      "subtask": true,
+    },
+    "push-changes": {
+      "description": "Commit relevant changes and push through the git workflow",
+      "template": "{file:commands/git.md}\n\nExecute this git task:\nCommit the relevant changes with a compliant conventional commit message and push the current branch to its remote. Before pushing, inspect every local commit that would be published: compare against the tracked upstream when one exists, otherwise compare against the branch point from the repository default branch and stop if unrelated committed work would also be published. If no upstream exists and the published commit set is correct, push with upstream tracking. If there is nothing to commit, do not create an empty commit. If hooks fail or the push is ambiguous, stop and report the blocker.\n\nAdditional context: $ARGUMENTS",
       "agent": "git-specialist",
       "subtask": true,
     },
@@ -256,6 +276,12 @@
       "description": "Update documentation",
       "template": "{file:commands/update-docs.md}\n\n$ARGUMENTS",
       "agent": "doc-updater",
+      "subtask": true,
+    },
+    "curate-learned-skills": {
+      "description": "Review learned drafts and promote the valuable ones into real skills",
+      "template": "{file:commands/curate-learned-skills.md}\n\n$ARGUMENTS",
+      "agent": "learned-skill-curator",
       "subtask": true,
     },
     "update-codemaps": {

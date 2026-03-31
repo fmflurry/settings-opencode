@@ -174,8 +174,13 @@ But: transformer une session "utile" en patterns reutilisables.
 - Il appelle `skills/continuous-learning/hooks/stop.sh` -> `skills/continuous-learning/stop.sh`.
 - `skills/continuous-learning/bin/evaluate-session.js`:
   - recupere la transcription (fichier si dispo, sinon via session id)
-  - detecte des patterns (debug, corrections user, conventions, etc.)
-  - ecrit des drafts dans `~/.config/opencode/skills/learned/` selon `skills/continuous-learning/config.json`
+  - detecte seulement les patterns `user_corrections` et `project_specific`
+  - dedupe par regle apprise plutot que par hash de session
+  - ecrit au plus un draft avec evidence complete dans `~/.config/opencode/skills/learned/` selon `skills/continuous-learning/config.json`
+
+Commande de curation:
+
+- `/curate-learned-skills`: lance un agent dedie pour relire les drafts dans `learned/` et en promouvoir certains vers de vraies skills.
 
 Pourquoi: capturer automatiquement les "bonnes manieres" observees, puis les garder dans `skills/learned/` pour curation et reuse.
 
@@ -328,8 +333,13 @@ Goal: turn a "valuable" session into reusable patterns.
 - It runs `skills/continuous-learning/hooks/stop.sh` -> `skills/continuous-learning/stop.sh`.
 - `skills/continuous-learning/bin/evaluate-session.js`:
   - fetches the transcript (file path when available, otherwise by session id)
-  - detects patterns (debugging flow, user corrections, conventions, etc.)
-  - writes draft skills to `~/.config/opencode/skills/learned/` based on `skills/continuous-learning/config.json`
+  - detects only `user_corrections` and `project_specific` patterns
+  - deduplicates by learned rule instead of whole-session hash
+  - writes at most one draft with full-message evidence to `~/.config/opencode/skills/learned/` based on `skills/continuous-learning/config.json`
+
+Curation command:
+
+- `/curate-learned-skills`: runs a dedicated agent to review drafts in `learned/` and promote the valuable ones into real skills.
 
 Why: automatically capture effective behaviors and keep them in `skills/learned/` for curation and reuse.
 

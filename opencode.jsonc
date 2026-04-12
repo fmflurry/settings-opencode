@@ -2,8 +2,15 @@
   "$schema": "https://opencode.ai/config.json",
   "autoupdate": true,
   "default_agent": "build",
+  // Model env vars:
+  // OPENCODE_MODEL_PRIMARY=openai/gpt-5.4
+  // OPENCODE_MODEL_SUBAGENT_MINI=openai/gpt-5.4-mini
+  // OPENCODE_MODEL_SUBAGENT_HIGH=openai/gpt-5.4
+  // OPENCODE_MODEL_SUBAGENT_XHIGH=openai/gpt-5.4-xhigh
   "plugin": ["@tarquinen/opencode-dcp@latest"],
   "instructions": [
+    "instructions/caveman-ultra.md",
+    "instructions/serena.md",
     "skills/tdd-workflow/SKILL.md",
     "skills/security-review/SKILL.md",
     "skills/coding-standards/SKILL.md",
@@ -14,7 +21,7 @@
     "build": {
       "description": "Primary coding agent for development work",
       "mode": "primary",
-      "model": "openai/gpt-5.4",
+      "model": "{env:OPENCODE_MODEL_PRIMARY}",
       "reasoningEffort": "high",
       "tools": {
         "write": true,
@@ -26,7 +33,7 @@
     "planner": {
       "description": "Expert planning specialist for complex features and refactoring. Use for implementation planning, architectural changes, or complex refactoring.",
       "mode": "subagent",
-      "model": "openai/gpt-5.4",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_XHIGH}",
       "reasoningEffort": "xhigh",
       "prompt": "{.config/opencode/prompts/agents/planner.txt}",
       "tools": {
@@ -39,7 +46,7 @@
     "architect": {
       "description": "Software architecture specialist for system design, scalability, and technical decision-making.",
       "mode": "subagent",
-      "model": "openai/gpt-5.4",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_HIGH}",
       "reasoningEffort": "high",
       "prompt": "{.config/opencode/prompts/agents/architect.txt}",
       "tools": {
@@ -52,7 +59,7 @@
     "code-reviewer": {
       "description": "Expert code review specialist. Reviews code for quality, security, and maintainability. Use immediately after writing or modifying code.",
       "mode": "subagent",
-      "model": "openai/gpt-5.4",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_HIGH}",
       "reasoningEffort": "high",
       "prompt": "{.config/opencode/prompts/agents/code-reviewer.txt}",
       "tools": {
@@ -66,7 +73,7 @@
     "security-reviewer": {
       "description": "Security vulnerability detection and remediation specialist. Use after writing code that handles user input, authentication, API endpoints, or sensitive data.",
       "mode": "subagent",
-      "model": "openai/gpt-5.4",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_HIGH}",
       "reasoningEffort": "high",
       "prompt": "{.config/opencode/prompts/agents/security-reviewer.txt}",
       "tools": {
@@ -81,7 +88,7 @@
     "tdd-guide": {
       "description": "Test-Driven Development specialist enforcing write-tests-first methodology. Use when writing new features, fixing bugs, or refactoring code. Ensures 80%+ test coverage.",
       "mode": "subagent",
-      "model": "openai/gpt-5.4",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_HIGH}",
       "reasoningEffort": "high",
       "prompt": "{.config/opencode/prompts/agents/tdd-guide.txt}",
       "tools": {
@@ -95,7 +102,7 @@
     "build-error-resolver": {
       "description": "Build and TypeScript error resolution specialist. Use when build fails or type errors occur. Fixes build/type errors only with minimal diffs.",
       "mode": "subagent",
-      "model": "openai/gpt-5.4",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_HIGH}",
       "reasoningEffort": "high",
       "prompt": "{.config/opencode/prompts/agents/build-error-resolver.txt}",
       "tools": {
@@ -110,7 +117,8 @@
     "e2e-runner": {
       "description": "End-to-end testing specialist using Playwright. Generates, maintains, and runs E2E tests for critical user flows.",
       "mode": "subagent",
-      "model": "openai/gpt-5.4",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_HIGH}",
+      "reasoningEffort": "high",
       "prompt": "{.config/opencode/prompts/agents/e2e-runner.txt}",
       "tools": {
         "read": true,
@@ -124,7 +132,7 @@
     "doc-updater": {
       "description": "Documentation and codemap specialist. Use for updating codemaps and documentation.",
       "mode": "subagent",
-      "model": "openai/gpt-5.4",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_HIGH}",
       "reasoningEffort": "high",
       "prompt": "{.config/opencode/prompts/agents/doc-updater.txt}",
       "tools": {
@@ -139,7 +147,8 @@
     "learned-skill-curator": {
       "description": "Review learned draft skills and promote the high-signal ones into real reusable skills.",
       "mode": "subagent",
-      "model": "openai/gpt-5.4-xhigh",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_XHIGH}",
+      "reasoningEffort": "xhigh",
       "prompt": "{.config/opencode/prompts/agents/learned-skill-curator.txt}",
       "tools": {
         "read": true,
@@ -153,7 +162,7 @@
     "refactor-cleaner": {
       "description": "Dead code cleanup and consolidation specialist. Use for removing unused code, duplicates, and refactoring.",
       "mode": "subagent",
-      "model": "openai/gpt-5.4",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_HIGH}",
       "reasoningEffort": "high",
       "prompt": "{.config/opencode/prompts/agents/refactor-cleaner.txt}",
       "tools": {
@@ -168,7 +177,8 @@
     "database-reviewer": {
       "description": "PostgreSQL database specialist for query optimization, schema design, security, and performance. Incorporates Supabase best practices.",
       "mode": "subagent",
-      "model": "openai/gpt-5.4",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_HIGH}",
+      "reasoningEffort": "high",
       "prompt": "{.config/opencode/prompts/agents/database-reviewer.txt}",
       "tools": {
         "read": true,
@@ -182,7 +192,7 @@
     "git-specialist": {
       "description": "Git workflow specialist for branch naming, commit messages, safe staging, commits, pushes, and PR-ready git hygiene.",
       "mode": "subagent",
-      "model": "openai/gpt-5.4-mini",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_MINI}",
       "reasoningEffort": "medium",
       "prompt": "{.config/opencode/prompts/agents/git-specialist.txt}",
       "tools": {
@@ -322,6 +332,17 @@
     },
   },
   "mcp": {
+    "serena": {
+      "type": "local",
+      "command": [
+        "uvx",
+        "--from",
+        "git+https://github.com/oraios/serena",
+        "serena",
+        "start-mcp-server",
+      ],
+      "enabled": true,
+    },
     "context7": {
       "type": "local",
       "command": ["npx", "-y", "@upstash/context7-mcp@latest"],

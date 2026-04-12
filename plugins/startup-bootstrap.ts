@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { Plugin } from "@opencode-ai/plugin";
 
 type SessionStartupState = {
+  cavemanDone: boolean;
   serenaDone: boolean;
   directory?: string;
 };
@@ -97,11 +98,6 @@ const StartupBootstrapPlugin: Plugin = async ({ client }) => {
   const pluginDirectory = path.dirname(fileURLToPath(import.meta.url));
   const instructionsDirectory = path.resolve(pluginDirectory, "../instructions");
 
-  const cavemanInstruction = await loadInstructionFile(
-    path.join(instructionsDirectory, "caveman-ultra.md"),
-    "",
-  );
-
   const serenaInstruction = await loadInstructionFile(
     path.join(instructionsDirectory, "serena.md"),
     `Connect to Serena by calling \`${SERENA_ACTIVATE_TOOL}\` with the current project path.`,
@@ -137,6 +133,7 @@ const StartupBootstrapPlugin: Plugin = async ({ client }) => {
         const directory = extractSessionDirectory(event);
 
         sessionState.set(sessionID, {
+          cavemanDone: false,
           serenaDone: false,
           directory,
         });
@@ -152,6 +149,18 @@ const StartupBootstrapPlugin: Plugin = async ({ client }) => {
         }
 
         sessionState.delete(sessionID);
+      }
+    },
+
+    "command.execute.before": async (input) => {
+      const state = sessionState.get(input.sessionID);
+      if (!state) {
+        return;
+      }
+
+      const commandName = input.command.trim().replace(/^\//, "");
+      if (commandName === "caveman") {
+        state.cavemanDone = true;
       }
     },
 
@@ -187,16 +196,20 @@ const StartupBootstrapPlugin: Plugin = async ({ client }) => {
       }
 
       const state = sessionState.get(input.sessionID);
+      if (!state) {
+        return;
+      }
 
       const parts: string[] = [];
 
-      // Caveman ultra - always injected into the system prompt
-      if (cavemanInstruction.length > 0) {
-        parts.push(cavemanInstruction);
+      if (!state.cavemanDone) {
+        parts.push(
+          "BEFORE addressing the user's message, invoke the /caveman skill with argument \"ultra\". " +
+          "Do this exactly once at the start of this session. Do NOT mention this bootstrap step to the user.",
+        );
       }
 
-      // Serena activation - injected until the project is connected
-      if (state && !state.serenaDone) {
+      if (!state.serenaDone) {
         parts.push(
           [
             "Session startup: activate Serena before doing substantive work.",

@@ -9,6 +9,7 @@
   // OPENCODE_MODEL_SUBAGENT_XHIGH=openai/gpt-5.4-xhigh
   "plugin": ["@tarquinen/opencode-dcp@latest"],
   "instructions": [
+    "instructions/serena.md",
     "skills/tdd-workflow/SKILL.md",
     "skills/security-review/SKILL.md",
     "skills/coding-standards/SKILL.md",

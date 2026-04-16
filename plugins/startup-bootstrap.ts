@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 import type { Plugin } from "@opencode-ai/plugin";
 
 type SessionStartupState = {
-  cavemanDone: boolean;
   serenaDone: boolean;
   directory?: string;
 };
@@ -133,7 +132,6 @@ const StartupBootstrapPlugin: Plugin = async ({ client }) => {
         const directory = extractSessionDirectory(event);
 
         sessionState.set(sessionID, {
-          cavemanDone: false,
           serenaDone: false,
           directory,
         });
@@ -149,18 +147,6 @@ const StartupBootstrapPlugin: Plugin = async ({ client }) => {
         }
 
         sessionState.delete(sessionID);
-      }
-    },
-
-    "command.execute.before": async (input) => {
-      const state = sessionState.get(input.sessionID);
-      if (!state) {
-        return;
-      }
-
-      const commandName = input.command.trim().replace(/^\//, "");
-      if (commandName === "caveman") {
-        state.cavemanDone = true;
       }
     },
 
@@ -200,27 +186,14 @@ const StartupBootstrapPlugin: Plugin = async ({ client }) => {
         return;
       }
 
-      const parts: string[] = [];
-
-      if (!state.cavemanDone) {
-        parts.push(
-          "BEFORE addressing the user's message, invoke the /caveman skill with argument \"ultra\". " +
-          "Do this exactly once at the start of this session. Do NOT mention this bootstrap step to the user.",
-        );
-      }
-
       if (!state.serenaDone) {
-        parts.push(
+        output.system.push(
           [
             "Session startup: activate Serena before doing substantive work.",
             serenaInstruction.trim(),
             "Do this first, then continue normally.",
           ].join("\n\n"),
         );
-      }
-
-      if (parts.length > 0) {
-        output.system.push(parts.join("\n\n---\n\n"));
       }
     },
   };

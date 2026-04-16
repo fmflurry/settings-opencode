@@ -1,16 +1,17 @@
 {
-  "min_session_length": 20,
+  "min_session_length": 10,
   "extraction_threshold": "medium",
   "auto_approve": false,
   "skills_root_path": "~/.claude/skills/",
   "learned_metadata_path": "~/.claude/skills/learned/",
   "patterns_to_detect": [
+    "error_resolution",
     "user_corrections",
+    "workarounds",
+    "debugging_techniques",
     "project_specific"
   ],
   "ignore_patterns": ["simple_typos", "one_time_fixes", "external_api_issues"],
-  "max_skills_per_session": 1,
-  "dedupe_window_sessions": 20,
-  "min_matching_messages": 2,
-  "min_distinct_keywords": 2
+  "max_skills_per_session": 3,
+  "dedupe_window_sessions": 20
 }

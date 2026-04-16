@@ -13,8 +13,12 @@ Read and display instincts from the continuous-learning-v2 system.
 
 ## Instinct Location
 
-Global: `~/config/opencode/instincts/`
-Project: `.opencode/instincts/`
+Shared homunculus store (v2.1):
+- Global personal: `~/.claude/homunculus/instincts/personal/`
+- Global inherited: `~/.claude/homunculus/instincts/inherited/`
+- Project-scoped: `~/.claude/homunculus/projects/<project_id>/instincts/{personal,inherited}/`
+
+Project id is resolved from the current working directory via `~/.claude/homunculus/projects.json`.
 
 ## Status Display
 

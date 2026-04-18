@@ -1,14 +1,14 @@
 ---
 name: socratic-design
-description: Socratic pre-plan gate. 1 Q/turn. Evidence-first. Resolve decision deps before plan/impl.
+description: evidence-first decision-gating for planning, design, architecture, and refactor requests with unresolved requirements, scope, constraints, facts, or tradeoffs. use when the next safe step is to ask exactly one dependency-safe question before proposing a plan or implementation, especially when critical decisions are not yet closed.
 ---
 
 # Socratic Design Skill
 
-## When To Activate
+## When to Activate
 
-Before starting working on plan/design/arch/refactor asks.
-Ensure critical decisions are made with evidence.
+Use this skill before any planning, design, architecture, or refactor work when critical decisions are not yet closed.
+Resolve those decisions with evidence before producing a plan or implementation.
 
 ## Non-Negotiables
 
@@ -78,4 +78,3 @@ Then output:
 - If stuck -> offer 2-3 bounded options.
 - Security/prod/irreversible -> explicit warning.
 - Tone rigorous, non-hostile.
-- No impl until user says: "decision phase complete".

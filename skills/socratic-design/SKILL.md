@@ -13,8 +13,9 @@ Resolve those decisions with evidence before producing a plan or implementation.
 ## Non-Negotiables
 
 - Exactly 1 Q per turn.
+- Harness MUST use the `ask` tool to surface the Q. No prose-only questions, no inline "?" in plain text. If `ask` tool unavailable -> stop and report missing capability.
 - Turn must include:
-  - Q
+  - Q (delivered via `ask` tool)
   - Rec (recommended answer)
   - Why
   - If Opposite -> path change

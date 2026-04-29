@@ -14,7 +14,7 @@
       "description": "Primary coding agent for development work",
       "mode": "primary",
       "model": "{env:OPENCODE_MODEL_PRIMARY}",
-      "reasoningEffort": "high",
+      "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
       "tools": {
         "write": true,
         "edit": true,
@@ -25,8 +25,8 @@
     "planner": {
       "description": "Expert planning specialist for complex features and refactoring. Use for implementation planning, architectural changes, or complex refactoring.",
       "mode": "subagent",
-      "model": "{env:OPENCODE_MODEL_SUBAGENT_XHIGH}",
-      "reasoningEffort": "xhigh",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_PLANNER}",
+      "reasoningEffort": "{env:OPENCODE_REASONING_PRIMARY}",
       "prompt": "{.config/opencode/prompts/agents/planner.txt}",
       "tools": {
         "read": true,
@@ -38,8 +38,8 @@
     "architect": {
       "description": "Software architecture specialist for system design, scalability, and technical decision-making.",
       "mode": "subagent",
-      "model": "{env:OPENCODE_MODEL_SUBAGENT_HIGH}",
-      "reasoningEffort": "high",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
+      "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
       "prompt": "{.config/opencode/prompts/agents/architect.txt}",
       "tools": {
         "read": true,
@@ -51,8 +51,8 @@
     "code-reviewer": {
       "description": "Expert code review specialist. Reviews code for quality, security, and maintainability. Use immediately after writing or modifying code.",
       "mode": "subagent",
-      "model": "{env:OPENCODE_MODEL_SUBAGENT_HIGH}",
-      "reasoningEffort": "high",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
+      "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
       "prompt": "{.config/opencode/prompts/agents/code-reviewer.txt}",
       "tools": {
         "read": true,
@@ -65,8 +65,8 @@
     "security-reviewer": {
       "description": "Security vulnerability detection and remediation specialist. Use after writing code that handles user input, authentication, API endpoints, or sensitive data.",
       "mode": "subagent",
-      "model": "{env:OPENCODE_MODEL_SUBAGENT_HIGH}",
-      "reasoningEffort": "high",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
+      "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
       "prompt": "{.config/opencode/prompts/agents/security-reviewer.txt}",
       "tools": {
         "read": true,
@@ -80,8 +80,8 @@
     "tdd-guide": {
       "description": "Test-Driven Development specialist enforcing write-tests-first methodology. Use when writing new features, fixing bugs, or refactoring code. Ensures 80%+ test coverage.",
       "mode": "subagent",
-      "model": "{env:OPENCODE_MODEL_SUBAGENT_HIGH}",
-      "reasoningEffort": "high",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
+      "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
       "prompt": "{.config/opencode/prompts/agents/tdd-guide.txt}",
       "tools": {
         "read": true,
@@ -94,8 +94,8 @@
     "build-error-resolver": {
       "description": "Build and TypeScript error resolution specialist. Use when build fails or type errors occur. Fixes build/type errors only with minimal diffs.",
       "mode": "subagent",
-      "model": "{env:OPENCODE_MODEL_SUBAGENT_HIGH}",
-      "reasoningEffort": "high",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
+      "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
       "prompt": "{.config/opencode/prompts/agents/build-error-resolver.txt}",
       "tools": {
         "read": true,
@@ -109,7 +109,7 @@
     "e2e-runner": {
       "description": "End-to-end testing specialist using Playwright. Generates, maintains, and runs E2E tests for critical user flows.",
       "mode": "subagent",
-      "model": "{env:OPENCODE_MODEL_SUBAGENT_HIGH}",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "prompt": "{.config/opencode/prompts/agents/e2e-runner.txt}",
       "tools": {
         "read": true,
@@ -123,8 +123,8 @@
     "doc-updater": {
       "description": "Documentation and codemap specialist. Use for updating codemaps and documentation.",
       "mode": "subagent",
-      "model": "{env:OPENCODE_MODEL_SUBAGENT_HIGH}",
-      "reasoningEffort": "high",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
+      "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
       "prompt": "{.config/opencode/prompts/agents/doc-updater.txt}",
       "tools": {
         "read": true,
@@ -138,8 +138,8 @@
     "refactor-cleaner": {
       "description": "Dead code cleanup and consolidation specialist. Use for removing unused code, duplicates, and refactoring.",
       "mode": "subagent",
-      "model": "{env:OPENCODE_MODEL_SUBAGENT_HIGH}",
-      "reasoningEffort": "high",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
+      "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
       "prompt": "{.config/opencode/prompts/agents/refactor-cleaner.txt}",
       "tools": {
         "read": true,
@@ -153,7 +153,7 @@
     "database-reviewer": {
       "description": "PostgreSQL database specialist for query optimization, schema design, security, and performance. Incorporates Supabase best practices.",
       "mode": "subagent",
-      "model": "{env:OPENCODE_MODEL_SUBAGENT_HIGH}",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "prompt": "{.config/opencode/prompts/agents/database-reviewer.txt}",
       "tools": {
         "read": true,
@@ -168,7 +168,7 @@
       "description": "Git workflow specialist for branch naming, commit messages, safe staging, commits, pushes, and PR-ready git hygiene.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_MINI}",
-      "reasoningEffort": "medium",
+      "reasoningEffort": "{env:OPENCODE_REASONING_TERTIARY}",
       "prompt": "{.config/opencode/prompts/agents/git-specialist.txt}",
       "tools": {
         "bash": true,

@@ -252,13 +252,11 @@ interface BaseObservationFields {
 
 const InstinctObserverPlugin: Plugin = async ({ client, directory }) => {
   const log: LogFn = async (level, message) => {
-    try {
-      await client.app.log({
-        body: { service: "instinct-observer", level, message },
-      });
-    } catch {
-      // never let logging break observation
-    }
+    // Fire-and-forget: never await the server during plugin init (deadlock),
+    // and never let a slow/failed log block observation writes.
+    client.app
+      .log({ body: { service: "instinct-observer", level, message } })
+      .catch(() => {});
   };
 
   const resolvedProject = await resolveProject(directory ?? "", log);

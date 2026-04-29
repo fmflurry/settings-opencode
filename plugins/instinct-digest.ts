@@ -327,13 +327,11 @@ function formatDigest(digest: Digest, sinceIso: string): string | null {
 
 const InstinctDigestPlugin: Plugin = async ({ client, directory }) => {
   const log: LogFn = async (level, message) => {
-    try {
-      await client.app.log({
-        body: { service: "instinct-digest", level, message },
-      });
-    } catch {
-      // never let logging break digest
-    }
+    // Fire-and-forget: awaiting client.app.log during plugin init deadlocks
+    // the server.
+    client.app
+      .log({ body: { service: "instinct-digest", level, message } })
+      .catch(() => {});
   };
 
   const projectId = await resolveProjectId(directory ?? "");

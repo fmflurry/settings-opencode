@@ -39,7 +39,9 @@ function extractSessionID(event: unknown): string | undefined {
   const body = getNestedRecord(event, "body");
   const bodySession = body ? getNestedRecord(body, "session") : undefined;
   const properties = getNestedRecord(event, "properties");
-  const propertiesInfo = properties ? getNestedRecord(properties, "info") : undefined;
+  const propertiesInfo = properties
+    ? getNestedRecord(properties, "info")
+    : undefined;
   const propertiesSession = properties
     ? getNestedRecord(properties, "session")
     : undefined;
@@ -58,7 +60,10 @@ function extractSessionID(event: unknown): string | undefined {
 function extractSessionDirectory(event: unknown): string | undefined {
   if (!isRecord(event)) return undefined;
 
-  const info = getNestedRecord(getNestedRecord(event, "properties") ?? {}, "info");
+  const info = getNestedRecord(
+    getNestedRecord(event, "properties") ?? {},
+    "info",
+  );
   return getNestedString(info ?? {}, "directory");
 }
 
@@ -66,7 +71,10 @@ function normalizePath(value: string): string {
   return path.resolve(value);
 }
 
-function matchesProjectTarget(requestedProject: string, directory: string): boolean {
+function matchesProjectTarget(
+  requestedProject: string,
+  directory: string,
+): boolean {
   const normalizedDirectory = normalizePath(directory);
 
   if (path.isAbsolute(requestedProject)) {
@@ -77,7 +85,10 @@ function matchesProjectTarget(requestedProject: string, directory: string): bool
     return true;
   }
 
-  return normalizePath(path.join(normalizedDirectory, requestedProject)) === normalizedDirectory;
+  return (
+    normalizePath(path.join(normalizedDirectory, requestedProject)) ===
+    normalizedDirectory
+  );
 }
 
 async function loadInstructionFile(
@@ -95,7 +106,10 @@ async function loadInstructionFile(
 
 const StartupBootstrapPlugin: Plugin = async ({ client }) => {
   const pluginDirectory = path.dirname(fileURLToPath(import.meta.url));
-  const instructionsDirectory = path.resolve(pluginDirectory, "../instructions");
+  const instructionsDirectory = path.resolve(
+    pluginDirectory,
+    "../instructions",
+  );
 
   const serenaInstruction = await loadInstructionFile(
     path.join(instructionsDirectory, "serena.md"),

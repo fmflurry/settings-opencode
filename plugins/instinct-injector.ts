@@ -374,13 +374,11 @@ function formatPreamble(instincts: readonly Instinct[]): string {
 
 const InstinctInjectorPlugin: Plugin = async ({ client, directory }) => {
   const log: LogFn = async (level, message) => {
-    try {
-      await client.app.log({
-        body: { service: "instinct-injector", level, message },
-      });
-    } catch {
-      // never let logging break injection
-    }
+    // Fire-and-forget: awaiting client.app.log during plugin init deadlocks
+    // the server (server waits for init before accepting requests).
+    client.app
+      .log({ body: { service: "instinct-injector", level, message } })
+      .catch(() => {});
   };
 
   // Plugin lifetime is bound to one opencode instance, which is bound to one

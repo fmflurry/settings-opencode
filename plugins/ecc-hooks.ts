@@ -69,33 +69,17 @@ export const ECCHooksPlugin = async ({
     },
 
     /**
-     * TypeScript Check Hook
-     * Equivalent to Claude Code PostToolUse hook for tsc
+     * Post-Tool Hook
      *
-     * Triggers: After edit tool completes on .ts/.tsx files
-     * Action: Runs tsc --noEmit to check for type errors
+     * Triggers: After tool execution
+     * Action: PR creation logging. Repo-wide tsc-on-edit removed:
+     *   produced TUI flood + crashed on Buffer.split. Use editor LSP
+     *   or run `tsc` manually / via verify skill.
      */
     "tool.execute.after": async (
       input: { tool: string; args?: { filePath?: string } },
       output: unknown,
     ) => {
-      // Check if a TypeScript file was edited
-      if (input.tool === "edit" && input.args?.filePath?.match(/\.tsx?$/)) {
-        try {
-          await $`npx tsc --noEmit 2>&1`;
-          log("info", "[ECC] TypeScript check passed");
-        } catch (error: unknown) {
-          const err = error as { stdout?: string };
-          log("warn", "[ECC] TypeScript errors detected:");
-          if (err.stdout) {
-            // Log first few errors
-            const errors = err.stdout.split("\n").slice(0, 5);
-            errors.forEach((line: string) => log("warn", `  ${line}`));
-          }
-        }
-      }
-
-      // PR creation logging
       if (
         input.tool === "bash" &&
         input.args?.toString().includes("gh pr create")

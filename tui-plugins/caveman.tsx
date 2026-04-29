@@ -10,9 +10,7 @@ import { createMemo } from "solid-js";
 
 import type { TuiPlugin, TuiThemeCurrent } from "@opencode-ai/plugin/tui";
 
-const CavemanSidebar = (props: {
-  theme: TuiThemeCurrent;
-}) => {
+const CavemanSidebar = (props: { theme: TuiThemeCurrent }) => {
   const color = createMemo(() => props.theme.textMuted);
 
   return (

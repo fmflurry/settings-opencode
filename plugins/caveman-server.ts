@@ -59,7 +59,7 @@ const CavemanServerPlugin: Plugin = async ({ client }) => {
   const log = (level: "debug" | "info" | "warn" | "error", message: string) =>
     client.app.log({ body: { service: "caveman", level, message } }).catch(() => {});
 
-  await log("info", "Caveman ultra will be injected via chat.system.transform");
+  void log("info", "Caveman ultra will be injected via chat.system.transform");
 
   return {
     event: async ({ event }) => {

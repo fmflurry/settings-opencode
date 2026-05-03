@@ -312,8 +312,7 @@ All TypeScript plugins use `@opencode-ai/plugin@1.4.6`.
 - `plugins/worktree.ts` (+ `plugins/worktree/`) — creates an isolated git worktree for the session and spawns a terminal (mac/Win/Linux). Inspired by opencode-worktree-session.
 - `plugins/startup-bootstrap.ts` — runs `serena_activate_project` on the first tool call of a session.
 - `plugins/kdco-primitives/` — shared utilities (mutex, shell, terminal-detect, project-id resolver, types).
-
-External plugin declared in `opencode.jsonc`: `@tarquinen/opencode-dcp@latest` (Dynamic Context Pruning).
+- `@tarquinen/opencode-dcp@latest` *(external, declared in `opencode.jsonc › plugin`)* — Dynamic Context Pruning. Trims stale tool results and large files from the live context window so long sessions don't blow past the model's limit. Configured via `dcp.jsonc` at the repo root.
 
 <a id="tools-en"></a>
 ### Custom tools (`tools/`)
@@ -507,8 +506,7 @@ Tous les plugins TypeScript utilisent `@opencode-ai/plugin@1.4.6`.
 - `plugins/worktree.ts` (+ `plugins/worktree/`) — cree un git worktree isolé pour la session et spawn un terminal (mac/Win/Linux). Inspiré d'opencode-worktree-session.
 - `plugins/startup-bootstrap.ts` — declenche `serena_activate_project` la premiere fois qu'un outil est appelé dans la session.
 - `plugins/kdco-primitives/` — utilities partages (mutex, shell, terminal-detect, project-id resolver, types).
-
-Plugin externe declare dans `opencode.jsonc`: `@tarquinen/opencode-dcp@latest` (Dynamic Context Pruning).
+- `@tarquinen/opencode-dcp@latest` *(externe, declare dans `opencode.jsonc › plugin`)* — Dynamic Context Pruning. Coupe les tool results stagnants et les gros fichiers dans la fenetre de contexte pour que les sessions longues ne depassent pas la limite modele. Configure via `dcp.jsonc` a la racine du repo.
 
 <a id="tools-fr"></a>
 ### Outils custom (`tools/`)

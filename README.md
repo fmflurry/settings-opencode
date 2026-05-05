@@ -1,15 +1,26 @@
 # OpenCode + Claude Code Setup
 
-Versioned dotfiles for the OpenCode CLI and the stable parts of `~/.claude`. Ships:
+> My personal **OpenCode** and **Claude Code** configuration, kept public so I can sync it across machines — and so anyone curious can borrow what's useful. MIT licensed, fork freely. It evolves with my workflow, so treat it as a living reference rather than a stable distribution.
 
-- A primary agent + 10 specialist sub-agents (planner, architect, code/security/database review, TDD, build-fix, e2e, doc, refactor, git).
-- Slash-command templates that route to those specialists.
-- Always-on skills (Socratic design, security, coding standards, git, Serena bootstrap).
-- OpenCode plugins: ECC hooks, continuous-learning v2 (homunculus), worktree spawner, auto-compact, caveman ultra, Figma RAG trigger, notifications, startup bootstrap.
-- Custom OpenCode tools (run-tests, check-coverage, security-audit) and codemap generator.
-- A `.claude/` mirror with hooks, rules, and learned skills for Claude Code.
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![OpenCode](https://img.shields.io/badge/OpenCode-CLI-000)](https://opencode.ai)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-mirror-d97757)](https://claude.com/claude-code)
 
-> If you just want to install it on your own machine, jump straight to [Public install](#public-install).
+### Want to try it? Jump to **[Public install](#public-install)** — it takes about five minutes.
+
+---
+
+## What's inside
+
+A primary `build` agent backed by **10 specialist sub-agents** (planner, architect, code/security/database review, TDD, build-fix, e2e, doc, refactor, git), wired together by:
+
+- **Slash commands** that route to the right specialist (`/plan`, `/tdd`, `/security`, `/code-review`, …).
+- **Always-on skills** loaded at session start — Socratic design, security review, coding standards, git workflow, Serena bootstrap.
+- **OpenCode plugins** — ECC hooks (Prettier + `tsc` on save), continuous-learning v2 (the *homunculus* instinct store), worktree spawner, auto-compact, caveman ultra mode, Figma RAG trigger, macOS notifications, startup bootstrap.
+- **Custom tools** — `run-tests`, `check-coverage`, `security-audit`, plus a codemap generator.
+- **A `.claude/` mirror** — hooks, rule packs, learned skills, and the shared homunculus store, so Claude Code benefits from the same guardrails.
+
+The two halves stand alone. Use the OpenCode side, the Claude Code mirror, or both — whichever you'd find useful.
 
 ## Table of contents
 

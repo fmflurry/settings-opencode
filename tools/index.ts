@@ -5,6 +5,6 @@
  */
 
 // Re-export all tools
-export { default as runTests } from "./run-tests.js";
-export { default as checkCoverage } from "./check-coverage.js";
-export { default as securityAudit } from "./security-audit.js";
+export { default as runTests } from "./run-tests.ts";
+export { default as checkCoverage } from "./check-coverage.ts";
+export { default as securityAudit } from "./security-audit.ts";

@@ -1,4 +1,6 @@
 {
+  "name": "settings-opencode",
+  "version": "0.0.0",
   "dependencies": {
     "@ai-sdk/openai": "^3.0.48",
     "@ai-sdk/openai-compatible": "^2.0.30",

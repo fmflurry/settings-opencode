@@ -57,17 +57,68 @@ The two halves stand alone. Use the OpenCode side, the Claude Code mirror, or bo
 <a id="public-install"></a>
 ## Public install
 
-This setup is opinionated but standalone. Follow the steps in order. Anything ending in `~/.config/opencode/...` or `~/.claude/...` is the OpenCode/Claude convention — the repo is meant to *become* (or symlink into) those directories.
+The repo is designed to *become* (or symlink into) `~/.config/opencode/`, plus an optional `~/.claude/` mirror. There are two paths: a one-shot script (recommended) and a manual walk-through if you want to see every step.
 
-### 1. Prerequisites
+### Prerequisites
 
-- macOS or Linux (the worktree plugin and notification plugin assume macOS — works on Linux with minor degradation).
+- macOS or Linux (the worktree and notification plugins assume macOS — works on Linux with minor degradation).
 - [OpenCode CLI](https://opencode.ai) installed and on your `PATH`.
 - [Claude Code](https://claude.com/claude-code) installed if you want the `.claude/` half.
 - Either [Bun](https://bun.sh) (recommended — `bun.lock` is what's checked in) or Node.js 20+ with `npm`.
-- `git`, `uv`/`uvx` (for the Serena MCP server), and `npx` (for Context7 / Wallaby MCP).
+- `git`, plus `uv`/`uvx` for the Serena MCP server (`brew install uv` on macOS, or `pip install uv`).
 
-### 2. Clone the repo into the OpenCode config dir
+### Quick install (script)
+
+```bash
+git clone https://github.com/fmflurry/settings-opencode.git ~/Workspace/settings-opencode
+cd ~/Workspace/settings-opencode
+./install.sh
+```
+
+`install.sh` is interactive by default. It will:
+
+1. Verify your prerequisites (`git`, `bun`/`npm`, `uv`).
+2. Symlink the repo into `~/.config/opencode` (backing up any existing config to `*.bak.<timestamp>`).
+3. Run `bun install` (or `npm ci` if Bun isn't available).
+4. Add the `OPENCODE_MODEL_*` and `OPENCODE_REASONING_*` defaults to your shell rc, fenced with markers so re-runs and uninstalls are idempotent.
+5. Optionally symlink `.claude/` into `~/.claude` (skip with `--no-claude` if you only want the OpenCode half).
+6. Print a smoke-test command and the locations to tweak afterwards.
+
+Useful flags:
+
+| Flag | Behaviour |
+| ---- | --------- |
+| _(none)_ | Interactive walk-through with `[Y/n]` prompts and sensible defaults. |
+| `--yes`, `-y` | Non-interactive — accept all defaults. Still backs up existing dirs before clobbering. |
+| `--no-claude` | Skip the `~/.claude` mirror (handy if you only use OpenCode, or want to manage Claude Code separately). |
+| `--uninstall` | Remove the env-var block + the two symlinks. **Never deletes the cloned repo, your data, or `*.bak.*` backups.** |
+| `--help`, `-h` | Print usage. |
+
+The script writes a fenced block to your shell rc (`~/.zshrc`, `~/.bashrc`, or `~/.config/fish/config.fish`) that looks like this:
+
+```bash
+# >>> settings-opencode >>>
+# Added by settings-opencode installer. Edit values to match your provider.
+export OPENCODE_MODEL_PRIMARY="anthropic/claude-sonnet-4-6"
+export OPENCODE_MODEL_SUBAGENT_PLANNER="anthropic/claude-opus-4-7"
+export OPENCODE_MODEL_SUBAGENT_WORKER="anthropic/claude-sonnet-4-6"
+export OPENCODE_MODEL_SUBAGENT_MINI="anthropic/claude-haiku-4-5"
+export OPENCODE_REASONING_PRIMARY="high"
+export OPENCODE_REASONING_SECONDARY="medium"
+export OPENCODE_REASONING_TERTIARY="low"
+# <<< settings-opencode <<<
+```
+
+Edit the values inside the markers to point at whichever provider you use. Re-running `./install.sh` rewrites the same block; `./install.sh --uninstall` removes it cleanly.
+
+If your shell isn't bash/zsh/fish, the script prints the env block for you to paste manually and continues with the rest of the install.
+
+### Manual install
+
+<details>
+<summary>Click to expand the step-by-step manual walk-through (same outcome as the script).</summary>
+
+#### 1. Clone the repo into the OpenCode config dir
 
 OpenCode loads `~/.config/opencode/opencode.jsonc` at startup, so the simplest install is to clone (or symlink) the repo there.
 
@@ -87,7 +138,7 @@ git clone https://github.com/fmflurry/settings-opencode.git ~/Workspace/settings
 ln -s ~/Workspace/settings-opencode ~/.config/opencode
 ```
 
-### 3. Install plugin/tool dependencies
+#### 2. Install plugin/tool dependencies
 
 ```bash
 bun install        # uses bun.lock
@@ -95,7 +146,7 @@ bun install        # uses bun.lock
 npm ci
 ```
 
-### 4. Set the model + reasoning environment variables
+#### 3. Set the model + reasoning environment variables
 
 The `agent` block in `opencode.jsonc` is parameterized via env vars so you can swap providers without editing the config. Add these to your shell profile (`~/.zshrc`, `~/.bashrc`, etc.):
 
@@ -114,7 +165,7 @@ export OPENCODE_REASONING_TERTIARY="low"
 
 If your provider doesn't support `reasoningEffort`, OpenCode silently ignores it — pick any value.
 
-### 5. Install MCP server prerequisites
+#### 4. Install MCP server prerequisites
 
 `opencode.jsonc` declares four MCP servers. **Serena is required** — `instructions/serena.md` is loaded on every session and will fail to activate without it. The others are optional but documented here so you know what you're opting into.
 
@@ -125,7 +176,7 @@ If your provider doesn't support `reasoningEffort`, OpenCode silently ignores it
 | wallaby    | install [Wallaby.js](https://wallabyjs.com) and run `wallaby update-mcp`                      | Optional. Runtime-test introspection.                                        |
 | Figma      | `enabled: false` by default                                                                   | Optional. Flip `enabled: true` and set up [Figma MCP](https://help.figma.com) for design-system tools. |
 
-### 6. (Optional) Install the Claude Code mirror
+#### 5. (Optional) Install the Claude Code mirror
 
 The repo ships a `.claude/` subtree. If you also use Claude Code, link or copy it into `~/.claude/`. The two halves don't depend on each other — install only what you need.
 
@@ -150,7 +201,9 @@ What this installs:
 - `.claude/skills/**` — a curated catalog of "learned" skills (project-specific patterns, debugging recipes).
 - `.claude/homunculus/` — the shared instinct store used by continuous-learning v2 (kept empty in fresh installs; populated by the OpenCode plugins as you work).
 
-### 7. Smoke test
+</details>
+
+### Smoke test
 
 ```bash
 opencode
@@ -170,15 +223,17 @@ Then drop a slash command:
 
 It should route to the `planner` sub-agent and return a structured plan without writing code.
 
-### 8. Updating
+### Updating
 
 ```bash
 cd ~/.config/opencode
 git pull
-bun install   # or: npm ci
+./install.sh --yes        # refreshes deps + env block; idempotent
+# or, if you want to do it by hand:
+# bun install   (or: npm ci)
 ```
 
-If a new plugin shows up, OpenCode picks it up on the next restart. If an env var is added to `opencode.jsonc`, this README will mention it in the changelog section above.
+If a new plugin shows up, OpenCode picks it up on the next restart. If an env var is added to `opencode.jsonc`, this README will mention it.
 
 ---
 

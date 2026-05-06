@@ -3,6 +3,7 @@
   "autoupdate": true,
   "default_agent": "build",
   "instructions": [
+    "instructions/subagent-routing.md",
     "instructions/serena.md",
     "skills/socratic-design/SKILL.md",
     "skills/security-review/SKILL.md",
@@ -14,20 +15,43 @@
       "description": "Primary coding agent for development work",
       "mode": "primary",
       "model": "{env:OPENCODE_MODEL_PRIMARY}",
+      "prompt": "{file:./prompts/agents/build.txt}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
       "tools": {
         "write": true,
         "edit": true,
         "bash": true,
         "read": true,
+        "task": true,
+      },
+      "permission": {
+        "read": "allow",
+        "edit": "allow",
+        "bash": "allow",
+        // OpenCode task permissions are last-match-wins; direct Task smoke tests verify these allows override the wildcard deny.
+        // Keep this allowlist in sync when adding or renaming subagents.
+        "task": {
+          "*": "deny",
+          "planner": "allow",
+          "architect": "allow",
+          "code-reviewer": "allow",
+          "security-reviewer": "allow",
+          "tdd-guide": "allow",
+          "build-error-resolver": "allow",
+          "e2e-runner": "allow",
+          "doc-updater": "allow",
+          "refactor-cleaner": "allow",
+          "database-reviewer": "allow",
+          "git-specialist": "allow",
+        },
       },
     },
     "planner": {
-      "description": "Expert planning specialist for complex features and refactoring. Use for implementation planning, architectural changes, or complex refactoring.",
+      "description": "MUST delegate for complex feature planning, implementation plans, large refactors, or unclear execution order. Produces plans only.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_PLANNER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_PRIMARY}",
-      "prompt": "{.config/opencode/prompts/agents/planner.txt}",
+      "prompt": "{file:./prompts/agents/planner.txt}",
       "tools": {
         "read": true,
         "bash": true,
@@ -36,11 +60,11 @@
       },
     },
     "architect": {
-      "description": "Software architecture specialist for system design, scalability, and technical decision-making.",
+      "description": "MUST delegate for architecture, system design, scalability, cross-module boundaries, or high-impact technical decisions.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
-      "prompt": "{.config/opencode/prompts/agents/architect.txt}",
+      "prompt": "{file:./prompts/agents/architect.txt}",
       "tools": {
         "read": true,
         "bash": true,
@@ -49,11 +73,11 @@
       },
     },
     "code-reviewer": {
-      "description": "Expert code review specialist. Reviews code for quality, security, and maintainability. Use immediately after writing or modifying code.",
+      "description": "MUST delegate immediately after meaningful code changes. Reviews diffs for bugs, regressions, quality, maintainability, and tests.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
-      "prompt": "{.config/opencode/prompts/agents/code-reviewer.txt}",
+      "prompt": "{file:./prompts/agents/code-reviewer.txt}",
       "tools": {
         "read": true,
         "bash": true,
@@ -63,11 +87,11 @@
       },
     },
     "security-reviewer": {
-      "description": "Security vulnerability detection and remediation specialist. Use after writing code that handles user input, authentication, API endpoints, or sensitive data.",
+      "description": "MUST delegate for auth, user input, API endpoints, secrets, payments, PII, or sensitive data. Finds and may patch security issues.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
-      "prompt": "{.config/opencode/prompts/agents/security-reviewer.txt}",
+      "prompt": "{file:./prompts/agents/security-reviewer.txt}",
       "tools": {
         "read": true,
         "bash": true,
@@ -78,11 +102,11 @@
       },
     },
     "tdd-guide": {
-      "description": "Test-Driven Development specialist enforcing write-tests-first methodology. Use when writing new features, fixing bugs, or refactoring code. Ensures 80%+ test coverage.",
+      "description": "MUST delegate for new features, bug fixes, or refactors that need tests. Enforces RED-GREEN-REFACTOR and 80%+ coverage.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
-      "prompt": "{.config/opencode/prompts/agents/tdd-guide.txt}",
+      "prompt": "{file:./prompts/agents/tdd-guide.txt}",
       "tools": {
         "read": true,
         "write": true,
@@ -92,11 +116,11 @@
       },
     },
     "build-error-resolver": {
-      "description": "Build and TypeScript error resolution specialist. Use when build fails or type errors occur. Fixes build/type errors only with minimal diffs.",
+      "description": "MUST delegate when build, typecheck, lint, or TypeScript errors occur. Fixes only those errors with minimal diffs.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
-      "prompt": "{.config/opencode/prompts/agents/build-error-resolver.txt}",
+      "prompt": "{file:./prompts/agents/build-error-resolver.txt}",
       "tools": {
         "read": true,
         "write": true,
@@ -107,10 +131,10 @@
       },
     },
     "e2e-runner": {
-      "description": "End-to-end testing specialist using Playwright. Generates, maintains, and runs E2E tests for critical user flows.",
+      "description": "MUST delegate for browser automation, Playwright work, and critical user-flow E2E tests. Generates, runs, and reports artifacts.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
-      "prompt": "{.config/opencode/prompts/agents/e2e-runner.txt}",
+      "prompt": "{file:./prompts/agents/e2e-runner.txt}",
       "tools": {
         "read": true,
         "write": true,
@@ -121,11 +145,11 @@
       },
     },
     "doc-updater": {
-      "description": "Documentation and codemap specialist. Use for updating codemaps and documentation.",
+      "description": "MUST delegate for documentation, README updates, architecture notes, and codemaps. Keeps docs aligned with code changes.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
-      "prompt": "{.config/opencode/prompts/agents/doc-updater.txt}",
+      "prompt": "{file:./prompts/agents/doc-updater.txt}",
       "tools": {
         "read": true,
         "write": true,
@@ -136,11 +160,11 @@
       },
     },
     "refactor-cleaner": {
-      "description": "Dead code cleanup and consolidation specialist. Use for removing unused code, duplicates, and refactoring.",
+      "description": "MUST delegate for dead code, unused exports, duplication, and consolidation cleanup. Preserves behavior and verifies safety.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
-      "prompt": "{.config/opencode/prompts/agents/refactor-cleaner.txt}",
+      "prompt": "{file:./prompts/agents/refactor-cleaner.txt}",
       "tools": {
         "read": true,
         "write": true,
@@ -151,10 +175,10 @@
       },
     },
     "database-reviewer": {
-      "description": "PostgreSQL database specialist for query optimization, schema design, security, and performance. Incorporates Supabase best practices.",
+      "description": "MUST delegate for PostgreSQL, SQL, Supabase, RLS, migrations, schema design, query performance, or DB security.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
-      "prompt": "{.config/opencode/prompts/agents/database-reviewer.txt}",
+      "prompt": "{file:./prompts/agents/database-reviewer.txt}",
       "tools": {
         "read": true,
         "write": true,
@@ -165,11 +189,11 @@
       },
     },
     "git-specialist": {
-      "description": "Git workflow specialist for branch naming, commit messages, safe staging, commits, pushes, and PR-ready git hygiene.",
+      "description": "MUST delegate for branch names, commits, staging, pushes, pull requests, and git hygiene. Performs git-only work safely.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_MINI}",
       "reasoningEffort": "{env:OPENCODE_REASONING_TERTIARY}",
-      "prompt": "{.config/opencode/prompts/agents/git-specialist.txt}",
+      "prompt": "{file:./prompts/agents/git-specialist.txt}",
       "tools": {
         "bash": true,
         "read": false,

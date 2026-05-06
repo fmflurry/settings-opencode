@@ -12,9 +12,10 @@
 
 ## What's inside
 
-A primary `build` agent backed by **10 specialist sub-agents** (planner, architect, code/security/database review, TDD, build-fix, e2e, doc, refactor, git), wired together by:
+A primary `build` agent backed by **11 specialist sub-agents** (planner, architect, code/security/database review, TDD, build-fix, e2e, doc, refactor, git), wired together by:
 
-- **Slash commands** that route to the right specialist (`/plan`, `/tdd`, `/security`, `/code-review`, …).
+- **Automatic sub-agent delegation** from `build` via the Task tool when work matches specialist scope, with a first-tool gate for open-weight models.
+- **Slash commands** that force routing to the right specialist (`/plan`, `/tdd`, `/security`, `/code-review`, …).
 - **Always-on skills** loaded at session start — Socratic design, security review, coding standards, git workflow, Serena bootstrap.
 - **OpenCode plugins** — ECC hooks (Prettier + `tsc` on save), continuous-learning v2 (the *homunculus* instinct store), worktree spawner, auto-compact, caveman ultra mode, Figma RAG trigger, macOS notifications, startup bootstrap.
 - **Custom tools** — `run-tests`, `check-coverage`, `security-audit`, plus a codemap generator.
@@ -240,7 +241,7 @@ If a new plugin shows up, OpenCode picks it up on the next restart. If an env va
 <a id="english"></a>
 ## English
 
-Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a primary `build` agent, ten specialist sub-agents, always-on skills, slash commands, OpenCode plugins (hooks, instincts, worktrees, auto-compact, caveman, figma RAG, notifications), custom tools, and a Claude Code mirror.
+Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a primary `build` agent, 11 specialist sub-agents, always-on skills, slash commands, OpenCode plugins (hooks, instincts, worktrees, auto-compact, caveman, figma RAG, notifications), custom tools, and a Claude Code mirror.
 
 <a id="goals-en"></a>
 ### Goals
@@ -262,18 +263,19 @@ Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a primary `build`
 - TUI plugins: `tui-plugins/*.tsx`.
 - Custom tools: `tools/*.ts`.
 - Mode notes: `contexts/*.md`.
-- Global instructions: `instructions/serena.md`, `instructions/caveman-ultra.md`.
+- Global instructions: `instructions/subagent-routing.md`, `instructions/serena.md`, `instructions/caveman-ultra.md`.
 - Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`.
 - Claude mirror: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/skills/`, `.claude/commands/`, `.claude/homunculus/`.
-- Intentional exclusions (`.gitignore`): `node_modules`, `bun.lock` cache, `antigravity-*`, `.instinct-digest-state.json`.
+- Intentional exclusions (`.gitignore`): `.serena/` local MCP state, `node_modules/`, `.instinct-digest-state.json`, `antigravity-*`, `.DS_Store`, local `.env*` files except `.env.example`.
 
 <a id="config-en"></a>
 ### Configuration: `opencode.jsonc`
 
-Five concerns wired in one file:
+Six concerns wired in one file:
 
 1. `instructions`: always-on skills loaded at session start. Currently:
-   - `instructions/serena.md` — auto-activates Serena MCP.
+   - `instructions/subagent-routing.md` — Task-first subagent delegation gate.
+   - `instructions/serena.md` — activates Serena MCP after the routing gate when specialist delegation does not apply.
    - `skills/socratic-design/SKILL.md` — evidence-first decision gating.
    - `skills/security-review/SKILL.md` — OWASP checklist.
    - `skills/coding-standards/SKILL.md` — code conventions.
@@ -305,6 +307,18 @@ Defined in `opencode.jsonc` under `agent`:
 | `refactor-cleaner`     | subagent | Dead-code removal + consolidation.                                                  |
 | `database-reviewer`    | subagent | PostgreSQL / Supabase schema, perf, security.                                       |
 | `git-specialist`       | subagent | Branches, commits, pushes, PRs (mini model).                                        |
+
+### Automatic sub-agent invocation
+
+OpenCode exposes subagents to primary agents through the Task tool. `instructions/subagent-routing.md` enforces a Task-first gate before direct inspection for matching requests, and `prompts/agents/build.txt` repeats the routing rules for the `build` agent. This helps less inference-heavy models delegate without waiting for a slash command.
+
+Use these paths depending on how much control you want:
+
+- Plain request: lets `build` auto-delegate when routing rules match.
+- `@agent` mention: manually invokes a specific subagent in the conversation.
+- Slash command: forces a subtask with a configured template, e.g. `/plan`, `/tdd`, `/security`.
+
+Why this exists: GPT/Claude often infer delegation from short descriptions, but open-source/open-weight models are more literal and tend to inspect with `bash`/Serena first. The top-level first-tool gate, routing prompt, and stronger `MUST delegate` agent descriptions make the same behavior more model-agnostic.
 
 <a id="commands-en"></a>
 ### Slash commands
@@ -425,7 +439,7 @@ Curation:
 1. Startup: OpenCode loads `opencode.jsonc` -> always-on instructions -> `instinct-injector` preloads instincts -> `instinct-digest` produces a diff -> `caveman-server` adds caveman preamble if active.
 2. First user action: `startup-bootstrap` triggers `serena_activate_project`.
 3. Dev: `build` executes. `ecc-hooks` formats / type-checks / flags `console.log`. `instinct-observer` archives events.
-4. Workflow: `/plan`, `/tdd`, `/security`, etc. route to the right specialist.
+4. Workflow: `build` auto-delegates to specialists through Task; `/plan`, `/tdd`, `/security`, etc. force the same routing explicitly.
 5. Idle: `auto-compact` triggers when the tool-call threshold is reached; `notification` pings macOS.
 6. Stop: v1 hook writes a draft; v2 daemon clusters observations into instincts for the next session.
 
@@ -434,7 +448,7 @@ Curation:
 <a id="francais"></a>
 ## Français
 
-Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `build`, dix sous-agents specialises, des skills toujours actives, des commandes slash, des plugins (hooks, instincts, worktrees, auto-compact, caveman, figma RAG), des outils custom et un mirror Claude Code.
+Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `build`, onze sous-agents specialises, des skills toujours actives, des commandes slash, des plugins (hooks, instincts, worktrees, auto-compact, caveman, figma RAG), des outils custom et un mirror Claude Code.
 
 <a id="objectif-fr"></a>
 ### Objectif
@@ -456,18 +470,19 @@ Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un ag
 - TUI plugins: `tui-plugins/*.tsx` (sidebar React rendue par OpenCode).
 - Outils custom: `tools/*.ts`.
 - Contextes (memos de mode): `contexts/*.md`.
-- Instructions globales: `instructions/serena.md`, `instructions/caveman-ultra.md`.
+- Instructions globales: `instructions/subagent-routing.md`, `instructions/serena.md`, `instructions/caveman-ultra.md`.
 - Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`.
 - Mirror Claude Code: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/skills/`, `.claude/commands/`, `.claude/homunculus/`.
-- Exclusions volontaires (`.gitignore`): `node_modules`, `bun.lock` cache, `antigravity-*`, `.instinct-digest-state.json`.
+- Exclusions volontaires (`.gitignore`): etat MCP local `.serena/`, `node_modules/`, `.instinct-digest-state.json`, `antigravity-*`, `.DS_Store`, fichiers locaux `.env*` sauf `.env.example`.
 
 <a id="config-fr"></a>
 ### Configuration: `opencode.jsonc`
 
-Le fichier orchestre quatre choses:
+Le fichier orchestre six choses:
 
 1. `instructions`: skills toujours chargees au demarrage. Aujourd'hui:
-   - `instructions/serena.md` -> active Serena MCP automatiquement.
+   - `instructions/subagent-routing.md` -> gate Task-first pour delegation sous-agent.
+   - `instructions/serena.md` -> active Serena MCP apres le gate de routage quand la delegation specialiste ne s'applique pas.
    - `skills/socratic-design/SKILL.md` -> gating evidence-first sur les decisions design.
    - `skills/security-review/SKILL.md` -> checklist OWASP.
    - `skills/coding-standards/SKILL.md` -> conventions code.
@@ -499,6 +514,18 @@ Definis dans `opencode.jsonc` (champ `agent`):
 | `refactor-cleaner`     | subagent  | Suppression code mort + consolidation.                                                |
 | `database-reviewer`    | subagent  | PostgreSQL / Supabase: schema, perfs, securite.                                       |
 | `git-specialist`       | subagent  | Branches, commits, push, PRs (modele mini).                                           |
+
+### Invocation automatique des sous-agents
+
+OpenCode expose les sous-agents aux agents primaires via le Task tool. `instructions/subagent-routing.md` impose un gate Task-first avant inspection directe quand une demande matche un specialiste, et `prompts/agents/build.txt` repete les regles pour l'agent `build`.
+
+Chemins possibles:
+
+- Requete normale: `build` auto-delegue quand une regle de routage matche.
+- Mention `@agent`: invoque manuellement un sous-agent precis.
+- Commande slash: force un subtask avec template configure, par ex. `/plan`, `/tdd`, `/security`.
+
+Pourquoi: GPT/Claude inferent souvent la delegation depuis des descriptions courtes, mais les modeles open-source/open-weight sont plus litteraux et inspectent souvent avec `bash`/Serena avant de deleguer. Le gate top-level, le prompt de routage, et les descriptions `MUST delegate` rendent le comportement plus portable entre modeles.
 
 <a id="commands-fr"></a>
 ### Commandes slash
@@ -619,7 +646,6 @@ Curation:
 1. Demarrage: OpenCode charge `opencode.jsonc` -> instructions globales -> plugin `instinct-injector` injecte les instincts -> `instinct-digest` produit un diff -> `caveman-server` ajoute le preamble si actif.
 2. Premiere action utilisateur: `startup-bootstrap` declenche `serena_activate_project`.
 3. Dev: `build` execute. `ecc-hooks` formate / type-check / loue les `console.log`. `instinct-observer` archive les events.
-4. Workflow: `/plan`, `/tdd`, `/security`, etc. routent vers le bon sous-agent.
+4. Workflow: `build` auto-delegue aux specialistes via Task; `/plan`, `/tdd`, `/security`, etc. forcent explicitement le meme routage.
 5. Idle: `auto-compact` declenche un compact quand le seuil de tool calls est atteint. `notification` ping macOS.
 6. Stop: hook v1 produit un draft, hook v2 cluster les observations en instincts pour la session suivante.
-

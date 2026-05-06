@@ -1,0 +1,13 @@
+# Local Serena MCP project state
+.serena/
+
+# Dependencies and generated caches
+node_modules/
+.instinct-digest-state.json
+antigravity-*
+.DS_Store
+
+# Local environment files
+.env
+.env.*
+!.env.example

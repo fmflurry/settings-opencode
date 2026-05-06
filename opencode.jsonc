@@ -4,7 +4,6 @@
   "default_agent": "build",
   "instructions": [
     "instructions/serena.md",
-    "instructions/agent-orchestration.md",
     "skills/socratic-design/SKILL.md",
     "skills/security-review/SKILL.md",
     "skills/coding-standards/SKILL.md",
@@ -21,10 +20,6 @@
         "edit": true,
         "bash": true,
         "read": true,
-        "task": true,
-      },
-      "permission": {
-        "task": "allow",
       },
     },
     "planner": {

@@ -318,6 +318,7 @@ function sqliteJsonQuery(dbPath, sql) {
   try {
     const result = spawnSync("sqlite3", ["-cmd", ".mode json", dbPath, sql], {
       encoding: "utf8",
+      maxBuffer: 50 * 1024 * 1024,
     });
 
     if (!result || typeof result.status !== "number" || result.status !== 0) {

@@ -354,4 +354,87 @@
     },
   },
   "plugin": ["@tarquinen/opencode-dcp@latest"],
+  "provider": {
+    "myMistral": {
+      "name": "myMistral",
+      "npm": "@ai-sdk/mistral", // override to fix wrong package version in OpenCode leading to fail tool calls
+      "options": {
+        "apiKey": "{env:MISTRAL_API_KEY}",
+      },
+      "models": {
+        "mistral-large-latest": {
+          "name": "Mistral Large (latest)",
+          "tool_call": true,
+          "reasoning": true,
+          "options": {
+            "reasoning_effort": "high",
+          },
+        },
+        "mistral-medium-latest": {
+          "name": "Mistral Medium (latest)",
+          "tool_call": true,
+          "reasoning": true,
+          "options": {
+            "reasoning_effort": "high",
+          },
+        },
+        "mistral-medium-2604": {
+          "name": "Mistral Medium 2604",
+          "tool_call": true,
+          "reasoning": true,
+          "options": {
+            "reasoning_effort": "high",
+          },
+        },
+        "mistral-small-latest": {
+          "name": "Mistral Small (latest)",
+          "tool_call": true,
+          "reasoning": true,
+          "options": {
+            "reasoning_effort": "high",
+          },
+        },
+        "codestral-latest": {
+          "name": "Codestral (latest)",
+          "tool_call": true,
+          "reasoning": true,
+          "options": {
+            "reasoning_effort": "high",
+          },
+        },
+        "magistral-medium-latest": {
+          "name": "Magistral Medium (latest)",
+          "tool_call": true,
+          "reasoning": true,
+          "options": {
+            "reasoning_effort": "high",
+          },
+        },
+        "ministral-8b-latest": {
+          "name": "Ministral 8B (latest)",
+          "tool_call": true,
+          "reasoning": true,
+          "options": {
+            "reasoning_effort": "high",
+          },
+        },
+        "ministral-3b-latest": {
+          "name": "Ministral 3B (latest)",
+          "tool_call": true,
+          "reasoning": true,
+          "options": {
+            "reasoning_effort": "high",
+          },
+        },
+        "pixtral-large-latest": {
+          "name": "Pixtral Large (latest)",
+          "tool_call": true,
+          "reasoning": true,
+          "options": {
+            "reasoning_effort": "high",
+          },
+        },
+      },
+    },
+  },
 }

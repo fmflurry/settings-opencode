@@ -353,7 +353,7 @@
       "enabled": false,
     },
   },
-  "plugin": ["@tarquinen/opencode-dcp@latest"],
+  "plugin": ["@tarquinen/opencode-dcp@latest", "opencode-skill-creator"],
   "provider": {
     "myMistral": {
       "name": "myMistral",

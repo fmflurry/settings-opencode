@@ -3,12 +3,12 @@
   "autoupdate": true,
   "default_agent": "build",
   "instructions": [
-    "instructions/subagent-routing.md",
-    "instructions/serena.md",
-    "skills/socratic-design/SKILL.md",
-    "skills/security-review/SKILL.md",
-    "skills/coding-standards/SKILL.md",
-    "skills/git-workflow/SKILL.md",
+    "{env:HOME}/.config/opencode/instructions/subagent-routing.md",
+    "{env:HOME}/.config/opencode/instructions/serena.md",
+    "{env:HOME}/.config/opencode/skills/socratic-design/SKILL.md",
+    "{env:HOME}/.config/opencode/skills/security-review/SKILL.md",
+    "{env:HOME}/.config/opencode/skills/coding-standards/SKILL.md",
+    "{env:HOME}/.config/opencode/skills/git-workflow/SKILL.md",
   ],
   "agent": {
     "build": {

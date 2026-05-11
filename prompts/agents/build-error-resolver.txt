@@ -86,8 +86,8 @@ For each error:
 # Nuclear option: clear all caches
 rm -rf .next node_modules/.cache && npm run build
 
-# Reinstall dependencies
-rm -rf node_modules package-lock.json && npm install
+# Reinstall dependencies without changing the lockfile
+npm ci
 
 # Fix ESLint auto-fixable
 npx eslint . --fix

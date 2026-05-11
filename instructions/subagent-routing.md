@@ -12,8 +12,8 @@ Do not use `bash`, `read`, `write`, `edit`, or MCP tools, including Serena, befo
 
 ## Task Must Be First When
 
-- Git, commit, branch, push, pull request, PR -> `git-specialist`
-- Code review, current-change review, "does this need review" -> `code-reviewer`
+- Git, commit, branch, push, pull request creation/status, PR creation/status -> `git-specialist`
+- Code review, PR review, pull request review, current-change review, "does this need review" -> `code-reviewer`
 - Security review, auth, secrets, user input, API endpoints -> `security-reviewer`
 - Build, lint, typecheck, or TypeScript errors -> `build-error-resolver`
 - Planning, complex features, unclear order, large refactors -> `planner`

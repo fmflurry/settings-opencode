@@ -4,26 +4,21 @@
   "default_agent": "build",
   "instructions": [
     "{env:HOME}/.config/opencode/instructions/subagent-routing.md",
-    "{env:HOME}/.config/opencode/instructions/serena.md",
-    "{env:HOME}/.config/opencode/skills/socratic-design/SKILL.md",
     "{env:HOME}/.config/opencode/skills/security-review/SKILL.md",
     "{env:HOME}/.config/opencode/skills/coding-standards/SKILL.md",
-    "{env:HOME}/.config/opencode/skills/git-workflow/SKILL.md",
+    // "{env:HOME}/.config/opencode/instructions/serena.md", // disabled: MCP off
+    // "{env:HOME}/.config/opencode/skills/socratic-design/SKILL.md", // disabled: load on demand
+    // "{env:HOME}/.config/opencode/skills/git-workflow/SKILL.md", // disabled: load on demand
   ],
   "agent": {
     "build": {
       "description": "Primary coding agent for development work",
       "mode": "primary",
       "model": "{env:OPENCODE_MODEL_PRIMARY}",
-      "prompt": "{file:./prompts/agents/build.txt}",
+      "prompt": "{.config/opencode/prompts/agents/build.txt}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
       "tools": {
         "*": true,
-        "write": true,
-        "edit": true,
-        "bash": true,
-        "read": true,
-        "task": true,
       },
       "permission": {
         "read": "allow",
@@ -52,7 +47,7 @@
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_PLANNER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_PRIMARY}",
-      "prompt": "{file:./prompts/agents/planner.txt}",
+      "prompt": "{.config/opencode/prompts/agents/planner.txt}",
       "tools": {
         "read": true,
         "bash": true,
@@ -65,7 +60,7 @@
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
-      "prompt": "{file:./prompts/agents/architect.txt}",
+      "prompt": "{.config/opencode/prompts/agents/architect.txt}",
       "tools": {
         "read": true,
         "bash": true,
@@ -74,17 +69,17 @@
       },
     },
     "code-reviewer": {
-      "description": "MUST delegate immediately after meaningful code changes. Reviews diffs for bugs, regressions, quality, maintainability, and tests.",
+      "description": "MUST delegate immediately after meaningful code changes or PR/pull request review requests. Reviews diffs for bugs, regressions, quality, maintainability, and tests.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
-      "prompt": "{file:./prompts/agents/code-reviewer.txt}",
+      "prompt": "{.config/opencode/prompts/agents/code-reviewer.txt}",
       "tools": {
         "read": true,
         "bash": true,
         "grep": true,
-        "write": false,
-        "edit": false,
+        "write": true,
+        "edit": true,
       },
     },
     "security-reviewer": {
@@ -92,7 +87,7 @@
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
-      "prompt": "{file:./prompts/agents/security-reviewer.txt}",
+      "prompt": "{.config/opencode/prompts/agents/security-reviewer.txt}",
       "tools": {
         "read": true,
         "bash": true,
@@ -107,7 +102,7 @@
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
-      "prompt": "{file:./prompts/agents/tdd-guide.txt}",
+      "prompt": "{.config/opencode/prompts/agents/tdd-guide.txt}",
       "tools": {
         "read": true,
         "write": true,
@@ -121,7 +116,7 @@
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
-      "prompt": "{file:./prompts/agents/build-error-resolver.txt}",
+      "prompt": "{.config/opencode/prompts/agents/build-error-resolver.txt}",
       "tools": {
         "read": true,
         "write": true,
@@ -135,7 +130,7 @@
       "description": "MUST delegate for browser automation, Playwright work, and critical user-flow E2E tests. Generates, runs, and reports artifacts.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
-      "prompt": "{file:./prompts/agents/e2e-runner.txt}",
+      "prompt": "{.config/opencode/prompts/agents/e2e-runner.txt}",
       "tools": {
         "read": true,
         "write": true,
@@ -150,7 +145,7 @@
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
-      "prompt": "{file:./prompts/agents/doc-updater.txt}",
+      "prompt": "{.config/opencode/prompts/agents/doc-updater.txt}",
       "tools": {
         "read": true,
         "write": true,
@@ -165,7 +160,7 @@
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
-      "prompt": "{file:./prompts/agents/refactor-cleaner.txt}",
+      "prompt": "{.config/opencode/prompts/agents/refactor-cleaner.txt}",
       "tools": {
         "read": true,
         "write": true,
@@ -179,7 +174,7 @@
       "description": "MUST delegate for PostgreSQL, SQL, Supabase, RLS, migrations, schema design, query performance, or DB security.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
-      "prompt": "{file:./prompts/agents/database-reviewer.txt}",
+      "prompt": "{.config/opencode/prompts/agents/database-reviewer.txt}",
       "tools": {
         "read": true,
         "write": true,
@@ -190,14 +185,14 @@
       },
     },
     "git-specialist": {
-      "description": "MUST delegate for branch names, commits, staging, pushes, pull requests, and git hygiene. Performs git-only work safely.",
+      "description": "MUST delegate for branch names, commits, staging, pushes, pull request creation/status, and git hygiene. Performs git-only work safely.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_MINI}",
       "reasoningEffort": "{env:OPENCODE_REASONING_TERTIARY}",
-      "prompt": "{file:./prompts/agents/git-specialist.txt}",
+      "prompt": "{.config/opencode/prompts/agents/git-specialist.txt}",
       "tools": {
         "bash": true,
-        "read": false,
+        "read": true,
         "write": false,
         "edit": false,
         "grep": false,
@@ -334,18 +329,18 @@
         "git+https://github.com/oraios/serena",
         "serena",
         "start-mcp-server",
-        "--open-web-dashboard",
-        "false",
       ],
-      "enabled": true,
+      "enabled": false,
     },
     "context7": {
       "type": "local",
       "command": ["npx", "-y", "@upstash/context7-mcp@latest"],
+      "enabled": false,
     },
     "wallaby": {
       "type": "local",
       "command": ["npx", "-y", "-c", "node ~/.wallaby/mcp/"],
+      "enabled": false,
     },
     "Figma": {
       "type": "remote",

@@ -11,3 +11,22 @@ antigravity-*
 .env
 .env.*
 !.env.example
+
+# Local-only runtime state
+logs/
+profiles/
+opencode.bkup/
+*.bkup/
+*.bku
+*.tui-migration.bak
+
+# Local agents (not synced)
+/agents/
+
+# Plugin-installed skill (regenerated on opencode start)
+skills/skill-creator/
+
+# Continuous-learning runtime artifacts (not yet promoted)
+skills/learned/*.draft.md
+skills/learned/learned-*.md
+skills/learned/.continuous-learning-index.json

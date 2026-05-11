@@ -5,352 +5,481 @@ description: Signal-first reactive state management for Angular. Bridge RxJS str
 
 # flurryx
 
-Signal-first reactive state management for Angular.
+Signal-first reactive state management for Angular. RxJS in, signals out.
 
 ## When to Activate
 
-- Creating or updating Angular state using `Store`, `syncToStore`, or `syncToKeyedStore`
-- Adding or refactoring facades, services, or other state orchestration layers that expose flurryx-backed signals
-- Generating feature modules that use flurryx for async state, caching, or keyed resources
-- Modeling per-entity caches with `KeyedResourceData<TKey, TValue>`
-- Wiring mirrored state with `mirror`, `mirrorSelf`, `mirrorKeyed`, `mirrorKey`, or `collectKeyed`
-- Adding message-channel persistence, time travel, replay, or dead-letter recovery
+- Build/modify state with `Store`, `syncToStore`, `syncToKeyedStore`
+- Add facades/services exposing flurryx-backed signals
+- Scaffold feature modules using flurryx for async state, caching, keyed resources
+- Per-entity caches via `KeyedResourceData<TKey, TValue>`
+- Mirroring/derivation: `mirror`, `mirrorSelf`, `derive`, `deriveSelf`, `mirrorKeyed`, `mirrorKey`, `deriveKey`, `collectKeyed`
+- Channel persistence, history, replay, dead-letter recovery
 - Reviewing AI-generated Angular code for flurryx correctness
 
-## Library Anchors (Verify Before Coding)
+## Imports
 
-Before writing code, verify these anchors exist in the active branch:
+```ts
+// main API
+import {
+  Store, BaseStore, LazyStore,
+  syncToStore, syncToKeyedStore,
+  SkipIfCached, Loading,
+  clearAllStores,
+  mirrorKey, deriveKey, collectKeyed,
+  cloneValue, createSnapshotRestorePatch,
+  createInMemoryStoreMessageChannel,
+  createStorageStoreMessageChannel,
+  createLocalStorageStoreMessageChannel,
+  createSessionStorageStoreMessageChannel,
+  createCompositeStoreMessageChannel,
+  isKeyedResourceData, createKeyedResourceData, isAnyKeyLoading,
+  CACHE_NO_TIMEOUT, DEFAULT_CACHE_TTL_MS,
+  defaultErrorNormalizer,
+} from 'flurryx';
 
-| Anchor            | What to look for                                                     |
-| ----------------- | -------------------------------------------------------------------- |
-| Store builder     | `Store.for<Config>().build()` or fluent `Store.resource(...).as<>()` |
-| Resource wrappers | `ResourceState<T>` and `KeyedResourceData<TKey, TValue>`             |
-| Rx bridge         | `syncToStore` and `syncToKeyedStore`                                 |
-| Decorators        | `@SkipIfCached` and `@Loading`                                       |
+import type {
+  ResourceState, StoreEnum, ResourceStatus, ResourceErrors,
+  KeyedResourceData, KeyedResourceKey,
+  StoreSignal, KeyedStoreSignal, KeyedResourceState, ValueOrSignal,
+  StoreOptions, StoreCacheInvalidateEvent,
+  MirrorOptions, DeriveOptions, CollectKeyedOptions,
+  SyncToStoreOptions, SyncToKeyedStoreOptions, ErrorNormalizer,
+  // history
+  StoreHistory, StoreHistoryEntry,
+  StoreDeadLetterEntry, StoreDeadLetterCommand, StoreDeadLetterMeta,
+  DeadLetterCommandResolverResult,
+  // messages
+  StoreMessage, StoreSnapshot, StoreMessageStatus,
+  UpdateStoreMessage, ClearStoreMessage, ClearAllStoreMessage,
+  StartLoadingStoreMessage, StopLoadingStoreMessage,
+  UpdateKeyedOneStoreMessage, ClearKeyedOneStoreMessage,
+  StartKeyedLoadingStoreMessage, EnsureKeyedSlotStoreMessage,
+  // channels
+  StoreMessageRecord, StoreMessageChannel,
+  StoreMessageChannelStorage, StoreMessageChannelOptions,
+  CompositeStoreMessageChannelOptions,
+  StorageStoreMessageChannelOptions,
+  BrowserStorageStoreMessageChannelOptions,
+} from 'flurryx';
 
-If one or more anchors are missing:
+// HTTP-only — pulls @angular/common/http
+import { httpErrorNormalizer } from 'flurryx/http';
+```
 
-- Do not invent new flurryx APIs
-- Prefer confirmed imports from `flurryx` and `flurryx/http`
-- Call out the mismatch clearly in the final message
+Prefer `flurryx`. Use `flurryx/http` only for `httpErrorNormalizer`. Avoid direct `@flurryx/core | @flurryx/store | @flurryx/rx` unless host already depends.
 
 ## Hard Rules
 
-- Never use `any`
-- Never let components subscribe to flurryx loading flows; components read signals, facades own writes and subscriptions
-- Prefer the interface-based builder: `Store.for<Config>().build()`
-- Use `UPPER_SNAKE_CASE` store keys such as `TASKS`, `TASK_DETAIL`, `TASK_CREATION`
-- Use `@SkipIfCached` only when the resource is intentionally cacheable; if the flow must always refetch, do not use it
-- Keep `@SkipIfCached` outermost and `@Loading` directly beneath it
-- Use `syncToKeyedStore` for keyed resources instead of hand-rolled `Record` updates
-- Prefer importing application-facing APIs from `flurryx`; use `flurryx/http` only for `httpErrorNormalizer`
-- Never subclass `BaseStore` directly unless the codebase already has an established custom-store pattern
-
-## Architecture Overview
-
-```text
-UI layer --> flurryx orchestration layer --> async/data layer
-```
-
-- flurryx is architecture-agnostic and does not require Clean Architecture, hexagonal layering, or a specific folder structure
-- The only requirement is a clear boundary where async work produces `Observable` values and flurryx syncs them into signal-backed store state
-- In many apps that boundary is a facade; in others it may be a service, feature store wrapper, or controller-like class
-
-## Recommended Architecture
-
-- If the codebase already uses facades, keep flurryx orchestration in facades
-- If the codebase uses plain Angular services, keep flurryx orchestration in services
-- If the codebase uses Clean Architecture or ports/adapters, flurryx fits naturally in that structure
-- Prefer matching the host application's existing architecture instead of forcing Clean Architecture or ports/adapters if they are not already present
+- Never `any`
+- Components read signals only. Facade/service owns subscriptions + writes
+- Prefer `Store.for<Config>().build()` interface builder
+- `UPPER_SNAKE_CASE` keys: `LIST`, `DETAIL`, `ITEMS`
+- `@SkipIfCached` outermost, `@Loading` directly beneath
+- Use `@SkipIfCached` only if cache hits are intended; else omit
+- Keyed resources -> `syncToKeyedStore`, not hand-rolled `Record` updates
+- Don't subclass `BaseStore` directly
+- Don't call component methods in templates -> use `computed`
 
 ## Core Flow
 
-```text
-Observable response -> syncToStore / syncToKeyedStore -> Store signal -> Template
+```
+Observable -> syncToStore / syncToKeyedStore -> Store signal -> Template
 ```
 
-flurryx keeps async work in RxJS and state consumption in Angular signals.
+## ResourceState<T>
 
-## Import Conventions
+Every slot wraps `ResourceState<T>`:
 
-Prefer these imports in application code:
-
-```typescript
-import {
-  Store,
-  syncToStore,
-  syncToKeyedStore,
-  SkipIfCached,
-  Loading,
-} from "flurryx";
-import type { KeyedResourceData, ResourceState } from "flurryx";
-import { httpErrorNormalizer } from "flurryx/http";
+```ts
+interface ResourceState<T> {
+  isLoading?: boolean;
+  data?: T;
+  status?: 'Success' | 'Error';
+  errors?: Array<{ code: string; message: string }>;
+}
 ```
 
-- Use `flurryx` for the main public API
-- Use `flurryx/http` only when handling Angular `HttpErrorResponse`
-- Avoid direct `@flurryx/core`, `@flurryx/store`, or `@flurryx/rx` imports unless the codebase already depends on those subpackages explicitly
+Lifecycle: idle -> loading -> Success | Error.
 
-## Primary Patterns
+## KeyedResourceData
 
-### Store Definition
+Per-entity cache:
 
-Prefer the interface-based builder for new code:
+```ts
+type KeyedResourceData<TKey extends string | number, TValue> =
+  Partial<Record<TKey, ResourceState<TValue>>>;
+```
 
-```typescript
-import { Store } from "flurryx";
+Helpers:
+- `createKeyedResourceData<TKey, TValue>()` -> `{}`
+- `isKeyedResourceData(val)` -> type guard
+- `isAnyKeyLoading(data)` -> bool
 
+## Store Builder
+
+### Interface form (preferred)
+
+```ts
 interface ProductStoreConfig {
   LIST: Product[];
   DETAIL: Product;
+  ITEMS: KeyedResourceData<string, Item>;
 }
 
 export const ProductStore = Store.for<ProductStoreConfig>().build();
 ```
 
-- Name config interfaces as `<Feature>StoreConfig`
-- Name store tokens as `<Feature>Store`
-- Model each slot as the raw data type; flurryx wraps it in `ResourceState<T>`
+Naming: `<Feature>StoreConfig` + `<Feature>Store`. Slots are raw types; flurryx wraps in `ResourceState<T>`.
 
-Use the fluent builder only when keys are defined inline at runtime:
+### Enum-constrained form
 
-```typescript
-export const ProductStore = Store.resource("LIST")
-  .as<Product[]>()
-  .resource("DETAIL")
-  .as<Product>()
+```ts
+const Keys = { LIST: 'LIST', DETAIL: 'DETAIL' } as const;
+export const ProductStore = Store.for(Keys)
+  .resource('LIST').as<Product[]>()
+  .resource('DETAIL').as<Product>()
   .build();
 ```
 
-### Facade Pattern
+`.build()` only callable when all enum keys defined.
 
-When the application uses facades, facades are the public API for components:
+### Fluent form
 
-```typescript
-import { Injectable, inject } from "@angular/core";
-import { syncToStore, SkipIfCached, Loading } from "flurryx";
+```ts
+export const ProductStore = Store
+  .resource('LIST').as<Product[]>()
+  .resource('DETAIL').as<Product>()
+  .build();
+```
 
+### Builder methods (all forms)
+
+- `.mirror(sourceToken, sourceKey, targetKey?)` -> 1:1 cross-store mirror
+- `.mirrorSelf(sourceKey, targetKey)` -> alias inside same store; keys must differ
+- `.derive(sourceToken, sourceKey, targetKey?, { mapData })` -> map source data into target slot
+- `.deriveSelf(sourceKey, targetKey, { mapData })` -> derived alias inside same store
+- `.mirrorKeyed(sourceToken, sourceKey, { extractId }, targetKey?)` -> aggregate single-entity fetches into keyed slot
+- `.build(options?: StoreOptions)` -> `InjectionToken` registered `providedIn: 'root'`
+
+`StoreOptions` extends `StoreMessageChannelOptions` -> supply `channel` to override default in-memory channel.
+
+## IStore API
+
+`store.get(key)` returns:
+- non-keyed slot -> `Signal<ResourceState<T>>`
+- keyed slot -> `KeyedStoreSignal<TData, K>` = signal + `.for(resourceKey | Signal<resourceKey>)` -> `Signal<ResourceState<TValue>>`
+
+### Writes (publish broker messages)
+
+- `update(key, partial, options?)` -> merge partial; `options.deadLetter?: StoreDeadLetterMeta`
+- `clear(key)` -> reset slot to idle
+- `clearAll()` -> reset every slot
+- `startLoading(key)` / `stopLoading(key)`
+- `updateKeyedOne(key, resourceKey, entity)` -> sets entity status `Success`, recomputes top-level isLoading
+- `clearKeyedOne(key, resourceKey)` -> remove single keyed entry
+- `startKeyedLoading(key, resourceKey)` -> mark single key loading
+
+### Cache invalidation
+
+- `invalidateCacheFor(key)` -> invalidate slot cache only (state untouched)
+- `invalidateCacheFor(key, resourceKey)` -> invalidate one keyed entry's cache
+
+### Hooks
+
+- `onUpdate(key, (next, prev) => …)` -> `() => void` cleanup
+- `onCacheInvalidate(key, ({ key, resourceKey }) => …)` -> cleanup
+- Hook errors are caught + rethrown via `queueMicrotask`/`AggregateError`
+
+### History / Replay
+
+- `replay(id | ids[])` -> re-execute persisted channel messages -> int (acked count)
+- `restoreStoreAt(index)` -> snapshot navigation (no message)
+- `restoreResource(key, index?)` -> restore single key from snapshot
+- `undo()` / `redo()` -> bool
+- `getHistory()` / `getHistory(key)` -> readonly entries
+- `getMessages()` / `getMessages(key)` -> channel records
+- `getDeadLetters()` -> dead-letter entries
+- `replayDeadLetter(id)` -> bool
+- `replayDeadLetters()` -> int (acked)
+- `replayDeadLetterCommand(id, async resolver -> { resolved, clear })` -> Promise<bool>
+- `getCurrentIndex()` -> int
+
+### Reactive signals on store
+
+- `history: Signal<readonly StoreHistoryEntry[]>`
+- `messages: Signal<readonly StoreMessageRecord[]>`
+- `currentIndex: Signal<number>`
+- `keys: Signal<readonly StoreKey[]>` (LazyStore: grows on first access)
+
+### Global
+
+- `clearAllStores()` -> calls `clearAll()` on every tracked store. Use for logout/tenant switch.
+
+## Rx Operators
+
+### syncToStore
+
+```ts
+this.api.getProducts().pipe(
+  syncToStore(this.store, 'LIST', {
+    completeOnFirstEmission: true,           // default true (take(1))
+    callbackAfterComplete: () => {},
+    errorNormalizer: defaultErrorNormalizer, // default
+    deadLetterCommand: { type: '...', payload: {} },
+  })
+).subscribe();
+```
+
+Success -> `{ data, isLoading: false, status: 'Success', errors: undefined }`.
+Error -> `{ data: undefined, isLoading: false, status: 'Error', errors: normalized }` + DLQ meta from HTTP-like errors.
+
+### syncToKeyedStore
+
+```ts
+this.api.getInvoice(id).pipe(
+  syncToKeyedStore(this.store, 'ITEMS', id, {
+    mapResponse: (r) => r.data,    // optional response unwrap
+    completeOnFirstEmission: true,
+    callbackAfterComplete: () => {},
+    errorNormalizer,
+    deadLetterCommand,
+  })
+).subscribe();
+```
+
+Bootstraps `isLoading: true` for that key on subscribe (via `defer`). Per-key Success/Error; recomputes top-level `isLoading` from remaining keys.
+
+## Decorators
+
+### @SkipIfCached
+
+```ts
+@SkipIfCached(
+  storeKey,
+  (i) => i.store,
+  returnObservable = false,
+  timeoutMs = DEFAULT_CACHE_TTL_MS,  // CACHE_NO_TIMEOUT for infinite
+)
+```
+
+Cache hit (skip) when: `status === 'Success'` OR `isLoading === true`, args match (`JSON.stringify`), TTL not expired.
+Cache miss when: idle, `status === 'Error'`, expired, or args changed.
+Keyed: if first arg is `string|number` AND slot is `KeyedResourceData`, tracks cache per `resourceKey` automatically.
+`returnObservable: true` -> uses `shareReplay({ bufferSize: 1, refCount: true })` for in-flight dedup; method must return `Observable`.
+
+### @Loading
+
+```ts
+@Loading(storeKey, (i) => i.store)
+```
+
+Calls `startLoading(key)` before method. If first arg is `string|number` and store has `startKeyedLoading`, calls `startKeyedLoading(key, resourceKey)` instead.
+
+### Composition
+
+`@SkipIfCached` MUST be outermost (short-circuits before loading). `@Loading` above `@SkipIfCached` -> potential infinite loading loops.
+
+## Standalone Functions
+
+### mirrorKey
+
+```ts
+mirrorKey(sourceStore, sourceKey, targetStore, targetKey?, options?: MirrorOptions)
+// MirrorOptions: { destroyRef?, direction?: 'bidirectional' | 'source-to-target' }
+// Default direction: 'bidirectional' — updates flow both ways with loop guard.
+// Set direction: 'source-to-target' for one-way mirroring.
+// returns cleanup () => void
+```
+
+### deriveKey
+
+```ts
+deriveKey(source, sourceKey, target, targetKey, {
+  mapData: (data, state) => mappedData,
+  destroyRef?,
+})
+// returns cleanup. Mirrors isLoading/status/errors, maps data.
+```
+
+### collectKeyed
+
+```ts
+collectKeyed(source, sourceKey, target, targetKey?, {
+  extractId: (entity | undefined) => key | undefined,
+  destroyRef?,
+})
+// CollectKeyedOptions. Aggregates single-entity emissions into keyed cache.
+```
+
+## Message Channels
+
+Default = in-memory.
+
+```ts
+Store.for<Config>().build({
+  channel: createLocalStorageStoreMessageChannel({
+    storageKey: 'app.store',
+    serialize?,    // optional
+    deserialize?,
+  }),
+});
+```
+
+Factories:
+- `createInMemoryStoreMessageChannel<TData>()`
+- `createStorageStoreMessageChannel({ storage, storageKey, serialize?, deserialize? })` -- custom adapter; auto-evicts oldest on quota exceeded
+- `createLocalStorageStoreMessageChannel({ storageKey, ... })` -- defaults storage to `localStorage`
+- `createSessionStorageStoreMessageChannel({ storageKey, ... })` -- session-scoped
+- `createCompositeStoreMessageChannel({ channels: [primary, ...replicas] })` -- fan-out writes; primary handles reads + id allocation
+
+`StoreMessageChannelStorage`: `getItem | setItem | removeItem`. Serializer handles `undefined`, `Date`, `Map`, `Set`, `Array`, plain objects.
+
+## Error Normalizers
+
+`defaultErrorNormalizer(err)` checks in order:
+1. `{ error: { errors: [...] } }` -> returns inner array
+2. `{ status, message }` -> `[{ code: String(status), message }]`
+3. `Error` -> `[{ code: 'UNKNOWN', message: err.message }]`
+4. else -> `[{ code: 'UNKNOWN', message: String(err) }]`
+
+`httpErrorNormalizer` (from `flurryx/http`):
+- `HttpErrorResponse` with `error.errors` array -> as-is
+- else -> `[{ code: status, message }]`
+- non-HTTP -> fallback `UNKNOWN`
+
+## Patterns
+
+### Facade (preferred when codebase uses facades)
+
+```ts
 @Injectable()
 export class ProductFacade {
-  private readonly getProductsUseCase = inject(GetProductsUseCase);
+  private readonly api = inject(GetProductsUseCase);
   readonly store = inject(ProductStore);
 
-  getProducts() {
-    return this.store.get("LIST");
+  getProducts() { return this.store.get('LIST'); }
+  getProduct(id: string) { return this.store.get('ITEMS').for(id); }
+
+  @SkipIfCached('LIST', (i: ProductFacade) => i.store)
+  @Loading('LIST', (i: ProductFacade) => i.store)
+  loadProducts() {
+    this.api.execute().pipe(syncToStore(this.store, 'LIST')).subscribe();
   }
 
-  @SkipIfCached("LIST", (i: ProductFacade) => i.store)
-  @Loading("LIST", (i: ProductFacade) => i.store)
-  loadProducts() {
-    this.getProductsUseCase
-      .execute()
-      .pipe(syncToStore(this.store, "LIST"))
-      .subscribe();
+  @SkipIfCached('ITEMS', (i: ProductFacade) => i.store)
+  @Loading('ITEMS', (i: ProductFacade) => i.store)
+  loadProduct(id: string) {
+    this.api.byId(id).pipe(syncToKeyedStore(this.store, 'ITEMS', id)).subscribe();
   }
 }
 ```
 
-- Expose read access through facade methods returning store signals
-- Keep `store` public and readonly so decorators can access it safely
-- Subscribe inside the facade, not in the component
+`store` MUST be public + readonly so decorator getters can reach it.
 
-### Service-Led Pattern
+### Service-led (when no facade layer)
 
-When the application does not use facades, the same orchestration can live in a service:
+Same shape, `@Injectable({ providedIn: 'root' })` service holds `store`.
 
-```typescript
-import { Injectable, inject } from "@angular/core";
-import { syncToStore, SkipIfCached, Loading } from "flurryx";
+### Component
 
-@Injectable({ providedIn: "root" })
-export class ProductStateService {
-  private readonly api = inject(ProductApi);
-  readonly store = inject(ProductStore);
-
-  getProducts() {
-    return this.store.get("LIST");
-  }
-
-  @SkipIfCached("LIST", (i: ProductStateService) => i.store)
-  @Loading("LIST", (i: ProductStateService) => i.store)
-  loadProducts() {
-    this.api.getProducts().pipe(syncToStore(this.store, "LIST")).subscribe();
-  }
-}
-```
-
-- flurryx does not require a use-case layer
-- Keep the same separation of concerns: components read signals, orchestration owns writes, async code stays out of templates
-
-### Component Pattern
-
-```typescript
-import { Component, computed, inject } from "@angular/core";
-
+```ts
 @Component({
   template: `
-    @if (productsState().isLoading) {
-    <app-spinner />
-    }
+    @if (state().isLoading) { <app-spinner/> }
+    @for (p of products(); track p.id) { ... }
   `,
 })
 export class ProductListComponent {
   private readonly facade = inject(ProductFacade);
-  readonly productsState = this.facade.getProducts();
-  readonly products = computed(() => this.productsState().data ?? []);
+  readonly state = this.facade.getProducts();
+  readonly products = computed(() => this.state().data ?? []);
 
-  constructor() {
-    this.facade.loadProducts();
-  }
+  constructor() { this.facade.loadProducts(); }
 }
 ```
 
-- Components inject the app's orchestration boundary, typically a facade or service, not raw async dependencies or stores for writes
-- Read `state().data`, `state().isLoading`, `state().status`, and `state().errors`
-- Prefer `computed()` for derived UI state
+Read `state().data | isLoading | status | errors`. Use `computed()` for derived UI.
 
-### Use Case Pattern
+### Keyed reads in component
 
-If the application uses Clean Architecture or similar layering, a use-case layer works well with flurryx:
-
-```typescript
-import { Injectable, inject } from "@angular/core";
-
-@Injectable()
-export class GetProductsUseCase {
-  private readonly getProductsPort = inject(GetProductsPort);
-
-  execute() {
-    return this.getProductsPort.execute();
-  }
-}
+```ts
+readonly id = input.required<string>();
+readonly invoiceState = computed(() => this.facade.store.get('ITEMS').for(this.id())());
 ```
 
-- Keep each use case narrowly scoped
-- Return `Observable<T>` from use cases
-- Put orchestration in facades or services, not components
+`.for(idOrSignal)` is `computed`-safe and supports raw or signal keys. Snapshot reads `state().data?.[id]` still work.
 
-### Keyed Resource Pattern
+### Mirroring at builder level
 
-Use keyed resources for per-entity caching:
-
-```typescript
-import { Store } from "flurryx";
-import type { KeyedResourceData } from "flurryx";
-
-interface InvoiceStoreConfig {
-  ITEMS: KeyedResourceData<string, Invoice>;
-}
-
-export const InvoiceStore = Store.for<InvoiceStoreConfig>().build();
-```
-
-```typescript
-@SkipIfCached('ITEMS', (i: InvoiceFacade) => i.store)
-@Loading('ITEMS', (i: InvoiceFacade) => i.store)
-loadInvoice(id: string) {
-  this.getInvoiceUseCase.execute(id).pipe(syncToKeyedStore(this.store, 'ITEMS', id)).subscribe();
-}
-```
-
-- When the first method argument is a `string` or `number`, decorators auto-detect it as the keyed resource id
-- Read keyed values from `state().data?.entities[id]`, `isLoading[id]`, `status[id]`, and `errors[id]`
-
-### Mirroring and Aggregation
-
-Use mirroring when one store should reflect another store's state:
-
-```typescript
+```ts
 export const SessionStore = Store.for<SessionStoreConfig>()
-  .mirror(CustomerStore, "CUSTOMERS")
-  .mirrorSelf("CUSTOMER_DETAILS", "CUSTOMER_SNAPSHOT")
+  .mirror(CustomerStore, 'CUSTOMERS')
+  .mirrorSelf('CUSTOMER_DETAILS', 'CUSTOMER_SNAPSHOT')
+  .derive(OrdersStore, 'TOTAL', { mapData: (data) => formatTotal(data) })
+  .mirrorKeyed(InvoiceStore, 'DETAIL', { extractId: (inv) => inv?.id }, 'INVOICES')
   .build();
 ```
 
-- Use `mirror` for direct slot-to-slot mirroring across stores
-- Use `mirrorSelf` for aliasing a slot within the same store
-- Use `mirrorKeyed`, `mirrorKey`, or `collectKeyed` when aggregating individual resources into keyed caches
+Mirrors propagate `update` + `onCacheInvalidate`. Self-mirror with same source/target throws.
 
-### Message Channels, History, and Recovery
+## Lifecycle / Resets
 
-flurryx supports persistence and recovery through message channels and store history.
+- `store.clear('LIST')` -> single slot
+- `store.clearKeyedOne('ITEMS', id)` -> one entry; also evicts that key's `@SkipIfCached` entries
+- `store.invalidateCacheFor('ITEMS', id)` -> invalidate cache only, keep state
+- `store.clearAll()` -> all slots in this store
+- `clearAllStores()` -> every flurryx store (logout/tenant switch)
+- `cloneValue(v)` -> deep clone (Date/Map/Set/Array/plain). Class instances with constructor side-effects don't survive
+- `createSnapshotRestorePatch(current, snapshot)` -> partial patch to restore
 
-```typescript
-store.undo();
-store.redo();
-store.restoreStoreAt(0);
-store.replay(12);
-store.replayDeadLetters();
+## Replay & Dead Letters
+
+```ts
+store.undo();  store.redo();
+store.restoreStoreAt(0);          // snapshot nav, no broker
+store.restoreResource('LIST', 5); // single-key restore
+store.replay(12);                 // re-publish via broker
+store.replay([12, 13, 14]);
+store.replayDeadLetters();        // bool/int per id
+store.replayDeadLetterCommand(id, async (entry) => ({ resolved: true, clear: true }));
 ```
 
-- Default channel is in-memory
-- Use `createLocalStorageStoreMessageChannel()` or `createSessionStorageStoreMessageChannel()` when persistence matters
-- Use `createCompositeStoreMessageChannel()` when you need fan-out writes
-
-## Decorator Rules
-
-`@SkipIfCached` must be outermost so it can short-circuit the call before loading state changes:
-
-```typescript
-@SkipIfCached('LIST', (i: ProductFacade) => i.store)
-@Loading('LIST', (i: ProductFacade) => i.store)
-loadProducts() {
-  this.getProductsUseCase.execute().pipe(syncToStore(this.store, 'LIST')).subscribe();
-}
-```
-
-Use `@SkipIfCached` only for resources where cache hits are part of the intended behavior.
-
-- If the user action or screen must always fetch fresh data, do not add `@SkipIfCached`
-- If caching is optional or unclear, default to not using `@SkipIfCached`
-- Applying `@SkipIfCached` to non-cacheable flows can suppress required requests and create confusing stale-state behavior
-- Putting `@Loading` above `@SkipIfCached` can trigger incorrect loading transitions and may lead to endless loading loops
-
-Decorator arguments:
-
-```typescript
-@SkipIfCached(
-  'LIST',
-  (i) => i.store,
-  false,
-  CACHE_NO_TIMEOUT,
-)
-```
-
-- Third argument: set to `true` only when the decorated method returns an `Observable`
-- Fourth argument: cache TTL in milliseconds; defaults to `DEFAULT_CACHE_TTL_MS`
-
-## Error Handling and Cache Invalidation
-
-- Use `defaultErrorNormalizer` for general errors
-- Use `httpErrorNormalizer` for Angular HTTP errors
-- Use `store.clear('KEY')` to invalidate a slot
-- Use `store.clearKeyedOne('KEY', id)` to invalidate one keyed entity
-- Use `store.clearAll()` for one store
-- Use `clearAllStores()` for global reset flows such as logout or tenant switch
+Dead letter entry: `{ id, message, attempts, error, httpStatus, httpMessage, command, failedAt }`.
+DLQ command meta on `update` -> `update(key, state, { deadLetter: { error, httpStatus?, httpMessage?, command? } })`. `syncToStore`/`syncToKeyedStore` populate this from HTTP-like errors automatically.
 
 ## Anti-Patterns
 
-- Do not subscribe in components for flurryx-backed fetches
-- Do not mutate store state directly from components
-- Do not inject `HttpClient` into components when the flow belongs in a facade or adapter
-- Do not place backend DTOs directly into presentation models when a mapper already exists
-- Do not add `@SkipIfCached` unless the resource is intentionally cacheable
-- Do not put `@Loading` above `@SkipIfCached`
-- Do not use `BehaviorSubject` where a flurryx store slot should own the state
-- Do not bypass `syncToStore` or `syncToKeyedStore` with custom loading/error plumbing unless the codebase already has a justified exception
+- Component subscribes to flurryx fetches
+- Component mutates store directly
+- Component injects `HttpClient` when belongs in facade/adapter
+- DTOs into presentation models when mapper exists
+- `@SkipIfCached` on always-fresh flows
+- `@Loading` outside (above) `@SkipIfCached`
+- `BehaviorSubject` where store slot would own state
+- Subclassing `BaseStore`
+- Bypassing `syncToStore` / `syncToKeyedStore` for ad-hoc loading/error plumbing
+- Calling component methods in templates (use `computed`)
 
 ## Quick Reference
 
-| Task                  | Preferred API                                                      |
-| --------------------- | ------------------------------------------------------------------ |
-| Define a store        | `Store.for<Config>().build()`                                      |
-| Read a slot           | `store.get('LIST')`                                                |
-| Sync one resource     | `syncToStore(this.store, 'LIST')`                                  |
-| Sync a keyed resource | `syncToKeyedStore(this.store, 'ITEMS', id)`                        |
-| Skip cache hits       | `@SkipIfCached('LIST', (i) => i.store)`                            |
-| Set loading           | `@Loading('LIST', (i) => i.store)`                                 |
-| Mirror state          | `mirror`, `mirrorSelf`, `mirrorKeyed`, `mirrorKey`, `collectKeyed` |
-| Clear one slot        | `store.clear('LIST')`                                              |
-| Clear all stores      | `clearAllStores()`                                                 |
-| Recover history       | `undo`, `redo`, `restoreStoreAt`, `replay`, `replayDeadLetters`    |
+| Task | API |
+| --- | --- |
+| Define store | `Store.for<Config>().build()` |
+| Read slot | `store.get('LIST')` |
+| Read keyed entry | `store.get('ITEMS').for(id)` |
+| Write slot | `store.update('LIST', { data })` |
+| Write keyed entry | `store.updateKeyedOne('ITEMS', id, entity)` |
+| Sync resource | `syncToStore(store, 'LIST', opts?)` |
+| Sync keyed | `syncToKeyedStore(store, 'ITEMS', id, opts?)` |
+| Skip cache | `@SkipIfCached(key, (i)=>i.store, retObs?, ttl?)` |
+| Mark loading | `@Loading(key, (i)=>i.store)` |
+| Mirror state | `.mirror | .mirrorSelf | .mirrorKeyed | .derive | .deriveSelf` (builder) |
+| Standalone mirror | `mirrorKey | deriveKey | collectKeyed` |
+| Clear slot | `store.clear('LIST')` |
+| Clear keyed entry | `store.clearKeyedOne('ITEMS', id)` |
+| Invalidate cache | `store.invalidateCacheFor('ITEMS', id?)` |
+| Reset all stores | `clearAllStores()` |
+| History | `undo | redo | restoreStoreAt | restoreResource | replay | replayDeadLetters` |
+| Channel | `createInMemory | LocalStorage | SessionStorage | Storage | Composite ...MessageChannel` |
+| Error norm | `defaultErrorNormalizer` / `httpErrorNormalizer` (from `flurryx/http`) |

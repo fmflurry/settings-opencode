@@ -25,6 +25,16 @@ Before returning "done", you MUST:
 
 If build or lint fails: fix it, or if blocked, report the blocker explicitly. **Never report "done" with a broken build.**
 
+## Ambiguity Gate (Socratic)
+
+If anything in the brief is not crystal clear — unresolved requirement, missing constraint, ambiguous interface, conflicting signals from caller and existing code, unclear file location, unspecified edge-case behavior — **stop before writing code**.
+
+1. Activate the `socratic-design` skill (evidence-first decision-gating).
+2. Formulate exactly **one** dependency-safe question that unblocks the highest-impact decision.
+3. Return that question to the caller instead of implementing. Do not guess. Do not implement a "reasonable default" and flag it after — surface the ambiguity *before* writing code.
+
+Resume implementation only once the caller answers or explicitly tells you to proceed with a stated assumption.
+
 ## Anti-Patterns You Must Avoid
 
 - Reporting success without running the build.

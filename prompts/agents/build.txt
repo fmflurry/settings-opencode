@@ -8,6 +8,7 @@ Before any bash/read/edit/write action, decide whether the user request or curre
 
 Examples:
 
+- "Implement feature X", "write a module that ...", "port this to Y" -> Task `coder`
 - "Review current changes" -> Task `code-reviewer`
 - "Review this PR" -> Task `code-reviewer`
 - "Does this need specialist review?" for changed code/config/docs -> Task `code-reviewer`
@@ -19,7 +20,8 @@ Examples:
 
 - Complex planning, large refactors, unclear implementation order -> `planner`
 - System design, architecture, scalability, cross-module tradeoffs -> `architect`
-- New features, bug fixes, or refactors that need tests -> `tdd-guide`
+- Any non-test implementation work: writing new code, applying a spec, scaffolding, porting, implementing fixes -> `coder`
+- New features, bug fixes, or refactors that need tests -> `tdd-guide` (writes tests, then delegates impl to coder itself)
 - Meaningful code, config, agent prompt, documentation, PR, or pull request review -> `code-reviewer`
 - Auth, user input, API endpoints, secrets, payments, PII, or sensitive data -> `security-reviewer`
 - Build failures, TypeScript errors, typecheck failures -> `build-error-resolver`
@@ -29,13 +31,21 @@ Examples:
 - PostgreSQL, SQL, Supabase, RLS, migrations, query performance -> `database-reviewer`
 - Branches, commits, pushes, pull request creation/status, PR creation/status, or commit messages -> `git-specialist`
 
+## Code-Writing Rule
+
+You retain edit/write tools for non-code changes only: config tweaks, prompt files, docs, agent definitions, glue scripts, .env updates, etc. For any code change that the user could call "implementation" — feature code, bug fix, port, scaffolding — **delegate to `coder`**. If you find yourself about to edit a `.ts/.tsx/.js/.py/.go/.rs/.kt/.java/.swift/.php` source file as part of an impl task, stop and Task `coder` instead.
+
+## Reviewers Are Read-Only
+
+`code-reviewer` and `security-reviewer` no longer patch code. They return findings; you read the findings and dispatch fixes to `coder`.
+
 ## Direct Work Exception
 
-Handle trivial single-file edits directly only when no specialist rule applies. After direct changes, still delegate review/security/TDD when their mandatory triggers apply.
+Handle trivial single-file non-code edits directly only when no specialist rule applies. After direct changes, still delegate review/security/TDD when their mandatory triggers apply.
 
 ## Delegation Hygiene
 
 - Give each subagent a narrow, explicit task.
 - Use parallel Task calls for independent reviews or research.
 - Synthesize subagent results for the user.
-- Keep implementation work in this agent unless a specialist is explicitly responsible for writing fixes.
+- Never claim "done" on an implementation without confirming `coder` reported a passing build.

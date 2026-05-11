@@ -12,7 +12,7 @@
 
 ## What's inside
 
-A primary `build` agent backed by **11 specialist sub-agents** (planner, architect, code/security/database review, TDD, build-fix, e2e, doc, refactor, git), wired together by:
+A primary `build` agent backed by **12 specialist sub-agents** (planner, architect, coder, code/security/database review, TDD, build-fix, e2e, doc, refactor, git), wired together by:
 
 - **Automatic sub-agent delegation** from `build` via the Task tool when work matches specialist scope, with a first-tool gate for open-weight models.
 - **Slash commands** that force routing to the right specialist (`/plan`, `/tdd`, `/security`, `/code-review`, …).
@@ -241,7 +241,7 @@ If a new plugin shows up, OpenCode picks it up on the next restart. If an env va
 <a id="english"></a>
 ## English
 
-Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a primary `build` agent, 11 specialist sub-agents, always-on skills, slash commands, OpenCode plugins (hooks, instincts, worktrees, auto-compact, caveman, figma RAG, notifications), custom tools, and a Claude Code mirror.
+Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a primary `build` agent, 12 specialist sub-agents, always-on skills, slash commands, OpenCode plugins (hooks, instincts, worktrees, auto-compact, caveman, figma RAG, notifications), custom tools, and a Claude Code mirror.
 
 <a id="goals-en"></a>
 ### Goals
@@ -295,12 +295,13 @@ Defined in `opencode.jsonc` under `agent`:
 
 | Agent                  | Mode     | Role                                                                                |
 | ---------------------- | -------- | ----------------------------------------------------------------------------------- |
-| `build`                | primary  | Shipping-focused (read/write/edit/bash).                                            |
+| `build`                | primary  | Orchestrator. Delegates all source-code edits to `coder`. Keeps edit perm for non-code (config/prompts/docs). |
 | `planner`              | subagent | Plan + risks before large changes. Read+bash, no edit.                              |
 | `architect`            | subagent | System design / scalability decisions. Read+bash only.                              |
-| `code-reviewer`        | subagent | Quality review over diffs and conventions.                                          |
-| `security-reviewer`    | subagent | OWASP/secrets/deps review. Can patch (read+write+edit+bash+grep+glob).              |
-| `tdd-guide`            | subagent | RED -> GREEN -> REFACTOR + 80% coverage.                                            |
+| `coder`                | subagent | Pure non-test implementation. Mandatory build+lint+standards self-check before reporting done. Socratic ambiguity gate. |
+| `code-reviewer`        | subagent | Quality review over diffs and conventions. Read-only — findings only; fixes go to `coder`. |
+| `security-reviewer`    | subagent | OWASP/secrets/deps review. Read-only — reports vulnerabilities; remediation routed to `coder`. |
+| `tdd-guide`            | subagent | RED -> GREEN -> REFACTOR + 80% coverage. Writes tests; delegates GREEN impl to `coder` via scoped Task perm. |
 | `build-error-resolver` | subagent | Build/TS error fixes with minimal diffs.                                            |
 | `e2e-runner`           | subagent | Playwright E2E tests.                                                               |
 | `doc-updater`          | subagent | Documentation + codemaps.                                                           |
@@ -448,7 +449,7 @@ Curation:
 <a id="francais"></a>
 ## Français
 
-Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `build`, onze sous-agents specialises, des skills toujours actives, des commandes slash, des plugins (hooks, instincts, worktrees, auto-compact, caveman, figma RAG), des outils custom et un mirror Claude Code.
+Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `build`, douze sous-agents specialises, des skills toujours actives, des commandes slash, des plugins (hooks, instincts, worktrees, auto-compact, caveman, figma RAG), des outils custom et un mirror Claude Code.
 
 <a id="objectif-fr"></a>
 ### Objectif
@@ -502,12 +503,13 @@ Definis dans `opencode.jsonc` (champ `agent`):
 
 | Agent                  | Mode      | Role                                                                                  |
 | ---------------------- | --------- | ------------------------------------------------------------------------------------- |
-| `build`                | primary   | Agent principal "livre la feature" (read/write/edit/bash).                            |
+| `build`                | primary   | Orchestrateur. Delegue toute ecriture de code source au `coder`. Garde l'edit pour non-code (config/prompts/docs). |
 | `planner`              | subagent  | Plan + risques avant grosse modif. Read+bash, pas d'edit.                             |
 | `architect`            | subagent  | Decisions de design / scalabilite. Read+bash uniquement.                              |
-| `code-reviewer`        | subagent  | Revue qualite (diff, conventions, tests). Read+bash+grep.                             |
-| `security-reviewer`    | subagent  | Revue OWASP/secrets/deps. Read+write+edit+bash+grep+glob (peut patcher).              |
-| `tdd-guide`            | subagent  | RED -> GREEN -> REFACTOR + 80% coverage.                                              |
+| `coder`                | subagent  | Implementation pure (hors tests). Verification build+lint+standards obligatoire avant de rendre. Gate socratique en cas d'ambiguite. |
+| `code-reviewer`        | subagent  | Revue qualite (diff, conventions, tests). Read-only — findings seulement; les fixes passent par `coder`. |
+| `security-reviewer`    | subagent  | Revue OWASP/secrets/deps. Read-only — rapporte les vulnerabilites; remediation routee vers `coder`. |
+| `tdd-guide`            | subagent  | RED -> GREEN -> REFACTOR + 80% coverage. Ecrit les tests; delegue le GREEN au `coder` via permission Task ciblee. |
 | `build-error-resolver` | subagent  | Fix build/TS errors avec diff minimal.                                                |
 | `e2e-runner`           | subagent  | Tests E2E Playwright.                                                                 |
 | `doc-updater`          | subagent  | Documentation et codemaps.                                                            |

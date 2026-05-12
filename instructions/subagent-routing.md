@@ -15,6 +15,7 @@ Do not use `bash`, `read`, `write`, `edit`, or MCP tools, including Serena, befo
 ## Task Must Be First When
 
 - Implementation work: write/port/scaffold/apply-spec non-test code -> `coder`
+- Writing or editing docs, README, markdown, HTML reports, release notes, ADRs, prose -> `writer`
 - Git, commit, branch, push, pull request creation/status, PR creation/status -> `git-specialist`
 - Code review, PR review, pull request review, current-change review, "does this need review" -> `code-reviewer` (read-only; fixes go to `coder`)
 - Security review, auth, secrets, user input, API endpoints -> `security-reviewer` (read-only; fixes go to `coder`)
@@ -23,10 +24,19 @@ Do not use `bash`, `read`, `write`, `edit`, or MCP tools, including Serena, befo
 - Architecture, design, scalability, cross-module tradeoffs -> `architect`
 - TDD, tests, coverage, test strategy -> `tdd-guide` (writes tests; delegates impl to `coder` itself)
 - E2E/browser journeys/Playwright -> `e2e-runner`
-- Documentation, README, codemaps -> `doc-updater`
+- Codemap or generated-doc updates -> `doc-updater`
 - Dead code, unused exports, duplication cleanup -> `refactor-cleaner`
 - SQL, PostgreSQL, Supabase, RLS, migrations -> `database-reviewer`
 
-## Direct Work Is OK Only When
+## Conductor Cannot Write Directly
 
-No specialist rule matches and the task is a trivial **non-code** edit (config, prompt, docs glue). Any non-trivial impl work on source files must go through `coder`. After direct changes, still use the required review/security/TDD specialists when their triggers match.
+The primary `conductor` agent has `write` and `edit` disabled (permissions + hook enforced). Every file change MUST go through a subagent:
+
+- Source code -> `coder`
+- Tests -> `tdd-guide` (which itself delegates impl to `coder`)
+- Docs/markdown/HTML/text -> `writer`
+- Generated docs/codemaps -> `doc-updater`
+- Refactor cleanup -> `refactor-cleaner`
+- Git operations (commit/push/PR) -> `git-specialist`
+
+There is no "direct trivial edit" escape hatch for the primary anymore. If you find yourself wanting to edit, pick a subagent.

@@ -12,9 +12,10 @@
 
 ## What's inside
 
-A primary `build` agent backed by **12 specialist sub-agents** (planner, architect, coder, code/security/database review, TDD, build-fix, e2e, doc, refactor, git), wired together by:
+A hardened primary `conductor` agent backed by **13 specialist sub-agents** (planner, architect, coder, writer, code/security/database review, TDD, build-fix, e2e, doc, refactor, git), wired together by:
 
-- **Automatic sub-agent delegation** from `build` via the Task tool when work matches specialist scope, with a first-tool gate for open-weight models.
+- **Mandatory sub-agent delegation** from `conductor`: the primary has `write` and `edit` denied at the permission layer, plus a `tool.execute.before` hook that blocks bash redirects to source files (`> file.ts`, `tee`, `sed -i`, heredocs, `python -c open().write`). The orchestrator cannot patch files — every change MUST go through `coder` (source code), `writer` (docs/markdown/HTML), `tdd-guide` (tests), or `git-specialist` (commits/PRs). This makes routing **model-agnostic**: even open-weight models that ignore prose rules are mechanically forced to delegate.
+- **Front-loaded first-tool gate** in `prompts/agents/conductor.txt`: hard rules at the top, routing table second, six few-shot User → `task` examples (with explicit wrong-way contrasts) so literal models copy the right pattern.
 - **Slash commands** that force routing to the right specialist (`/plan`, `/tdd`, `/security`, `/code-review`, …).
 - **Always-on skills** loaded at session start — Socratic design, security review, coding standards, git workflow, Serena bootstrap.
 - **OpenCode plugins** — ECC hooks (Prettier + `tsc` on save), continuous-learning v2 (the *homunculus* instinct store), worktree spawner, auto-compact, caveman ultra mode, Figma RAG trigger, macOS notifications, startup bootstrap.
@@ -241,7 +242,7 @@ If a new plugin shows up, OpenCode picks it up on the next restart. If an env va
 <a id="english"></a>
 ## English
 
-Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a primary `build` agent, 12 specialist sub-agents, always-on skills, slash commands, OpenCode plugins (hooks, instincts, worktrees, auto-compact, caveman, figma RAG, notifications), custom tools, and a Claude Code mirror.
+Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primary `conductor` agent (no write/edit perms — must delegate), 13 specialist sub-agents, always-on skills, slash commands, OpenCode plugins (hooks, instincts, worktrees, auto-compact, caveman, figma RAG, notifications), custom tools, and a Claude Code mirror.
 
 <a id="goals-en"></a>
 ### Goals
@@ -280,7 +281,7 @@ Six concerns wired in one file:
    - `skills/security-review/SKILL.md` — OWASP checklist.
    - `skills/coding-standards/SKILL.md` — code conventions.
    - `skills/git-workflow/SKILL.md` — branches, commits, PRs.
-2. `default_agent`: `build`.
+2. `default_agent`: `conductor` (orchestrator-only — cannot write/edit).
 3. `agent`: sub-agent definitions (model + reasoning effort + prompt + tool allowlist). All models are env-driven (`OPENCODE_MODEL_*`, `OPENCODE_REASONING_*`) — see [Public install § 4](#public-install).
 4. `command`: maps `/<name>` -> template + sub-agent + `subtask`.
 5. `mcp`: serena, context7, wallaby, Figma (disabled).
@@ -295,31 +296,36 @@ Defined in `opencode.jsonc` under `agent`:
 
 | Agent                  | Mode     | Role                                                                                |
 | ---------------------- | -------- | ----------------------------------------------------------------------------------- |
-| `build`                | primary  | Orchestrator. Delegates all source-code edits to `coder`. Keeps edit perm for non-code (config/prompts/docs). |
+| `conductor`            | primary  | Orchestrator. `write` + `edit` **denied** at the permission layer. Routes every change to a specialist via Task. Bash redirects to source files blocked by the ECC pre-tool hook. |
 | `planner`              | subagent | Plan + risks before large changes. Read+bash, no edit.                              |
 | `architect`            | subagent | System design / scalability decisions. Read+bash only.                              |
 | `coder`                | subagent | Pure non-test implementation. Mandatory build+lint+standards self-check before reporting done. Socratic ambiguity gate. |
+| `writer`               | subagent | Writes docs/markdown/HTML/text artifacts. Forbidden from touching source code — refuses out-of-scope files back to the conductor. |
 | `code-reviewer`        | subagent | Quality review over diffs and conventions. Read-only — findings only; fixes go to `coder`. |
 | `security-reviewer`    | subagent | OWASP/secrets/deps review. Read-only — reports vulnerabilities; remediation routed to `coder`. |
 | `tdd-guide`            | subagent | RED -> GREEN -> REFACTOR + 80% coverage. Writes tests; delegates GREEN impl to `coder` via scoped Task perm. |
 | `build-error-resolver` | subagent | Build/TS error fixes with minimal diffs.                                            |
 | `e2e-runner`           | subagent | Playwright E2E tests.                                                               |
-| `doc-updater`          | subagent | Documentation + codemaps.                                                           |
+| `doc-updater`          | subagent | Generated docs + codemaps.                                                          |
 | `refactor-cleaner`     | subagent | Dead-code removal + consolidation.                                                  |
 | `database-reviewer`    | subagent | PostgreSQL / Supabase schema, perf, security.                                       |
 | `git-specialist`       | subagent | Branches, commits, pushes, PRs (mini model).                                        |
 
-### Automatic sub-agent invocation
+### Hardened sub-agent orchestration
 
-OpenCode exposes subagents to primary agents through the Task tool. `instructions/subagent-routing.md` enforces a Task-first gate before direct inspection for matching requests, and `prompts/agents/build.txt` repeats the routing rules for the `build` agent. This helps less inference-heavy models delegate without waiting for a slash command.
+Delegation is enforced at **three layers**, so the same behavior holds whether the primary model is Claude, GPT, DeepSeek, or any open-weight runner that ignores prose hints:
+
+1. **Permissions** — `conductor` has `tools.write: false`, `tools.edit: false`, and `permission.edit/write: deny` in `opencode.jsonc`. The Task allowlist enumerates every legal specialist; `*: deny` blocks anything else. The orchestrator literally has no file-mutation tool.
+2. **Pre-tool hook (`plugins/ecc-hooks.ts`)** — defense in depth: blocks bash commands that would write to source files via shell redirect (`>`, `>>`), `tee`, `sed -i`, heredocs, or `python -c open().write`. Throws aborting the tool call with an explicit "delegate to coder/writer/tdd-guide" message. Applies globally — no subagent should be writing code through bash either.
+3. **Front-loaded prompt (`prompts/agents/conductor.txt`)** — hard rules in the first lines, routing table second, six worked few-shot examples showing User → `task` calls with explicit wrong-way contrasts. `instructions/subagent-routing.md` enforces a Task-first gate before direct inspection.
 
 Use these paths depending on how much control you want:
 
-- Plain request: lets `build` auto-delegate when routing rules match.
+- Plain request: `conductor` consults the routing table and dispatches the matching specialist via Task.
 - `@agent` mention: manually invokes a specific subagent in the conversation.
 - Slash command: forces a subtask with a configured template, e.g. `/plan`, `/tdd`, `/security`.
 
-Why this exists: GPT/Claude often infer delegation from short descriptions, but open-source/open-weight models are more literal and tend to inspect with `bash`/Serena first. The top-level first-tool gate, routing prompt, and stronger `MUST delegate` agent descriptions make the same behavior more model-agnostic.
+Why this exists: GPT/Claude often infer delegation from short descriptions, but open-source/open-weight models are more literal and tend to inspect or edit first. Permissions + the hook + the front-loaded gate make delegation **mechanically enforced** rather than instruction-dependent.
 
 <a id="commands-en"></a>
 ### Slash commands
@@ -381,7 +387,7 @@ On-demand (loaded by description / by command):
 
 All TypeScript plugins use `@opencode-ai/plugin@1.4.6`.
 
-- `plugins/ecc-hooks.ts` — Prettier on edited JS/TS, `console.log` detection, `tsc --noEmit` after edit, sensitive-command reminders (`git push` etc.).
+- `plugins/ecc-hooks.ts` — Prettier on edited JS/TS, `console.log` detection, sensitive-command reminders (`git push` etc.), and the **conductor hard-stop**: aborts bash redirects (`>`, `>>`, `tee`, `sed -i`, heredocs, `python -c open().write`) targeting source files so delegation cannot be bypassed via shell.
 - `plugins/instinct-injector.ts` — reads `~/.claude/homunculus`, filters by confidence, injects instincts into the system prompt (continuous-learning v2 read side).
 - `plugins/instinct-observer.ts` — captures `tool.execute.before/after` events and appends to `observations.jsonl` (write side).
 - `plugins/instinct-digest.ts` — session-start diff: surfaces new/updated instincts since last session.
@@ -439,8 +445,8 @@ Curation:
 
 1. Startup: OpenCode loads `opencode.jsonc` -> always-on instructions -> `instinct-injector` preloads instincts -> `instinct-digest` produces a diff -> `caveman-server` adds caveman preamble if active.
 2. First user action: `startup-bootstrap` triggers `serena_activate_project`.
-3. Dev: `build` executes. `ecc-hooks` formats / type-checks / flags `console.log`. `instinct-observer` archives events.
-4. Workflow: `build` auto-delegates to specialists through Task; `/plan`, `/tdd`, `/security`, etc. force the same routing explicitly.
+3. Dev: `conductor` executes — it cannot write files; it dispatches Task calls to specialists. `ecc-hooks` formats / flags `console.log` / blocks bash-write bypasses. `instinct-observer` archives events.
+4. Workflow: `conductor` routes to specialists through Task (perm-enforced); `/plan`, `/tdd`, `/security`, etc. force the same routing explicitly.
 5. Idle: `auto-compact` triggers when the tool-call threshold is reached; `notification` pings macOS.
 6. Stop: v1 hook writes a draft; v2 daemon clusters observations into instincts for the next session.
 
@@ -449,7 +455,7 @@ Curation:
 <a id="francais"></a>
 ## Français
 
-Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `build`, douze sous-agents specialises, des skills toujours actives, des commandes slash, des plugins (hooks, instincts, worktrees, auto-compact, caveman, figma RAG), des outils custom et un mirror Claude Code.
+Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), treize sous-agents specialises, des skills toujours actives, des commandes slash, des plugins (hooks, instincts, worktrees, auto-compact, caveman, figma RAG), des outils custom et un mirror Claude Code.
 
 <a id="objectif-fr"></a>
 ### Objectif
@@ -488,7 +494,7 @@ Le fichier orchestre six choses:
    - `skills/security-review/SKILL.md` -> checklist OWASP.
    - `skills/coding-standards/SKILL.md` -> conventions code.
    - `skills/git-workflow/SKILL.md` -> branches, commits, PRs.
-2. `default_agent`: `build`.
+2. `default_agent`: `conductor` (orchestrateur sans droit d'ecriture).
 3. `agent`: definitions des sous-agents (modele + reasoning effort + prompt + outils autorises). Tous les modeles passent par variables d'environnement (`OPENCODE_MODEL_*`, `OPENCODE_REASONING_*`).
 4. `command`: mappe `/<name>` -> template + sous-agent + `subtask` (delegation).
 5. `mcp`: serena, context7, wallaby, Figma (desactive par defaut).
@@ -503,31 +509,36 @@ Definis dans `opencode.jsonc` (champ `agent`):
 
 | Agent                  | Mode      | Role                                                                                  |
 | ---------------------- | --------- | ------------------------------------------------------------------------------------- |
-| `build`                | primary   | Orchestrateur. Delegue toute ecriture de code source au `coder`. Garde l'edit pour non-code (config/prompts/docs). |
+| `conductor`            | primary   | Orchestrateur. `write` + `edit` **interdits** par permission. Route chaque modif via Task vers un specialiste. Les redirections bash vers du code sont bloquees par le hook ECC. |
 | `planner`              | subagent  | Plan + risques avant grosse modif. Read+bash, pas d'edit.                             |
 | `architect`            | subagent  | Decisions de design / scalabilite. Read+bash uniquement.                              |
 | `coder`                | subagent  | Implementation pure (hors tests). Verification build+lint+standards obligatoire avant de rendre. Gate socratique en cas d'ambiguite. |
+| `writer`               | subagent  | Ecrit docs/markdown/HTML/texte. Interdit de toucher au code source — refuse les fichiers hors scope au conductor. |
 | `code-reviewer`        | subagent  | Revue qualite (diff, conventions, tests). Read-only — findings seulement; les fixes passent par `coder`. |
 | `security-reviewer`    | subagent  | Revue OWASP/secrets/deps. Read-only — rapporte les vulnerabilites; remediation routee vers `coder`. |
 | `tdd-guide`            | subagent  | RED -> GREEN -> REFACTOR + 80% coverage. Ecrit les tests; delegue le GREEN au `coder` via permission Task ciblee. |
 | `build-error-resolver` | subagent  | Fix build/TS errors avec diff minimal.                                                |
 | `e2e-runner`           | subagent  | Tests E2E Playwright.                                                                 |
-| `doc-updater`          | subagent  | Documentation et codemaps.                                                            |
+| `doc-updater`          | subagent  | Codemaps + docs generees.                                                             |
 | `refactor-cleaner`     | subagent  | Suppression code mort + consolidation.                                                |
 | `database-reviewer`    | subagent  | PostgreSQL / Supabase: schema, perfs, securite.                                       |
 | `git-specialist`       | subagent  | Branches, commits, push, PRs (modele mini).                                           |
 
-### Invocation automatique des sous-agents
+### Orchestration durcie des sous-agents
 
-OpenCode expose les sous-agents aux agents primaires via le Task tool. `instructions/subagent-routing.md` impose un gate Task-first avant inspection directe quand une demande matche un specialiste, et `prompts/agents/build.txt` repete les regles pour l'agent `build`.
+La delegation est imposee sur **trois couches**, donc le comportement reste identique que le primary soit Claude, GPT, DeepSeek ou un modele open-weight qui ignore les instructions en prose:
+
+1. **Permissions** — `conductor` a `tools.write: false`, `tools.edit: false`, et `permission.edit/write: deny` dans `opencode.jsonc`. L'allowlist Task enumere chaque specialiste legal; `*: deny` bloque le reste. L'orchestrateur n'a litteralement aucun outil pour modifier des fichiers.
+2. **Hook pre-tool (`plugins/ecc-hooks.ts`)** — defense en profondeur: bloque les commandes bash qui ecriraient sur du code source via redirection (`>`, `>>`), `tee`, `sed -i`, heredocs ou `python -c open().write`. Le hook leve une erreur explicite "delegate to coder/writer/tdd-guide" et avorte l'appel d'outil. S'applique globalement — aucun sous-agent ne devrait ecrire du code via bash non plus.
+3. **Prompt front-loaded (`prompts/agents/conductor.txt`)** — regles dures dans les premieres lignes, table de routage en second, six exemples few-shot User -> `task` avec contre-exemples explicites. `instructions/subagent-routing.md` impose un Task-first gate avant inspection directe.
 
 Chemins possibles:
 
-- Requete normale: `build` auto-delegue quand une regle de routage matche.
+- Requete normale: `conductor` consulte la table de routage et delegue via Task.
 - Mention `@agent`: invoque manuellement un sous-agent precis.
 - Commande slash: force un subtask avec template configure, par ex. `/plan`, `/tdd`, `/security`.
 
-Pourquoi: GPT/Claude inferent souvent la delegation depuis des descriptions courtes, mais les modeles open-source/open-weight sont plus litteraux et inspectent souvent avec `bash`/Serena avant de deleguer. Le gate top-level, le prompt de routage, et les descriptions `MUST delegate` rendent le comportement plus portable entre modeles.
+Pourquoi: GPT/Claude inferent souvent la delegation depuis des descriptions courtes, mais les modeles open-source/open-weight sont plus litteraux et inspectent ou editent souvent avant de deleguer. Permissions + hook + gate front-loaded rendent la delegation **mecaniquement imposee** plutot que dependante de l'instruction.
 
 <a id="commands-fr"></a>
 ### Commandes slash
@@ -589,7 +600,7 @@ Skills sur demande (chargees par leur description / par une commande):
 
 Tous les plugins TypeScript utilisent `@opencode-ai/plugin@1.4.6`.
 
-- `plugins/ecc-hooks.ts` — Prettier sur fichiers JS/TS edites, detection `console.log`, `tsc --noEmit` post-edit, rappels sur commandes sensibles (`git push` etc.).
+- `plugins/ecc-hooks.ts` — Prettier sur fichiers JS/TS edites, detection `console.log`, rappels sur commandes sensibles (`git push` etc.), et le **hard-stop conductor**: avorte les redirections bash (`>`, `>>`, `tee`, `sed -i`, heredocs, `python -c open().write`) qui visent du code source, pour que la delegation ne puisse pas etre contournee via le shell.
 - `plugins/instinct-injector.ts` — lit `~/.claude/homunculus`, filtre par confidence, injecte les instincts dans le system prompt (continuous-learning v2 read-side).
 - `plugins/instinct-observer.ts` — capture les events `tool.execute.before/after` et append dans `observations.jsonl` (write-side).
 - `plugins/instinct-digest.ts` — diff session-start: surface les instincts nouveaux/modifies depuis la derniere session.
@@ -647,7 +658,7 @@ Curation:
 
 1. Demarrage: OpenCode charge `opencode.jsonc` -> instructions globales -> plugin `instinct-injector` injecte les instincts -> `instinct-digest` produit un diff -> `caveman-server` ajoute le preamble si actif.
 2. Premiere action utilisateur: `startup-bootstrap` declenche `serena_activate_project`.
-3. Dev: `build` execute. `ecc-hooks` formate / type-check / loue les `console.log`. `instinct-observer` archive les events.
-4. Workflow: `build` auto-delegue aux specialistes via Task; `/plan`, `/tdd`, `/security`, etc. forcent explicitement le meme routage.
+3. Dev: `conductor` execute — il n'a pas le droit d'ecrire; il dispatche des Task vers les specialistes. `ecc-hooks` formate / flag les `console.log` / bloque les bypasses bash-write. `instinct-observer` archive les events.
+4. Workflow: `conductor` route via Task (impose par permissions); `/plan`, `/tdd`, `/security`, etc. forcent explicitement le meme routage.
 5. Idle: `auto-compact` declenche un compact quand le seuil de tool calls est atteint. `notification` ping macOS.
 6. Stop: hook v1 produit un draft, hook v2 cluster les observations en instincts pour la session suivante.

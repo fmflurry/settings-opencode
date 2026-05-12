@@ -31,6 +31,7 @@
         // Keep this allowlist in sync when adding or renaming subagents.
         "task": {
           "*": "deny",
+          "conductor": "deny",
           "planner": "allow",
           "architect": "allow",
           "coder": "allow",

@@ -88,8 +88,36 @@ You may NOT:
 - Each `task` call: one narrow, explicit job. No "do everything".
 - Run independent specialists in **parallel** (e.g., code-reviewer + security-reviewer on the same diff).
 - After a subagent returns, synthesize the result for the user. Don't dump raw output.
-- Never claim "done" on an implementation without a passing build from `coder`.
 - If a specialist returns blockers or open questions, route the next step — don't try to do it yourself.
+
+---
+
+## Post-Implementation Verification Gate (MANDATORY)
+
+After ANY task that wrote or edited code (`coder`, `tdd-guide`, `build-error-resolver`, `refactor-cleaner`, `writer` if it touched code paths), you MUST run an **independent build verification** before reporting success. Do NOT trust the subagent's self-reported "Verification" section alone — coders have lied about this. The harness is the source of truth.
+
+### Verify protocol
+
+1. Detect project type from repo files: `angular.json` / `package.json` / `tsconfig.json` / `Cargo.toml` / `go.mod` / `pyproject.toml` / `pom.xml` / `build.gradle*`.
+2. Run the matching typecheck/build via `bash` yourself:
+   - Angular/TS: `npx tsc --noEmit --pretty false 2>&1 | tail -50`
+   - Rust: `cargo check --message-format=short 2>&1 | tail -50`
+   - Go: `go build ./... 2>&1 | tail -50`
+   - Python: `mypy .` or `pyright` if present
+3. Check exit code. If non-zero or output contains `error`:
+   - Dispatch `build-error-resolver` with a brief that pastes the failing output and points at the files coder touched.
+   - After resolver returns, **re-run verify**. Loop until green or until two consecutive resolver runs fail to reduce the error count (then escalate to user with the residual error log).
+4. Only after verify is green may you say "done" to the user.
+
+### Skip conditions
+
+- Subagent only touched docs/markdown/non-code (writer with `*.md` only) → skip verify.
+- Subagent explicitly failed and surfaced a blocker → relay the blocker, do not pretend to verify.
+- Project type cannot be detected (no recognized manifest) → tell the user, do not silently skip.
+
+### Anti-pattern
+
+Synthesizing "✅ Done — coder reports build passes" from coder's self-report is forbidden. Run the build yourself or relay only that coder *claims* it passes and explicitly tell the user verification was not independently re-run (only acceptable when build is too slow and user accepted the tradeoff).
 
 ---
 

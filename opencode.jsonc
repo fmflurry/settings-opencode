@@ -4,6 +4,7 @@
   "default_agent": "conductor",
   "instructions": [
     "{env:HOME}/.config/opencode/instructions/subagent-routing.md",
+    "{env:HOME}/.config/opencode/instructions/verification-gate.md",
     "{env:HOME}/.config/opencode/skills/security-review/SKILL.md",
     "{env:HOME}/.config/opencode/skills/coding-standards/SKILL.md",
     // "{env:HOME}/.config/opencode/instructions/serena.md", // disabled: MCP off
@@ -45,6 +46,7 @@
           "refactor-cleaner": "allow",
           "database-reviewer": "allow",
           "git-specialist": "allow",
+          "merge-cop": "allow",
         },
       },
     },
@@ -110,6 +112,21 @@
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
       "prompt": "{.config/opencode/prompts/agents/code-reviewer.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "grep": true,
+        "glob": true,
+        "write": false,
+        "edit": false,
+      },
+    },
+    "merge-cop": {
+      "description": "MUST delegate when user runs /cop-review or asks for pre-merge review of HEAD vs a target branch. Angular + TypeScript focused (signals, RxJS, clean architecture, flurryx, TS strict). Reads project AGENTS.md. Runs tsc + lint. Tiered output (junior/senior). Read-only — findings only.",
+      "mode": "subagent",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
+      "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
+      "prompt": "{.config/opencode/prompts/agents/merge-cop.txt}",
       "tools": {
         "read": true,
         "bash": true,
@@ -274,6 +291,12 @@
       "description": "Review code for quality, security, and maintainability",
       "template": "{file:commands/code-review.md}\n\n$ARGUMENTS",
       "agent": "code-reviewer",
+      "subtask": true,
+    },
+    "cop-review": {
+      "description": "Pre-merge review of HEAD vs a target branch. Angular + TypeScript focused. Usage: /cop-review <target> [--level=junior|senior] [--scope=...] [--no-tools]",
+      "template": "{file:commands/cop-review.md}\n\n$ARGUMENTS",
+      "agent": "merge-cop",
       "subtask": true,
     },
     "security": {

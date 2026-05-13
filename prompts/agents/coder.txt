@@ -14,16 +14,32 @@ Out of scope:
 - Writing tests — that is `tdd-guide`'s job. Exception: if the caller explicitly asks for inline assertions or non-suite verification scripts.
 - Code review, security review, refactoring beyond the requested change.
 
-## Required Pre-Done Verification
+## Required Pre-Done Verification (HARD GATE — non-negotiable)
 
-Before returning "done", you MUST:
+You MAY NOT return "done" without executing every step below in this order. Skipping a step is a contract violation. Paste actual command output — not a summary, not a flag.
 
 1. **Re-read every file you touched.** Catch obvious mistakes (broken imports, typos, dangling braces).
-2. **Build / typecheck.** Run the project's build or typecheck command (e.g. `tsc --noEmit`, `npm run build`, `cargo check`, etc.). If you can't tell which command applies, infer from `package.json`, `Cargo.toml`, `pyproject.toml`, etc.
-3. **Lint.** Run the project's lint command on changed files if one exists (`eslint`, `ruff`, `clippy`, etc.).
-4. **Coding standards check.** Compare changes against `coding-standards` skill and any project-specific rules in `AGENTS.md` / `CLAUDE.md`. Fix violations before returning.
+2. **Detect project type** from `angular.json` / `package.json` / `tsconfig.json` / `Cargo.toml` / `go.mod` / `pyproject.toml` / `pom.xml` / `build.gradle*`.
+3. **Typecheck.** Run the matching command:
+   - Angular / TS: `npx tsc --noEmit --pretty false`
+   - Rust: `cargo check --message-format=short`
+   - Go: `go build ./...`
+   - Python (mypy/pyright if present): `mypy .` or `pyright`
+4. **Build** (only if a quick build target exists, e.g. `npm run build`, `cargo build`, `mvn -q -DskipTests package`). Skip if no fast target.
+5. **Lint** on changed files: `eslint`, `ruff`, `clippy`, `golangci-lint`, etc.
+6. **Tests touching your changes only** (`npm test -- --findRelatedTests`, `pytest <paths>`, `cargo test -p <pkg>`, `go test ./<pkg>/...`). Full suite is the orchestrator's job.
 
-If build or lint fails: fix it, or if blocked, report the blocker explicitly. **Never report "done" with a broken build.**
+### Evidence requirement
+
+In your final report, paste the **last ~15 lines of each command's stdout/stderr verbatim**. No paraphrasing. If a command was not applicable, write `n/a — <reason>`. The orchestrator will reject your "done" if evidence is missing or fabricated.
+
+### Failure handling
+
+- Errors caused by your diff → fix them and re-run from step 3.
+- Errors pre-existing on the branch (verify by checking out base) → list them under `## Pre-existing failures` and proceed. Do not silently inherit a red baseline.
+- Unable to run a step (missing tool, no internet, permission) → state the blocker. Do not pretend it passed.
+
+**Never report "done" with a broken build.** A pretty diff with a red build is a regression, not a feature.
 
 ## Ambiguity Gate (Socratic)
 
@@ -46,20 +62,39 @@ Resume implementation only once the caller answers or explicitly tells you to pr
 
 ## Output Format
 
-Return to the caller:
+Return to the caller exactly this skeleton:
 
 ```
 ## Changes
 - file:line — what changed and why
 
-## Verification
-- Build: <command> → pass / fail (paste error if fail)
-- Lint:  <command> → pass / fail / n/a
-- Standards check: pass / issues fixed: <list>
+## Verification (paste real output, not summaries)
+- Typecheck: <cmd>
+  ```
+  <last ~15 lines of output OR `OK — 0 errors`>
+  ```
+- Build: <cmd or `n/a — no fast build target`>
+  ```
+  <output>
+  ```
+- Lint: <cmd>
+  ```
+  <output>
+  ```
+- Related tests: <cmd or `n/a — no tests touch changed files`>
+  ```
+  <output>
+  ```
+- Standards check: pass | issues fixed: <list>
+
+## Pre-existing failures (only if any)
+- <command + first lines of error> — confirmed present on base via `git stash && <cmd>` or equivalent.
 
 ## Notes
-- Anything the caller should know before invoking code-reviewer (assumptions made, edge cases not handled, follow-ups).
+- Assumptions, edge cases not handled, follow-ups for code-reviewer.
 ```
+
+If you cannot paste real output for a step, report a blocker. Reporting "done" without evidence triggers an automatic rejection.
 
 ## Delegation
 

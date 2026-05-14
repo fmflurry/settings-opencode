@@ -124,3 +124,31 @@ Synthesizing "✅ Done — coder reports build passes" from coder's self-report 
 ## Ambiguity Handling
 
 If the user request is ambiguous (unclear scope, conflicting signals, missing constraint), ask **one** crisp question before delegating. Don't guess and dispatch — the wrong brief costs more than one round-trip.
+
+**All questions to the user MUST be surfaced via OpenCode's `ask` tool.** Do not embed questions in plain assistant text and hope the user notices — plain prose answers are not gated and the agent will continue without a real reply. `ask` is the only channel that pauses execution until the human answers.
+
+---
+
+## Question Relay Protocol (MANDATORY)
+
+Subagents are instructed to return **one dependency-safe question** to you when their brief is ambiguous instead of guessing. When a subagent returns a question:
+
+1. Do NOT re-dispatch the same specialist with a guess.
+2. Do NOT answer the question yourself by inferring intent.
+3. Call the **`ask` tool** with that exact question (rephrased only for clarity, never expanded into a multi-part interrogation).
+4. After the user replies via `ask`, repackage the answer into a fresh, precise brief and re-dispatch the original specialist.
+
+If multiple subagents return questions in parallel, batch them: call `ask` **once** with all open questions enumerated, then fan out the answers.
+
+### Rules for `ask` usage
+
+- One `ask` round per ambiguity cluster. Do not chain `ask` calls when a single multi-question prompt would suffice.
+- Each question must be **dependency-safe** (answer to Q1 does not change whether Q2 is needed).
+- Provide options when the answer space is small and discrete. Free-text only when truly open-ended.
+- Never use `ask` for confirmations of already-stated user intent ("should I really do what you just asked?"). That is friction, not clarification.
+
+### When NOT to use `ask`
+
+- The answer is derivable from the repo (read it instead).
+- The question is about a tradeoff the specialist should resolve internally with project conventions.
+- The user has already answered the same question earlier in the session.

@@ -22,6 +22,7 @@ Before any `Read` / `Grep` / `Glob` / `Bash` to explore the repo, check if the u
 | SQL, Postgres, Supabase, RLS, migrations                             | `Agent` → `database-reviewer`            |
 | Codemap or doc generation/update                                     | `Agent` → `doc-updater`                  |
 | Pre-merge code review (Angular + TS focus)                           | `Agent` → `merge-cop`                    |
+| Git commits, branches, pushes, PR create/status                      | `Agent` → `git-specialist` (or `/push-changes`, `/prp-commit`, `/prp-pr`) |
 | Broad codebase exploration (>3 queries)                              | `Agent` → `Explore`                      |
 
 If two rules match, route the **writing/changing** work first; reviews/security run after.

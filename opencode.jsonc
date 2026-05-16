@@ -261,6 +261,13 @@
         "glob": false,
       },
     },
+    // Disable built-in primary agents — conductor is the only primary entry point.
+    "build": {
+      "disable": true,
+    },
+    "plan": {
+      "disable": true,
+    },
   },
   "command": {
     "git": {

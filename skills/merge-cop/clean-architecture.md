@@ -67,6 +67,45 @@ class OrderFacade {
 
 ## 🟡 Risks
 
+### Ad-hoc display formatting in components/templates
+Flag local presentation formatting/parsing when reusable Angular pipes or app helpers can do it.
+
+- Bad in components/templates unless justified + centralized:
+  - `new Intl.*Format(...)`
+  - `toLocaleString`, `toLocaleDateString`, `toLocaleTimeString`
+  - regex/string formatting helpers for numbers, dates, currencies, percentages, text transforms
+  - manual separators, padding, rounding-for-display, date/number formatting helpers
+- Prefer built-in Angular pipes first: `number`, `currency`, `percent`, `date`, text pipes when suitable.
+- Prefer existing app pipes/utilities next. Search nearby/shared code before approving trivial formatting logic.
+- If no reusable pipe/helper exists, request one in shared/presentation layer; do not accept local component helper.
+- Component may choose data and pass args; pipe/helper owns display transformation.
+
+Report as 🟡 risk, or 🟢 arch when repeated/local formatting creates clear duplication or violates AGENTS.md presentation rules.
+
+Example:
+
+```ts
+// BAD - local one-off formatting in component
+const FRENCH_NUMBER_FORMAT = new Intl.NumberFormat('fr-FR', {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
+
+formatValue(value: unknown): string {
+  return typeof value === 'number' ? FRENCH_NUMBER_FORMAT.format(value) : '';
+}
+```
+
+```html
+<!-- GOOD - display formatting delegated to pipe -->
+{{ value | number: '1.0-2' }}
+```
+
+Review action: grep for existing `*.pipe.ts`, shared formatting helpers, and similar formatting call sites before accepting new local impl.
+
+### Trivial repetitive logic duplicates existing app behavior
+For small repeated actions (format, parse, normalize, map labels, build display strings), search existing nearby/shared code before approving new local implementation. If equivalent exists, request reuse. If not, request extraction when likely repeated.
+
 ### Facade exposes mutable state
 Facade should expose `Signal<T>` (read-only), not `WritableSignal<T>`.
 ```ts

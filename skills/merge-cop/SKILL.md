@@ -49,7 +49,7 @@ Pre-merge review. Compares HEAD vs `origin/<target>`. Angular-aware. Project-awa
 6. For each changed file:
      - Skim full file (not just hunk) for context
      - Apply relevant sub-checklists by extension/role:
-         *.component.ts / *.html  -> signals.md, rxjs.md, a11y
+          *.component.ts / *.html  -> signals.md, rxjs.md, clean-architecture.md, a11y
          *.facade.ts / *.store.ts -> flurryx.md, clean-architecture.md
          *.adapter.ts / *.port.ts -> clean-architecture.md
          *.ts                     -> typescript-strict.md

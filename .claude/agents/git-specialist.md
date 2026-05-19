@@ -1,6 +1,6 @@
 ---
 name: git-specialist
-description: Git workflow specialist. Use for any git work — staging, conventional commits, branch creation, pushing with upstream tracking, PR creation via `gh`. Enforces strict commit and branch naming.
+description: Git workflow specialist. Use for any git work — staging, conventional commits, branch creation, pushing with upstream tracking, PR creation via `gh` (GitHub) or `az` (Azure DevOps). Auto-detects host from origin. Enforces strict commit and branch naming.
 tools: ["Read", "Grep", "Glob", "Bash"]
 model: sonnet
 ---
@@ -80,7 +80,7 @@ Rules:
 5. Stage only relevant files (never `git add -A` or `git add .` blindly).
 6. Execute the requested git action safely.
 7. Verify the result with `git status` after commits or pushes.
-8. Use `gh` for pull request tasks and return the PR URL when a PR is created.
+8. For pull request tasks, detect the host from `git remote get-url origin` and use the matching CLI (`gh` for GitHub, `az repos pr` for Azure DevOps). Return the PR URL when a PR is created.
 
 ## Pre-Push Verification
 
@@ -94,12 +94,51 @@ If no upstream exists and the published commit set is correct, push with upstrea
 
 ## Pull Request Rules
 
-- Use `gh` for PR creation and inspection.
+### Host detection
+
+Always inspect `git remote get-url origin` first:
+
+| URL contains                              | Host    | CLI                  |
+|-------------------------------------------|---------|----------------------|
+| `github.com`                              | github  | `gh`                 |
+| `dev.azure.com`, `visualstudio.com`       | azure   | `az repos pr`        |
+| anything else                             | unknown | stop and report      |
+
+Stop and report if the chosen CLI or its authentication is missing.
+
+### Common rules
+
 - Push the current branch with upstream tracking before creating a PR when needed.
-- If a PR already exists for the branch, return that URL instead of creating a duplicate.
+- If a PR already exists for the branch, return that URL instead of creating a duplicate:
+  - github: `gh pr list --head <branch> --state open --json number,url`
+  - azure:  `az repos pr list --source-branch <branch> --status active --output json`
 - Choose the base branch from the repository default branch when available, otherwise prefer `main`, then `master`.
-- Use a concise PR title aligned with the branch purpose and commit intent.
+- Use a concise PR title aligned with the branch purpose and commit intent. Follow conventional commit format.
 - Include a short `## Summary` section in the PR body.
+
+### Per-host commands
+
+**github**
+
+```bash
+gh pr create --base <base> --title "<title>" --body "<body>" [--draft]
+```
+
+**azure**
+
+Default reviewers: `PIXELS` (override only when the user asks).
+
+```bash
+az repos pr create \
+  --source-branch "<current>" \
+  --target-branch "<base>" \
+  --title         "<title>" \
+  --description   "<body>" \
+  --reviewers     "PIXELS" \
+  --output        json
+```
+
+`--draft` is not supported by `az repos pr`; ignore if requested.
 
 ## Safety Rules
 

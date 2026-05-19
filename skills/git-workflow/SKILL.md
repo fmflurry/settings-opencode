@@ -101,19 +101,23 @@ The `git-specialist` agent must:
 - stage only relevant changes
 - avoid destructive git commands unless explicitly requested
 - push only when requested or clearly part of the delegated git task
-- use `gh` for pull request creation or inspection when the task includes PR work
+- detect the host from `git remote get-url origin` and use the matching CLI for PR work: `gh` for GitHub, `az repos pr` for Azure DevOps
 - preserve repository history hygiene
 
 ## Pull Request Rules
 
 When the task includes PR creation or inspection:
 
-- use `gh` for GitHub operations
+- detect the host from `git remote get-url origin`:
+  - `github.com` → use `gh`
+  - `dev.azure.com` / `visualstudio.com` → use `az repos pr` (Azure CLI + `azure-devops` extension)
+  - otherwise → stop and report an unsupported host
 - push the current branch with upstream tracking first if needed
 - if a PR already exists for the current branch, return that URL instead of creating a duplicate
 - choose the base branch from the repository default branch when available, otherwise prefer `main`, then `master`
-- use a concise PR title aligned with the branch purpose and commit intent
+- use a concise PR title aligned with the branch purpose and commit intent (conventional commit format)
 - include a short `## Summary` section in the PR body
+- Azure DevOps defaults: reviewers = group `PIXELS`; `--draft` is not supported by `az repos pr` (ignore the flag for Azure)
 
 ## Output Expectations
 

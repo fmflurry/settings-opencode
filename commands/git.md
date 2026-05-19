@@ -44,7 +44,8 @@ Allowed types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
 - use a compliant conventional commit message for commit operations
 - stage only relevant changes
 - avoid destructive commands unless explicitly requested
-- use `gh` and return the PR URL for pull request tasks
+- for pull request tasks: detect host from `git remote get-url origin` — use `gh` for GitHub, `az repos pr` for Azure DevOps (`dev.azure.com` / `visualstudio.com`). Stop if unknown. Return the PR URL.
+- Azure DevOps PR defaults: reviewers = `PIXELS`, no `--draft`. Title must follow conventional commit format.
 - use the repository default branch as PR base when available, otherwise prefer `main`, then `master`
 - return an existing PR URL instead of creating a duplicate PR for the same branch
 

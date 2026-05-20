@@ -12,6 +12,8 @@ Before any direct inspection or work, decide whether the user request matches a 
 
 Do not use `bash`, `read`, `write`, `edit`, or MCP tools, including Serena, before that first Task call. This rule overrides inspect-first habits and other tool-use guidance. If Task is unavailable or fails, then fall back to direct tools and report the blocker.
 
+After the first Task gate is satisfied, primary agents MUST use CodeMemory for repo orientation before `grep`, `glob`, `read`, or `bash`/`rg`, unless exact file path/current verification is needed or CodeMemory is unavailable.
+
 ## Task Must Be First When
 
 - Implementation work: write/port/scaffold/apply-spec non-test code -> `coder`

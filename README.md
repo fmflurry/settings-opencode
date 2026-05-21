@@ -1,22 +1,15 @@
----
-title: opencode harness
-subtitle: conductor-routed multi-agent setup for OpenCode + Claude Code
-author: fmflurry
-license: MIT
-languages: [en, fr]
-tags: [opencode, claude-code, agents, multi-agent, conductor, subagents, mcp, code-memory]
----
-
-> **Status:** Powered by [**CodeMemory**](https://github.com/fmflurry/code-memory) — semantic repo orientation MCP loaded session-start via `instructions/codememory-first.md`. Every subagent has `code-memory_*` pre-allowlisted and routes repo research through it before `grep`/`read`.
->
-> [![CodeMemory](https://img.shields.io/badge/MCP-CodeMemory-7c3aed?logo=github)](https://github.com/fmflurry/code-memory)
-> [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-> [![OpenCode](https://img.shields.io/badge/OpenCode-CLI-000)](https://opencode.ai)
-> [![Claude Code](https://img.shields.io/badge/Claude%20Code-mirror-d97757)](https://claude.com/claude-code)
-
 <p align="center">
   <img src="assets/opencode-harness.png" alt="opencode harness — conductor-routed multi-agent setup overview" width="100%" />
 </p>
+
+<p align="center">
+  <a href="https://github.com/fmflurry/code-memory"><img src="https://img.shields.io/badge/MCP-CodeMemory-7c3aed?logo=github" alt="CodeMemory MCP" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
+  <a href="https://opencode.ai"><img src="https://img.shields.io/badge/OpenCode-CLI-000" alt="OpenCode" /></a>
+  <a href="https://claude.com/claude-code"><img src="https://img.shields.io/badge/Claude%20Code-mirror-d97757" alt="Claude Code mirror" /></a>
+</p>
+
+> **Powered by [CodeMemory](https://github.com/fmflurry/code-memory).** Semantic repo orientation MCP — every subagent prefers it over `grep`/`read` via `instructions/codememory-first.md`.
 
 # OpenCode + Claude Code Setup
 

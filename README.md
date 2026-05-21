@@ -1,3 +1,16 @@
+---
+title: opencode harness
+subtitle: conductor-routed multi-agent setup for OpenCode + Claude Code
+author: fmflurry
+license: MIT
+languages: [en, fr]
+tags: [opencode, claude-code, agents, multi-agent, conductor, subagents, mcp]
+---
+
+<p align="center">
+  <img src="assets/opencode-harness.png" alt="opencode harness — conductor-routed multi-agent setup overview" width="100%" />
+</p>
+
 # OpenCode + Claude Code Setup
 
 > My personal **OpenCode** and **Claude Code** configuration, kept public so I can sync it across machines — and so anyone curious can borrow what's useful. MIT licensed, fork freely. It evolves with my workflow, so treat it as a living reference rather than a stable distribution.

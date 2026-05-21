@@ -4,8 +4,15 @@ subtitle: conductor-routed multi-agent setup for OpenCode + Claude Code
 author: fmflurry
 license: MIT
 languages: [en, fr]
-tags: [opencode, claude-code, agents, multi-agent, conductor, subagents, mcp]
+tags: [opencode, claude-code, agents, multi-agent, conductor, subagents, mcp, code-memory]
 ---
+
+> **Status:** Powered by [**CodeMemory**](https://github.com/fmflurry/code-memory) — semantic repo orientation MCP loaded session-start via `instructions/codememory-first.md`. Every subagent has `code-memory_*` pre-allowlisted and routes repo research through it before `grep`/`read`.
+>
+> [![CodeMemory](https://img.shields.io/badge/MCP-CodeMemory-7c3aed?logo=github)](https://github.com/fmflurry/code-memory)
+> [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+> [![OpenCode](https://img.shields.io/badge/OpenCode-CLI-000)](https://opencode.ai)
+> [![Claude Code](https://img.shields.io/badge/Claude%20Code-mirror-d97757)](https://claude.com/claude-code)
 
 <p align="center">
   <img src="assets/opencode-harness.png" alt="opencode harness — conductor-routed multi-agent setup overview" width="100%" />
@@ -14,10 +21,6 @@ tags: [opencode, claude-code, agents, multi-agent, conductor, subagents, mcp]
 # OpenCode + Claude Code Setup
 
 > My personal **OpenCode** and **Claude Code** configuration, kept public so I can sync it across machines — and so anyone curious can borrow what's useful. MIT licensed, fork freely. It evolves with my workflow, so treat it as a living reference rather than a stable distribution.
-
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![OpenCode](https://img.shields.io/badge/OpenCode-CLI-000)](https://opencode.ai)
-[![Claude Code](https://img.shields.io/badge/Claude%20Code-mirror-d97757)](https://claude.com/claude-code)
 
 ### Want to try it? Jump to **[Public install](#public-install)** — it takes about five minutes.
 
@@ -30,7 +33,7 @@ A hardened primary `conductor` agent backed by **13 specialist sub-agents** (pla
 - **Mandatory sub-agent delegation** from `conductor`: the primary has `write` and `edit` denied at the permission layer, plus a `tool.execute.before` hook that blocks bash redirects to source files (`> file.ts`, `tee`, `sed -i`, heredocs, `python -c open().write`). The orchestrator cannot patch files — every change MUST go through `coder` (source code), `writer` (docs/markdown/HTML), `tdd-guide` (tests), or `git-specialist` (commits/PRs). This makes routing **model-agnostic**: even open-weight models that ignore prose rules are mechanically forced to delegate.
 - **Front-loaded first-tool gate** in `prompts/agents/conductor.txt`: hard rules at the top, routing table second, six few-shot User → `task` examples (with explicit wrong-way contrasts) so literal models copy the right pattern.
 - **Slash commands** that force routing to the right specialist (`/plan`, `/tdd`, `/security`, `/code-review`, …).
-- **Always-on skills** loaded at session start — Socratic design, security review, coding standards, git workflow, Serena bootstrap.
+- **Always-on skills** loaded at session start — Socratic design, security review, coding standards, git workflow, Serena bootstrap, [CodeMemory-first](https://github.com/fmflurry/code-memory) repo orientation.
 - **OpenCode plugins** — ECC hooks (Prettier + `tsc` on save), continuous-learning v2 (the *homunculus* instinct store), worktree spawner, auto-compact, caveman ultra mode, Figma RAG trigger, macOS notifications, startup bootstrap.
 - **Custom tools** — `run-tests`, `check-coverage`, `security-audit`, plus a codemap generator.
 - **A `.claude/` mirror** — hooks, rule packs, learned skills, and the shared homunculus store, so Claude Code benefits from the same guardrails.
@@ -182,14 +185,15 @@ If your provider doesn't support `reasoningEffort`, OpenCode silently ignores it
 
 #### 4. Install MCP server prerequisites
 
-`opencode.jsonc` declares four MCP servers. **Serena is required** — `instructions/serena.md` is loaded on every session and will fail to activate without it. The others are optional but documented here so you know what you're opting into.
+`opencode.jsonc` declares four MCP servers, plus an externally-registered fifth one (`code-memory`). **Serena is required** — `instructions/serena.md` is loaded on every session and will fail to activate without it. **CodeMemory is strongly recommended** — `instructions/codememory-first.md` routes repo orientation through it before falling back to `grep`/`read`. The others are optional but documented here so you know what you're opting into.
 
-| Server     | Install                                                                                       | Status                                                                       |
-| ---------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| serena     | `pip install uv` (or `brew install uv`) — the config invokes `uvx --from git+https://github.com/oraios/serena serena start-mcp-server` | **Required.** IDE-grade semantic code retrieval used by `instructions/serena.md`. |
-| context7   | nothing — `npx -y @upstash/context7-mcp@latest` is auto-installed at session start            | Live docs lookup. Auto-bootstraps on first use.                              |
-| wallaby    | install [Wallaby.js](https://wallabyjs.com) and run `wallaby update-mcp`                      | Optional. Runtime-test introspection.                                        |
-| Figma      | `enabled: false` by default                                                                   | Optional. Flip `enabled: true` and set up [Figma MCP](https://help.figma.com) for design-system tools. |
+| Server       | Install                                                                                       | Status                                                                       |
+| ------------ | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| serena       | `pip install uv` (or `brew install uv`) — the config invokes `uvx --from git+https://github.com/oraios/serena serena start-mcp-server` | **Required.** IDE-grade semantic code retrieval used by `instructions/serena.md`. |
+| code-memory  | register externally (user-level MCP) — see [`fmflurry/code-memory`](https://github.com/fmflurry/code-memory) | **Recommended.** Semantic repo orientation; `code-memory_*` tools are pre-allowlisted for every subagent. Pairs with `instructions/codememory-first.md`. |
+| context7     | nothing — `npx -y @upstash/context7-mcp@latest` is auto-installed at session start            | Live docs lookup. Auto-bootstraps on first use.                              |
+| wallaby      | install [Wallaby.js](https://wallabyjs.com) and run `wallaby update-mcp`                      | Optional. Runtime-test introspection.                                        |
+| Figma        | `enabled: false` by default                                                                   | Optional. Flip `enabled: true` and set up [Figma MCP](https://help.figma.com) for design-system tools. |
 
 #### 5. (Optional) Install the Claude Code mirror
 
@@ -289,6 +293,7 @@ Six concerns wired in one file:
 
 1. `instructions`: always-on skills loaded at session start. Currently:
    - `instructions/subagent-routing.md` — Task-first subagent delegation gate.
+   - `instructions/codememory-first.md` — prefer [CodeMemory](https://github.com/fmflurry/code-memory) MCP (`code-memory_*` tools) for repo orientation before `grep`/`read`.
    - `instructions/serena.md` — activates Serena MCP after the routing gate when specialist delegation does not apply.
    - `skills/socratic-design/SKILL.md` — evidence-first decision gating.
    - `skills/security-review/SKILL.md` — OWASP checklist.
@@ -297,7 +302,7 @@ Six concerns wired in one file:
 2. `default_agent`: `conductor` (orchestrator-only — cannot write/edit).
 3. `agent`: sub-agent definitions (model + reasoning effort + prompt + tool allowlist). All models are env-driven (`OPENCODE_MODEL_*`, `OPENCODE_REASONING_*`) — see [Public install § 4](#public-install).
 4. `command`: maps `/<name>` -> template + sub-agent + `subtask`.
-5. `mcp`: serena, context7, wallaby, Figma (disabled).
+5. `mcp`: serena, context7, wallaby, Figma (disabled). Plus externally-registered [`code-memory`](https://github.com/fmflurry/code-memory) — tool perms `code-memory_*` are pre-allowlisted for every subagent.
 6. `plugin`: external marketplace plugins (`@tarquinen/opencode-dcp@latest`).
 
 `dcp.jsonc` configures the Dynamic Context Pruning plugin. `ocx.jsonc` registers OCX [registries](https://ocx.kdco.dev).
@@ -502,6 +507,7 @@ Le fichier orchestre six choses:
 
 1. `instructions`: skills toujours chargees au demarrage. Aujourd'hui:
    - `instructions/subagent-routing.md` -> gate Task-first pour delegation sous-agent.
+   - `instructions/codememory-first.md` -> prefere [CodeMemory](https://github.com/fmflurry/code-memory) MCP (outils `code-memory_*`) pour l'orientation repo avant `grep`/`read`.
    - `instructions/serena.md` -> active Serena MCP apres le gate de routage quand la delegation specialiste ne s'applique pas.
    - `skills/socratic-design/SKILL.md` -> gating evidence-first sur les decisions design.
    - `skills/security-review/SKILL.md` -> checklist OWASP.
@@ -510,7 +516,7 @@ Le fichier orchestre six choses:
 2. `default_agent`: `conductor` (orchestrateur sans droit d'ecriture).
 3. `agent`: definitions des sous-agents (modele + reasoning effort + prompt + outils autorises). Tous les modeles passent par variables d'environnement (`OPENCODE_MODEL_*`, `OPENCODE_REASONING_*`).
 4. `command`: mappe `/<name>` -> template + sous-agent + `subtask` (delegation).
-5. `mcp`: serena, context7, wallaby, Figma (desactive par defaut).
+5. `mcp`: serena, context7, wallaby, Figma (desactive par defaut). Plus [`code-memory`](https://github.com/fmflurry/code-memory) enregistre en externe — perms `code-memory_*` pre-allowlistees pour chaque sous-agent.
 6. `plugin`: marketplace plugins externes (`@tarquinen/opencode-dcp@latest`).
 
 `dcp.jsonc` configure le plugin Dynamic Context Pruning. `ocx.jsonc` declare les registries pour le wrapper [OCX](https://ocx.kdco.dev).

@@ -9,7 +9,15 @@
   <a href="https://claude.com/claude-code"><img src="https://img.shields.io/badge/Claude%20Code-mirror-d97757" alt="Claude Code mirror" /></a>
 </p>
 
-> **Powered by [CodeMemory](https://github.com/fmflurry/code-memory).** Semantic repo orientation MCP — every subagent prefers it over `grep`/`read` via `instructions/codememory-first.md`.
+> ### Powered by [**CodeMemory**](https://github.com/fmflurry/code-memory)
+>
+> The semantic backbone of this harness. CodeMemory indexes the whole repo into a queryable memory of files, symbols, and episodes — so every agent walks into a session **already knowing the codebase** instead of grepping it back into existence on every turn.
+>
+> - **Orientation, not scanning.** One `code-memory_codememory_retrieve` call surfaces the right paths, symbols, and prior decisions; `grep`/`read` only run afterwards for exact verification.
+> - **Cross-session memory.** Episodes and findings persist — agents pick up where the last session left off instead of re-discovering the repo from scratch.
+> - **Wired in by default.** `instructions/codememory-first.md` is loaded at session start, and `code-memory_*` tools are pre-allowlisted for the conductor and every specialist subagent.
+>
+> If you adopt only one piece of this setup, adopt this one. → [`fmflurry/code-memory`](https://github.com/fmflurry/code-memory)
 
 # OpenCode + Claude Code Setup
 

@@ -16,8 +16,6 @@
 > - **Orientation, not scanning.** One `code-memory_codememory_retrieve` call surfaces the right paths, symbols, and prior decisions; `grep`/`read` only run afterwards for exact verification.
 > - **Cross-session memory.** Episodes and findings persist — agents pick up where the last session left off instead of re-discovering the repo from scratch.
 > - **Wired in by default.** `instructions/codememory-first.md` is loaded at session start, and `code-memory_*` tools are pre-allowlisted for the conductor and every specialist subagent.
->
-> If you adopt only one piece of this setup, adopt this one. → [`fmflurry/code-memory`](https://github.com/fmflurry/code-memory)
 
 # OpenCode + Claude Code Setup
 

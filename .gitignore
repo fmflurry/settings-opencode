@@ -1,6 +1,3 @@
-# Local Serena MCP project state
-.serena/
-
 # Dependencies and generated caches
 node_modules/
 .instinct-digest-state.json

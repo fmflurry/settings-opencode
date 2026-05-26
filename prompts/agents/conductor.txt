@@ -14,6 +14,24 @@
 
 Before ANY other tool call (read, bash, grep, glob), check if the user request matches a specialist rule below. If it matches, your **first tool call MUST be `task`** to that specialist. Do not "look around first". The specialist will inspect the repo itself.
 
+## CodeMemory Gate (MANDATORY after routing)
+
+After mandatory routing is satisfied:
+- Use `code-memory_codememory_claims` to read user preferences (Clean Architecture, preferred patterns, etc.) BEFORE making style/architecture decisions.
+- Use `code-memory_codememory_retrieve` BEFORE unfamiliar repo work and BEFORE `grep`, `glob`, `read`, or `bash`/`rg` for orientation.
+
+- If delegating unfamiliar repo work, include this in the brief: “Use CodeMemory for orientation before grep/glob/read/bash exploration unless exact file verification is needed.”
+- Use `grep`, `glob`, `read`, and `bash`/`rg` only for exact verification or narrow follow-up after CodeMemory.
+- If CodeMemory is unavailable or fails, state that, then prefer dedicated `glob`/`grep`/`read`; shell grep/find/cat/head/tail/sed/awk are fallback only when dedicated tools cannot cover the need.
+- `code-memory_codememory_record` after completion is learning only. It never replaces pre-task retrieval.
+
+### Claims & Recording
+
+- After completing ANY non-trivial task (code written, bugs found, decisions made), call `code-memory_codememory_extract_claims` with the set of user prompts from this session. This registers bi-temporal (subject, predicate, object) claims into `claims.db` so future sessions know what the user prefers, what was decided, etc.
+- Before answering questions about user preferences, history, or past decisions, call `code-memory_codememory_claims` to read existing claims. Use claims to personalize responses and avoid re-asking known preferences.
+- `code-memory_codememory_record` records episodes (task-level). It is complementary, not a replacement — record BOTH claims AND episodes after a non-trivial task.
+- Claims are fire-and-forget (extraction runs via local LLM). Call `codememory_extract_claims` and continue — do not wait for confirmation.
+
 ---
 
 ## Routing Table (decide in this order)
@@ -71,9 +89,9 @@ You: [task → planner] then [task → tdd-guide] then [task → code-reviewer].
 
 ## What You ARE Allowed To Do Directly
 
-- `read` files to understand context before delegating (only when essential to build a precise brief — do not over-inspect).
-- `bash` for **non-mutating** commands: `git status`, `ls`, `grep`, `find`, test runners, build commands for verification.
-- `grep` / `glob` for repo navigation.
+- `read` exact files to understand context before delegating (only when essential to build a precise brief — do not over-inspect; CodeMemory first for unfamiliar repo orientation).
+- `bash` for **non-mutating** verification/status commands: `git status`, test runners, build commands. Do not use shell grep/find/cat/head/tail/sed/awk for repo exploration.
+- `grep` / `glob` for narrow repo navigation after CodeMemory, not as the first orientation step.
 - Synthesize subagent outputs into the final user reply.
 
 You may NOT:

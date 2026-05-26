@@ -4,10 +4,10 @@
   "default_agent": "conductor",
   "instructions": [
     "{env:HOME}/.config/opencode/instructions/subagent-routing.md",
-    "instructions/codememory-first.md",
     "{env:HOME}/.config/opencode/instructions/verification-gate.md",
     "{env:HOME}/.config/opencode/skills/security-review/SKILL.md",
     "{env:HOME}/.config/opencode/skills/coding-standards/SKILL.md",
+    // "{env:HOME}/.config/opencode/instructions/serena.md", // disabled: MCP off
     // "{env:HOME}/.config/opencode/skills/socratic-design/SKILL.md", // disabled: load on demand
     // "{env:HOME}/.config/opencode/skills/git-workflow/SKILL.md", // disabled: load on demand
   ],
@@ -61,7 +61,6 @@
         "bash": true,
         "write": false,
         "edit": false,
-        "code-memory_*": true,
       },
     },
     "architect": {
@@ -75,7 +74,6 @@
         "bash": true,
         "write": false,
         "edit": false,
-        "code-memory_*": true,
       },
     },
     "coder": {
@@ -91,7 +89,6 @@
         "bash": true,
         "grep": true,
         "glob": true,
-        "code-memory_*": true,
       },
     },
     "writer": {
@@ -107,7 +104,6 @@
         "bash": true,
         "grep": true,
         "glob": true,
-        "code-memory_*": true,
       },
     },
     "code-reviewer": {
@@ -123,7 +119,6 @@
         "glob": true,
         "write": false,
         "edit": false,
-        "code-memory_*": true,
       },
     },
     "merge-cop": {
@@ -139,7 +134,6 @@
         "glob": true,
         "write": false,
         "edit": false,
-        "code-memory_*": true,
       },
     },
     "security-reviewer": {
@@ -155,7 +149,6 @@
         "glob": true,
         "write": false,
         "edit": false,
-        "code-memory_*": true,
       },
     },
     "tdd-guide": {
@@ -172,7 +165,6 @@
         "grep": true,
         "glob": true,
         "task": true,
-        "code-memory_*": true,
       },
       "permission": {
         "task": {
@@ -194,7 +186,6 @@
         "bash": true,
         "grep": true,
         "glob": true,
-        "code-memory_*": true,
       },
     },
     "e2e-runner": {
@@ -209,7 +200,6 @@
         "bash": true,
         "grep": true,
         "glob": true,
-        "code-memory_*": true,
       },
     },
     "doc-updater": {
@@ -225,7 +215,6 @@
         "bash": true,
         "grep": true,
         "glob": true,
-        "code-memory_*": true,
       },
     },
     "refactor-cleaner": {
@@ -241,7 +230,6 @@
         "bash": true,
         "grep": true,
         "glob": true,
-        "code-memory_*": true,
       },
     },
     "database-reviewer": {
@@ -256,7 +244,6 @@
         "bash": true,
         "grep": true,
         "glob": true,
-        "code-memory_*": true,
       },
     },
     "git-specialist": {
@@ -409,6 +396,17 @@
     },
   },
   "mcp": {
+    "serena": {
+      "type": "local",
+      "command": [
+        "uvx",
+        "--from",
+        "git+https://github.com/oraios/serena",
+        "serena",
+        "start-mcp-server",
+      ],
+      "enabled": false,
+    },
     "context7": {
       "type": "local",
       "command": ["npx", "-y", "@upstash/context7-mcp@latest"],

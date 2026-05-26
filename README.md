@@ -32,7 +32,7 @@ A hardened primary `conductor` agent backed by **13 specialist sub-agents** (pla
 - **Mandatory sub-agent delegation** from `conductor`: the primary has `write` and `edit` denied at the permission layer, plus a `tool.execute.before` hook that blocks bash redirects to source files (`> file.ts`, `tee`, `sed -i`, heredocs, `python -c open().write`). The orchestrator cannot patch files — every change MUST go through `coder` (source code), `writer` (docs/markdown/HTML), `tdd-guide` (tests), or `git-specialist` (commits/PRs). This makes routing **model-agnostic**: even open-weight models that ignore prose rules are mechanically forced to delegate.
 - **Front-loaded first-tool gate** in `prompts/agents/conductor.txt`: hard rules at the top, routing table second, six few-shot User → `task` examples (with explicit wrong-way contrasts) so literal models copy the right pattern.
 - **Slash commands** that force routing to the right specialist (`/plan`, `/tdd`, `/security`, `/code-review`, …).
-- **Always-on skills** loaded at session start — Socratic design, security review, coding standards, git workflow, Serena bootstrap, [CodeMemory-first](https://github.com/fmflurry/code-memory) repo orientation.
+- **Always-on skills** loaded at session start — Socratic design, security review, coding standards, git workflow, [CodeMemory-first](https://github.com/fmflurry/code-memory) repo orientation.
 - **OpenCode plugins** — ECC hooks (Prettier + `tsc` on save), continuous-learning v2 (the *homunculus* instinct store), worktree spawner, auto-compact, caveman ultra mode, Figma RAG trigger, macOS notifications, startup bootstrap.
 - **Custom tools** — `run-tests`, `check-coverage`, `security-audit`, plus a codemap generator.
 - **A `.claude/` mirror** — hooks, rule packs, learned skills, and the shared homunculus store, so Claude Code benefits from the same guardrails.
@@ -82,7 +82,7 @@ The repo is designed to *become* (or symlink into) `~/.config/opencode/`, plus a
 - [OpenCode CLI](https://opencode.ai) installed and on your `PATH`.
 - [Claude Code](https://claude.com/claude-code) installed if you want the `.claude/` half.
 - Either [Bun](https://bun.sh) (recommended — `bun.lock` is what's checked in) or Node.js 20+ with `npm`.
-- `git`, plus `uv`/`uvx` for the Serena MCP server (`brew install uv` on macOS, or `pip install uv`).
+- `git`.
 
 ### Quick install (script)
 
@@ -184,11 +184,10 @@ If your provider doesn't support `reasoningEffort`, OpenCode silently ignores it
 
 #### 4. Install MCP server prerequisites
 
-`opencode.jsonc` declares four MCP servers, plus an externally-registered fifth one (`code-memory`). **Serena is required** — `instructions/serena.md` is loaded on every session and will fail to activate without it. **CodeMemory is strongly recommended** — `instructions/codememory-first.md` routes repo orientation through it before falling back to `grep`/`read`. The others are optional but documented here so you know what you're opting into.
+`opencode.jsonc` declares three MCP servers, plus an externally-registered fourth one (`code-memory`). **CodeMemory is strongly recommended** — `instructions/codememory-first.md` routes repo orientation through it before falling back to `grep`/`read`. The others are optional but documented here so you know what you're opting into.
 
 | Server       | Install                                                                                       | Status                                                                       |
 | ------------ | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| serena       | `pip install uv` (or `brew install uv`) — the config invokes `uvx --from git+https://github.com/oraios/serena serena start-mcp-server` | **Required.** IDE-grade semantic code retrieval used by `instructions/serena.md`. |
 | code-memory  | register externally (user-level MCP) — see [`fmflurry/code-memory`](https://github.com/fmflurry/code-memory) | **Recommended.** Semantic repo orientation; `code-memory_*` tools are pre-allowlisted for every subagent. Pairs with `instructions/codememory-first.md`. |
 | context7     | nothing — `npx -y @upstash/context7-mcp@latest` is auto-installed at session start            | Live docs lookup. Auto-bootstraps on first use.                              |
 | wallaby      | install [Wallaby.js](https://wallabyjs.com) and run `wallaby update-mcp`                      | Optional. Runtime-test introspection.                                        |
@@ -230,7 +229,6 @@ opencode
 You should see:
 
 - The caveman ultra TUI sidebar plugin show up (or be silent if you're not in a caveman session).
-- `instructions/serena.md` ask Serena to activate the project on first user message.
 - The continuous-learning v2 injector preload high-confidence instincts into the system prompt.
 
 Then drop a slash command:
@@ -280,10 +278,10 @@ Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primar
 - TUI plugins: `tui-plugins/*.tsx`.
 - Custom tools: `tools/*.ts`.
 - Mode notes: `contexts/*.md`.
-- Global instructions: `instructions/subagent-routing.md`, `instructions/serena.md`, `instructions/caveman-ultra.md`.
+- Global instructions: `instructions/subagent-routing.md`, `instructions/codememory-first.md`, `instructions/caveman-ultra.md`.
 - Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`.
 - Claude mirror: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/skills/`, `.claude/commands/`, `.claude/homunculus/`.
-- Intentional exclusions (`.gitignore`): `.serena/` local MCP state, `node_modules/`, `.instinct-digest-state.json`, `antigravity-*`, `.DS_Store`, local `.env*` files except `.env.example`.
+- Intentional exclusions (`.gitignore`): `node_modules/`, `.instinct-digest-state.json`, `antigravity-*`, `.DS_Store`, local `.env*` files except `.env.example`.
 
 <a id="config-en"></a>
 ### Configuration: `opencode.jsonc`
@@ -293,7 +291,6 @@ Six concerns wired in one file:
 1. `instructions`: always-on skills loaded at session start. Currently:
    - `instructions/subagent-routing.md` — Task-first subagent delegation gate.
    - `instructions/codememory-first.md` — prefer [CodeMemory](https://github.com/fmflurry/code-memory) MCP (`code-memory_*` tools) for repo orientation before `grep`/`read`.
-   - `instructions/serena.md` — activates Serena MCP after the routing gate when specialist delegation does not apply.
    - `skills/socratic-design/SKILL.md` — evidence-first decision gating.
    - `skills/security-review/SKILL.md` — OWASP checklist.
    - `skills/coding-standards/SKILL.md` — code conventions.
@@ -301,7 +298,7 @@ Six concerns wired in one file:
 2. `default_agent`: `conductor` (orchestrator-only — cannot write/edit).
 3. `agent`: sub-agent definitions (model + reasoning effort + prompt + tool allowlist). All models are env-driven (`OPENCODE_MODEL_*`, `OPENCODE_REASONING_*`) — see [Public install § 4](#public-install).
 4. `command`: maps `/<name>` -> template + sub-agent + `subtask`.
-5. `mcp`: serena, context7, wallaby, Figma (disabled). Plus externally-registered [`code-memory`](https://github.com/fmflurry/code-memory) — tool perms `code-memory_*` are pre-allowlisted for every subagent.
+5. `mcp`: context7, wallaby, Figma (disabled). Plus externally-registered [`code-memory`](https://github.com/fmflurry/code-memory) — tool perms `code-memory_*` are pre-allowlisted for every subagent.
 6. `plugin`: external marketplace plugins (`@tarquinen/opencode-dcp@latest`).
 
 `dcp.jsonc` configures the Dynamic Context Pruning plugin. `ocx.jsonc` registers OCX [registries](https://ocx.kdco.dev).
@@ -384,8 +381,6 @@ Always-on (declared in `instructions`):
 - `skills/security-review/SKILL.md` — security checklist + scenarios.
 - `skills/coding-standards/SKILL.md` — naming, immutability, file size, error handling.
 - `skills/git-workflow/SKILL.md` — branches, conventional commits, push guards.
-- `instructions/serena.md` — connects Serena MCP per session.
-
 On-demand (loaded by description / by command):
 
 - `skills/tdd-workflow/SKILL.md` — full TDD methodology.
@@ -414,7 +409,6 @@ All TypeScript plugins use `@opencode-ai/plugin@1.4.6`.
 - `plugins/caveman-server.ts` + `tui-plugins/caveman.tsx` — injects caveman instructions into the system prompt + TUI sidebar showing active mode.
 - `plugins/figma-mcp-trigger.js` — Figma RAG: reads `figma-rag.md` (or `OPENCODE_FIGMA_RAG_PATHS`) and injects snippets when designs are referenced.
 - `plugins/worktree.ts` (+ `plugins/worktree/`) — creates an isolated git worktree for the session and spawns a terminal (mac/Win/Linux). Inspired by opencode-worktree-session.
-- `plugins/startup-bootstrap.ts` — runs `serena_activate_project` on the first tool call of a session.
 - `plugins/kdco-primitives/` — shared utilities (mutex, shell, terminal-detect, project-id resolver, types).
 - `@tarquinen/opencode-dcp@latest` *(external, declared in `opencode.jsonc › plugin`)* — Dynamic Context Pruning. Trims stale tool results and large files from the live context window so long sessions don't blow past the model's limit. Configured via `dcp.jsonc` at the repo root.
 
@@ -461,8 +455,7 @@ Curation:
 ### How it fits together
 
 1. Startup: OpenCode loads `opencode.jsonc` -> always-on instructions -> `instinct-injector` preloads instincts -> `instinct-digest` produces a diff -> `caveman-server` adds caveman preamble if active.
-2. First user action: `startup-bootstrap` triggers `serena_activate_project`.
-3. Dev: `conductor` executes — it cannot write files; it dispatches Task calls to specialists. `ecc-hooks` formats / flags `console.log` / blocks bash-write bypasses. `instinct-observer` archives events.
+2. Dev: `conductor` executes — it cannot write files; it dispatches Task calls to specialists. `ecc-hooks` formats / flags `console.log` / blocks bash-write bypasses. `instinct-observer` archives events.
 4. Workflow: `conductor` routes to specialists through Task (perm-enforced); `/plan`, `/tdd`, `/security`, etc. force the same routing explicitly.
 5. Idle: `auto-compact` triggers when the tool-call threshold is reached; `notification` pings macOS.
 6. Stop: v1 hook writes a draft; v2 daemon clusters observations into instincts for the next session.
@@ -494,10 +487,10 @@ Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un ag
 - TUI plugins: `tui-plugins/*.tsx` (sidebar React rendue par OpenCode).
 - Outils custom: `tools/*.ts`.
 - Contextes (memos de mode): `contexts/*.md`.
-- Instructions globales: `instructions/subagent-routing.md`, `instructions/serena.md`, `instructions/caveman-ultra.md`.
+- Instructions globales: `instructions/subagent-routing.md`, `instructions/codememory-first.md`, `instructions/caveman-ultra.md`.
 - Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`.
 - Mirror Claude Code: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/skills/`, `.claude/commands/`, `.claude/homunculus/`.
-- Exclusions volontaires (`.gitignore`): etat MCP local `.serena/`, `node_modules/`, `.instinct-digest-state.json`, `antigravity-*`, `.DS_Store`, fichiers locaux `.env*` sauf `.env.example`.
+- Exclusions volontaires (`.gitignore`): `node_modules/`, `.instinct-digest-state.json`, `antigravity-*`, `.DS_Store`, fichiers locaux `.env*` sauf `.env.example`.
 
 <a id="config-fr"></a>
 ### Configuration: `opencode.jsonc`
@@ -507,7 +500,6 @@ Le fichier orchestre six choses:
 1. `instructions`: skills toujours chargees au demarrage. Aujourd'hui:
    - `instructions/subagent-routing.md` -> gate Task-first pour delegation sous-agent.
    - `instructions/codememory-first.md` -> prefere [CodeMemory](https://github.com/fmflurry/code-memory) MCP (outils `code-memory_*`) pour l'orientation repo avant `grep`/`read`.
-   - `instructions/serena.md` -> active Serena MCP apres le gate de routage quand la delegation specialiste ne s'applique pas.
    - `skills/socratic-design/SKILL.md` -> gating evidence-first sur les decisions design.
    - `skills/security-review/SKILL.md` -> checklist OWASP.
    - `skills/coding-standards/SKILL.md` -> conventions code.
@@ -515,7 +507,7 @@ Le fichier orchestre six choses:
 2. `default_agent`: `conductor` (orchestrateur sans droit d'ecriture).
 3. `agent`: definitions des sous-agents (modele + reasoning effort + prompt + outils autorises). Tous les modeles passent par variables d'environnement (`OPENCODE_MODEL_*`, `OPENCODE_REASONING_*`).
 4. `command`: mappe `/<name>` -> template + sous-agent + `subtask` (delegation).
-5. `mcp`: serena, context7, wallaby, Figma (desactive par defaut). Plus [`code-memory`](https://github.com/fmflurry/code-memory) enregistre en externe — perms `code-memory_*` pre-allowlistees pour chaque sous-agent.
+5. `mcp`: context7, wallaby, Figma (desactive par defaut). Plus [`code-memory`](https://github.com/fmflurry/code-memory) enregistre en externe — perms `code-memory_*` pre-allowlistees pour chaque sous-agent.
 6. `plugin`: marketplace plugins externes (`@tarquinen/opencode-dcp@latest`).
 
 `dcp.jsonc` configure le plugin Dynamic Context Pruning. `ocx.jsonc` declare les registries pour le wrapper [OCX](https://ocx.kdco.dev).
@@ -598,8 +590,6 @@ Skills toujours actives (declared dans `instructions`):
 - `skills/security-review/SKILL.md` — checklist securite + scenarios.
 - `skills/coding-standards/SKILL.md` — naming, immutabilite, taille fichier, error handling.
 - `skills/git-workflow/SKILL.md` — branches, conventional commits, garde-fous push.
-- `instructions/serena.md` — connecte Serena MCP a chaque session.
-
 Skills sur demande (chargees par leur description / par une commande):
 
 - `skills/tdd-workflow/SKILL.md` — methode TDD detaillee.
@@ -628,7 +618,6 @@ Tous les plugins TypeScript utilisent `@opencode-ai/plugin@1.4.6`.
 - `plugins/caveman-server.ts` + `tui-plugins/caveman.tsx` — injecte les instructions caveman dans le system prompt + sidebar TUI qui affiche le mode actif.
 - `plugins/figma-mcp-trigger.js` — RAG figma: lit `figma-rag.md` (ou `OPENCODE_FIGMA_RAG_PATHS`) et injecte des snippets quand des designs sont referencés.
 - `plugins/worktree.ts` (+ `plugins/worktree/`) — cree un git worktree isolé pour la session et spawn un terminal (mac/Win/Linux). Inspiré d'opencode-worktree-session.
-- `plugins/startup-bootstrap.ts` — declenche `serena_activate_project` la premiere fois qu'un outil est appelé dans la session.
 - `plugins/kdco-primitives/` — utilities partages (mutex, shell, terminal-detect, project-id resolver, types).
 - `@tarquinen/opencode-dcp@latest` *(externe, declare dans `opencode.jsonc › plugin`)* — Dynamic Context Pruning. Coupe les tool results stagnants et les gros fichiers dans la fenetre de contexte pour que les sessions longues ne depassent pas la limite modele. Configure via `dcp.jsonc` a la racine du repo.
 
@@ -675,8 +664,7 @@ Curation:
 ### Comment tout s'emboite
 
 1. Demarrage: OpenCode charge `opencode.jsonc` -> instructions globales -> plugin `instinct-injector` injecte les instincts -> `instinct-digest` produit un diff -> `caveman-server` ajoute le preamble si actif.
-2. Premiere action utilisateur: `startup-bootstrap` declenche `serena_activate_project`.
-3. Dev: `conductor` execute — il n'a pas le droit d'ecrire; il dispatche des Task vers les specialistes. `ecc-hooks` formate / flag les `console.log` / bloque les bypasses bash-write. `instinct-observer` archive les events.
+2. Dev: `conductor` execute — il n'a pas le droit d'ecrire; il dispatche des Task vers les specialistes. `ecc-hooks` formate / flag les `console.log` / bloque les bypasses bash-write. `instinct-observer` archive les events.
 4. Workflow: `conductor` route via Task (impose par permissions); `/plan`, `/tdd`, `/security`, etc. forcent explicitement le meme routage.
 5. Idle: `auto-compact` declenche un compact quand le seuil de tool calls est atteint. `notification` ping macOS.
 6. Stop: hook v1 produit un draft, hook v2 cluster les observations en instincts pour la session suivante.

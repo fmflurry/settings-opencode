@@ -74,7 +74,7 @@ Flags:
   --help, -h      Show this message
 
 What it does (interactive by default):
-  1. Verifies prerequisites (git, bun or npm, uv for Serena MCP).
+  1. Verifies prerequisites (git, bun or npm).
   2. Links this repo into ~/.config/opencode (or uses it in place).
   3. Installs JS deps with bun (if available) or npm.
   4. Adds OPENCODE_MODEL_* and OPENCODE_REASONING_* defaults to your shell rc,
@@ -190,12 +190,6 @@ check_prereqs() {
     fi
     PKG_MANAGER="$pm"
 
-    if command -v uv >/dev/null 2>&1 || command -v uvx >/dev/null 2>&1; then
-        ok "uv present (Serena MCP will work)"
-    else
-        warn "uv not found — Serena MCP server will fail to start. Install with: brew install uv  (or: pip install uv)"
-    fi
-
     [ "$missing" = "0" ] || { err "missing required tools"; exit 1; }
 }
 
@@ -304,9 +298,8 @@ print_next_steps() {
     step "Next steps"
     cat <<EOF
     1. Reload your shell (or:  source "$(detect_shell_rc)")
-    2. Required: install Serena MCP prerequisites (uv) — https://github.com/oraios/serena
-    3. Optional: install Wallaby.js + run \`wallaby update-mcp\` if you want runtime-test introspection
-    4. Smoke test:
+    2. Optional: install Wallaby.js + run \`wallaby update-mcp\` if you want runtime-test introspection
+    3. Smoke test:
            opencode
            /plan add a TODO list to my homepage
 

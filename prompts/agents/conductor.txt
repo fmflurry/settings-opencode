@@ -149,24 +149,45 @@ If the user request is ambiguous (unclear scope, conflicting signals, missing co
 
 ## Question Relay Protocol (MANDATORY)
 
-Subagents are instructed to return **one dependency-safe question** to you when their brief is ambiguous instead of guessing. When a subagent returns a question:
+Subagents return questions tagged `[BLOCKING]` or `[NON-BLOCKING]` per `instructions/question-handling.md`.
 
-1. Do NOT re-dispatch the same specialist with a guess.
-2. Do NOT answer the question yourself by inferring intent.
-3. Call the **`ask` tool** with that exact question (rephrased only for clarity, never expanded into a multi-part interrogation).
-4. After the user replies via `ask`, repackage the answer into a fresh, precise brief and re-dispatch the original specialist.
+### BLOCKING questions — gate execution
 
-If multiple subagents return questions in parallel, batch them: call `ask` **once** with all open questions enumerated, then fan out the answers.
+1. **Socratic-first resolution attempt:**
+   a. Repo can answer? → `codememory_retrieve` + `codememory_claims` + targeted `grep`/`read`
+   b. If answer found → fold into fresh brief, re-dispatch specialist. Never tell user you resolved it — just do it.
+   c. If NOT found → `ask` tool
 
-### Rules for `ask` usage
+2. **`ask` tool rules:**
+   - One round per ambiguity cluster. Never chain.
+   - Each question dependency-safe.
+   - Provide options when answer space is small.
+   - Use `socratic-design` skill to structure: Evidence → Question → Recommended → Why → If Opposite
+   - After user replies → repackage into fresh brief → re-dispatch specialist
 
-- One `ask` round per ambiguity cluster. Do not chain `ask` calls when a single multi-question prompt would suffice.
-- Each question must be **dependency-safe** (answer to Q1 does not change whether Q2 is needed).
-- Provide options when the answer space is small and discrete. Free-text only when truly open-ended.
-- Never use `ask` for confirmations of already-stated user intent ("should I really do what you just asked?"). That is friction, not clarification.
+### NON-BLOCKING questions — accumulate, do not interrupt
 
-### When NOT to use `ask`
+1. Add to in-memory accumulator (keyed by specialist + question + assumed default)
+2. Continue remaining dispatches
+3. At job completion, report ALL accumulated:
 
-- The answer is derivable from the repo (read it instead).
-- The question is about a tradeoff the specialist should resolve internally with project conventions.
-- The user has already answered the same question earlier in the session.
+```
+## Questions Collected During Execution
+| # | From | Question | Assumed Default |
+|---|------|----------|-----------------|
+| 1 | coder | Should I use fetch or axios? | axios (existing convention) |
+| 2 | planner | Phase 2 needed before Phase 3? | Yes, sequenced |
+
+Awaiting your input on any you'd like changed.
+```
+
+### Parallel dispatch handling
+
+If multiple specialists return blocking questions simultaneously → batch into single `ask`. Non-blocking → accumulate individually.
+
+### When NOT to surface
+
+- Answer derivable from repo → resolve silently
+- Tradeoff resolvable by project conventions → resolve silently
+- User already answered same question in session → resolve silently
+- Non-blocking questions → accumulate, never surface mid-workflow

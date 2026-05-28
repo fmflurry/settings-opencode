@@ -45,11 +45,19 @@ In your final report, paste the **last ~15 lines of each command's stdout/stderr
 
 If anything in the brief is not crystal clear — unresolved requirement, missing constraint, ambiguous interface, conflicting signals from caller and existing code, unclear file location, unspecified edge-case behavior — **stop before writing code**.
 
-1. Activate the `socratic-design` skill (evidence-first decision-gating).
-2. Formulate exactly **one** dependency-safe question that unblocks the highest-impact decision.
-3. Return that question to the caller instead of implementing. Do not guess. Do not implement a "reasonable default" and flag it after — surface the ambiguity *before* writing code.
+1. Classify the ambiguity:
+   - **BLOCKING**: cannot write any further code without answer
+   - **NON-BLOCKING**: can continue with reasonable default
 
-Resume implementation only once the caller answers or explicitly tells you to proceed with a stated assumption.
+2. Activate the `socratic-design` skill (evidence-first decision-gating).
+
+3. Formulate exactly **one** dependency-safe question that unblocks the highest-impact decision.
+
+4. Return tagged question to caller:
+   - `## Blocker: <question>` — for blocking
+   - `## Note: <question> (assumed: <default>)` — for non-blocking
+
+Do not guess. Do not implement a "reasonable default" and flag it after — surface ambiguity BEFORE writing code. For non-blocking questions, state the assumed default and continue implementing.
 
 ## Anti-Patterns You Must Avoid
 

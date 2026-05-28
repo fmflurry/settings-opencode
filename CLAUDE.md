@@ -6,17 +6,6 @@ Behavioral guidelines for coding agents (Claude Code, OpenCode, etc.) to reduce 
 
 ---
 
-## 0. Personal Hard Rules
-
-These always apply, regardless of project:
-
-- **Never use `any` type.** TypeScript code must keep its type information. Use `unknown` with narrowing, generics, or a real type. `any` defeats the type system and is treated as a bug.
-- **Never call UseCases directly from components.** Components interact with UseCases through a Facade. Direct component → UseCase wiring breaks clean-architecture boundaries and makes refactors painful.
-
-@RTK.md
-
----
-
 ## 1. Think Before Coding
 
 **Don't assume. Don't hide confusion. Surface tradeoffs. Disagree when warranted.**
@@ -137,7 +126,11 @@ Direct work (no delegation) for:
 
 **Don't trust specialist self-reports of "build passes."** Re-run §5 verification yourself.
 
-**When a specialist returns a question:** relay it to the user via `socratic-design` rules — do not answer by inferring intent, do not re-dispatch with a guess.
+**When a specialist returns a question:**
+- **[BLOCKING]** — specialist cannot proceed without an answer. Attempt resolution via repo inspection first (CodeMemory, codememory_claims, grep/read). Surface to user via `ask` only if repo cannot answer. Use `socratic-design` to frame the question.
+- **[NON-BLOCKING]** — specialist continued with stated default. Accumulate these. Report ALL at job end in single batch. Do not interrupt workflow.
+- Never answer by inferring intent. Never re-dispatch with a guess.
+- See `instructions/question-handling.md` for full protocol.
 
 ---
 
@@ -168,6 +161,7 @@ A user approving an action once does not authorize it for the rest of the sessio
 - Parallel tool calls when independent; sequential only when output of one feeds the next.
 - Don't re-read a file you just edited — the harness tracks state.
 - Don't search the whole filesystem (`find /`). Start from project root.
+- For any codebase exploration (search, callers, definitions, dependencies, "where is X"), use `mcp__code-memory__*` tools first. Fall back to `rtk grep`/`find` only when code-memory cannot answer (raw dir listing, glob by filename).
 - For UI/frontend changes, run the app and exercise the feature before claiming success. Type-check ≠ feature-check. If you can't test the UI, say so explicitly.
 
 ---
@@ -181,7 +175,6 @@ These rules are working if:
 - `socratic-design` is invoked before code on ambiguous requests, not after corrections.
 - Specialist agents (when available) are invoked before main agent explores.
 - Destructive actions never happen without explicit user authorization in the same turn.
-- `any` type and direct UseCase calls from components never appear in diffs.
 
 These rules are failing if:
 

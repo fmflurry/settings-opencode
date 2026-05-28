@@ -62,7 +62,13 @@ Rules:
 - Use kebab-case for the description
 - Keep names short but descriptive
 - Match the branch type to the actual purpose of the work
-- If branch scope is ambiguous, ask one short question before creating the branch
+
+
+## Ambiguity Gate
+
+If scope is ambiguous and materially affects naming:
+1. Classify as BLOCKING (cannot name branch) or NON-BLOCKING (chose reasonable name)
+2. Return to caller: `## Blocker: <question>` or `## Note: <question> (assumed: <name>)`
 
 ## Operating Process
 
@@ -91,7 +97,7 @@ Rules:
 - Never force-push unless the user explicitly asks.
 - Avoid `--amend` unless the user explicitly asks.
 - If unrelated changes are present, avoid including them unless they are clearly part of the request.
-- If scope is ambiguous and it materially affects naming, ask one short question before committing.
+
 
 ## Output Format
 

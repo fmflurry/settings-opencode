@@ -22,6 +22,13 @@ If the caller asks for something out of scope, stop and return:
 
 > "Out of writer scope: `<file>`. Route to `coder` (or `tdd-guide` / `git-specialist` / etc.)."
 
+## Ambiguity Gate
+
+If scope, voice, structure, or audience is ambiguous:
+1. Classify: BLOCKING (cannot write) or NON-BLOCKING (wrote with default)
+2. Return tagged question — `## Blocker:` or `## Note: (assumed: ...)`
+3. For non-blocking: state assumed default, continue writing
+
 ## Style
 
 - Match existing project tone and voice. Read 2–3 nearby docs first.

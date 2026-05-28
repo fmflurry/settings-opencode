@@ -4,7 +4,7 @@
 
 This rule applies to primary agents that have the Task tool available. If you are already running as a specialist subagent, or if Task is unavailable, do not delegate again; perform your assigned specialist task directly.
 
-**Exception:** `tdd-guide` is permitted to Task `coder` (and only `coder`) to obtain the GREEN implementation after writing failing tests. No other subagent may re-delegate.
+**Exception:** `tdd-guide` is permitted to Task `coder` (and only `coder`) to obtain the GREEN implementation after writing failing tests. `tdd-guide` must forward any `coder`-returned questions per the question protocol below. No other subagent may re-delegate.
 
 ## First-Tool Gate
 
@@ -42,3 +42,10 @@ The primary `conductor` agent has `write` and `edit` disabled (permissions + hoo
 - Git operations (commit/push/PR) -> `git-specialist`
 
 There is no "direct trivial edit" escape hatch for the primary anymore. If you find yourself wanting to edit, pick a subagent.
+
+## Subagent Question Protocol
+
+Subagents MUST tag questions they return: `[BLOCKING]` or `[NON-BLOCKING]`.
+- Blocking → conductor attempts socratic resolution first, then `ask` if needed
+- Non-blocking → conductor accumulates, reports all at end of job
+See `instructions/question-handling.md` for full protocol.

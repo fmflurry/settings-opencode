@@ -22,6 +22,8 @@ REPO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]:-$0}" )" && pwd )"
 ASSUME_YES=0
 SKIP_CLAUDE=0
 DO_UNINSTALL=0
+WSL_MODE=0
+WSL_WIN_HOME=""
 
 # ------------------------------ presentation ---------------------------------
 
@@ -103,6 +105,24 @@ backup_path() {
     ok "backed up to $backup"
 }
 
+# Copy src/ contents into dst/ (used on WSL where symlinks across /mnt/c don't work).
+# Excludes node_modules, .git, and lockfile artifacts so user runs npm install on the Windows side.
+rsync_to_windows_target() {
+    local src="$1" dst="$2"
+    if ! command -v rsync >/dev/null 2>&1; then
+        err "rsync is required for the WSL -> Windows copy install"
+        err "  sudo apt install -y rsync"
+        exit 1
+    fi
+    mkdir -p "$dst"
+    rsync -a --delete \
+        --exclude='node_modules' \
+        --exclude='.git' \
+        --exclude='*.log' \
+        --exclude='.DS_Store' \
+        "$src/" "$dst/"
+}
+
 # ------------------------------ env-var block --------------------------------
 
 env_block_content() {
@@ -167,6 +187,52 @@ remove_env_block() {
 
 # ------------------------------ steps ----------------------------------------
 
+is_wsl() {
+    grep -qiE "(microsoft|wsl)" /proc/version 2>/dev/null
+}
+
+detect_wsl_windows_user() {
+    local u=""
+    if command -v cmd.exe >/dev/null 2>&1; then
+        u="$(cmd.exe /c 'echo %USERNAME%' 2>/dev/null | tr -d '\r\n' || true)"
+    fi
+    if [ -z "$u" ] && command -v wslvar >/dev/null 2>&1; then
+        u="$(wslvar USERNAME 2>/dev/null | tr -d '\r\n' || true)"
+    fi
+    if [ -z "$u" ] && command -v powershell.exe >/dev/null 2>&1; then
+        u="$(powershell.exe -NoProfile -Command '[Environment]::UserName' 2>/dev/null | tr -d '\r\n' || true)"
+    fi
+    printf "%s" "$u"
+}
+
+configure_wsl_targets() {
+    is_wsl || return 0
+    info "WSL detected — opencode config lives on the Windows side"
+    local winuser
+    winuser="$(detect_wsl_windows_user)"
+    if [ -z "$winuser" ] || [ ! -d "/mnt/c/Users/$winuser" ]; then
+        warn "could not auto-detect your Windows username under /mnt/c/Users"
+        if [ "$ASSUME_YES" = "1" ]; then
+            err "non-interactive run cannot prompt — aborting. Pass --windows-user=<name> or run interactively."
+            exit 1
+        fi
+        printf "    ${BOLD}?${RESET} Enter your Windows username (folder under /mnt/c/Users): "
+        read -r winuser || winuser=""
+        winuser="$(printf "%s" "$winuser" | tr -d '\r\n')"
+        if [ -z "$winuser" ] || [ ! -d "/mnt/c/Users/$winuser" ]; then
+            err "invalid Windows user — /mnt/c/Users/$winuser does not exist"
+            exit 1
+        fi
+    fi
+    WSL_WIN_HOME="/mnt/c/Users/$winuser"
+    TARGET_OPENCODE="$WSL_WIN_HOME/.config/opencode"
+    TARGET_CLAUDE="$WSL_WIN_HOME/.claude"
+    WSL_MODE=1
+    ok "Windows home: $WSL_WIN_HOME"
+    ok "opencode target: $TARGET_OPENCODE"
+    ok "claude target:   $TARGET_CLAUDE"
+}
+
 check_prereqs() {
     step "Checking prerequisites"
 
@@ -178,22 +244,122 @@ check_prereqs() {
     fi
 
     local pm=""
-    if command -v bun >/dev/null 2>&1; then
-        pm="bun"
-        ok "bun $(bun --version)"
-    elif command -v npm >/dev/null 2>&1; then
-        pm="npm"
-        ok "npm $(npm --version) (bun not found, will use npm)"
+    if [ "$WSL_MODE" = "1" ]; then
+        info "WSL mode — bun/npm not required on Linux side (Windows handles deps)"
+        if ! command -v rsync >/dev/null 2>&1; then
+            err "rsync not found — required for WSL -> Windows copy"
+            err "  sudo apt install -y rsync"
+            missing=1
+        else
+            ok "rsync $(rsync --version | head -1 | awk '{print $3}')"
+        fi
     else
-        err "neither bun nor npm found — install one before continuing"
-        missing=1
+        if command -v bun >/dev/null 2>&1; then
+            pm="bun"
+            ok "bun $(bun --version)"
+        elif command -v npm >/dev/null 2>&1; then
+            pm="npm"
+            ok "npm $(npm --version) (bun not found, will use npm)"
+        else
+            err "neither bun nor npm found — install one before continuing"
+            missing=1
+        fi
     fi
     PKG_MANAGER="$pm"
 
     [ "$missing" = "0" ] || { err "missing required tools"; exit 1; }
 }
 
+check_environment() {
+    step "Checking environment"
+
+    # 1. Detect Windows Node leaking into WSL (only matters for Linux-side install).
+    if is_wsl && [ "$WSL_MODE" != "1" ]; then
+        local node_path node_platform
+        node_path="$(command -v node 2>/dev/null || true)"
+        if [ -n "$node_path" ]; then
+            case "$node_path" in
+                /mnt/c/*|/mnt/[a-z]/*)
+                    err "node resolves to a Windows path: $node_path"
+                    err "Windows Node cannot build native modules (better-sqlite3) from a WSL path."
+                    err "Install Linux Node inside WSL:"
+                    err "  sudo apt update && sudo apt install -y build-essential python3 curl"
+                    err "  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash"
+                    err "  source ~/.bashrc && nvm install --lts && nvm use --lts"
+                    err "Then re-run this installer."
+                    exit 1
+                    ;;
+            esac
+            node_platform="$("$node_path" -p "process.platform" 2>/dev/null || true)"
+            if [ -n "$node_platform" ] && [ "$node_platform" != "linux" ]; then
+                err "node platform is '$node_platform', expected 'linux' inside WSL"
+                err "You are running a non-Linux Node binary. Install Linux Node via nvm."
+                exit 1
+            fi
+            ok "Linux Node at $node_path"
+        fi
+    fi
+
+    # 2. Repo dir writable by current user.
+    if [ ! -w "$REPO_DIR" ]; then
+        err "$REPO_DIR is not writable by user '$USER'"
+        err "Fix ownership:  sudo chown -R \"$USER:$USER\" \"$REPO_DIR\""
+        exit 1
+    fi
+
+    # 3. Stale node_modules owned by another user (classic 'sudo npm install' aftermath).
+    if [ -d "$REPO_DIR/node_modules" ]; then
+        local nm_owner
+        nm_owner="$(stat -c '%U' "$REPO_DIR/node_modules" 2>/dev/null || stat -f '%Su' "$REPO_DIR/node_modules" 2>/dev/null || echo "")"
+        if [ -n "$nm_owner" ] && [ "$nm_owner" != "$USER" ]; then
+            err "$REPO_DIR/node_modules is owned by '$nm_owner', not '$USER'"
+            err "Likely a previous 'sudo npm install' or a failed Windows-Node attempt."
+            err "Clean it up:"
+            err "  sudo rm -rf \"$REPO_DIR/node_modules\" \"$REPO_DIR/package-lock.json\""
+            err "  sudo chown -R \"$USER:$USER\" \"$REPO_DIR\""
+            err "Then re-run this installer (without sudo)."
+            exit 1
+        fi
+        if [ ! -w "$REPO_DIR/node_modules" ]; then
+            err "$REPO_DIR/node_modules exists but is not writable by '$USER'"
+            err "Clean it up:"
+            err "  sudo rm -rf \"$REPO_DIR/node_modules\" \"$REPO_DIR/package-lock.json\""
+            err "Then re-run this installer (without sudo)."
+            exit 1
+        fi
+    fi
+
+    # 4. Refuse to run the installer itself as root.
+    if [ "${EUID:-$(id -u)}" = "0" ]; then
+        err "Do not run install.sh as root/sudo."
+        err "It will create root-owned node_modules that you can't modify later."
+        err "Run as your normal user."
+        exit 1
+    fi
+
+    ok "environment looks sane"
+}
+
 install_repo_link() {
+    if [ "$WSL_MODE" = "1" ]; then
+        step "Copying repo into $TARGET_OPENCODE (WSL -> Windows)"
+        if [ -e "$TARGET_OPENCODE" ] && [ ! -L "$TARGET_OPENCODE" ]; then
+            info "$TARGET_OPENCODE exists"
+            if ask "back it up and replace with a fresh copy of $REPO_DIR?" Y; then
+                backup_path "$TARGET_OPENCODE"
+            else
+                warn "skipping copy — Windows opencode will keep using whatever is already there"
+                return 0
+            fi
+        elif [ -L "$TARGET_OPENCODE" ]; then
+            info "$TARGET_OPENCODE is a symlink — removing (Windows can't follow WSL symlinks)"
+            rm "$TARGET_OPENCODE"
+        fi
+        rsync_to_windows_target "$REPO_DIR" "$TARGET_OPENCODE"
+        ok "copied $REPO_DIR -> $TARGET_OPENCODE (node_modules excluded)"
+        return 0
+    fi
+
     step "Linking repo into $TARGET_OPENCODE"
 
     if [ "$REPO_DIR" = "$TARGET_OPENCODE" ]; then
@@ -221,6 +387,16 @@ install_repo_link() {
 }
 
 install_deps() {
+    if [ "$WSL_MODE" = "1" ]; then
+        step "Skipping Linux-side npm install (WSL mode)"
+        warn "Windows opencode needs node_modules built with Windows Node.js."
+        warn "Linux Node would produce binaries Windows cannot load (better-sqlite3, etc.)."
+        info "From PowerShell or cmd.exe on Windows, run:"
+        info "  cd \"%USERPROFILE%\\.config\\opencode\""
+        info "  npm install        (or: bun install)"
+        return 0
+    fi
+
     step "Installing JS dependencies ($PKG_MANAGER)"
     cd "$REPO_DIR"
     if [ "$PKG_MANAGER" = "bun" ]; then
@@ -275,6 +451,23 @@ install_claude_mirror() {
         return 0
     fi
 
+    if [ "$WSL_MODE" = "1" ]; then
+        info "WSL mode — copying instead of symlinking"
+        if [ -e "$TARGET_CLAUDE" ] && [ ! -L "$TARGET_CLAUDE" ]; then
+            if ask "back up existing $TARGET_CLAUDE and replace with fresh copy?" Y; then
+                backup_path "$TARGET_CLAUDE"
+            else
+                warn "skipping"
+                return 0
+            fi
+        elif [ -L "$TARGET_CLAUDE" ]; then
+            rm "$TARGET_CLAUDE"
+        fi
+        rsync_to_windows_target "$source_claude" "$TARGET_CLAUDE"
+        ok "copied $source_claude -> $TARGET_CLAUDE"
+        return 0
+    fi
+
     if [ -L "$TARGET_CLAUDE" ] && [ "$(readlink "$TARGET_CLAUDE")" = "$source_claude" ]; then
         ok "$TARGET_CLAUDE already symlinks here"
         return 0
@@ -296,6 +489,23 @@ install_claude_mirror() {
 
 print_next_steps() {
     step "Next steps"
+    if [ "$WSL_MODE" = "1" ]; then
+        cat <<EOF
+    WSL -> Windows install. Finish setup from a Windows shell (PowerShell or cmd.exe):
+
+        cd "%USERPROFILE%\\.config\\opencode"
+        npm install        (or: bun install)
+
+    Then in WSL:
+    1. Reload your shell (or:  source "$(detect_shell_rc)")
+    2. Re-run this script to push fresh changes from the repo to the Windows target.
+
+    Adjust env-var values for your provider in $(detect_shell_rc)
+    Re-run anytime: $REPO_DIR/install.sh
+    Uninstall:     $REPO_DIR/install.sh --uninstall
+EOF
+        return 0
+    fi
     cat <<EOF
     1. Reload your shell (or:  source "$(detect_shell_rc)")
     2. Optional: install Wallaby.js + run \`wallaby update-mcp\` if you want runtime-test introspection
@@ -312,11 +522,18 @@ EOF
 # ------------------------------ uninstall ------------------------------------
 
 run_uninstall() {
+    configure_wsl_targets
+
     step "Uninstall"
     info "this will:"
     info "  - remove the marker-fenced env block from your shell rc"
-    info "  - remove $TARGET_OPENCODE if it symlinks to this repo"
-    info "  - remove $TARGET_CLAUDE if it symlinks to this repo"
+    if [ "$WSL_MODE" = "1" ]; then
+        info "  - remove the copied directory at $TARGET_OPENCODE (after confirm)"
+        info "  - remove the copied directory at $TARGET_CLAUDE (after confirm)"
+    else
+        info "  - remove $TARGET_OPENCODE if it symlinks to this repo"
+        info "  - remove $TARGET_CLAUDE if it symlinks to this repo"
+    fi
     info "the cloned repo at $REPO_DIR is left intact."
     if ! ask "proceed?" N; then
         info "aborted"
@@ -327,18 +544,40 @@ run_uninstall() {
     rc="$(detect_shell_rc)"
     [ -n "$rc" ] && remove_env_block "$rc" || warn "no known shell rc detected, skipping env block"
 
-    if [ -L "$TARGET_OPENCODE" ] && [ "$(readlink "$TARGET_OPENCODE")" = "$REPO_DIR" ]; then
-        rm "$TARGET_OPENCODE"
-        ok "removed symlink $TARGET_OPENCODE"
+    if [ "$WSL_MODE" = "1" ]; then
+        if [ -d "$TARGET_OPENCODE" ] && [ ! -L "$TARGET_OPENCODE" ]; then
+            if ask "delete copied directory $TARGET_OPENCODE ?" N; then
+                rm -rf "$TARGET_OPENCODE"
+                ok "removed $TARGET_OPENCODE"
+            else
+                info "left $TARGET_OPENCODE in place"
+            fi
+        else
+            info "$TARGET_OPENCODE not found or not a directory, skipping"
+        fi
+        if [ -d "$TARGET_CLAUDE" ] && [ ! -L "$TARGET_CLAUDE" ]; then
+            if ask "delete copied directory $TARGET_CLAUDE ?" N; then
+                rm -rf "$TARGET_CLAUDE"
+                ok "removed $TARGET_CLAUDE"
+            else
+                info "left $TARGET_CLAUDE in place"
+            fi
+        else
+            info "$TARGET_CLAUDE not found or not a directory, skipping"
+        fi
     else
-        info "$TARGET_OPENCODE is not a symlink to this repo, leaving it alone"
-    fi
-
-    if [ -L "$TARGET_CLAUDE" ] && [ "$(readlink "$TARGET_CLAUDE")" = "$REPO_DIR/.claude" ]; then
-        rm "$TARGET_CLAUDE"
-        ok "removed symlink $TARGET_CLAUDE"
-    else
-        info "$TARGET_CLAUDE is not a symlink to this repo, leaving it alone"
+        if [ -L "$TARGET_OPENCODE" ] && [ "$(readlink "$TARGET_OPENCODE")" = "$REPO_DIR" ]; then
+            rm "$TARGET_OPENCODE"
+            ok "removed symlink $TARGET_OPENCODE"
+        else
+            info "$TARGET_OPENCODE is not a symlink to this repo, leaving it alone"
+        fi
+        if [ -L "$TARGET_CLAUDE" ] && [ "$(readlink "$TARGET_CLAUDE")" = "$REPO_DIR/.claude" ]; then
+            rm "$TARGET_CLAUDE"
+            ok "removed symlink $TARGET_CLAUDE"
+        else
+            info "$TARGET_CLAUDE is not a symlink to this repo, leaving it alone"
+        fi
     fi
 
     step "Done. Backups (if any) are at *.bak.YYYYMMDD-HHMMSS — restore manually if you want them back."
@@ -364,11 +603,15 @@ fi
 
 step "settings-opencode installer"
 info "repo:    $REPO_DIR"
-info "target:  $TARGET_OPENCODE"
-info "claude:  $([ "$SKIP_CLAUDE" = "1" ] && echo "skipped" || echo "$TARGET_CLAUDE")"
 info "mode:    $([ "$ASSUME_YES" = "1" ] && echo "non-interactive" || echo "interactive")"
 
+configure_wsl_targets
 check_prereqs
+check_environment
+
+info "target:  $TARGET_OPENCODE"
+info "claude:  $([ "$SKIP_CLAUDE" = "1" ] && echo "skipped" || echo "$TARGET_CLAUDE")"
+
 install_repo_link
 install_deps
 install_env_vars

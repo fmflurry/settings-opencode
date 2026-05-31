@@ -50,6 +50,13 @@ export const ECCHooksPlugin = async ({
   const VERIFY_CMD =
     /\b(tsc|cargo check|cargo build|go build|go vet|mvn .*(?:compile|verify)|gradle .*(?:compile|build|check)|gradlew .*(?:compile|build|check)|dotnet build|mypy|pyright|pytest|jest|vitest|cargo test|go test)\b/;
 
+  // XML-style tool-call hallucination. Mistral (and other open-weight
+  // models) sometimes emit tool invocations wrapped in XML tags as
+  // plain text — e.g. `<read>{"filePath":"..."}</read>`, `<task>...`.
+  // These never fire; the harness sees them as text. Detect and retry.
+  const TOOL_XML_HALLUCINATION =
+    /<(?:read|write|edit|bash|task|grep|glob|webfetch|websearch|todowrite|todoread|codememory_[a-z_]+|mcp__[a-z0-9_-]+)\s*>\s*[\{\["]/i;
+
   // Subagents whose work TOUCHES SOURCE CODE → require post-dispatch verify.
   const CODE_TOUCHING_SUBAGENTS = new Set([
     "coder",
@@ -417,18 +424,28 @@ export const ECCHooksPlugin = async ({
     },
 
     /**
-     * Conductor Retry-Guard (Pattern A + Pattern C)
+     * Conductor Retry-Guard (Patterns A, C, D, E)
      *
      * Triggers: After any conductor assistant message completes
-     * Detects two failure modes and force-retries by sending a synthetic
-     * [SYSTEM RETRY] user message:
+     * Detects four failure modes and force-retries by sending a synthetic
+     * [SYSTEM RETRY] user message. Check order is most-specific first:
+     *
+     *   Pattern E — XML tool-call hallucination:
+     *     Text contains `<read>{...}</read>` / `<task>{...}</task>` /
+     *     similar XML-wrapped tool syntax. These never fire (harness sees
+     *     plain text). Model thought it was calling a tool but used the
+     *     wrong wire format. Fires regardless of opener.
+     *
+     *   Pattern D — Open TODOs + no tool_call:
+     *     Session has pending/in_progress TODOs but conductor emitted
+     *     text-only message. Work is not done; conductor stalled.
+     *     Strong signal — fires regardless of opener wording.
      *
      *   Pattern A — Narration-only stall:
      *     Message has zero tool_call parts AND text starts with a banned
      *     mid-task narration opener ("Now", "First", "Let me", "I'll start",
-     *     "Here's my plan", etc.). The model planned out loud instead of
-     *     emitting the tool call. Applies to ALL providers — Mistral is the
-     *     most frequent offender but any model can stall this way.
+     *     "Here's my plan", etc.). Fallback after D — used when no TODO
+     *     list exists to consult. Applies to ALL providers.
      *
      *   Pattern C — Premature "done" without verification:
      *     Message claims completion ("done", "ready", "✅", etc.) AND a
@@ -503,7 +520,73 @@ export const ECCHooksPlugin = async ({
         .trim();
 
       // ────────────────────────────────────────────────────────────────
-      // Pattern A — Narration-only stall
+      // Pattern E — XML tool-call hallucination
+      // Most specific signal: model tried to call a tool via XML syntax
+      // in text instead of emitting a structured tool_call. Fires
+      // regardless of opener.
+      // ────────────────────────────────────────────────────────────────
+      if (!hasToolCall && text.length > 0 && TOOL_XML_HALLUCINATION.test(text)) {
+        retriedMessageIds.add(info.id);
+        retryCountBySession.set(info.sessionID, usedBudget + 1);
+        const match = text.match(TOOL_XML_HALLUCINATION);
+        log(
+          "warn",
+          `[ECC retry-guard E] XML tool-call hallucination in conductor msg ${info.id.slice(0, 8)}. Matched: ${match?.[0] ?? "(?)"}. Budget ${usedBudget + 1}/${RETRY_BUDGET}.`,
+        );
+
+        await injectRetry(
+          info.sessionID,
+          [
+            "[SYSTEM RETRY — automatic, Pattern E: XML tool-call hallucination]",
+            'Your previous message contained tool-call XML syntax in TEXT, e.g. `<read>{...}</read>` or `<task>{...}</task>`. That format does NOT fire — the harness sees plain text and ends the turn.',
+            "Tools must be invoked as STRUCTURED tool_calls (the API field), not as text. You cannot type the tool invocation; you must emit it through the tool-calling channel.",
+            "Retry the same intent as a real `task` tool call (subagent_type + description + prompt fields). Do not write any XML tags.",
+          ].join("\n\n"),
+        );
+        return;
+      }
+
+      // ────────────────────────────────────────────────────────────────
+      // Pattern D — Open TODOs + no tool_call
+      // Strong signal: work isn't done, conductor stalled with text.
+      // ────────────────────────────────────────────────────────────────
+      if (!hasToolCall && text.length > 0) {
+        let openTodos = 0;
+        try {
+          const todoRes = await client.session.todo({
+            path: { id: info.sessionID },
+          });
+          const todoList = ((todoRes as { data?: Array<{ status?: string; content?: string }> })?.data ?? []);
+          openTodos = todoList.filter(
+            (t) => t.status === "pending" || t.status === "in_progress",
+          ).length;
+        } catch (e) {
+          log("debug", `[ECC retry-guard D] todo fetch failed (skipping): ${String(e)}`);
+        }
+
+        if (openTodos > 0) {
+          retriedMessageIds.add(info.id);
+          retryCountBySession.set(info.sessionID, usedBudget + 1);
+          log(
+            "warn",
+            `[ECC retry-guard D] conductor msg ${info.id.slice(0, 8)} stalled with ${openTodos} open TODO(s) and no tool_call. Budget ${usedBudget + 1}/${RETRY_BUDGET}. First 80: ${text.slice(0, 80)}`,
+          );
+
+          await injectRetry(
+            info.sessionID,
+            [
+              "[SYSTEM RETRY — automatic, Pattern D: open TODOs]",
+              `Your TODO list still has ${openTodos} open item(s) (pending or in_progress), but your previous message contained TEXT and NO tool_call. Work is not done — you stopped mid-task.`,
+              "Continue execution by dispatching the next `task` to the appropriate specialist for the next open TODO. Do NOT emit a final answer until all TODOs are marked completed.",
+              "If a TODO is actually obsolete or already done, update it via the todowrite tool — do not just narrate that it's done.",
+            ].join("\n\n"),
+          );
+          return;
+        }
+      }
+
+      // ────────────────────────────────────────────────────────────────
+      // Pattern A — Narration-only stall (fallback)
       // ────────────────────────────────────────────────────────────────
       if (!hasToolCall && text.length > 0 && BANNED_OPENER.test(text)) {
         retriedMessageIds.add(info.id);

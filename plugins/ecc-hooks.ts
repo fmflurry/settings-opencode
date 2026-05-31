@@ -315,6 +315,48 @@ export const ECCHooksPlugin = async ({
         log("info", `[ECC] Progress: ${completed}/${total} tasks completed`);
       }
     },
+
+    /**
+     * Mistral Steering — End-of-System-Prompt Reminder
+     *
+     * Triggers: Before every chat completion
+     * Action: When the active model is Mistral, append a terse end-of-prompt
+     *   reminder that re-states the most-violated rules. End-of-system-prompt
+     *   sits in the highest-attention slot just before the user message,
+     *   which is the only position open-weight reasoning models reliably
+     *   honor after they consume their thinking budget.
+     *
+     * Why scoped to Mistral: Anthropic/GPT-5 reliably end turns with tool
+     *   calls when the prompt asks. Mistral Medium 2604 emits plan prose
+     *   and halts. This reminder is overhead for stronger models; we skip
+     *   them to avoid prompt-bloat.
+     */
+    "experimental.chat.system.transform": async (
+      input: { sessionID?: string; model: { providerID: string; modelID: string } },
+      output: { system: string[] },
+    ) => {
+      const isMistral =
+        input.model.providerID === "myMistral" ||
+        input.model.modelID.toLowerCase().includes("mistral") ||
+        input.model.modelID.toLowerCase().includes("codestral") ||
+        input.model.modelID.toLowerCase().includes("magistral") ||
+        input.model.modelID.toLowerCase().includes("ministral");
+
+      if (!isMistral) return;
+
+      const reminder = [
+        "## CRITICAL — END-OF-PROMPT REMINDER (Mistral)",
+        "",
+        "Your turn MUST end with a tool call. Text without a tool_call = the user sees nothing and is blocked.",
+        "Forbidden opening words for assistant text between tools: Now, First, Next, Then, So, Need to, Let me, I will, Let's, Good, OK, Understanding, Based on. If you would write one of these, emit the next tool call instead.",
+        "After ANY tool returns: next message is either another tool call or the final user answer. No recap. No plan-for-next-step. No prose summarizing what you read.",
+        "Long task (>2 steps, >2 files, >2 todos) → first tool call is `task` → `planner`. Do not read files yourself.",
+        "Hard cap: 2 direct file reads per user request. Third read = dispatch a specialist.",
+        "Never re-confirm an actionable request. User said X → dispatch immediately.",
+      ].join("\n");
+
+      output.system.push(reminder);
+    },
   };
 };
 

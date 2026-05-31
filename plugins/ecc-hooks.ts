@@ -24,9 +24,33 @@ export const ECCHooksPlugin = async ({
   // Track files edited in current session for console.log audit
   const editedFiles = new Set<string>();
 
+  // Track conductor messages we've already force-retried so we never
+  // loop on the same message twice. Per-process Set is fine — OpenCode
+  // restarts get a fresh state.
+  const retriedMessageIds = new Set<string>();
+
+  // Banned narration openers for the Mistral conductor retry-guard.
+  // Mirrors the conductor.txt hard rule + experimental.chat.system.transform
+  // reminder. Case-insensitive match at start of message.
+  const BANNED_OPENER =
+    /^(?:now\b|first\b|next\b|then\b|so\b|need to\b|let me\b|i will\b|let's\b|good\b|ok\b|okay\b|understanding\b|based on\b)/i;
+
   // Helper to call the SDK's log API with correct signature
   const log = (level: "debug" | "info" | "warn" | "error", message: string) =>
     client.app.log({ body: { service: "ecc", level, message } });
+
+  // Returns true if the provider/model is in the Mistral family.
+  // Mirrors the scope of the experimental.chat.system.transform hook.
+  const isMistralModel = (providerID: string, modelID: string): boolean => {
+    if (providerID === "myMistral") return true;
+    const m = modelID.toLowerCase();
+    return (
+      m.includes("mistral") ||
+      m.includes("codestral") ||
+      m.includes("magistral") ||
+      m.includes("ministral")
+    );
+  };
 
   return {
     /**
@@ -335,12 +359,7 @@ export const ECCHooksPlugin = async ({
       input: { sessionID?: string; model: { providerID: string; modelID: string } },
       output: { system: string[] },
     ) => {
-      const isMistral =
-        input.model.providerID === "myMistral" ||
-        input.model.modelID.toLowerCase().includes("mistral") ||
-        input.model.modelID.toLowerCase().includes("codestral") ||
-        input.model.modelID.toLowerCase().includes("magistral") ||
-        input.model.modelID.toLowerCase().includes("ministral");
+      const isMistral = isMistralModel(input.model.providerID, input.model.modelID);
 
       if (!isMistral) return;
 
@@ -356,6 +375,111 @@ export const ECCHooksPlugin = async ({
       ].join("\n");
 
       output.system.push(reminder);
+    },
+
+    /**
+     * Mistral Conductor Retry-Guard
+     *
+     * Triggers: After a conductor assistant message completes
+     * Action: If the message has zero tool_call parts AND its text starts
+     *   with a banned narration opener AND the model is Mistral, force a
+     *   retry by sending a synthetic user message demanding a tool call.
+     *
+     * Why: Prompt-only steering hit a model ceiling — Mistral Medium 2604
+     *   emits plan prose ("Now understand structure. Need add...") instead
+     *   of structured tool_calls under long-context load. Sometimes it also
+     *   hallucinates XML tool syntax (`<read>{...}</read>`). Neither parses
+     *   as a tool call → harness ends turn → user is blocked.
+     *
+     * Anti-loop: every retried messageID is recorded in retriedMessageIds;
+     *   a second narration after retry will NOT trigger a second retry
+     *   (escalate to user via session error instead).
+     *
+     * Scope: conductor agent only, Mistral provider only. Other agents and
+     *   non-Mistral models are left alone.
+     */
+    "message.updated": async (event: {
+      properties?: { info?: unknown };
+    }) => {
+      const info = (event?.properties?.info ?? {}) as {
+        id?: string;
+        sessionID?: string;
+        role?: string;
+        mode?: string;
+        modelID?: string;
+        providerID?: string;
+        finish?: string;
+      };
+
+      if (info.role !== "assistant") return;
+      if (!info.id || !info.sessionID) return;
+      if (!info.finish) return; // not yet completed
+      if (info.mode !== "conductor") return;
+      if (!info.providerID || !info.modelID) return;
+      if (!isMistralModel(info.providerID, info.modelID)) return;
+      if (retriedMessageIds.has(info.id)) return;
+
+      // Fetch full message with parts.
+      let parts: Array<{ type?: string; text?: string; synthetic?: boolean }> = [];
+      try {
+        const res = await client.session.message({
+          path: { id: info.sessionID, messageID: info.id },
+        });
+        const data = (res as { data?: { parts?: typeof parts } })?.data;
+        parts = data?.parts ?? [];
+      } catch (e) {
+        log("warn", `[ECC retry-guard] failed to fetch message ${info.id.slice(0, 8)}: ${String(e)}`);
+        return;
+      }
+
+      // If any tool part exists, message is fine.
+      const hasToolCall = parts.some((p) => p.type === "tool");
+      if (hasToolCall) return;
+
+      // Concatenate visible text parts.
+      const text = parts
+        .filter((p) => p.type === "text" && !p.synthetic && typeof p.text === "string")
+        .map((p) => p.text ?? "")
+        .join("\n")
+        .trim();
+
+      if (text.length === 0) return; // empty/aborted — let it be
+
+      // Only retry if text starts with a banned narration opener. A valid
+      // final synthesis to the user typically opens with answer content
+      // (a noun, a result, code), not "Now"/"First"/"Let me"/etc.
+      if (!BANNED_OPENER.test(text)) return;
+
+      retriedMessageIds.add(info.id);
+      log(
+        "warn",
+        `[ECC retry-guard] Mistral conductor narration-only message ${info.id.slice(0, 8)} — forcing retry. First 80 chars: ${text.slice(0, 80)}`,
+      );
+
+      // Inject a synthetic user message that re-demands a tool call.
+      // Uses promptAsync so we don't block the event handler.
+      try {
+        await client.session.promptAsync({
+          path: { id: info.sessionID },
+          body: {
+            parts: [
+              {
+                type: "text",
+                text: [
+                  "[SYSTEM RETRY — automatic]",
+                  "Your previous assistant message contained TEXT but NO tool_call. That ends the turn and blocks the user. You said: \"" +
+                    text.slice(0, 120).replace(/"/g, "'") +
+                    "...\"",
+                  "Re-do that reasoning AS A TOOL CALL. Invoke `task` with the appropriate specialist (coder/planner/writer/tdd-guide/etc.) and put the brief in the prompt field.",
+                  "Do NOT narrate again. Emit a tool call now.",
+                ].join("\n\n"),
+              },
+            ],
+          },
+        } as Parameters<typeof client.session.promptAsync>[0]);
+      } catch (e) {
+        log("error", `[ECC retry-guard] retry injection failed for ${info.id.slice(0, 8)}: ${String(e)}`);
+      }
     },
   };
 };

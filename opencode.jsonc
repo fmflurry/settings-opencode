@@ -14,9 +14,9 @@
     "conductor": {
       "description": "Primary orchestrator. Routes every task to the matching specialist subagent. CANNOT write or edit files directly \u2014 all writes go through writer (docs) or coder (code).",
       "mode": "primary",
-      "model": "{env:OPENCODE_MODEL_PRIMARY}",
+      "model": "{env:OPENCODE_MODEL_CONDUCTOR}",
       "prompt": "{.config/opencode/prompts/agents/conductor.txt}",
-      "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
+      "reasoningEffort": "{env:OPENCODE_REASONING_CONDUCTOR}",
       "tools": {
         "*": true,
         "write": false,

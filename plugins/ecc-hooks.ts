@@ -29,11 +29,35 @@ export const ECCHooksPlugin = async ({
   // restarts get a fresh state.
   const retriedMessageIds = new Set<string>();
 
-  // Banned narration openers for the Mistral conductor retry-guard.
-  // Mirrors the conductor.txt hard rule + experimental.chat.system.transform
-  // reminder. Case-insensitive match at start of message.
+  // Per-session retry budget. Prevents runaway loops if the model keeps
+  // emitting narration after every retry. Default cap = 5; overridable via
+  // ECC_RETRY_BUDGET env var. globalThis cast avoids @types/node dep.
+  const retryCountBySession = new Map<string, number>();
+  const envProc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
+  const RETRY_BUDGET = Number(envProc?.env?.ECC_RETRY_BUDGET ?? 5);
+
+  // Mid-task narration openers. Final synthesis to the user typically
+  // starts with answer content (a noun, a code block, a fact), NOT with
+  // intent verbs. These openers reliably indicate a stalled mid-task plan.
   const BANNED_OPENER =
-    /^(?:now\b|first\b|next\b|then\b|so\b|need to\b|let me\b|i will\b|let's\b|good\b|ok\b|okay\b|understanding\b|based on\b)/i;
+    /^(?:now\b|first\b|next\b|then\b|so\b|need to\b|let me\b|i will\b|i'll\b|i need to\b|i should\b|we should\b|we need to\b|let's\b|good\b|ok\b|okay\b|understanding\b|based on\b|to (?:do|accomplish|implement|fix|add|build|start) this\b|here's (?:my|the) plan\b|here is (?:my|the) plan\b|the plan is\b|step \d+\b)/i;
+
+  // "Done"-claim regex. When conductor declares completion, we verify
+  // that a build/typecheck was actually run.
+  const DONE_CLAIM = /\b(done|completed?|ready|finished|all set|good to go|ready to (?:merge|ship|deploy)|✅)\b/i;
+
+  // Verification commands that satisfy the "build was run" gate.
+  const VERIFY_CMD =
+    /\b(tsc|cargo check|cargo build|go build|go vet|mvn .*(?:compile|verify)|gradle .*(?:compile|build|check)|gradlew .*(?:compile|build|check)|dotnet build|mypy|pyright|pytest|jest|vitest|cargo test|go test)\b/;
+
+  // Subagents whose work TOUCHES SOURCE CODE → require post-dispatch verify.
+  const CODE_TOUCHING_SUBAGENTS = new Set([
+    "coder",
+    "tdd-guide",
+    "build-error-resolver",
+    "refactor-cleaner",
+    "writer", // writer can touch code paths per conductor.txt verify protocol
+  ]);
 
   // Helper to call the SDK's log API with correct signature
   const log = (level: "debug" | "info" | "warn" | "error", message: string) =>
@@ -50,6 +74,21 @@ export const ECCHooksPlugin = async ({
       m.includes("magistral") ||
       m.includes("ministral")
     );
+  };
+
+  // Inject a synthetic user message that re-prompts the conductor.
+  // Shared by Pattern A (narration-only) and Pattern C (premature done).
+  const injectRetry = async (sessionID: string, body: string): Promise<void> => {
+    try {
+      await client.session.promptAsync({
+        path: { id: sessionID },
+        body: {
+          parts: [{ type: "text", text: body }],
+        },
+      } as Parameters<typeof client.session.promptAsync>[0]);
+    } catch (e) {
+      log("error", `[ECC retry-guard] injection failed: ${String(e)}`);
+    }
   };
 
   return {
@@ -378,25 +417,35 @@ export const ECCHooksPlugin = async ({
     },
 
     /**
-     * Mistral Conductor Retry-Guard
+     * Conductor Retry-Guard (Pattern A + Pattern C)
      *
-     * Triggers: After a conductor assistant message completes
-     * Action: If the message has zero tool_call parts AND its text starts
-     *   with a banned narration opener AND the model is Mistral, force a
-     *   retry by sending a synthetic user message demanding a tool call.
+     * Triggers: After any conductor assistant message completes
+     * Detects two failure modes and force-retries by sending a synthetic
+     * [SYSTEM RETRY] user message:
      *
-     * Why: Prompt-only steering hit a model ceiling — Mistral Medium 2604
-     *   emits plan prose ("Now understand structure. Need add...") instead
-     *   of structured tool_calls under long-context load. Sometimes it also
-     *   hallucinates XML tool syntax (`<read>{...}</read>`). Neither parses
-     *   as a tool call → harness ends turn → user is blocked.
+     *   Pattern A — Narration-only stall:
+     *     Message has zero tool_call parts AND text starts with a banned
+     *     mid-task narration opener ("Now", "First", "Let me", "I'll start",
+     *     "Here's my plan", etc.). The model planned out loud instead of
+     *     emitting the tool call. Applies to ALL providers — Mistral is the
+     *     most frequent offender but any model can stall this way.
      *
-     * Anti-loop: every retried messageID is recorded in retriedMessageIds;
-     *   a second narration after retry will NOT trigger a second retry
-     *   (escalate to user via session error instead).
+     *   Pattern C — Premature "done" without verification:
+     *     Message claims completion ("done", "ready", "✅", etc.) AND a
+     *     code-touching subagent (coder/tdd-guide/build-error-resolver/
+     *     refactor-cleaner/writer) ran in this session AND no verify
+     *     command (tsc/cargo check/go build/mvn compile/etc.) ran AFTER
+     *     that subagent. The conductor lied about verification, violating
+     *     the verification gate in conductor.txt / instructions/.
      *
-     * Scope: conductor agent only, Mistral provider only. Other agents and
-     *   non-Mistral models are left alone.
+     * Anti-loop:
+     *   - Per-message: retriedMessageIds Set, never retry same message twice
+     *   - Per-session: RETRY_BUDGET (default 5, ECC_RETRY_BUDGET env override)
+     *     If a session exhausts its retry budget, the hook stops intervening
+     *     and the user must take over.
+     *
+     * Scope: conductor agent only. Subagents (coder/writer/etc.) have
+     *   different success criteria and are out of scope for this hook.
      */
     "message.updated": async (event: {
       properties?: { info?: unknown };
@@ -415,12 +464,26 @@ export const ECCHooksPlugin = async ({
       if (!info.id || !info.sessionID) return;
       if (!info.finish) return; // not yet completed
       if (info.mode !== "conductor") return;
-      if (!info.providerID || !info.modelID) return;
-      if (!isMistralModel(info.providerID, info.modelID)) return;
       if (retriedMessageIds.has(info.id)) return;
 
-      // Fetch full message with parts.
-      let parts: Array<{ type?: string; text?: string; synthetic?: boolean }> = [];
+      // Session-level budget check.
+      const usedBudget = retryCountBySession.get(info.sessionID) ?? 0;
+      if (usedBudget >= RETRY_BUDGET) {
+        log(
+          "warn",
+          `[ECC retry-guard] session ${info.sessionID.slice(0, 8)} exhausted retry budget (${RETRY_BUDGET}). Standing down.`,
+        );
+        return;
+      }
+
+      // Fetch this message's parts.
+      let parts: Array<{
+        type?: string;
+        text?: string;
+        synthetic?: boolean;
+        tool?: string;
+        state?: { input?: { command?: string; subagent_type?: string; agent?: string; subagent?: string } };
+      }> = [];
       try {
         const res = await client.session.message({
           path: { id: info.sessionID, messageID: info.id },
@@ -432,54 +495,109 @@ export const ECCHooksPlugin = async ({
         return;
       }
 
-      // If any tool part exists, message is fine.
       const hasToolCall = parts.some((p) => p.type === "tool");
-      if (hasToolCall) return;
-
-      // Concatenate visible text parts.
       const text = parts
         .filter((p) => p.type === "text" && !p.synthetic && typeof p.text === "string")
         .map((p) => p.text ?? "")
         .join("\n")
         .trim();
 
-      if (text.length === 0) return; // empty/aborted — let it be
+      // ────────────────────────────────────────────────────────────────
+      // Pattern A — Narration-only stall
+      // ────────────────────────────────────────────────────────────────
+      if (!hasToolCall && text.length > 0 && BANNED_OPENER.test(text)) {
+        retriedMessageIds.add(info.id);
+        retryCountBySession.set(info.sessionID, usedBudget + 1);
+        log(
+          "warn",
+          `[ECC retry-guard A] narration-only conductor message ${info.id.slice(0, 8)} (${info.providerID}/${info.modelID}). Budget ${usedBudget + 1}/${RETRY_BUDGET}. First 80: ${text.slice(0, 80)}`,
+        );
 
-      // Only retry if text starts with a banned narration opener. A valid
-      // final synthesis to the user typically opens with answer content
-      // (a noun, a result, code), not "Now"/"First"/"Let me"/etc.
-      if (!BANNED_OPENER.test(text)) return;
+        await injectRetry(
+          info.sessionID,
+          [
+            "[SYSTEM RETRY — automatic, Pattern A: narration-only]",
+            'Your previous assistant message contained TEXT but NO tool_call. That ends the turn and blocks the user. You said: "' +
+              text.slice(0, 160).replace(/"/g, "'") +
+              '..."',
+            "Re-do that reasoning AS A TOOL CALL. Invoke `task` with the appropriate specialist (coder / planner / writer / tdd-guide / git-specialist / code-reviewer / etc.) and put the brief in the prompt field. Long task (>2 steps or >2 files) → first call MUST be `task` → `planner`.",
+            "Do NOT narrate again. Emit a tool call now.",
+          ].join("\n\n"),
+        );
+        return;
+      }
+
+      // ────────────────────────────────────────────────────────────────
+      // Pattern C — Premature "done" without verification
+      // ────────────────────────────────────────────────────────────────
+      if (text.length === 0 || !DONE_CLAIM.test(text)) return;
+
+      // Look back over the WHOLE session to determine whether a
+      // code-touching task ran and whether verify ran after it.
+      let sessionMessages: Array<{
+        info?: { id?: string; role?: string; time?: { created?: number } };
+        parts?: typeof parts;
+      }> = [];
+      try {
+        const res = await client.session.messages({
+          path: { id: info.sessionID },
+        });
+        const data = (res as { data?: typeof sessionMessages })?.data;
+        sessionMessages = data ?? [];
+      } catch (e) {
+        log("warn", `[ECC retry-guard C] failed to fetch session messages: ${String(e)}`);
+        return;
+      }
+
+      let lastCodeTaskAt = -1;
+      let lastVerifyAt = -1;
+
+      sessionMessages.forEach((msg, idx) => {
+        for (const part of msg.parts ?? []) {
+          if (part.type !== "tool") continue;
+          const toolName = part.tool ?? "";
+          const inputArgs = part.state?.input ?? {};
+          if (toolName === "task") {
+            const target =
+              inputArgs.subagent_type ?? inputArgs.agent ?? inputArgs.subagent ?? "";
+            if (CODE_TOUCHING_SUBAGENTS.has(target)) {
+              lastCodeTaskAt = idx;
+            }
+          } else if (toolName === "bash") {
+            const cmd = String(inputArgs.command ?? "");
+            if (VERIFY_CMD.test(cmd)) {
+              lastVerifyAt = idx;
+            }
+          }
+        }
+      });
+
+      // No code task in session → "done" claim is fine (e.g. user asked a question).
+      if (lastCodeTaskAt < 0) return;
+      // Verify ran AFTER (or at) the last code task → satisfied.
+      if (lastVerifyAt >= lastCodeTaskAt) return;
 
       retriedMessageIds.add(info.id);
+      retryCountBySession.set(info.sessionID, usedBudget + 1);
       log(
         "warn",
-        `[ECC retry-guard] Mistral conductor narration-only message ${info.id.slice(0, 8)} — forcing retry. First 80 chars: ${text.slice(0, 80)}`,
+        `[ECC retry-guard C] premature 'done' from conductor ${info.id.slice(0, 8)}. Code task at msg ${lastCodeTaskAt}, last verify at msg ${lastVerifyAt}. Budget ${usedBudget + 1}/${RETRY_BUDGET}.`,
       );
 
-      // Inject a synthetic user message that re-demands a tool call.
-      // Uses promptAsync so we don't block the event handler.
-      try {
-        await client.session.promptAsync({
-          path: { id: info.sessionID },
-          body: {
-            parts: [
-              {
-                type: "text",
-                text: [
-                  "[SYSTEM RETRY — automatic]",
-                  "Your previous assistant message contained TEXT but NO tool_call. That ends the turn and blocks the user. You said: \"" +
-                    text.slice(0, 120).replace(/"/g, "'") +
-                    "...\"",
-                  "Re-do that reasoning AS A TOOL CALL. Invoke `task` with the appropriate specialist (coder/planner/writer/tdd-guide/etc.) and put the brief in the prompt field.",
-                  "Do NOT narrate again. Emit a tool call now.",
-                ].join("\n\n"),
-              },
-            ],
-          },
-        } as Parameters<typeof client.session.promptAsync>[0]);
-      } catch (e) {
-        log("error", `[ECC retry-guard] retry injection failed for ${info.id.slice(0, 8)}: ${String(e)}`);
-      }
+      await injectRetry(
+        info.sessionID,
+        [
+          "[SYSTEM RETRY — automatic, Pattern C: verification gate]",
+          "Your previous message declared completion (\"done\" / \"ready\" / \"✅\"), but a code-touching subagent ran in this session and no build verification was executed after it.",
+          "Per the verification gate (instructions/verification-gate.md + conductor.txt hard rule): you MUST run an independent typecheck/build via `bash` before claiming done. Examples:",
+          "  - TS/Angular: `npx tsc --noEmit --pretty false 2>&1 | tail -50`",
+          "  - Rust:       `cargo check --message-format=short 2>&1 | tail -50`",
+          "  - Go:         `go build ./... 2>&1 | tail -50`",
+          "  - Java/Maven: `mvn -q -DskipTests compile`",
+          "  - .NET:       `dotnet build --nologo -clp:ErrorsOnly`",
+          "Detect the project type from manifests, run the correct command, paste the last ~15 lines of output. If errors → dispatch `task` → `build-error-resolver` and loop. Only after verify is green may you declare done.",
+        ].join("\n"),
+      );
     },
   };
 };

@@ -77,6 +77,28 @@ export const ECCHooksPlugin = async ({
     "writer", // writer can touch code paths per conductor.txt verify protocol
   ]);
 
+  // All subagent mode names (mirrors the conductor.txt routing table). Used to
+  // extend ONLY the tool-call-hallucination guard (Pattern E) to subagents.
+  // Subagents must NOT get Patterns A/B/C/D: a subagent's normal completion IS
+  // a text-only message with finish=stop (that's how it returns its result to
+  // the conductor), so those patterns would retry every legitimate result.
+  const KNOWN_SUBAGENTS = new Set([
+    "planner",
+    "architect",
+    "coder",
+    "writer",
+    "code-reviewer",
+    "security-reviewer",
+    "tdd-guide",
+    "build-error-resolver",
+    "e2e-runner",
+    "doc-updater",
+    "refactor-cleaner",
+    "database-reviewer",
+    "git-specialist",
+    "merge-cop",
+  ]);
+
   // Helper to call the SDK's log API with correct signature
   const log = (level: "debug" | "info" | "warn" | "error", message: string) =>
     client.app.log({ body: { service: "ecc", level, message } });
@@ -180,6 +202,33 @@ export const ECCHooksPlugin = async ({
       tool: string;
       args?: Record<string, unknown>;
     }) => {
+      // === HARD STOP: malformed tool-call name (Mistral serialization bug) ===
+      // Mistral sometimes emits the tool NAME as the arguments JSON blob, e.g.
+      // name = `{"description":...,"subagent_type":"coder"} task`. OpenCode can't
+      // resolve it and routes to the `invalid` tool, returning a verbose
+      // "unavailable tool / Available tools: ..." dump that Mistral ignores and
+      // loops on. Intercept with TARGETED format guidance instead. No real tool
+      // name contains `{`, so this can't false-positive on a valid call.
+      if (
+        typeof input.tool === "string" &&
+        (input.tool.includes("{") || input.tool === "invalid")
+      ) {
+        const msg = [
+          "[ECC] Malformed tool call. The tool NAME must be a bare identifier",
+          "(e.g. `task`, `bash`, `read`, `edit`), NOT a JSON object and NOT a",
+          "name+JSON string. You put the arguments into the name field.",
+          "Retry as a STRUCTURED tool_call: name = the tool alone (e.g. `task`),",
+          'arguments = the JSON object (e.g. {"subagent_type":"coder",',
+          '"description":"...","prompt":"..."}). Do not concatenate the JSON and',
+          "the tool name into one string, and do not wrap the call in text.",
+        ].join(" ");
+        log(
+          "error",
+          `[ECC] malformed tool name intercepted: ${input.tool.slice(0, 80)}`,
+        );
+        throw new Error(msg);
+      }
+
       // === HARD STOP: block conductor self-delegation ===
       // Defense in depth on top of permission "conductor: deny" in opencode.jsonc.
       // Weak open-weight models sometimes hallucinate task(subagent="conductor")
@@ -474,8 +523,14 @@ export const ECCHooksPlugin = async ({
      *     If a session exhausts its retry budget, the hook stops intervening
      *     and the user must take over.
      *
-     * Scope: conductor agent only. Subagents (coder/writer/etc.) have
-     *   different success criteria and are out of scope for this hook.
+     * Scope: the conductor gets the FULL guard (Patterns A–E). Subagents
+     *   (coder/git-specialist/etc.) get ONLY Pattern E — they hallucinate
+     *   tool calls too (e.g. git-specialist typing `bash{...}` as text and
+     *   stalling), but their normal completion is a text-only finish=stop
+     *   message, so Patterns A/B/C/D would false-positive on every legit
+     *   result. A `!isConductor` short-circuit after Pattern E enforces this.
+     *   NOTE: retry-injection into a subagent's session is unverified live —
+     *   the per-message + per-session budgets bound any misfire.
      */
     // OpenCode dispatches bus events ONLY through the generic `event` hook.
     // Top-level keys like "message.updated" / "session.idle" / "file.edited"
@@ -502,12 +557,15 @@ export const ECCHooksPlugin = async ({
       // Pre-gate trace: confirms the dispatched event reaches the guard and
       // reveals the real `mode` value. Remove once the guard is verified live.
       log("info", `[ECC retry-guard] entry msg=${info.id.slice(0, 8)} mode=${info.mode} finish=${info.finish}`);
-      // Scope to the conductor. The AssistantMessage `mode` field carries the
-      // AGENT NAME — confirmed live as "conductor" via the entry diagnostic.
-      // (The "primary"/"subagent" mode lives on the session/llm object, not here.)
-      // The real bug was never this gate; it was the dispatch — bus events only
-      // arrive through the `event` hook above, never a top-level key.
-      if (info.mode !== "conductor") return;
+      // Scope. The AssistantMessage `mode` field carries the AGENT NAME
+      // (confirmed live as "conductor"). The conductor gets the FULL guard
+      // (Patterns A–E). Subagents get ONLY Pattern E (tool-call hallucination):
+      // their normal completion is a text-only finish=stop message, so the other
+      // patterns would false-positive on every legit result. Anything that is
+      // neither the conductor nor a known subagent is out of scope.
+      const isConductor = info.mode === "conductor";
+      const isSubagent = KNOWN_SUBAGENTS.has(info.mode ?? "");
+      if (!isConductor && !isSubagent) return;
       if (retriedMessageIds.has(info.id)) return;
 
       // Session-level budget check.
@@ -572,8 +630,10 @@ export const ECCHooksPlugin = async ({
       // Conductor ended its turn delivering NO answer text and dispatching
       // NO task — typically after read-only exploration (grep/glob/read).
       // This is the dominant Mistral failure: it "researches" then halts.
+      // Conductor-only: an empty subagent turn is handled below (Pattern E or
+      // the !isConductor short-circuit), never treated as a delegation stall.
       // ────────────────────────────────────────────────────────────────
-      if (text.length === 0) {
+      if (isConductor && text.length === 0) {
         retriedMessageIds.add(info.id);
         retryCountBySession.set(info.sessionID, usedBudget + 1);
         log(
@@ -607,22 +667,30 @@ export const ECCHooksPlugin = async ({
         retryCountBySession.set(info.sessionID, usedBudget + 1);
         const match = xmlMatch ?? jsonMatch;
         const form = xmlMatch ? "XML" : "JSON/brace";
+        const role = isConductor ? "conductor" : `subagent:${info.mode}`;
         log(
           "warn",
-          `[ECC retry-guard E] ${form} tool-call hallucination in conductor msg ${info.id.slice(0, 8)}. Matched: ${(match?.[0] ?? "(?)").trim().slice(0, 60)}. Budget ${usedBudget + 1}/${RETRY_BUDGET}.`,
+          `[ECC retry-guard E] ${form} tool-call hallucination in ${role} msg ${info.id.slice(0, 8)}. Matched: ${(match?.[0] ?? "(?)").trim().slice(0, 60)}. Budget ${usedBudget + 1}/${RETRY_BUDGET}.`,
         );
 
-        await injectRetry(
-          info.sessionID,
-          [
-            "[SYSTEM RETRY — automatic, Pattern E: tool-call hallucination]",
-            'Your previous message typed tool-call syntax as TEXT — either XML like `<read>{...}</read>` or the brace form like `grep{"pattern":...}` / `read{"filePath":...}`. Neither fires: the harness sees plain text, ends the turn, and the user is blocked.',
-            "Tools must be invoked as STRUCTURED tool_calls (the API tool-calling channel), NOT typed into your message body. You cannot write the invocation as text — you must emit it through the tool-calling channel.",
-            "Per the conductor rules, do not explore the repo yourself with grep/read/glob. Retry the original request as a real `task` tool call to the matching specialist (coder for code edits, planner for multi-step work) with the brief in the prompt field. Do not type any tool name followed by `{` or `<`.",
-          ].join("\n\n"),
-        );
+        const sharedE = [
+          "[SYSTEM RETRY — automatic, Pattern E: tool-call hallucination]",
+          'Your previous message typed tool-call syntax as TEXT — either XML like `<read>{...}</read>` or the brace form like `grep{"pattern":...}` / `read{"filePath":...}` / `bash{"command":...}`. Neither fires: the harness sees plain text, ends the turn, and nothing happens.',
+          "Tools must be invoked as STRUCTURED tool_calls (the API tool-calling channel), NOT typed into your message body. You cannot write the invocation as text — emit it through the tool-calling channel.",
+        ];
+        const tailE = isConductor
+          ? "Per the conductor rules, do not explore the repo yourself with grep/read/glob. Retry the original request as a real `task` tool call to the matching specialist (coder for code edits, planner for multi-step work) with the brief in the prompt field. Do not type any tool name followed by `{` or `<`."
+          : "You are a subagent: you execute the work YOURSELF, you do NOT delegate. Re-issue the SAME tool you intended (read/bash/edit/grep/glob/etc.) as a real structured tool_call now. If you have finished the work, return your result as plain prose with NO tool-call syntax in it. Do not type any tool name followed by `{` or `<`.";
+
+        await injectRetry(info.sessionID, [...sharedE, tailE].join("\n\n"));
         return;
       }
+
+      // Beyond this point the patterns (D, A, C) are conductor-specific: they
+      // assume a delegating orchestrator with TODOs and a verification gate.
+      // A subagent that reached here ended with legitimate result text — leave
+      // it alone.
+      if (!isConductor) return;
 
       // ────────────────────────────────────────────────────────────────
       // Pattern D — Open TODOs at turn end

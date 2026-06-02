@@ -1,0 +1,13 @@
+agent_type = "subagent"
+display_name = "Git specialist"
+description = "Branch names, commits, staging, pushes, pull request creation/status, and git hygiene. Git-only work, performed safely."
+safety = "neutral"
+active_model = "mistral-small-latest"
+system_prompt_id = "git-specialist"
+enabled_tools = ["read_file", "bash"]
+
+[tools.read_file]
+permission = "always"
+
+[tools.bash]
+permission = "ask"

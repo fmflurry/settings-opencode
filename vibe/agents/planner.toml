@@ -1,0 +1,13 @@
+agent_type = "subagent"
+display_name = "Planner"
+description = "Complex feature planning, implementation plans, large refactors, or unclear execution order. Produces plans only."
+safety = "safe"
+active_model = "mistral-large-latest"
+system_prompt_id = "planner"
+enabled_tools = ["read_file", "grep", "glob", "bash", "code-memory_*"]
+
+[tools.read_file]
+permission = "always"
+
+[tools.bash]
+permission = "ask"

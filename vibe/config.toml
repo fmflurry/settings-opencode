@@ -1,0 +1,90 @@
+# Mistral Vibe CLI — conductor harness base config.
+#
+# Vibe requires models to be DECLARED ([[models]] with alias); active_model and
+# each agent's active_model reference an alias. Plain mistral-* API models reject
+# `reasoning_effort`, so `thinking = "off"` on them (Vibe sends reasoning_effort
+# when thinking is on). MISTRAL_API_KEY must be set (vibe --setup or env var).
+#
+# Vibe fills tool defaults internally — only [tools.task] is overridden here so
+# the conductor may delegate to our subagents (the builtin default allows only
+# the `explore` subagent).
+
+active_model = "mistral-medium-3.5"
+default_agent = "conductor"
+enable_auto_update = true
+enable_notifications = true
+enabled_skills = ["*"]
+
+[[providers]]
+name = "mistral"
+api_base = "https://api.mistral.ai/v1"
+api_key_env_var = "MISTRAL_API_KEY"
+browser_auth_base_url = "https://console.mistral.ai"
+browser_auth_api_base_url = "https://console.mistral.ai/api"
+api_style = "openai"
+backend = "mistral"
+reasoning_field_name = "reasoning_content"
+
+[providers.extra_headers]
+
+# --- Model tiers (mirror opencode: PLANNER=large, WORKER=medium, MINI=small) --
+[[models]]
+name = "mistral-vibe-cli-latest"
+provider = "mistral"
+alias = "mistral-medium-3.5"
+temperature = 1.0
+thinking = "max"
+auto_compact_threshold = 200000
+
+[[models]]
+name = "mistral-large-latest"
+provider = "mistral"
+alias = "mistral-large-latest"
+temperature = 1.0
+thinking = "off"
+auto_compact_threshold = 200000
+
+[[models]]
+name = "mistral-small-latest"
+provider = "mistral"
+alias = "mistral-small-latest"
+temperature = 0.3
+thinking = "off"
+auto_compact_threshold = 200000
+
+# --- task tool: allow conductor to delegate to every harness subagent ---------
+[tools.task]
+permission = "always"
+allowlist = [
+    "explore",
+    "planner",
+    "architect",
+    "coder",
+    "writer",
+    "code-reviewer",
+    "security-reviewer",
+    "merge-cop",
+    "tdd-guide",
+    "build-error-resolver",
+    "e2e-runner",
+    "doc-updater",
+    "refactor-cleaner",
+    "database-reviewer",
+    "git-specialist",
+]
+denylist = []
+
+# --- MCP servers (global only; agents gate access via enabled_tools) ----------
+[[mcp_servers]]
+name = "code-memory"
+transport = "stdio"
+command = "uvx"
+args = ["--from", "git+https://github.com/fmflurry/code-memory", "code-memory-mcp"]
+env = { CODE_MEMORY_PROJECT = "auto", CLAIMS_EXTRACTION = "true" }
+
+# context7 — disabled in the opencode setup; uncomment to enable.
+# [[mcp_servers]]
+# name = "context7"
+# transport = "stdio"
+# command = "npx"
+# args = ["-y", "@upstash/context7-mcp@latest"]

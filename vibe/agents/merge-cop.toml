@@ -1,0 +1,13 @@
+agent_type = "subagent"
+display_name = "Merge cop"
+description = "Pre-merge review of HEAD vs a target branch. Angular + TypeScript focused (signals, RxJS, clean architecture, flurryx, TS strict). Runs tsc + lint. Read-only — findings only."
+safety = "safe"
+active_model = "mistral-medium-3.5"
+system_prompt_id = "merge-cop"
+enabled_tools = ["read_file", "grep", "glob", "bash", "code-memory_*"]
+
+[tools.read_file]
+permission = "always"
+
+[tools.bash]
+permission = "ask"

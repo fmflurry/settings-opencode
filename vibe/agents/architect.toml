@@ -1,0 +1,13 @@
+agent_type = "subagent"
+display_name = "Architect"
+description = "Architecture, system design, scalability, cross-module boundaries, or high-impact technical decisions. Read-only."
+safety = "safe"
+active_model = "mistral-medium-3.5"
+system_prompt_id = "architect"
+enabled_tools = ["read_file", "grep", "glob", "bash", "code-memory_*"]
+
+[tools.read_file]
+permission = "always"
+
+[tools.bash]
+permission = "ask"

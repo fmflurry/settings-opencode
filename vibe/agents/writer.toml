@@ -1,0 +1,19 @@
+agent_type = "subagent"
+display_name = "Writer"
+description = "Writes or edits non-code text artifacts: docs, README, markdown, reports, release notes, ADRs, prose. Forbidden from touching source code."
+safety = "neutral"
+active_model = "mistral-medium-3.5"
+system_prompt_id = "writer"
+enabled_tools = ["read_file", "write_file", "search_replace", "bash", "grep", "glob", "code-memory_*"]
+
+[tools.read_file]
+permission = "always"
+
+[tools.write_file]
+permission = "ask"
+
+[tools.search_replace]
+permission = "ask"
+
+[tools.bash]
+permission = "ask"

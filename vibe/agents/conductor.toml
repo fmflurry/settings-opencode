@@ -1,0 +1,22 @@
+agent_type = "agent"
+display_name = "Conductor"
+description = "Primary orchestrator. Routes every task to the matching specialist subagent via the task tool. Does not write or edit files directly — delegates code to coder, docs to writer."
+safety = "neutral"
+active_model = "mistral-medium-3.5"
+system_prompt_id = "conductor"
+disabled_tools = ["write_file", "search_replace"]
+
+[tools.read_file]
+permission = "always"
+
+[tools.grep]
+permission = "always"
+
+[tools.glob]
+permission = "always"
+
+[tools.bash]
+permission = "ask"
+
+[tools.task]
+permission = "always"

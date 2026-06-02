@@ -57,6 +57,17 @@ export const ECCHooksPlugin = async ({
   const TOOL_XML_HALLUCINATION =
     /<(?:read|write|edit|bash|task|grep|glob|webfetch|websearch|todowrite|todoread|codememory_[a-z_]+|mcp__[a-z0-9_-]+)\s*>\s*[\{\["]/i;
 
+  // Brace/JSON-style tool-call hallucination. The more common Mistral
+  // failure: it emits the call as `toolname{json}` plain text with NO
+  // angle brackets — e.g. `grep{"pattern":"..."}`, `read{"filePath":"..."}`,
+  // even chained `grep{...}grep{...}read{...}`. Confirmed live in the ecc
+  // log: `finish=stop hasTool=false textLen=629 first40=grep{"pattern":...`.
+  // The harness sees text, the turn dies, and the XML regex above misses it.
+  // Anchored to line-start (the hallucination always opens the message) so
+  // prose that merely mentions a tool name mid-sentence won't trip it.
+  const TOOL_JSON_HALLUCINATION =
+    /(?:^|\n)\s*(?:read|write|edit|bash|task|grep|glob|list|patch|webfetch|websearch|todowrite|todoread|code-?memory_[a-z_]+|mcp__[a-z0-9_-]+)\s*\{\s*["']?[a-z_]/i;
+
   // Subagents whose work TOUCHES SOURCE CODE → require post-dispatch verify.
   const CODE_TOUCHING_SUBAGENTS = new Set([
     "coder",
@@ -72,9 +83,9 @@ export const ECCHooksPlugin = async ({
 
   // Returns true if the provider/model is in the Mistral family.
   // Mirrors the scope of the experimental.chat.system.transform hook.
-  const isMistralModel = (providerID: string, modelID: string): boolean => {
+  const isMistralModel = (providerID?: string, modelID?: string): boolean => {
     if (providerID === "myMistral") return true;
-    const m = modelID.toLowerCase();
+    const m = (modelID ?? "").toLowerCase();
     return (
       m.includes("mistral") ||
       m.includes("codestral") ||
@@ -430,11 +441,13 @@ export const ECCHooksPlugin = async ({
      * Detects four failure modes and force-retries by sending a synthetic
      * [SYSTEM RETRY] user message. Check order is most-specific first:
      *
-     *   Pattern E — XML tool-call hallucination:
-     *     Text contains `<read>{...}</read>` / `<task>{...}</task>` /
-     *     similar XML-wrapped tool syntax. These never fire (harness sees
-     *     plain text). Model thought it was calling a tool but used the
-     *     wrong wire format. Fires regardless of opener.
+     *   Pattern E — tool-call hallucination (XML or JSON/brace form):
+     *     Text contains tool-call syntax typed as prose — either XML
+     *     `<read>{...}</read>` / `<task>{...}</task>`, OR the more common
+     *     brace form `grep{"pattern":...}` / `read{"filePath":...}`. These
+     *     never fire (harness sees plain text; finish=stop, hasTool=false).
+     *     Model thought it was calling a tool but used the wrong wire
+     *     format. Fires regardless of opener.
      *
      *   Pattern D — Open TODOs + no tool_call:
      *     Session has pending/in_progress TODOs but conductor emitted
@@ -464,10 +477,16 @@ export const ECCHooksPlugin = async ({
      * Scope: conductor agent only. Subagents (coder/writer/etc.) have
      *   different success criteria and are out of scope for this hook.
      */
-    "message.updated": async (event: {
-      properties?: { info?: unknown };
+    // OpenCode dispatches bus events ONLY through the generic `event` hook.
+    // Top-level keys like "message.updated" / "session.idle" / "file.edited"
+    // are NOT part of the Hooks interface and are silently ignored — which is
+    // why the retry-guard never ran. We route message.updated here.
+    event: async (input: {
+      event?: { type?: string; properties?: { info?: unknown } };
     }) => {
-      const info = (event?.properties?.info ?? {}) as {
+      const ev = input?.event;
+      if (ev?.type !== "message.updated") return;
+      const info = (ev.properties?.info ?? {}) as {
         id?: string;
         sessionID?: string;
         role?: string;
@@ -480,6 +499,14 @@ export const ECCHooksPlugin = async ({
       if (info.role !== "assistant") return;
       if (!info.id || !info.sessionID) return;
       if (!info.finish) return; // not yet completed
+      // Pre-gate trace: confirms the dispatched event reaches the guard and
+      // reveals the real `mode` value. Remove once the guard is verified live.
+      log("info", `[ECC retry-guard] entry msg=${info.id.slice(0, 8)} mode=${info.mode} finish=${info.finish}`);
+      // Scope to the conductor. The AssistantMessage `mode` field carries the
+      // AGENT NAME — confirmed live as "conductor" via the entry diagnostic.
+      // (The "primary"/"subagent" mode lives on the session/llm object, not here.)
+      // The real bug was never this gate; it was the dispatch — bus events only
+      // arrive through the `event` hook above, never a top-level key.
       if (info.mode !== "conductor") return;
       if (retriedMessageIds.has(info.id)) return;
 
@@ -519,38 +546,89 @@ export const ECCHooksPlugin = async ({
         .join("\n")
         .trim();
 
+      // Diagnostic: logged for EVERY finished primary message the guard
+      // evaluates, whether or not a pattern fires. Reveals stall shape
+      // (tool-call present? text empty? finish reason?) in the ecc log.
+      log(
+        "info",
+        `[ECC retry-guard] eval ${info.id.slice(0, 8)} finish=${info.finish} hasTool=${hasToolCall} textLen=${text.length} first40=${text.slice(0, 40).replace(/\n/g, " ")}`,
+      );
+
+      // Only act when the conductor VOLUNTARILY ended its turn. finish === "tool-calls"
+      // means the turn continues (tools pending) — never intervene there. The message
+      // accumulates ALL parts across rounds, so `hasToolCall` is true even on a clean
+      // stop; that's why the old `!hasToolCall` gate could never fire. Gate on finish.
+      if (info.finish !== "stop") return;
+
+      // Dispatching a `task` IS valid progress — the subagent runs and the conductor
+      // resumes when it returns. Don't treat a delegation turn as a stall.
+      const dispatchedTask = parts.some(
+        (p) => p.type === "tool" && p.tool === "task",
+      );
+      if (dispatchedTask) return;
+
       // ────────────────────────────────────────────────────────────────
-      // Pattern E — XML tool-call hallucination
-      // Most specific signal: model tried to call a tool via XML syntax
-      // in text instead of emitting a structured tool_call. Fires
-      // regardless of opener.
+      // Pattern B — Exploration-only / empty stall
+      // Conductor ended its turn delivering NO answer text and dispatching
+      // NO task — typically after read-only exploration (grep/glob/read).
+      // This is the dominant Mistral failure: it "researches" then halts.
       // ────────────────────────────────────────────────────────────────
-      if (!hasToolCall && text.length > 0 && TOOL_XML_HALLUCINATION.test(text)) {
+      if (text.length === 0) {
         retriedMessageIds.add(info.id);
         retryCountBySession.set(info.sessionID, usedBudget + 1);
-        const match = text.match(TOOL_XML_HALLUCINATION);
         log(
           "warn",
-          `[ECC retry-guard E] XML tool-call hallucination in conductor msg ${info.id.slice(0, 8)}. Matched: ${match?.[0] ?? "(?)"}. Budget ${usedBudget + 1}/${RETRY_BUDGET}.`,
+          `[ECC retry-guard B] conductor msg ${info.id.slice(0, 8)} ended turn with no answer and no task dispatch (hasTool=${hasToolCall}). Budget ${usedBudget + 1}/${RETRY_BUDGET}.`,
         );
-
         await injectRetry(
           info.sessionID,
           [
-            "[SYSTEM RETRY — automatic, Pattern E: XML tool-call hallucination]",
-            'Your previous message contained tool-call XML syntax in TEXT, e.g. `<read>{...}</read>` or `<task>{...}</task>`. That format does NOT fire — the harness sees plain text and ends the turn.',
-            "Tools must be invoked as STRUCTURED tool_calls (the API field), not as text. You cannot type the tool invocation; you must emit it through the tool-calling channel.",
-            "Retry the same intent as a real `task` tool call (subagent_type + description + prompt fields). Do not write any XML tags.",
+            "[SYSTEM RETRY — automatic, Pattern B: exploration-only stall]",
+            "Your previous turn ended without delivering an answer to the user and without dispatching a `task`. Exploring the repo (grep/glob/read) is NOT a turn-ender — you must either delegate or answer.",
+            "As the conductor you do not implement directly. Dispatch the next step now: emit a `task` tool call to the matching specialist (coder for code edits, planner for multi-step work, etc.) with a concrete brief in the prompt field.",
+            "Do NOT narrate. Emit the `task` tool call.",
           ].join("\n\n"),
         );
         return;
       }
 
       // ────────────────────────────────────────────────────────────────
-      // Pattern D — Open TODOs + no tool_call
-      // Strong signal: work isn't done, conductor stalled with text.
+      // Pattern E — tool-call hallucination (XML or JSON/brace form)
+      // Most specific signal: model tried to call a tool by typing its
+      // syntax in text instead of emitting a structured tool_call. Two
+      // shapes seen from Mistral: XML `<read>{...}</read>` and the more
+      // common brace form `read{"filePath":...}` / `grep{"pattern":...}`.
+      // Fires regardless of opener.
       // ────────────────────────────────────────────────────────────────
-      if (!hasToolCall && text.length > 0) {
+      const xmlMatch = TOOL_XML_HALLUCINATION.exec(text);
+      const jsonMatch = TOOL_JSON_HALLUCINATION.exec(text);
+      if (xmlMatch || jsonMatch) {
+        retriedMessageIds.add(info.id);
+        retryCountBySession.set(info.sessionID, usedBudget + 1);
+        const match = xmlMatch ?? jsonMatch;
+        const form = xmlMatch ? "XML" : "JSON/brace";
+        log(
+          "warn",
+          `[ECC retry-guard E] ${form} tool-call hallucination in conductor msg ${info.id.slice(0, 8)}. Matched: ${(match?.[0] ?? "(?)").trim().slice(0, 60)}. Budget ${usedBudget + 1}/${RETRY_BUDGET}.`,
+        );
+
+        await injectRetry(
+          info.sessionID,
+          [
+            "[SYSTEM RETRY — automatic, Pattern E: tool-call hallucination]",
+            'Your previous message typed tool-call syntax as TEXT — either XML like `<read>{...}</read>` or the brace form like `grep{"pattern":...}` / `read{"filePath":...}`. Neither fires: the harness sees plain text, ends the turn, and the user is blocked.',
+            "Tools must be invoked as STRUCTURED tool_calls (the API tool-calling channel), NOT typed into your message body. You cannot write the invocation as text — you must emit it through the tool-calling channel.",
+            "Per the conductor rules, do not explore the repo yourself with grep/read/glob. Retry the original request as a real `task` tool call to the matching specialist (coder for code edits, planner for multi-step work) with the brief in the prompt field. Do not type any tool name followed by `{` or `<`.",
+          ].join("\n\n"),
+        );
+        return;
+      }
+
+      // ────────────────────────────────────────────────────────────────
+      // Pattern D — Open TODOs at turn end
+      // Strong signal: work isn't done, conductor stalled with narration.
+      // ────────────────────────────────────────────────────────────────
+      {
         let openTodos = 0;
         try {
           const todoRes = await client.session.todo({
@@ -588,7 +666,7 @@ export const ECCHooksPlugin = async ({
       // ────────────────────────────────────────────────────────────────
       // Pattern A — Narration-only stall (fallback)
       // ────────────────────────────────────────────────────────────────
-      if (!hasToolCall && text.length > 0 && BANNED_OPENER.test(text)) {
+      if (BANNED_OPENER.test(text)) {
         retriedMessageIds.add(info.id);
         retryCountBySession.set(info.sessionID, usedBudget + 1);
         log(

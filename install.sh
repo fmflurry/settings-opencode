@@ -6,7 +6,7 @@
 # Flags:
 #   --yes, -y       Non-interactive, accept all defaults
 #   --no-claude     Skip ~/.claude mirror install
-#   --uninstall     Remove env-var block and symlinks (does not delete the repo)
+#   --uninstall     Remove env-var block and installed copies (does not delete the repo)
 #   --help, -h      Show usage
 #
 set -euo pipefail
@@ -71,17 +71,17 @@ Usage: ./install.sh [flags]
 Flags:
   --yes, -y       Non-interactive (accept all defaults)
   --no-claude     Skip the ~/.claude mirror install
-  --uninstall     Remove the env-var block and symlinks created by this script
+  --uninstall     Remove the env-var block and copies created by this script
                   (does not delete the cloned repo or your data)
   --help, -h      Show this message
 
 What it does (interactive by default):
   1. Verifies prerequisites (git, bun or npm).
-  2. Links this repo into ~/.config/opencode (or uses it in place).
+  2. Copies this repo into ~/.config/opencode (or uses it in place).
   3. Installs JS deps with bun (if available) or npm.
   4. Adds OPENCODE_MODEL_* and OPENCODE_REASONING_* defaults to your shell rc,
      fenced with markers so re-runs and uninstalls are idempotent.
-  5. Optionally symlinks the .claude/ mirror into ~/.claude.
+  5. Optionally copies the .claude/ mirror into ~/.claude.
   6. Prints next steps for MCP servers and a smoke test.
 EOF
 }
@@ -105,17 +105,22 @@ backup_path() {
     ok "backed up to $backup"
 }
 
-# Copy src/ contents into dst/ (used on WSL where symlinks across /mnt/c don't work).
-# Excludes node_modules, .git, and lockfile artifacts so user runs npm install on the Windows side.
-rsync_to_windows_target() {
+# Copy src/ contents into dst/ as a real copy (not a symlink).
+# Used for both the local install and the WSL -> Windows install (where symlinks
+# across /mnt/c don't work). Excludes node_modules (reinstalled in the target),
+# .git, and transient artifacts. Additive — does NOT use --delete, so runtime
+# state created in the target (auth.json, sessions, memory/, projects/) survives
+# re-runs. Files removed from the repo are therefore not pruned from the target.
+copy_tree() {
     local src="$1" dst="$2"
     if ! command -v rsync >/dev/null 2>&1; then
-        err "rsync is required for the WSL -> Windows copy install"
-        err "  sudo apt install -y rsync"
+        err "rsync is required to copy files into the install target"
+        err "  macOS: rsync ships by default"
+        err "  Debian/Ubuntu: sudo apt install -y rsync"
         exit 1
     fi
     mkdir -p "$dst"
-    rsync -a --delete \
+    rsync -a \
         --exclude='node_modules' \
         --exclude='.git' \
         --exclude='*.log' \
@@ -129,10 +134,12 @@ env_block_content() {
     cat <<'EOF'
 # Added by settings-opencode installer. Edit values to match your provider.
 # To remove this block, run: ~/.config/opencode/install.sh --uninstall
-export OPENCODE_MODEL_PRIMARY="anthropic/claude-sonnet-4-6"
-export OPENCODE_MODEL_SUBAGENT_PLANNER="anthropic/claude-opus-4-7"
-export OPENCODE_MODEL_SUBAGENT_WORKER="anthropic/claude-sonnet-4-6"
-export OPENCODE_MODEL_SUBAGENT_MINI="anthropic/claude-haiku-4-5"
+# Defaults target the myMistral provider configured in opencode.jsonc.
+export OPENCODE_MODEL_CONDUCTOR="myMistral/mistral-medium-2604"
+export OPENCODE_MODEL_SUBAGENT_PLANNER="myMistral/mistral-large-latest"
+export OPENCODE_MODEL_SUBAGENT_WORKER="myMistral/mistral-medium-latest"
+export OPENCODE_MODEL_SUBAGENT_MINI="myMistral/mistral-small-latest"
+export OPENCODE_REASONING_CONDUCTOR="high"
 export OPENCODE_REASONING_PRIMARY="high"
 export OPENCODE_REASONING_SECONDARY="medium"
 export OPENCODE_REASONING_TERTIARY="low"
@@ -355,35 +362,33 @@ install_repo_link() {
             info "$TARGET_OPENCODE is a symlink — removing (Windows can't follow WSL symlinks)"
             rm "$TARGET_OPENCODE"
         fi
-        rsync_to_windows_target "$REPO_DIR" "$TARGET_OPENCODE"
+        copy_tree "$REPO_DIR" "$TARGET_OPENCODE"
         ok "copied $REPO_DIR -> $TARGET_OPENCODE (node_modules excluded)"
         return 0
     fi
 
-    step "Linking repo into $TARGET_OPENCODE"
+    step "Copying repo into $TARGET_OPENCODE"
 
     if [ "$REPO_DIR" = "$TARGET_OPENCODE" ]; then
         ok "repo already lives at $TARGET_OPENCODE"
         return 0
     fi
-    if [ -L "$TARGET_OPENCODE" ] && [ "$(readlink "$TARGET_OPENCODE")" = "$REPO_DIR" ]; then
-        ok "$TARGET_OPENCODE already symlinks to this repo"
-        return 0
-    fi
 
-    if [ -e "$TARGET_OPENCODE" ] || [ -L "$TARGET_OPENCODE" ]; then
+    if [ -L "$TARGET_OPENCODE" ]; then
+        info "$TARGET_OPENCODE is a legacy symlink — removing before copying"
+        rm "$TARGET_OPENCODE"
+    elif [ -e "$TARGET_OPENCODE" ]; then
         info "$TARGET_OPENCODE exists"
-        if ask "back it up and replace with a symlink to $REPO_DIR?" Y; then
+        if ask "back it up and replace with a fresh copy of $REPO_DIR?" Y; then
             backup_path "$TARGET_OPENCODE"
         else
-            warn "skipping link step — you'll need to point OpenCode at this repo manually"
+            warn "skipping copy step — you'll need to point OpenCode at this repo manually"
             return 0
         fi
     fi
 
-    mkdir -p "$(dirname "$TARGET_OPENCODE")"
-    ln -s "$REPO_DIR" "$TARGET_OPENCODE"
-    ok "symlinked $TARGET_OPENCODE -> $REPO_DIR"
+    copy_tree "$REPO_DIR" "$TARGET_OPENCODE"
+    ok "copied $REPO_DIR -> $TARGET_OPENCODE (node_modules excluded)"
 }
 
 install_deps() {
@@ -397,8 +402,13 @@ install_deps() {
         return 0
     fi
 
-    step "Installing JS dependencies ($PKG_MANAGER)"
-    cd "$REPO_DIR"
+    # Install into the live copy so node_modules lands where OpenCode reads from.
+    # Falls back to the repo if the copy step was skipped.
+    local opencode_dir="$REPO_DIR"
+    [ -d "$TARGET_OPENCODE" ] && opencode_dir="$TARGET_OPENCODE"
+
+    step "Installing JS dependencies ($PKG_MANAGER) in $opencode_dir"
+    cd "$opencode_dir"
     if [ "$PKG_MANAGER" = "bun" ]; then
         bun install
     else
@@ -463,28 +473,25 @@ install_claude_mirror() {
         elif [ -L "$TARGET_CLAUDE" ]; then
             rm "$TARGET_CLAUDE"
         fi
-        rsync_to_windows_target "$source_claude" "$TARGET_CLAUDE"
+        copy_tree "$source_claude" "$TARGET_CLAUDE"
         ok "copied $source_claude -> $TARGET_CLAUDE"
         return 0
     fi
 
-    if [ -L "$TARGET_CLAUDE" ] && [ "$(readlink "$TARGET_CLAUDE")" = "$source_claude" ]; then
-        ok "$TARGET_CLAUDE already symlinks here"
-        return 0
-    fi
-
-    if [ -e "$TARGET_CLAUDE" ] || [ -L "$TARGET_CLAUDE" ]; then
+    if [ -L "$TARGET_CLAUDE" ]; then
+        info "$TARGET_CLAUDE is a legacy symlink — removing before copying"
+        rm "$TARGET_CLAUDE"
+    elif [ -e "$TARGET_CLAUDE" ]; then
         info "$TARGET_CLAUDE exists"
-        if ask "back it up before linking?" Y; then
+        if ask "back it up before copying? (runtime state like memory/ and projects/ is preserved on re-runs, not on this replace)" Y; then
             backup_path "$TARGET_CLAUDE"
         else
-            warn "skipping (would clobber existing $TARGET_CLAUDE)"
-            return 0
+            info "merging fresh copy into existing $TARGET_CLAUDE (existing files preserved)"
         fi
     fi
 
-    ln -s "$source_claude" "$TARGET_CLAUDE"
-    ok "symlinked $TARGET_CLAUDE -> $source_claude"
+    copy_tree "$source_claude" "$TARGET_CLAUDE"
+    ok "copied $source_claude -> $TARGET_CLAUDE"
 }
 
 print_next_steps() {
@@ -527,13 +534,8 @@ run_uninstall() {
     step "Uninstall"
     info "this will:"
     info "  - remove the marker-fenced env block from your shell rc"
-    if [ "$WSL_MODE" = "1" ]; then
-        info "  - remove the copied directory at $TARGET_OPENCODE (after confirm)"
-        info "  - remove the copied directory at $TARGET_CLAUDE (after confirm)"
-    else
-        info "  - remove $TARGET_OPENCODE if it symlinks to this repo"
-        info "  - remove $TARGET_CLAUDE if it symlinks to this repo"
-    fi
+    info "  - remove the copied directory at $TARGET_OPENCODE (after confirm)"
+    info "  - remove the copied directory at $TARGET_CLAUDE (after confirm)"
     info "the cloned repo at $REPO_DIR is left intact."
     if ! ask "proceed?" N; then
         info "aborted"
@@ -568,15 +570,29 @@ run_uninstall() {
     else
         if [ -L "$TARGET_OPENCODE" ] && [ "$(readlink "$TARGET_OPENCODE")" = "$REPO_DIR" ]; then
             rm "$TARGET_OPENCODE"
-            ok "removed symlink $TARGET_OPENCODE"
+            ok "removed legacy symlink $TARGET_OPENCODE"
+        elif [ -d "$TARGET_OPENCODE" ] && [ "$TARGET_OPENCODE" != "$REPO_DIR" ]; then
+            if ask "delete copied directory $TARGET_OPENCODE ?" N; then
+                rm -rf "$TARGET_OPENCODE"
+                ok "removed $TARGET_OPENCODE"
+            else
+                info "left $TARGET_OPENCODE in place"
+            fi
         else
-            info "$TARGET_OPENCODE is not a symlink to this repo, leaving it alone"
+            info "$TARGET_OPENCODE is not managed by this installer, leaving it alone"
         fi
         if [ -L "$TARGET_CLAUDE" ] && [ "$(readlink "$TARGET_CLAUDE")" = "$REPO_DIR/.claude" ]; then
             rm "$TARGET_CLAUDE"
-            ok "removed symlink $TARGET_CLAUDE"
+            ok "removed legacy symlink $TARGET_CLAUDE"
+        elif [ -d "$TARGET_CLAUDE" ]; then
+            if ask "delete copied directory $TARGET_CLAUDE ? (this includes any runtime state stored there)" N; then
+                rm -rf "$TARGET_CLAUDE"
+                ok "removed $TARGET_CLAUDE"
+            else
+                info "left $TARGET_CLAUDE in place"
+            fi
         else
-            info "$TARGET_CLAUDE is not a symlink to this repo, leaving it alone"
+            info "$TARGET_CLAUDE is not managed by this installer, leaving it alone"
         fi
     fi
 

@@ -138,6 +138,40 @@ Uses a `ContextRegistry` with `contextProvidersFor()`. **For full patterns**: Se
 
 Target **80%+ coverage**.
 
+### CRITICAL: Refactoring and Test Maintenance
+
+**ALWAYS update tests when refactoring code.** This is non-negotiable.
+
+When you modify source code:
+- Converting methods to signals: `getFormattedX()` → `readonly formattedX = computed(...)`
+- Renaming or moving methods/functions
+- Changing method signatures or return types
+- Modifying class/interface structures
+
+**YOU MUST:**
+1. Find ALL `.spec.ts` files that test the modified code
+2. Update test assertions to use the new API
+3. Run tests: `npx vitest run <path>.spec.ts`
+4. Verify all tests pass before committing
+
+**Common Angular Pattern - Method to Signal:**
+```typescript
+// Before
+protected getFormattedDate(): string { return this.data().date; }
+// Template: {{ getFormattedDate() }}
+// Test: component.getFormattedDate()
+
+// After  
+readonly formattedDate = computed(() => this.data().date);
+// Template: {{ formattedDate() }}
+// Test: component.formattedDate()
+```
+
+**NEVER:**
+- Commit with failing tests
+- Assume tests will "automatically work" after refactoring
+- Ignore pre-commit hook failures (they exist to catch exactly this)
+
 ## Naming Conventions
 
 | Artifact | Pattern | Example |

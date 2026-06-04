@@ -62,7 +62,7 @@ If `scope` is set, intersect.
 
 ### 5. Static review per file
 For each changed file:
-- Read the **full file** (not just hunks) so context is correct.
+- Read the changed file for context. For files ≤ 400 lines read the full file; for larger files read only the changed hunks plus ~30 lines of surrounding context, so the working set stays small and the report renders before context grows unwieldy.
 - Apply checklists from loaded sub-pages.
 - Record `(severity, file, line, category, problem, fix, citation)` tuples.
 - Confidence < 80% -> downgrade to `❓ q:`.
@@ -111,6 +111,8 @@ If `--no-tools`: append `(tooling skipped — verdict does not reflect build sta
 ## Output
 
 Single markdown document. Nothing else. Do not append your thinking or tool transcripts. The orchestrator pastes the report into the PR.
+
+Keep it compact: one finding per line in senior mode, cap per-file findings at 10, and never re-render the same table or section twice. Emit the report in a single pass — if you catch yourself repeating a token, line, or block, stop immediately and close the document.
 
 ## Self-check before emitting
 

@@ -74,17 +74,51 @@ The two halves stand alone. Use the OpenCode side, the Claude Code mirror, or bo
 <a id="public-install"></a>
 ## Public install
 
-The repo is designed to *become* (or symlink into) `~/.config/opencode/`, plus an optional `~/.claude/` mirror. There are two paths: a one-shot script (recommended) and a manual walk-through if you want to see every step.
+The repo is designed to *become* (or symlink into) `~/.config/opencode/`, plus an optional `~/.claude/` mirror. There are three paths: a **one-line install** (recommended — nothing to clone by hand), a one-shot script if you already have the repo, and a manual walk-through if you want to see every step.
+
+### One-line install
+
+You don't need to clone anything first. The bootstrap fetches the repo into `~/.local/share/settings-opencode` (override with `SETTINGS_OPENCODE_SRC`), then runs the installer. **Re-running the exact same command is also how you update** — it pulls the latest and re-applies it.
+
+**macOS / Linux / WSL** (bash):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash
+```
+
+On WSL it installs to the **Windows** side (`/mnt/c/Users/<you>/.config/opencode`), matching `install.sh`'s WSL behaviour. Pass installer flags through after `-s --`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash -s -- --no-claude
+curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash -s -- --uninstall
+```
+
+**Native Windows** (PowerShell — no WSL):
+
+```powershell
+irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1 | iex
+```
+
+Copies into `%USERPROFILE%\.config\opencode` + `\.claude`, runs `npm install` (or `bun install`), and writes the `OPENCODE_*` defaults as **persistent User environment variables**. Open a new terminal afterwards so they take effect. Variants:
+
+```powershell
+# skip the Claude mirror
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -NoClaude
+# uninstall (removes the OPENCODE_* env vars; leaves copied config in place)
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -Uninstall
+```
 
 ### Prerequisites
 
-- macOS or Linux (the worktree and notification plugins assume macOS — works on Linux with minor degradation).
+- macOS, Linux, WSL, or native Windows (the worktree and notification plugins assume macOS — work on Linux/WSL with minor degradation).
 - [OpenCode CLI](https://opencode.ai) installed and on your `PATH`.
 - [Claude Code](https://claude.com/claude-code) installed if you want the `.claude/` half.
 - Either [Bun](https://bun.sh) (recommended — `bun.lock` is what's checked in) or Node.js 20+ with `npm`.
 - `git`.
 
 ### Quick install (script)
+
+Already have the repo cloned? Run the installer directly:
 
 ```bash
 git clone https://github.com/fmflurry/settings-opencode.git ~/Workspace/settings-opencode
@@ -240,6 +274,20 @@ Then drop a slash command:
 It should route to the `planner` sub-agent and return a structured plan without writing code.
 
 ### Updating
+
+If you installed via the one-liner, **re-run the exact same command** — it pulls the latest and re-applies it:
+
+```bash
+# macOS / Linux / WSL
+curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash
+```
+
+```powershell
+# native Windows
+irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1 | iex
+```
+
+If you cloned the repo by hand instead:
 
 ```bash
 cd ~/.config/opencode

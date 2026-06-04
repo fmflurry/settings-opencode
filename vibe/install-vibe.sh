@@ -83,7 +83,7 @@ fi
 # Format: "<slash-name>:<delegate-agent-or-empty>:<commands/file.md>"
 COMMAND_SKILLS=(
   "git:git-specialist:git.md"
-  "push-changes:git-specialist:git.md"
+  "push-changes:git-specialist:push-changes.md"
   "plan:planner:plan.md"
   "tdd:tdd-guide:tdd.md"
   "code-review:code-reviewer:code-review.md"
@@ -103,29 +103,61 @@ COMMAND_SKILLS=(
   "skill-create::skill-create.md"
 )
 
+# Vibe skills follow the Agent Skills spec: the SKILL.md body is injected
+# verbatim as a user message to the active agent (the conductor). So unlike
+# opencode commands, there is NO `$ARGUMENTS` substitution and the opencode
+# frontmatter (`agent:`/`subtask:`) is meaningless here. We therefore:
+#   - lift the real `description` out of the source frontmatter (shown in the
+#     slash-command picker AND used by the model to judge relevance),
+#   - strip that source frontmatter from the injected body,
+#   - neutralise the literal `$ARGUMENTS` token (Vibe never expands it),
+#   - emit a spec-valid `allowed-tools` YAML list,
+#   - and, for delegating commands, instruct the conductor to build the task
+#     brief from the FULL workflow it now has in context — not a placeholder.
+strip_frontmatter() {
+  awk '
+    NR==1 && $0=="---" { infm=1; next }
+    infm && $0=="---"  { infm=0; next }
+    !infm              { print }
+  ' "$1" | sed 's/\$ARGUMENTS/(any extra instructions you included with this command)/g'
+}
+extract_description() {
+  awk '
+    NR==1 && $0=="---" { infm=1; next }
+    infm && $0=="---"  { exit }
+    infm && /^description:/ { sub(/^description:[[:space:]]*/,""); print; exit }
+  ' "$1"
+}
+
 gen=0
 for entry in "${COMMAND_SKILLS[@]}"; do
   name="${entry%%:*}"; rest="${entry#*:}"
   agent="${rest%%:*}"; file="${rest#*:}"
   body_src="$REPO_DIR/commands/$file"
   [ -f "$body_src" ] || { warn "skip /$name — missing commands/$file"; continue; }
+
+  desc="$(extract_description "$body_src")"
+  [ -n "$desc" ] || desc="$name command (ported from the opencode harness)"
+
   dir="$VIBE_HOME/skills/cmd-$name"
   mkdir -p "$dir"
   {
     echo "---"
     echo "name: $name"
-    echo "description: ${name} command (ported from opencode)"
+    echo "description: $desc"
     echo "user-invocable: true"
-    echo "allowed-tools: task read_file grep glob bash"
+    echo "allowed-tools: [task, read_file, grep, glob, bash]"
     echo "---"
     echo
     if [ -n "$agent" ]; then
-      echo "Delegate this task to the \`$agent\` subagent using the task tool:"
-      echo "\`task(task=\"<the request below, plus the user's arguments>\", agent=\"$agent\")\`."
-      echo "Do not perform the work yourself — relay the subagent's result."
+      echo "Route this request to the \`$agent\` subagent via the \`task\` tool."
+      echo "Build the task brief from the COMPLETE workflow below — pass the real"
+      echo "requirements, never a summary or a placeholder. Do the work only through"
+      echo "the subagent, then relay its result. If you added extra instructions"
+      echo "alongside the command, fold them into the brief."
       echo
     fi
-    cat "$body_src"
+    strip_frontmatter "$body_src"
   } > "$dir/SKILL.md"
   gen=$((gen+1))
 done

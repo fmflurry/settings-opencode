@@ -55,6 +55,16 @@ the Mistral provider rejects `reasoning_effort`.
 - **Installer is non-destructive.** If `~/.vibe/config.toml` already exists it is
   kept; the harness base is dropped as `config.harness-example.toml` to merge
   by hand (Vibe generates a rich default config on first launch — don't clobber).
+- **Command skills are Agent-Skills bodies, not opencode commands.** A
+  `cmd-*/SKILL.md` body is injected verbatim as a user message to the conductor.
+  So (a) `$ARGUMENTS` is **never** substituted — leaving it literal makes the
+  subagent receive a placeholder and ask "what do you want me to do?" (the
+  classic `/push-changes` failure); (b) the opencode `agent:`/`subtask:`
+  frontmatter is meaningless and must be stripped from the body; (c)
+  `allowed-tools` must be a YAML list (`[task, read_file, ...]`), not a
+  space-joined string. The installer now strips frontmatter, neutralises
+  `$ARGUMENTS`, lifts the real `description`, and tells the conductor to build
+  the `task` brief from the full workflow it has in context (no placeholder).
 - **No retry-guard for tool-call hallucination.** opencode's `ecc-hooks`
   retry-guard has no Vibe counterpart (see *Not ported*). On opencode it catches
   Mistral typing a tool call as plain text — XML `<read>{...}</read>` or, more

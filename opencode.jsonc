@@ -16,6 +16,8 @@
       "mode": "primary",
       "model": "{env:OPENCODE_MODEL_CONDUCTOR}",
       "prompt": "{.config/opencode/prompts/agents/conductor.txt}",
+      "temperature": 0.3,
+      "topP": 0.9,
       "reasoningEffort": "{env:OPENCODE_REASONING_CONDUCTOR}",
       "tools": {
         "*": true,
@@ -53,6 +55,8 @@
       "model": "{env:OPENCODE_MODEL_SUBAGENT_PLANNER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_PRIMARY}",
       "prompt": "{.config/opencode/prompts/agents/planner.txt}",
+      "temperature": 0.3,
+      "topP": 0.9,
       "tools": {
         "read": true,
         "bash": true,
@@ -67,6 +71,8 @@
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
       "prompt": "{.config/opencode/prompts/agents/architect.txt}",
+      "temperature": 0.3,
+      "topP": 0.9,
       "tools": {
         "read": true,
         "bash": true,
@@ -81,6 +87,8 @@
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
       "prompt": "{.config/opencode/prompts/agents/coder.txt}",
+      "temperature": 0.3,
+      "topP": 0.9,
       "tools": {
         "read": true,
         "write": true,
@@ -97,6 +105,8 @@
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_TERTIARY}",
       "prompt": "{.config/opencode/prompts/agents/writer.txt}",
+      "temperature": 0.3,
+      "topP": 0.9,
       "tools": {
         "read": true,
         "write": true,
@@ -113,6 +123,8 @@
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
       "prompt": "{.config/opencode/prompts/agents/code-reviewer.txt}",
+      "temperature": 0.3,
+      "topP": 0.9,
       "tools": {
         "read": true,
         "bash": true,
@@ -129,6 +141,8 @@
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
       "prompt": "{.config/opencode/prompts/agents/merge-cop.txt}",
+      "temperature": 0.3,
+      "topP": 0.9,
       "tools": {
         "read": true,
         "bash": true,
@@ -145,6 +159,8 @@
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
       "prompt": "{.config/opencode/prompts/agents/security-reviewer.txt}",
+      "temperature": 0.3,
+      "topP": 0.9,
       "tools": {
         "read": true,
         "bash": true,
@@ -161,6 +177,8 @@
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
       "prompt": "{.config/opencode/prompts/agents/tdd-guide.txt}",
+      "temperature": 0.3,
+      "topP": 0.9,
       "tools": {
         "read": true,
         "write": true,
@@ -184,6 +202,8 @@
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
       "prompt": "{.config/opencode/prompts/agents/build-error-resolver.txt}",
+      "temperature": 0.3,
+      "topP": 0.9,
       "tools": {
         "read": true,
         "write": true,
@@ -199,6 +219,8 @@
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "prompt": "{.config/opencode/prompts/agents/e2e-runner.txt}",
+      "temperature": 0.3,
+      "topP": 0.9,
       "tools": {
         "read": true,
         "write": true,
@@ -215,6 +237,8 @@
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
       "prompt": "{.config/opencode/prompts/agents/doc-updater.txt}",
+      "temperature": 0.3,
+      "topP": 0.9,
       "tools": {
         "read": true,
         "write": true,
@@ -231,6 +255,8 @@
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
       "prompt": "{.config/opencode/prompts/agents/refactor-cleaner.txt}",
+      "temperature": 0.3,
+      "topP": 0.9,
       "tools": {
         "read": true,
         "write": true,
@@ -246,6 +272,8 @@
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "prompt": "{.config/opencode/prompts/agents/database-reviewer.txt}",
+      "temperature": 0.3,
+      "topP": 0.9,
       "tools": {
         "read": true,
         "write": true,
@@ -262,6 +290,8 @@
       "model": "{env:OPENCODE_MODEL_SUBAGENT_MINI}",
       "reasoningEffort": "{env:OPENCODE_REASONING_TERTIARY}",
       "prompt": "{.config/opencode/prompts/agents/git-specialist.txt}",
+      "temperature": 0.3,
+      "topP": 0.9,
       "tools": {
         "bash": true,
         "read": true,
@@ -460,18 +490,12 @@
         "mistral-large-latest": {
           "name": "Mistral Large (latest)",
           "tool_call": true,
-          "reasoning": true,
-          "options": {
-            "reasoning_effort": "high"
-          }
+          "reasoning": false
         },
         "mistral-medium-latest": {
           "name": "Mistral Medium (latest)",
           "tool_call": true,
-          "reasoning": true,
-          "options": {
-            "reasoning_effort": "high"
-          }
+          "reasoning": false
         },
         "mistral-medium-2604": {
           "name": "Mistral Medium 2604",
@@ -492,10 +516,7 @@
         "codestral-latest": {
           "name": "Codestral (latest)",
           "tool_call": true,
-          "reasoning": true,
-          "options": {
-            "reasoning_effort": "high"
-          }
+          "reasoning": false
         },
         "magistral-medium-latest": {
           "name": "Magistral Medium (latest)",
@@ -508,26 +529,17 @@
         "ministral-8b-latest": {
           "name": "Ministral 8B (latest)",
           "tool_call": true,
-          "reasoning": true,
-          "options": {
-            "reasoning_effort": "high"
-          }
+          "reasoning": false
         },
         "ministral-3b-latest": {
           "name": "Ministral 3B (latest)",
           "tool_call": true,
-          "reasoning": true,
-          "options": {
-            "reasoning_effort": "high"
-          }
+          "reasoning": false
         },
         "pixtral-large-latest": {
           "name": "Pixtral Large (latest)",
           "tool_call": true,
-          "reasoning": true,
-          "options": {
-            "reasoning_effort": "high"
-          }
+          "reasoning": false
         }
       }
     }

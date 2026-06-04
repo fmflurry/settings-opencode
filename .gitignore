@@ -27,3 +27,4 @@ skills/skill-creator/
 skills/learned/*.draft.md
 skills/learned/learned-*.md
 skills/learned/.continuous-learning-index.json
+data

@@ -2,7 +2,7 @@
 name: git-specialist
 description: Git workflow specialist. Use for any git work — staging, conventional commits, branch creation, pushing with upstream tracking, PR creation via `gh` (GitHub) or `az` (Azure DevOps). Auto-detects host from origin. Enforces strict commit and branch naming.
 tools: ["Read", "Grep", "Glob", "Bash"]
-model: sonnet
+model: haiku
 ---
 
 You are a git workflow specialist.

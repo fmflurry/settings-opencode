@@ -1,12 +1,12 @@
 {
-  "attribution": {
-    "commit": "",
-    "pr": ""
-  },
   "env": {
     "API_TIMEOUT_MS": "3000000",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "80"
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
   },
   "permissions": {
     "allow": [
@@ -51,22 +51,11 @@
         ]
       },
       {
-        "matcher": "*",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/plugins/marketplaces/everything-claude-code/skills/continuous-learning-v2/hooks/observe.sh pre"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/plugins/marketplaces/everything-claude-code/skills/continuous-learning-v2/hooks/observe.sh post"
+            "command": "/Users/fmflurry/.claude/hooks/rtk-rewrite.sh"
           }
         ]
       }
@@ -84,7 +73,6 @@
     ]
   },
   "enabledPlugins": {
-    "everything-claude-code@everything-claude-code": true,
     "csharp-lsp@claude-plugins-official": true
   },
   "skipDangerousModePermissionPrompt": true

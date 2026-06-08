@@ -24,6 +24,7 @@ SKIP_CLAUDE=0
 DO_UNINSTALL=0
 WSL_MODE=0
 WSL_WIN_HOME=""
+WSL_OPENCODE_WIN_PATH=""
 
 # ------------------------------ presentation ---------------------------------
 
@@ -393,12 +394,42 @@ install_repo_link() {
 
 install_deps() {
     if [ "$WSL_MODE" = "1" ]; then
-        step "Skipping Linux-side npm install (WSL mode)"
-        warn "Windows opencode needs node_modules built with Windows Node.js."
-        warn "Linux Node would produce binaries Windows cannot load (better-sqlite3, etc.)."
-        info "From PowerShell or cmd.exe on Windows, run:"
-        info "  cd \"%USERPROFILE%\\.config\\opencode\""
-        info "  npm install        (or: bun install)"
+        step "Installing JS dependencies on the Windows side (via WSL interop)"
+        warn "node_modules must be built with Windows Node.js — Linux Node would"
+        warn "produce binaries Windows cannot load (better-sqlite3, etc.)."
+
+        local win_path
+        win_path="$(wslpath -w "$TARGET_OPENCODE" 2>/dev/null || true)"
+        if [ -z "$win_path" ]; then
+            warn "couldn't resolve the Windows path for $TARGET_OPENCODE — skipping"
+            info "once you know the path, run 'npm install' there with Windows Node."
+            return 0
+        fi
+        WSL_OPENCODE_WIN_PATH="$win_path"
+
+        if ! command -v cmd.exe >/dev/null 2>&1; then
+            warn "Windows interop (cmd.exe) not reachable from this WSL distro."
+            info "Run this from a Windows shell instead:"
+            info "  cd \"$win_path\" && npm install"
+            return 0
+        fi
+
+        info "target (Windows path): $win_path"
+        # Windows npm is invoked through interop, so this runs from THIS WSL
+        # terminal — no need to open PowerShell — yet still builds native
+        # modules with Windows Node.
+        if ask "run 'npm install' on the Windows side now, from this terminal?" Y; then
+            if cmd.exe /c "cd /d \"$win_path\" && npm install"; then
+                ok "deps installed (Windows Node)"
+            else
+                warn "Windows npm install failed — is Node.js installed on Windows?"
+                info "install Node.js for Windows, then re-run from this WSL terminal:"
+                info "  cmd.exe /c 'cd /d \"$win_path\" && npm install'"
+            fi
+        else
+            info "skipped. Run later from this same WSL terminal:"
+            info "  cmd.exe /c 'cd /d \"$win_path\" && npm install'   (or swap npm for bun)"
+        fi
         return 0
     fi
 
@@ -497,13 +528,15 @@ install_claude_mirror() {
 print_next_steps() {
     step "Next steps"
     if [ "$WSL_MODE" = "1" ]; then
+        local dep_hint="Dependencies were installed on the Windows side from this terminal."
+        if [ -n "${WSL_OPENCODE_WIN_PATH:-}" ]; then
+            dep_hint="If you skipped the dependency step, run it from THIS WSL terminal:
+        cmd.exe /c 'cd /d \"$WSL_OPENCODE_WIN_PATH\" && npm install'"
+        fi
         cat <<EOF
-    WSL -> Windows install. Finish setup from a Windows shell (PowerShell or cmd.exe):
+    WSL -> Windows install.
+    $dep_hint
 
-        cd "%USERPROFILE%\\.config\\opencode"
-        npm install        (or: bun install)
-
-    Then in WSL:
     1. Reload your shell (or:  source "$(detect_shell_rc)")
     2. Re-run this script to push fresh changes from the repo to the Windows target.
 

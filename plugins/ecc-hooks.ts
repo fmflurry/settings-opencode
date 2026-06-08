@@ -50,6 +50,14 @@ export const ECCHooksPlugin = async ({
   const VERIFY_CMD =
     /\b(tsc|cargo check|cargo build|go build|go vet|mvn .*(?:compile|verify)|gradle .*(?:compile|build|check)|gradlew .*(?:compile|build|check)|dotnet build|mypy|pyright|pytest|jest|vitest|cargo test|go test)\b/;
 
+  // OpenSpec artifact-generation detector. OpenSpec workflows (/opsx-* commands)
+  // produce ONLY markdown files under openspec/changes/<name>/ — no buildable
+  // source. Pattern C must not demand a tsc/cargo/etc. run after these jobs.
+  // Match the banner the conductor emits when artifacts are ready, plus the
+  // canonical path prefix and the "READY FOR /opsx" handoff line.
+  const OPENSPEC_DONE =
+    /openspec\/changes\/|OPENSPEC ARTIFACTS|OPENPEC ARTIFACTS|READY FOR:?\s+\/opsx|\/opsx-apply-change/i;
+
   // XML-style tool-call hallucination. Mistral (and other open-weight
   // models) sometimes emit tool invocations wrapped in XML tags as
   // plain text — e.g. `<read>{"filePath":"..."}</read>`, `<task>...`.
@@ -584,7 +592,7 @@ export const ECCHooksPlugin = async ({
         text?: string;
         synthetic?: boolean;
         tool?: string;
-        state?: { input?: { command?: string; subagent_type?: string; agent?: string; subagent?: string } };
+        state?: { input?: { command?: string; subagent_type?: string; agent?: string; subagent?: string; prompt?: string; description?: string } };
       }> = [];
       try {
         const res = await client.session.message({
@@ -761,6 +769,12 @@ export const ECCHooksPlugin = async ({
       // ────────────────────────────────────────────────────────────────
       if (text.length === 0 || !DONE_CLAIM.test(text)) return;
 
+      // OpenSpec workflows (/opsx-* commands) produce only markdown artifacts
+      // under openspec/changes/<name>/ — nothing buildable is emitted. Skip the
+      // verification gate entirely when the conductor's done-message signals an
+      // OpenSpec artifact-generation result (e.g. "READY FOR: /opsx-apply-change").
+      if (OPENSPEC_DONE.test(text)) return;
+
       // Look back over the WHOLE session to determine whether a
       // code-touching task ran and whether verify ran after it.
       let sessionMessages: Array<{
@@ -789,7 +803,11 @@ export const ECCHooksPlugin = async ({
           if (toolName === "task") {
             const target =
               inputArgs.subagent_type ?? inputArgs.agent ?? inputArgs.subagent ?? "";
-            if (CODE_TOUCHING_SUBAGENTS.has(target)) {
+            // Skip: tasks whose brief references openspec paths or /opsx commands
+            // produce only markdown artifacts — nothing to build/typecheck.
+            const brief = String(inputArgs.prompt ?? inputArgs.description ?? "");
+            const isOpenSpecTask = OPENSPEC_DONE.test(brief) || /\/opsx\b/i.test(brief);
+            if (CODE_TOUCHING_SUBAGENTS.has(target) && !isOpenSpecTask) {
               lastCodeTaskAt = idx;
             }
           } else if (toolName === "bash") {

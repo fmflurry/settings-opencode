@@ -1,5 +1,7 @@
 # Codebase Exploration
 
+**HARD DEFAULT: When `mcp__code-memory__*` tools are connected, they are the FIRST and REQUIRED choice for any code search, symbol lookup, callers/callees, definitions, dependencies, or importers. Grep/Glob/Bash are fallbacks ONLY — reach for them only when code-memory cannot answer (raw directory listing, filename glob, reading a known path region, or no index for the project). Do not "start with grep" or "try grep first". Start with code-memory.**
+
 **Applies whenever the `code-memory` MCP server is connected (tools named `mcp__code-memory__*`). Skip entirely if the server is absent.**
 
 ## Priority

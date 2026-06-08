@@ -58,6 +58,15 @@
             "command": "/Users/fmflurry/.claude/hooks/rtk-rewrite.sh"
           }
         ]
+      },
+      {
+        "matcher": "Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/prefer-code-memory.sh"
+          }
+        ]
       }
     ],
     "Stop": [

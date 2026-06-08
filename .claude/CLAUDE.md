@@ -3,5 +3,6 @@
 
 @rules/common/orchestration.md
 @rules/common/verification-gate.md
+@rules/common/codebase-exploration.md
 
 @RTK.md

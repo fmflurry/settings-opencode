@@ -22,12 +22,12 @@ You MAY NOT tell the user "done", "complete", "ready", "ready to merge", or rend
    - Java/Maven: `mvn -q -DskipTests compile` (multi-module: run from repo root, Maven recurses)
    - Java/Gradle: `./gradlew --offline compileJava compileTestJava -x test` (or `compileKotlin` for Kotlin)
    - .NET: `dotnet build --nologo -clp:ErrorsOnly --no-restore` (run `dotnet restore` first if `obj/` is missing); pass the explicit path for a solution: `dotnet build path/to/Solution.sln` or `dotnet build path/to/Solution.slnx` (SDK 9.0.200+ required for `.slnx`)
-3. Run lint on changed files when a project script exists.
+3. When a `scripts.lint` entry exists in `package.json`, run `<pm> run lint` (auto-detect package manager: `bun.lock`/`bun.lockb` → `bun`; `pnpm-lock.yaml` → `pnpm`; `yarn.lock` → `yarn`; else `npm`). Lint errors are **blocking** — treat them exactly like build errors: fix before claiming "done".
 4. Paste the last ~15 lines of each command's actual output into your reply, OR explicitly state `n/a — <reason>`. No paraphrasing.
 
 ## On failure
 
-- Errors caused by the diff in this turn → fix or dispatch the build-error-resolver subagent. Re-verify. Loop until green.
+- Build or lint errors caused by the diff in this turn → fix or dispatch the build-error-resolver subagent. Re-verify. Loop until green.
 - Errors pre-existing on the base branch → list under `## Pre-existing failures`, confirm via `git stash && <cmd>`, then proceed without claiming you fixed them.
 - Two consecutive resolver passes that fail to reduce error count → stop, escalate to the user with the residual error log.
 

@@ -31,6 +31,8 @@ When the `mcp__code-memory__*` tools are connected, use them FIRST for any code 
 
 7. **HARD CAP: 2 direct file reads per user request.** Third read = you are coding/exploring, not orchestrating. Dispatch instead.
 
+8. **OWN REPLIES USE CAVEMAN ULTRA.** For Conductor's own user-facing replies, load/use skill `caveman` with mode `ultra`.
+
 ---
 
 ## First-Tool Gate

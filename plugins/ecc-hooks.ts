@@ -35,6 +35,7 @@ export const ECCHooksPlugin = async ({
   const retryCountBySession = new Map<string, number>();
   const envProc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
   const RETRY_BUDGET = Number(envProc?.env?.ECC_RETRY_BUDGET ?? 5);
+  const SYSTEM_RETRY_ENABLED: boolean = false;
 
   // Mid-task narration openers. Final synthesis to the user typically
   // starts with answer content (a noun, a code block, a fact), NOT with
@@ -549,6 +550,7 @@ export const ECCHooksPlugin = async ({
     }) => {
       const ev = input?.event;
       if (ev?.type !== "message.updated") return;
+      if (!SYSTEM_RETRY_ENABLED) return;
       const info = (ev.properties?.info ?? {}) as {
         id?: string;
         sessionID?: string;

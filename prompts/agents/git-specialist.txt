@@ -108,3 +108,5 @@ Return a short, practical summary with:
 - `Push`: whether push happened
 - `PR`: URL when a pull request exists or was created, otherwise `n/a`
 - `Notes`: any relevant warning or blocker
+
+CRITICAL: never ever add a co-author to the PR unless I specifically ask you to do so.

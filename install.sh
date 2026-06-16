@@ -7,9 +7,14 @@
 #   --yes, -y       Non-interactive, accept all defaults
 #   --no-claude     Skip ~/.claude mirror install
 #   --uninstall     Remove env-var block and installed copies (does not delete the repo)
+#   --local         Project-scoped install into the current working directory
+#                   (./.opencode and ./.claude). Does not touch shell rc files.
 #   --help, -h      Show usage
 #
 set -euo pipefail
+
+# Capture invocation directory before any cd happens.
+INVOKE_DIR="$PWD"
 
 # ------------------------------ constants ------------------------------------
 
@@ -22,6 +27,7 @@ REPO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]:-$0}" )" && pwd )"
 ASSUME_YES=0
 SKIP_CLAUDE=0
 DO_UNINSTALL=0
+LOCAL_MODE=0
 WSL_MODE=0
 WSL_WIN_HOME=""
 WSL_OPENCODE_WIN_PATH=""
@@ -74,6 +80,11 @@ Flags:
   --no-claude     Skip the ~/.claude mirror install
   --uninstall     Remove the env-var block and copies created by this script
                   (does not delete the cloned repo or your data)
+  --local         Project-scoped install into the current working directory.
+                  Copies repo into ./.opencode and .claude into ./.claude.
+                  Does not touch global shell rc files. Combine with --yes,
+                  --no-claude, and --uninstall as normal. Do NOT run this
+                  from inside the settings-opencode repo itself.
   --help, -h      Show this message
 
 What it does (interactive by default):
@@ -84,6 +95,9 @@ What it does (interactive by default):
      fenced with markers so re-runs and uninstalls are idempotent.
   5. Optionally copies the .claude/ mirror into ~/.claude.
   6. Prints next steps for MCP servers and a smoke test.
+
+  With --local, steps 2-3 and 5 target ./.opencode/.claude in the cwd.
+  Step 4 (shell rc) is skipped; the env block is printed to stdout instead.
 EOF
 }
 
@@ -214,6 +228,8 @@ detect_wsl_windows_user() {
 }
 
 configure_wsl_targets() {
+    # Local mode keeps cwd-scoped targets; WSL re-targeting must not override them.
+    [ "$LOCAL_MODE" = "1" ] && return 0
     is_wsl || return 0
     info "WSL detected — opencode config lives on the Windows side"
     local winuser
@@ -527,6 +543,24 @@ install_claude_mirror() {
 
 print_next_steps() {
     step "Next steps"
+    if [ "$LOCAL_MODE" = "1" ]; then
+        cat <<EOF
+    Project-scoped (--local) install — applies only when working in:
+      $INVOKE_DIR
+
+    Installed:
+      $INVOKE_DIR/.opencode   (opencode config + deps)
+$([ "$SKIP_CLAUDE" = "1" ] && echo "      ./.claude              (skipped via --no-claude)" || echo "      $INVOKE_DIR/.claude    (claude Code mirror)")
+
+    No shell reload needed — no global rc was modified.
+    To set model env-vars for this project only, add the block printed above
+    to a per-project .envrc (direnv) or source it manually.
+
+    Re-run anytime from $INVOKE_DIR: $REPO_DIR/install.sh --local
+    Uninstall local copy:           $REPO_DIR/install.sh --local --uninstall
+EOF
+        return 0
+    fi
     if [ "$WSL_MODE" = "1" ]; then
         local dep_hint="Dependencies were installed on the Windows side from this terminal."
         if [ -n "${WSL_OPENCODE_WIN_PATH:-}" ]; then
@@ -565,14 +599,46 @@ run_uninstall() {
     configure_wsl_targets
 
     step "Uninstall"
-    info "this will:"
-    info "  - remove the marker-fenced env block from your shell rc"
-    info "  - remove the copied directory at $TARGET_OPENCODE (after confirm)"
-    info "  - remove the copied directory at $TARGET_CLAUDE (after confirm)"
+    if [ "$LOCAL_MODE" = "1" ]; then
+        info "this will (local mode):"
+        info "  - remove $TARGET_OPENCODE (after confirm)"
+        info "  - remove $TARGET_CLAUDE (after confirm)"
+        info "  - shell rc is NOT modified (local mode never touched it)"
+    else
+        info "this will:"
+        info "  - remove the marker-fenced env block from your shell rc"
+        info "  - remove the copied directory at $TARGET_OPENCODE (after confirm)"
+        info "  - remove the copied directory at $TARGET_CLAUDE (after confirm)"
+    fi
     info "the cloned repo at $REPO_DIR is left intact."
     if ! ask "proceed?" N; then
         info "aborted"
         exit 0
+    fi
+
+    if [ "$LOCAL_MODE" = "1" ]; then
+        if [ -d "$TARGET_OPENCODE" ]; then
+            if ask "delete local directory $TARGET_OPENCODE ?" N; then
+                rm -rf "$TARGET_OPENCODE"
+                ok "removed $TARGET_OPENCODE"
+            else
+                info "left $TARGET_OPENCODE in place"
+            fi
+        else
+            info "$TARGET_OPENCODE not found, skipping"
+        fi
+        if [ -d "$TARGET_CLAUDE" ]; then
+            if ask "delete local directory $TARGET_CLAUDE ?" N; then
+                rm -rf "$TARGET_CLAUDE"
+                ok "removed $TARGET_CLAUDE"
+            else
+                info "left $TARGET_CLAUDE in place"
+            fi
+        else
+            info "$TARGET_CLAUDE not found, skipping"
+        fi
+        step "Done. Local copies removed."
+        return 0
     fi
 
     local rc
@@ -639,11 +705,22 @@ while [ $# -gt 0 ]; do
         --yes|-y)     ASSUME_YES=1 ;;
         --no-claude)  SKIP_CLAUDE=1 ;;
         --uninstall)  DO_UNINSTALL=1 ;;
+        --local)      LOCAL_MODE=1 ;;
         -h|--help)    print_help; exit 0 ;;
         *) err "unknown flag: $1"; print_help; exit 1 ;;
     esac
     shift
 done
+
+# Apply local-mode target overrides before any other logic runs.
+if [ "$LOCAL_MODE" = "1" ]; then
+    if [ "$INVOKE_DIR" = "$REPO_DIR" ]; then
+        err "--local copies the repo into ./.opencode; run it from your project directory, not from the settings-opencode repo"
+        exit 1
+    fi
+    TARGET_OPENCODE="$INVOKE_DIR/.opencode"
+    TARGET_CLAUDE="$INVOKE_DIR/.claude"
+fi
 
 if [ "$DO_UNINSTALL" = "1" ]; then
     run_uninstall
@@ -652,7 +729,7 @@ fi
 
 step "settings-opencode installer"
 info "repo:    $REPO_DIR"
-info "mode:    $([ "$ASSUME_YES" = "1" ] && echo "non-interactive" || echo "interactive")"
+info "mode:    $([ "$ASSUME_YES" = "1" ] && echo "non-interactive" || echo "interactive")$([ "$LOCAL_MODE" = "1" ] && echo " --local (project-scoped)" || true)"
 
 configure_wsl_targets
 check_prereqs
@@ -663,6 +740,14 @@ info "claude:  $([ "$SKIP_CLAUDE" = "1" ] && echo "skipped" || echo "$TARGET_CLA
 
 install_repo_link
 install_deps
-install_env_vars
+if [ "$LOCAL_MODE" = "1" ]; then
+    step "Shell environment variables — skipped (--local does not modify global rc)"
+    info "To use per-project env vars, add the following to a .envrc or source it manually:"
+    printf "\n"
+    env_block_content | sed 's/^/        /'
+    printf "\n"
+else
+    install_env_vars
+fi
 install_claude_mirror
 print_next_steps

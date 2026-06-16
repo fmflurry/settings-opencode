@@ -19,15 +19,16 @@ Out of scope:
 You MAY NOT return "done" without executing every step below in this order. Skipping a step is a contract violation. Paste actual command output — not a summary, not a flag.
 
 1. **Re-read every file you touched.** Catch obvious mistakes (broken imports, typos, dangling braces).
-2. **Detect project type** from `angular.json` / `package.json` / `tsconfig.json` / `Cargo.toml` / `go.mod` / `pyproject.toml` / `pom.xml` / `build.gradle*`.
+2. **Detect project type** from `angular.json` / `package.json` / `tsconfig.json` / `Cargo.toml` / `go.mod` / `pyproject.toml` / `pom.xml` / `build.gradle*` / `*.sln` / `*.slnx` / `*.csproj` / `global.json`.
 3. **Typecheck.** Run the matching command:
    - Angular / TS: `npx tsc --noEmit --pretty false`
    - Rust: `cargo check --message-format=short`
    - Go: `go build ./...`
    - Python (mypy/pyright if present): `mypy .` or `pyright`
-4. **Build** (only if a quick build target exists, e.g. `npm run build`, `cargo build`, `mvn -q -DskipTests package`). Skip if no fast target.
-5. **Lint** on changed files: `eslint`, `ruff`, `clippy`, `golangci-lint`, etc.
-6. **Tests touching your changes only** (`npm test -- --findRelatedTests`, `pytest <paths>`, `cargo test -p <pkg>`, `go test ./<pkg>/...`). Full suite is the orchestrator's job.
+   - .NET / C#: `dotnet build --nologo -clp:ErrorsOnly --no-restore` (run `dotnet restore` first if `obj/` is missing; pass the explicit `.sln`/`.slnx`/`.csproj` path for multi-project repos)
+4. **Build** (only if a quick build target exists, e.g. `npm run build`, `cargo build`, `mvn -q -DskipTests package`, `dotnet build`). Skip if no fast target.
+5. **Lint** on changed files: `eslint`, `ruff`, `clippy`, `golangci-lint`, `dotnet format --verify-no-changes`, etc.
+6. **Tests touching your changes only** (`npm test -- --findRelatedTests`, `pytest <paths>`, `cargo test -p <pkg>`, `go test ./<pkg>/...`, `dotnet test --filter <Name>`). Full suite is the orchestrator's job.
 
 ### Evidence requirement
 

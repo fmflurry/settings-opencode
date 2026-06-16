@@ -45,7 +45,7 @@
           "refactor-cleaner": "allow",
           "database-reviewer": "allow",
           "git-specialist": "allow",
-          "merge-cop": "allow",
+          "angular-cop": "allow",
         },
       },
     },
@@ -135,12 +135,12 @@
         "code-memory_*": true,
       },
     },
-    "merge-cop": {
+    "angular-cop": {
       "description": "MUST delegate when user runs /cop-review or asks for pre-merge review of HEAD vs a target branch. Angular + TypeScript focused (signals, RxJS, clean architecture, flurryx, TS strict). Reads project AGENTS.md. Runs tsc + lint. Tiered output (junior/senior). Read-only \u2014 findings only.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
-      "prompt": "{.config/opencode/prompts/agents/merge-cop.txt}",
+      "prompt": "{.config/opencode/prompts/agents/angular-cop.txt}",
       "temperature": 0.3,
       "topP": 0.9,
       "tools": {
@@ -342,7 +342,7 @@
     "cop-review": {
       "description": "Pre-merge review of HEAD vs a target branch. Angular + TypeScript focused. Usage: /cop-review <target> [--level=junior|senior] [--scope=...] [--no-tools]",
       "template": "{file:commands/cop-review.md}\n\n$ARGUMENTS",
-      "agent": "merge-cop",
+      "agent": "angular-cop",
       "subtask": true,
     },
     "security": {

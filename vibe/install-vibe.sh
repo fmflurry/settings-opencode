@@ -87,7 +87,7 @@ COMMAND_SKILLS=(
   "plan:planner:plan.md"
   "tdd:tdd-guide:tdd.md"
   "code-review:code-reviewer:code-review.md"
-  "cop-review:merge-cop:cop-review.md"
+  "cop-review:angular-cop:cop-review.md"
   "security:security-reviewer:security.md"
   "build-fix:build-error-resolver:build-fix.md"
   "e2e:e2e-runner:e2e.md"

@@ -63,7 +63,7 @@ allowlist = [
     "writer",
     "code-reviewer",
     "security-reviewer",
-    "merge-cop",
+    "angular-cop",
     "tdd-guide",
     "build-error-resolver",
     "e2e-runner",

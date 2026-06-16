@@ -105,7 +105,7 @@ export const ECCHooksPlugin = async ({
     "refactor-cleaner",
     "database-reviewer",
     "git-specialist",
-    "merge-cop",
+    "angular-cop",
   ]);
 
   // Helper to call the SDK's log API with correct signature

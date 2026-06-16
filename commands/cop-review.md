@@ -1,6 +1,6 @@
 ---
 description: Pre-merge code review of HEAD vs a target branch (Angular + TypeScript focused)
-agent: merge-cop
+agent: angular-cop
 subtask: true
 ---
 
@@ -29,7 +29,7 @@ Review the current branch against a target branch before merging. Angular + Type
    - Flags as documented above.
    - If `target` missing, print usage and stop.
 2. Verify you're inside a git repo (`git rev-parse --is-inside-work-tree`).
-3. Load the **merge-cop** skill at `skills/merge-cop/SKILL.md`. Follow its pipeline section verbatim.
+3. Load the **angular-cop** skill at `skills/angular-cop/SKILL.md`. Follow its pipeline section verbatim.
 4. Load `AGENTS.md` from repo root if it exists.
 5. Execute the pipeline (steps 1-7 in the skill / agent prompt).
 6. Emit the single markdown report. No preamble. No epilogue.
@@ -52,6 +52,6 @@ A single markdown document with:
 - Tooling (tsc / lint summaries)
 - Footer
 
-See `skills/merge-cop/output-format.md` for the exact templates.
+See `skills/angular-cop/output-format.md` for the exact templates.
 
 $ARGUMENTS

@@ -1,4 +1,4 @@
-# merge-cop / TypeScript strictness
+# angular-cop / TypeScript strictness
 
 Project runs TS strict. New code in the diff must obey.
 

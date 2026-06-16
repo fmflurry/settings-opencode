@@ -1,4 +1,4 @@
-# merge-cop / signals + change detection
+# angular-cop / signals + change detection
 
 Angular signals, computed, effects, OnPush. Applies to `*.component.ts`, `*.component.html`, `*.directive.ts`.
 

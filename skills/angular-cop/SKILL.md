@@ -1,15 +1,15 @@
 ---
-name: merge-cop
+name: angular-cop
 description: >
   Pre-merge code review for Angular + TypeScript pull requests. Diffs current branch
   against a target branch, applies Angular-specific checklists (signals, RxJS, clean
   architecture, flurryx, TS strict), runs lint + tsc, and emits a tiered report
   (verbose for juniors, terse for seniors). Auto-loads project AGENTS.md rules.
   Use when user runs /cop-review, says "pre-merge review", "review before merging",
-  "check my PR against <branch>", or invokes the merge-cop agent.
+  "check my PR against <branch>", or invokes the angular-cop agent.
 ---
 
-# merge-cop
+# angular-cop
 
 Pre-merge review. Compares HEAD vs `origin/<target>`. Angular-aware. Project-aware (reads `AGENTS.md`). Tooling-aware (runs lint + tsc).
 
@@ -18,7 +18,7 @@ Pre-merge review. Compares HEAD vs `origin/<target>`. Angular-aware. Project-awa
 - `/cop-review <target>` slash command
 - User asks for review before merging a PR
 - User specifies a target branch and wants a diff review
-- merge-cop agent is invoked
+- angular-cop agent is invoked
 
 ## Inputs
 
@@ -74,12 +74,12 @@ Promote to BLOCK if AGENTS.md flags the category as mandatory.
 
 ## Sub-pages (read on demand)
 
-- [[merge-cop-signals]] — Angular signals, change detection, OnPush, computed, no-method-in-template
-- [[merge-cop-rxjs]] — RxJS hygiene, takeUntilDestroyed, async pipe, leak patterns
-- [[merge-cop-clean-architecture]] — facade / use-case / port / adapter / store boundaries
-- [[merge-cop-flurryx]] — flurryx-specific rules (decorator order, keyed stores, no manual Record updates)
-- [[merge-cop-typescript-strict]] — no `any`, immutability, narrowing, no `!`, readonly
-- [[merge-cop-output-format]] — junior vs senior render templates
+- [[angular-cop-signals]] — Angular signals, change detection, OnPush, computed, no-method-in-template
+- [[angular-cop-rxjs]] — RxJS hygiene, takeUntilDestroyed, async pipe, leak patterns
+- [[angular-cop-clean-architecture]] — facade / use-case / port / adapter / store boundaries
+- [[angular-cop-flurryx]] — flurryx-specific rules (decorator order, keyed stores, no manual Record updates)
+- [[angular-cop-typescript-strict]] — no `any`, immutability, narrowing, no `!`, readonly
+- [[angular-cop-output-format]] — junior vs senior render templates
 
 ## AGENTS.md Loading
 
@@ -103,7 +103,7 @@ Single markdown document, sections in fixed order:
 5. **Tooling** — lint summary, tsc summary, test status if available.
 6. **Verdict** — `APPROVE` / `APPROVE-WITH-CHANGES` / `BLOCK`.
 
-See [[merge-cop-output-format]] for full templates.
+See [[angular-cop-output-format]] for full templates.
 
 ## Boundaries
 

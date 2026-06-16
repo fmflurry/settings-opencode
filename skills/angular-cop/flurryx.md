@@ -1,4 +1,4 @@
-# merge-cop / flurryx
+# angular-cop / flurryx
 
 State management correctness. Mirror authority: the [[flurryx]] skill. Do not invent APIs not documented there.
 

@@ -1,4 +1,4 @@
-# merge-cop / Angular clean architecture
+# angular-cop / Angular clean architecture
 
 DDD layering: presentation → application → domain → infrastructure. Facade + use-case + port + adapter + store. Mirror the [[angular-clean-architecture]] skill.
 

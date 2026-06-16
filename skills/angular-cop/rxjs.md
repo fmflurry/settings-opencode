@@ -1,4 +1,4 @@
-# merge-cop / RxJS hygiene
+# angular-cop / RxJS hygiene
 
 Subscription lifecycle, leak patterns, async pipe, signal interop.
 
@@ -88,7 +88,7 @@ class FooComponent {
 }
 ```
 
-If using flurryx, see [[merge-cop-flurryx]] — `syncToStore` handles teardown via DestroyRef-aware Store.
+If using flurryx, see [[angular-cop-flurryx]] — `syncToStore` handles teardown via DestroyRef-aware Store.
 
 ## 🔵 Nits
 

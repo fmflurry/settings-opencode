@@ -106,6 +106,7 @@ export const ECCHooksPlugin = async ({
     "database-reviewer",
     "git-specialist",
     "angular-cop",
+    "dotnet-cop",
   ]);
 
   // Helper to call the SDK's log API with correct signature

@@ -1,17 +1,16 @@
 ---
-description: Pre-merge code review of HEAD vs a target branch (Angular + TypeScript focused)
-agent: angular-cop
+description: Pre-merge code review of HEAD vs a target branch (stack-aware: Angular+TS → angular-cop; .NET → dotnet-cop)
 subtask: true
 ---
 
 # /cop-review — Pre-Merge Review
 
-Review the current branch against a target branch before merging. Angular + TypeScript focused. Loads `AGENTS.md` from cwd. Runs `tsc --noEmit` + `npm run lint`. Emits tiered report.
+Review the current branch against a target branch before merging. Stack-aware: routes to the correct cop agent based on the detected project type. Loads `AGENTS.md` from cwd. Runs tooling checks. Emits tiered report.
 
 ## Usage
 
 ```
-/cop-review <target-branch> [--level=junior|senior] [--scope=signals,rxjs,arch,flurryx,ts,a11y] [--no-tools]
+/cop-review <target-branch> [--level=junior|senior] [--scope=...] [--no-tools]
 ```
 
 ## Arguments
@@ -20,7 +19,18 @@ Review the current branch against a target branch before merging. Angular + Type
 - `--level=junior` — verbose teaching mode with rationale + doc links for every finding.
 - `--level=senior` (default) — terse one-liners.
 - `--scope=...` — limit to a subset of checklists. Comma list. Defaults to all.
-- `--no-tools` — skip `tsc` + `lint` and produce static review only (faster).
+- `--no-tools` — skip tooling checks and produce static review only (faster).
+
+## Stack detection & routing
+
+Before loading a skill, detect the project stack by checking these signals in cwd (search recursively):
+
+| Signal | Stack | Agent | Tooling |
+|---|---|---|---|
+| `angular.json` present | Angular + TypeScript | `angular-cop` | `npx tsc --noEmit` + `npm run lint` |
+| `*.csproj` / `*.sln` / `*.slnx` / `global.json` present | .NET | `dotnet-cop` | `dotnet build --nologo -clp:ErrorsOnly` + `dotnet format --verify-no-changes` |
+
+If BOTH are present (rare monorepo), check which language the diff files are in (`.ts`/`.html` → angular-cop; `.cs`/`.csproj` → dotnet-cop). If still ambiguous, default to angular-cop and note the ambiguity in the report header.
 
 ## What you do
 
@@ -29,10 +39,12 @@ Review the current branch against a target branch before merging. Angular + Type
    - Flags as documented above.
    - If `target` missing, print usage and stop.
 2. Verify you're inside a git repo (`git rev-parse --is-inside-work-tree`).
-3. Load the **angular-cop** skill at `skills/angular-cop/SKILL.md`. Follow its pipeline section verbatim.
-4. Load `AGENTS.md` from repo root if it exists.
-5. Execute the pipeline (steps 1-7 in the skill / agent prompt).
-6. Emit the single markdown report. No preamble. No epilogue.
+3. Detect the project stack using the rules above.
+4. **Angular stack:** Load the **angular-cop** skill at `skills/angular-cop/SKILL.md`. Follow its pipeline section verbatim.
+   **dotnet stack:** Load the **dotnet-cop** skill at `skills/dotnet-cop/SKILL.md`. Follow its pipeline section verbatim.
+5. Load `AGENTS.md` from repo root if it exists.
+6. Execute the pipeline (steps 1-7 in the skill / agent prompt).
+7. Emit the single markdown report. No preamble. No epilogue.
 
 ## Examples
 
@@ -40,6 +52,7 @@ Review the current branch against a target branch before merging. Angular + Type
 /cop-review main
 /cop-review develop --level=junior
 /cop-review release/2026.05 --scope=signals,flurryx --no-tools
+/cop-review main --scope=ports-adapters,ef-core
 ```
 
 ## Output Contract
@@ -49,9 +62,10 @@ A single markdown document with:
 - Blockers (🔴 / 🟠 / 🟢 when AGENTS.md mandates)
 - Should-fix (🟡)
 - Optional (🔵 / ❓) collapsed
-- Tooling (tsc / lint summaries)
+- Tooling (build / lint / format summaries)
 - Footer
 
-See `skills/angular-cop/output-format.md` for the exact templates.
+Angular stack: see `skills/angular-cop/output-format.md` for the exact templates.
+dotnet stack: see `skills/dotnet-cop/output-format.md` for the exact templates.
 
 $ARGUMENTS

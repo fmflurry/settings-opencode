@@ -64,6 +64,7 @@ allowlist = [
     "code-reviewer",
     "security-reviewer",
     "angular-cop",
+    "dotnet-cop",
     "tdd-guide",
     "build-error-resolver",
     "e2e-runner",

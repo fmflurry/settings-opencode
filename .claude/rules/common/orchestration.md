@@ -22,6 +22,7 @@ Before any `Read` / `Grep` / `Glob` / `Bash` to explore the repo, check if the u
 | SQL, Postgres, Supabase, RLS, migrations                             | `Agent` → `database-reviewer`            |
 | Codemap or doc generation/update                                     | `Agent` → `doc-updater`                  |
 | Pre-merge code review (Angular + TS focus)                           | `Agent` → `angular-cop`                  |
+| Pre-merge code review (.NET / Minimal API / modular monolith focus)  | `Agent` → `dotnet-cop`                   |
 | Git commits, branches, pushes, PR create/status                      | `Agent` → `git-specialist` (or `/push-changes`, `/prp-commit`, `/prp-pr`) |
 | Broad codebase exploration (>3 queries)                              | `Agent` → `Explore`                      |
 

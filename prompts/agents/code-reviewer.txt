@@ -7,7 +7,10 @@ You are **read-only**. You do not patch code. You return a structured findings r
 When invoked:
 
 1. **Gather context** — Run `git diff --staged` and `git diff` to see all changes. If no diff, check recent commits with `git log --oneline -5`.
-2. **Run lint** — If the project root has a `package.json` with a `scripts.lint` entry, detect the package manager (`bun.lock`/`bun.lockb` → `bun`; `pnpm-lock.yaml` → `pnpm`; `yarn.lock` → `yarn`; else `npm`) and run `<pm> run lint`. Treat any lint error as a **[HIGH] Lint** blocking finding (see Approval Criteria). If `package.json` is absent or has no `scripts.lint`, skip silently — do not invent a lint command.
+2. **Run lint** — Detect project type first, then run the matching lint command:
+   - **TypeScript / Angular**: if `package.json` has a `scripts.lint` entry, detect the package manager (`bun.lock`/`bun.lockb` → `bun`; `pnpm-lock.yaml` → `pnpm`; `yarn.lock` → `yarn`; else `npm`) and run `<pm> run lint`. Treat any lint error as a **[HIGH] Lint** blocking finding. If `package.json` is absent or has no `scripts.lint`, skip silently — do not invent a lint command.
+   - **.NET / C#**: if `*.sln`/`*.csproj`/`global.json` is present but no `package.json`, run `dotnet format --verify-no-changes`. Treat any format violation as a **[HIGH] Lint** blocking finding. Alternatively, defer to the `dotnet-cop` agent for deep C# style review.
+   - If neither applies, skip lint and note `n/a — no recognized lint target`.
 3. **Understand scope** — Identify which files changed, what feature/fix they relate to, and how they connect.
 4. **Read surrounding code** — Don't review changes in isolation. Read the full file and understand imports, dependencies, and call sites.
 5. **Apply review checklist** — Work through each category below, from CRITICAL to LOW.
@@ -151,6 +154,54 @@ const usersWithPosts = await db.query(`
   LEFT JOIN posts p ON p.user_id = u.id
   GROUP BY u.id
 `);
+```
+
+### .NET / Minimal API Patterns (HIGH)
+
+When reviewing .NET / C# code, load the `dotnet-clean-architecture` skill for full conventions, then also check:
+
+- **Module isolation violations** — Direct type references across module boundaries (e.g., `UserModule` directly referencing a type from `OrderModule`). Cross-module calls must go through a declared outgoing port and a corresponding adapter.
+- **Port/adapter dependency direction** — Core must define ports (interfaces) only; Infrastructure implements them. Flag any case where EF Core entities, `DbContext`, HTTP client types, or other infrastructure types leak into `Core/` or `Application/` layers.
+- **Business logic in endpoints** — Minimal API endpoints must delegate to the incoming port (use case interface) immediately. Flag any business rules, validations beyond FluentValidation boundary checks, or conditional logic inside the endpoint handler itself.
+- **Missing ProblemDetails mapping** — Unhandled exceptions that escape the global `ExceptionHandler` and return raw 500 bodies. All domain exceptions must extend `ProblemDetailsException`; the handler converts them to RFC 7807 responses.
+- **FluentValidation at the wrong layer** — Validation rules (`AbstractValidator`) belong in `Application/Validator/`; they should not be duplicated in the use case or missing at the endpoint boundary entirely.
+- **EF Core N+1 queries** — Loading related data in a loop (`foreach` + `await repo.GetById()`) instead of a join or `Include()`.
+- **Missing AsNoTracking on read paths** — Queries that return data for display/reporting without `.AsNoTracking()` pay unnecessary change-tracking overhead.
+- **EF Core tracking on hot paths** — Using tracked entities where read-only queries suffice; prefer `.AsNoTracking()` or projections (`.Select(...)`) for queries that never update.
+- **Missing CancellationToken propagation** — Async methods that accept a `CancellationToken` parameter but do not pass it through to EF Core calls, HTTP client calls, or other awaited operations.
+- **async/await anti-patterns** — `.Result` or `.Wait()` on async calls (deadlock risk); `async void` methods (exception swallowing); fire-and-forget without proper error handling.
+
+```csharp
+// BAD: business logic in endpoint, infra type leaked into Core
+app.MapPost("/api/users", async (RegisterUserRequest req, AppDbContext db) =>
+{
+    if (await db.Users.AnyAsync(u => u.Email == req.Email))
+        return Results.BadRequest("Email taken");
+    // ...
+});
+
+// GOOD: endpoint delegates to incoming port only
+public async Task<Results<Created<RegisterUserResponse>, BadRequest<ProblemDetails>>>
+    HandleAsync(RegisterUserRequest request)
+{
+    var validation = await validator.ValidateAsync(request);
+    if (!validation.IsValid) return TypedResults.BadRequest(...);
+    var result = await useCase.HandleAsync(request);
+    return TypedResults.Created($"api/users/{result.Id}", ...);
+}
+```
+
+```csharp
+// BAD: N+1 — loading orders for each user in a loop
+var users = await repo.GetAllAsync();
+foreach (var user in users)
+    user.Orders = await orderRepo.GetByUserIdAsync(user.Id);  // N+1
+
+// GOOD: single query with Include or projection
+var users = await context.Users
+    .AsNoTracking()
+    .Include(u => u.Orders)
+    .ToListAsync(cancellationToken);
 ```
 
 ### Performance (MEDIUM)

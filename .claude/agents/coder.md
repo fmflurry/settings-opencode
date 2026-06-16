@@ -15,7 +15,7 @@ When the `mcp__code-memory__*` tools are connected, use them FIRST for any code 
 ## Scope
 
 - Implement non-test code per the brief given by the caller (build agent or tdd-guide).
-- Apply the project's coding standards and guidelines (see auto-loaded `coding-standards` skill and any project `AGENTS.md` / rules).
+- Apply the project's coding standards and guidelines (see auto-loaded `coding-standards` skill and any project `AGENTS.md` / rules). When `*.csproj`/`*.sln`/`*.slnx` is in scope, also load the `dotnet-clean-architecture` skill for module/ports-adapters/Minimal API conventions (mirrors how Angular work loads `angular-clean-architecture`).
 - Self-verify before reporting done.
 
 Out of scope:

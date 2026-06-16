@@ -120,15 +120,17 @@ CREATE TABLE orders (
 SELECT * FROM orders WHERE user_id = $current_user_id;
 -- Bug means all orders exposed!
 
--- GOOD: Database-enforced RLS
+-- GOOD: Database-enforced RLS (generic Postgres — set session GUC before queries)
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders FORCE ROW LEVEL SECURITY;
 
+-- Generic Postgres pattern (self-hosted / .NET / any stack)
+-- Set context before queries: SET LOCAL app.current_user_id = '42';
 CREATE POLICY orders_user_policy ON orders
   FOR ALL
-  USING (user_id = current_setting('app.current_user_id')::bigint);
+  USING (user_id = current_setting('app.current_user_id', true)::bigint);
 
--- Supabase pattern
+-- Supabase-specific pattern (uses Supabase auth.uid() helper)
 CREATE POLICY orders_user_policy ON orders
   FOR ALL
   TO authenticated
@@ -140,16 +142,217 @@ CREATE POLICY orders_user_policy ON orders
 **Impact:** 5-10x faster RLS queries
 
 ```sql
--- BAD: Function called per row
+-- BAD: Function called per row (applies to both patterns below)
 CREATE POLICY orders_policy ON orders
-  USING (auth.uid() = user_id);  -- Called 1M times for 1M rows!
+  USING (current_setting('app.current_user_id', true)::bigint = user_id);  -- Called 1M times!
 
--- GOOD: Wrap in SELECT (cached, called once)
+-- GOOD: Wrap in SELECT (cached, called once per statement)
 CREATE POLICY orders_policy ON orders
-  USING ((SELECT auth.uid()) = user_id);  -- 100x faster
+  USING ((SELECT current_setting('app.current_user_id', true)::bigint) = user_id);  -- 100x faster
+
+-- Supabase-specific equivalent (same wrapping rule applies)
+-- USING ((SELECT auth.uid()) = user_id);
 
 -- Always index RLS policy columns
 CREATE INDEX orders_user_id_idx ON orders (user_id);
+```
+
+## EF Core Migrations (Entity Framework Core)
+
+### 1. Migration Workflow Commands
+
+```bash
+# Add a new migration (run from the project containing DbContext)
+dotnet ef migrations add <MigrationName> --project src/Infrastructure --startup-project src/Api
+
+# Apply pending migrations to the database
+dotnet ef database update --project src/Infrastructure --startup-project src/Api
+
+# Generate an idempotent SQL script for production deploys (safe to re-run)
+dotnet ef migrations script --idempotent --output deploy/migration.sql \
+  --project src/Infrastructure --startup-project src/Api
+
+# Remove the last migration (ONLY if it has NOT been applied to any DB)
+dotnet ef migrations remove --project src/Infrastructure --startup-project src/Api
+
+# Check for pending model changes (CI gate — fails if snapshot is out of sync)
+dotnet ef migrations has-pending-model-changes --project src/Infrastructure --startup-project src/Api
+```
+
+### 2. Migration Safety Review Checklist
+
+Flag any migration that contains the following — each requires explicit sign-off:
+
+- **DROP COLUMN / DROP TABLE** — confirm data is no longer needed; is a backup taken?
+- **Type narrowing** (e.g., `text` → `varchar(50)`) — will existing values truncate?
+- **NOT NULL addition without default** on a populated table — EF will fail unless a default or data migration is included.
+- **Column rename** — EF generates DROP + ADD (data loss). Use expand-then-contract:
+  1. Migration 1: add new column, copy data in a `migrationBuilder.Sql(...)`.
+  2. Migration 2 (after deploy + code switch): drop old column.
+- **Index on a large table** — `CREATE INDEX` takes an `ACCESS SHARE` lock and can block writes on old Postgres. EF Core cannot emit `CREATE INDEX CONCURRENTLY` directly. When a migration adds an index on a table with >1M rows, flag it and suggest replacing the EF index statement with a manual `migrationBuilder.Sql("CREATE INDEX CONCURRENTLY ...")` raw migration, run outside a transaction (`migrationBuilder.Sql(...); // no transaction`).
+- **Reversible `Down()`** — verify the `Down()` method actually undoes the `Up()`. EF scaffolds `Down()` but it is often incomplete for data migrations or complex column changes.
+
+```csharp
+// BAD: Down() is a no-op — migration is irreversible
+protected override void Down(MigrationBuilder migrationBuilder)
+{
+    // Empty or throws NotImplementedException
+}
+
+// GOOD: Down() mirrors Up() in reverse
+protected override void Down(MigrationBuilder migrationBuilder)
+{
+    migrationBuilder.DropColumn(name: "NewColumn", table: "orders", schema: "orders");
+}
+```
+
+### 3. DbContext Design — One Per Module
+
+In a modular monolith, each module owns its own `DbContext` scoped to its schema. This is the schema-per-module pattern.
+
+```csharp
+// BAD: Shared DbContext across modules — couples module internals
+public class AppDbContext : DbContext
+{
+    public DbSet<Order> Orders { get; set; }
+    public DbSet<User> Users { get; set; }   // Users belong to a different module!
+    public DbSet<Invoice> Invoices { get; set; }
+}
+
+// GOOD: Module-scoped DbContext with default schema
+public class OrdersDbContext : DbContext
+{
+    public DbSet<OrderEntity> Orders { get; set; }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.HasDefaultSchema("orders");  // All tables go to orders schema
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(OrdersDbContext).Assembly);
+    }
+}
+```
+
+Conventions:
+- One `DbContext` per module, placed in `Infrastructure/Context/`.
+- `HasDefaultSchema("<module_name>")` on every module DbContext.
+- No navigation properties crossing module boundaries — modules communicate via domain contracts (ports/adapters), not EF relationships.
+- Migration projects are per-module (separate `Migrations/` folder per `DbContext`).
+
+### 4. EF Query Review (Read Side)
+
+```csharp
+// BAD: Tracking enabled — EF tracks change state for every entity (memory + CPU overhead on reads)
+var orders = await _context.Orders
+    .Where(o => o.UserId == userId)
+    .ToListAsync();
+
+// GOOD: AsNoTracking for read-only queries
+var orders = await _context.Orders
+    .AsNoTracking()
+    .Where(o => o.UserId == userId)
+    .ToListAsync();
+
+// BAD: N+1 — one query per order to load its items
+foreach (var order in orders)
+{
+    var items = await _context.OrderItems.Where(i => i.OrderId == order.Id).ToListAsync();
+}
+
+// GOOD: Eager load with Include
+var orders = await _context.Orders
+    .AsNoTracking()
+    .Include(o => o.Items)
+    .Where(o => o.UserId == userId)
+    .ToListAsync();
+
+// GOOD: AsSplitQuery when including multiple collections (avoids Cartesian explosion)
+var orders = await _context.Orders
+    .AsNoTracking()
+    .AsSplitQuery()
+    .Include(o => o.Items)
+    .Include(o => o.Payments)
+    .Where(o => o.UserId == userId)
+    .ToListAsync();
+
+// BAD: FromSqlRaw with string interpolation — SQL injection risk
+var orders = await _context.Orders
+    .FromSqlRaw($"SELECT * FROM orders.orders WHERE user_id = {userId}")
+    .ToListAsync();
+
+// GOOD: Parameterized FromSqlRaw
+var orders = await _context.Orders
+    .FromSqlRaw("SELECT * FROM orders.orders WHERE user_id = {0}", userId)
+    .ToListAsync();
+// Or use FromSqlInterpolated (EF parameterizes automatically)
+var orders = await _context.Orders
+    .FromSqlInterpolated($"SELECT * FROM orders.orders WHERE user_id = {userId}")
+    .ToListAsync();
+```
+
+## Modular-Monolith Schema Design (Schema-per-Module)
+
+### 1. Schema Isolation in Postgres
+
+Each module owns a dedicated Postgres schema. This enforces the same boundary at the DB level that clean architecture enforces at the code level.
+
+```sql
+-- Create schemas during initial migration
+CREATE SCHEMA IF NOT EXISTS orders;
+CREATE SCHEMA IF NOT EXISTS catalog;
+CREATE SCHEMA IF NOT EXISTS identity;
+
+-- Tables live inside their module schema
+CREATE TABLE orders.orders (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  user_id bigint NOT NULL,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE catalog.products (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name text NOT NULL
+);
+```
+
+Rules:
+- No cross-schema foreign keys — if `orders` needs product data, it stores a `product_id` (an ID reference), and the application resolves it via the catalog port.
+- `search_path` should NOT be relied on for production queries; always qualify table names with the schema (`orders.orders`, not just `orders`).
+- Grant minimum required privileges per schema to the application role.
+
+### 2. RLS with Application-Set Session GUC (Self-Hosted / .NET)
+
+In a self-hosted .NET + Postgres stack without Supabase, use a session-level GUC (Grand Unified Configuration variable) set by the application before executing queries.
+
+```sql
+-- Policy using session GUC (generic Postgres — works with any app layer)
+ALTER TABLE orders.orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE orders.orders FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY orders_tenant_policy ON orders.orders
+  FOR ALL
+  USING ((SELECT current_setting('app.current_user_id', true))::bigint = user_id);
+```
+
+```csharp
+// .NET: Set the session GUC before executing queries (e.g., via interceptor or middleware)
+await using var cmd = connection.CreateCommand();
+cmd.CommandText = "SET LOCAL app.current_user_id = @userId";
+cmd.Parameters.AddWithValue("@userId", currentUserId);
+await cmd.ExecuteNonQueryAsync();
+// Subsequent queries in this transaction will use this setting
+```
+
+The `true` second argument to `current_setting()` makes it return `null` instead of throwing when the GUC is not set — important for superuser / migration contexts.
+
+For multi-tenant (tenant isolation, not just user isolation), use `app.current_tenant_id` in the same pattern.
+
+**Supabase variant** (for reference — uses `auth.uid()` populated by Supabase's JWT middleware):
+```sql
+-- Supabase-specific: auth.uid() is set by Supabase infrastructure, not by application code
+CREATE POLICY orders_user_policy ON orders
+  FOR ALL
+  TO authenticated
+  USING ((SELECT auth.uid()) = user_id);
 ```
 
 ## Concurrency & Locking
@@ -233,15 +436,36 @@ SELECT * FROM products WHERE id > 199980 ORDER BY id LIMIT 20;
 ## Review Checklist
 
 ### Before Approving Database Changes:
+
+**Schema & indexes:**
 - [ ] All WHERE/JOIN columns indexed
 - [ ] Composite indexes in correct column order
 - [ ] Proper data types (bigint, text, timestamptz, numeric)
-- [ ] RLS enabled on multi-tenant tables
-- [ ] RLS policies use `(SELECT auth.uid())` pattern
 - [ ] Foreign keys have indexes
+- [ ] Lowercase identifiers used
+
+**RLS:**
+- [ ] RLS enabled on multi-tenant/multi-user tables
+- [ ] RLS policies wrap the identity function in `(SELECT ...)` to cache per statement
+- [ ] Generic Postgres: policy uses `current_setting('app.current_user_id', true)` pattern
+- [ ] Supabase-specific (if applicable): policy uses `(SELECT auth.uid())` pattern
+- [ ] RLS policy columns are indexed
+
+**Queries:**
 - [ ] No N+1 query patterns
 - [ ] EXPLAIN ANALYZE run on complex queries
-- [ ] Lowercase identifiers used
 - [ ] Transactions kept short
 
-**Remember**: Database issues are often the root cause of application performance problems. Optimize queries and schema design early. Use EXPLAIN ANALYZE to verify assumptions. Always index foreign keys and RLS policy columns.
+**EF Core migrations (when reviewing .NET + EF Core):**
+- [ ] Migration has no destructive ops (DROP COLUMN/TABLE) without explicit sign-off
+- [ ] Column renames use expand-then-contract, not DROP + ADD
+- [ ] Indexes on large tables use `CREATE INDEX CONCURRENTLY` via raw SQL
+- [ ] `Down()` method is correct and complete
+- [ ] `AsNoTracking()` used on all read-only EF queries
+- [ ] No `FromSqlRaw` with string interpolation (injection risk)
+- [ ] `AsSplitQuery()` used when including multiple collections
+- [ ] Each module DbContext has `HasDefaultSchema("<module>")` set
+- [ ] No cross-module navigation properties in EF models
+- [ ] `dotnet ef migrations has-pending-model-changes` passes in CI
+
+**Remember**: Database issues are often the root cause of application performance problems. Optimize queries and schema design early. Use EXPLAIN ANALYZE to verify assumptions. Always index foreign keys and RLS policy columns. In .NET + EF Core projects, treat every migration as a production deployment artifact — review `Up()` and `Down()` as carefully as application code.

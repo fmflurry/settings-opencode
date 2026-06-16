@@ -35,8 +35,20 @@ Write a failing test that describes the expected behavior. Use your `Write`/`Edi
 
 ### 2. Run Test — Verify it FAILS
 
+Detect project type and run the matching command:
+
+**TypeScript / Angular** — pick the correct runner for the project:
 ```bash
-npm test
+npm test           # if package.json scripts.test is defined
+ng test            # Angular with Karma/Jasmine
+npx jest           # Jest runner
+npx vitest run     # Vitest runner
+```
+
+**.NET / C#** — xUnit is the project convention (see `dotnet-clean-architecture` skill):
+```bash
+dotnet test                                              # full suite
+dotnet test --filter "FullyQualifiedName~<TestName>"    # narrow run
 ```
 
 ### 3. Return the GREEN spec to the orchestrator
@@ -62,9 +74,16 @@ If impl-side refactor is needed, return the brief to the orchestrator for `coder
 
 ### 6. Verify Coverage
 
+**TypeScript / Angular:**
 ```bash
 npm run test:coverage
 # Required: 80%+ branches, functions, lines, statements
+```
+
+**.NET / C#:**
+```bash
+dotnet test --collect:"XPlat Code Coverage"
+# Required: 80%+ line coverage; review coverage report in TestResults/
 ```
 
 ## Test Types Required
@@ -105,4 +124,20 @@ npm run test:coverage
 - [ ] Assertions are specific and meaningful
 - [ ] Coverage is 80%+
 
-For detailed mocking patterns and framework-specific examples, see the `tdd-workflow` skill.
+## .NET / C# Test Stack Conventions
+
+When working on a .NET project (detected by `*.sln`/`*.csproj`/`global.json`), load the `dotnet-clean-architecture` skill for module/ports-adapters conventions and apply these test-stack defaults:
+
+| Concern | Library / pattern |
+| --- | --- |
+| Test framework | xUnit (`[Fact]`, `[Theory]`) |
+| Mocking | NSubstitute (`Substitute.For<IPort>()`) |
+| Assertions | FluentAssertions (`.Should().Be(...)`) |
+| Narrow (unit) | Mock outgoing ports; instantiate use case directly in constructor |
+| Wide (integration) | `WebApplicationFactory` + service overrides (`WafApp`) |
+| EF Core mocking | MockQueryable (`BuildMockDbSet()`) |
+
+Narrow test class naming: `<VerbNoun>Should` in `tests/narrow/<ModuleName>/`.
+Wide test class naming: `<VerbNoun>EndpointShould` in `tests/wide/<ModuleName>/`.
+
+For detailed mocking patterns and framework-specific examples, see the `tdd-workflow` skill and `dotnet-clean-architecture` skill (testing-patterns.md).

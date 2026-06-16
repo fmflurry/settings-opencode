@@ -268,6 +268,20 @@ Summary: Analyze current module → Introduce facade boundary → Extract use ca
 - [ ] All event handlers are thin — logic delegated to facade
 - [ ] Immutable updates throughout — no object mutation
 
+## MUST (BLOCK) — Enforcement Summary
+
+The following violations **fail review** (BLOCK severity). This is a compact reference; see [[angular-cop-enforcement]] for the full checklist and [[angular-cop-enforcement-tooling]] for the ESLint + architecture-plugin templates.
+
+- **No `any` type** — use `unknown` + type guard at system boundaries.
+- **No UseCase in components** — components inject the Facade only; Facade orchestrates UseCases.
+- **No RxJS subscription leaks** — every `subscribe()` in a component must use `takeUntilDestroyed(this.destroyRef)` or be replaced by `toSignal()` / `async` pipe.
+- **No state mutation** — return new objects/arrays; no in-place modification of caller-owned data.
+- **No layer boundary violations** — presentation must not import from infrastructure; domain must have zero Angular or HTTP dependencies.
+- **No unjustified non-null assertions `!`** — narrow explicitly or throw with a message.
+- **`OnPush` required on stateful components** — components that read facade signals or use `input()` bindings must declare `ChangeDetectionStrategy.OnPush`.
+
+---
+
 ## Expected Output Style for Agent Responses
 
 When completing work on this codebase, include in your final message:

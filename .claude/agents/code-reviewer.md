@@ -108,7 +108,9 @@ function processUsers(users) {
 
 ### Angular Patterns (HIGH)
 
-When reviewing Angular code, also check:
+When reviewing Angular code, you MUST load `skills/angular-cop/enforcement.md` and classify findings by its BLOCK/WARN model. BLOCK = architecture + correctness violations (review fails); WARN = style/naming (advisory). Deterministic rules should ideally be enforced by the repo's ESLint config (see `skills/angular-cop/enforcement-tooling.md`); if absent, flag the gap as a [MEDIUM] recommendation to add it.
+
+Also check:
 
 - **Missing unsubscribe / cleanup**
   - Subscriptions in ngOnInit (or services) without takeUntilDestroyed(), async pipe, or proper teardown → memory leaks & duplicate work.
@@ -169,7 +171,9 @@ const usersWithPosts = await db.query(`
 
 ### .NET / Minimal API Patterns (HIGH)
 
-When reviewing .NET / C# code, load the `dotnet-clean-architecture` skill for full conventions, then also check:
+When reviewing .NET / C# code, you MUST load `skills/dotnet-cop/enforcement.md` and classify findings by its BLOCK/WARN model. BLOCK = architecture + correctness violations (review fails); treat as blocking. WARN = style (advisory). Also load the `dotnet-clean-architecture` skill for full conventions. Deterministic rules should ideally be enforced by the repo's analyzer/.editorconfig config (see `skills/dotnet-cop/enforcement-tooling.md`); if absent, flag the gap as a [MEDIUM] recommendation to add it.
+
+Also check:
 
 - **Module isolation violations** — Direct type references across module boundaries (e.g., `UserModule` directly referencing a type from `OrderModule`). Cross-module calls must go through a declared outgoing port and a corresponding adapter.
 - **Port/adapter dependency direction** — Core must define ports (interfaces) only; Infrastructure implements them. Flag any case where EF Core entities, `DbContext`, HTTP client types, or other infrastructure types leak into `Core/` or `Application/` layers.

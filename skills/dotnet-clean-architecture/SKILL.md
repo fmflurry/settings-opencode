@@ -147,6 +147,20 @@ Target **80%+ coverage**.
 | Narrow test class | `<VerbNoun>Should` | `RegisterUserShould` |
 | Wide test class | `<VerbNoun>EndpointShould` | `RegisterUserEndpointShould` |
 
+## MUST (BLOCK) — non-negotiable invariants
+
+Violations of these rules fail review immediately. Full severity list + tooling templates: [skills/dotnet-cop/enforcement.md](../dotnet-cop/enforcement.md).
+
+- **No direct cross-module type reference** — modules communicate only via shared contracts or a port + adapter.
+- **Core has zero infrastructure dependencies** — no `using Microsoft.EntityFrameworkCore` or any infra namespace inside `Core/` or `Application/`.
+- **EF entities must not cross the port boundary into Core** — port signatures use domain models; adapters map before crossing.
+- **Business logic belongs in Core use cases, never in endpoint handlers** — endpoint delegates to incoming port only.
+- **Read-only EF queries must use `.AsNoTracking()`** — omitting it on non-saving paths is a BLOCK finding.
+- **All async I/O must propagate `CancellationToken`** — passing the token through every `await` is mandatory.
+- **`FromSqlRaw`/`ExecuteSqlRaw` must never use string interpolation** — use parameterized form or LINQ.
+- **Nullable reference types must be enabled; `!` null-forgiving operator requires a guard** — unjustified `!` is a BLOCK finding.
+- **Domain exceptions must flow through `ProblemDetailsException` → global `ExceptionHandler`** — no raw 500 escaping the handler.
+
 ## Known Tradeoffs
 
 - Module isolation is by **convention** (namespaces + folders) unless you split into separate projects/assemblies.

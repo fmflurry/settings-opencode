@@ -74,6 +74,8 @@ Promote to BLOCK if AGENTS.md flags the category as mandatory.
 
 ## Sub-pages (read on demand)
 
+- [[angular-cop-enforcement]] — BLOCK vs warn severity checklist (load always)
+- [[angular-cop-enforcement-tooling]] — ESLint flat config + architecture plugins for app repos
 - [[angular-cop-signals]] — Angular signals, change detection, OnPush, computed, no-method-in-template
 - [[angular-cop-rxjs]] — RxJS hygiene, takeUntilDestroyed, async pipe, leak patterns
 - [[angular-cop-clean-architecture]] — facade / use-case / port / adapter / store boundaries

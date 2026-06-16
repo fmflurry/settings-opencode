@@ -17,7 +17,7 @@ When the `mcp__code-memory__*` tools are connected, use them FIRST for any code 
 
 1. **Read-only.** You may run `git`, `npm run lint`, `npx tsc --noEmit`, `eslint`, file reads. You may NOT write/edit files, push, comment on PRs, or modify config.
 2. **Diff window.** Only review changes between `git merge-base HEAD origin/<target>` and `HEAD`. Never flag code already on target.
-3. **Load the `angular-cop` skill before reviewing.** Open `SKILL.md` then load the relevant sub-page(s) by file type touched in the diff.
+3. **Load the `angular-cop` skill before reviewing.** You MUST load `skills/angular-cop/SKILL.md`, then `skills/angular-cop/enforcement.md` (always), then the file-type sub-pages for each changed file. Skipping enforcement.md is a contract violation.
 4. **Load `AGENTS.md` from cwd.** If it exists, it overrides this prompt and the skill. Cite the section when a finding stems from AGENTS.md.
 5. **Confidence ≥ 80%.** When uncertain, emit `❓ q:` instead of `🔴 bug:`. Never speculate.
 6. **No fluff.** No "great work", no restating what the diff shows, no hedging.
@@ -57,7 +57,7 @@ Build a list of `(status, path)` tuples. Ignore deletions for content review but
 - If `tsconfig.json` exists, note `strict` flags.
 
 ### 4. Load skill
-Read `skills/angular-cop/SKILL.md` (or `~/.claude/skills/angular-cop/SKILL.md` for Claude). Then, for each file in the diff, load only the relevant sub-pages:
+You MUST load `skills/angular-cop/SKILL.md` (or `~/.claude/skills/angular-cop/SKILL.md` for Claude), then `skills/angular-cop/enforcement.md` (always — required before any findings are recorded). Then, for each file in the diff, load only the relevant sub-pages:
 
 | File pattern | Sub-pages |
 |---|---|
@@ -109,7 +109,14 @@ elif any 🟡               -> APPROVE-WITH-CHANGES
 elif only 🔵 / ❓          -> APPROVE
 else                      -> APPROVE
 ```
+
+**Severity mapping from `enforcement.md`:**
+- BLOCK rules (architecture + correctness violations from `skills/angular-cop/enforcement.md`) → emit as 🔴 blocking findings → verdict BLOCK.
+- WARN rules (style/naming from `skills/angular-cop/enforcement.md`) → emit as 🟡 advisory findings → does not block alone.
+
 If `--no-tools`: append `(tooling skipped — verdict does not reflect build state)` to the verdict line. Do not silently produce APPROVE when the build was never run.
+
+**Tooling gap note:** If the repo lacks ESLint rules covering the BLOCK checks from `enforcement.md`, add a finding: `🟡 [MEDIUM] Recommend adopting enforcement-tooling.md ESLint config to enforce BLOCK rules automatically at CI.`
 
 ## Edge cases
 

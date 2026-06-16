@@ -83,6 +83,8 @@ Promote to BLOCK if AGENTS.md flags the category as mandatory.
 - [[dotnet-cop-ports-adapters]] — hexagonal: Core defines ports, Infrastructure implements adapters; dependency direction; no EF entities leaking into Core
 - [[dotnet-cop-ef-core]] — DbContext per module/schema, migrations, AsNoTracking, N+1, query splitting, migration safety
 - [[dotnet-cop-output-format]] — junior vs senior render templates
+- [[dotnet-cop-enforcement]] — BLOCK vs WARN severity checklist (load always)
+- [[dotnet-cop-enforcement-tooling]] — `.editorconfig`, analyzer packages, and NetArchTest templates for deterministic enforcement in target repos
 
 ## AGENTS.md Loading
 

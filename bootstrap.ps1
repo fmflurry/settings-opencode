@@ -104,6 +104,91 @@ function Copy-Tree($src, $dst) {
     $global:LASTEXITCODE = 0
 }
 
+# Additive copy with seed-only protection for personal config files. Mirrors
+# install.sh's copy_tree_with_seed: repo-managed content (skills/, agents/, rules/)
+# is always updated; settings.json / settings.local.json / policy-limits.json /
+# *.local.json are copied only when they do not already exist (first install seeds
+# them; reinstalls never overwrite user edits).
+function Copy-TreeWithSeed($src, $dst) {
+    if (-not (Test-Path $dst)) { New-Item -ItemType Directory -Path $dst -Force | Out-Null }
+
+    # Pass 1: update all repo-managed content, excluding personal config files.
+    $roboArgs = @(
+        $src, $dst, '/E',
+        '/XD', (Join-Path $src 'node_modules'), (Join-Path $src '.git'), (Join-Path $src '.serena'),
+        '/XF', '*.log', '.DS_Store', '*.bak', 'install.sh', 'install-cursor.sh', 'bootstrap.sh', 'bootstrap.ps1',
+               'settings.json', 'settings.local.json', 'policy-limits.json',
+        '/NFL', '/NDL', '/NJH', '/NJS', '/NP', '/R:1', '/W:1'
+    )
+    & robocopy.exe @roboArgs | Out-Null
+    if ($LASTEXITCODE -ge 8) { Die "robocopy failed copying $src -> $dst (exit $LASTEXITCODE)" }
+    $global:LASTEXITCODE = 0
+
+    # Pass 2: seed personal config files on first install only — skip if they
+    # already exist in the destination (preserves user edits on reinstall).
+    $seedFiles = @('settings.json', 'settings.local.json', 'policy-limits.json')
+    foreach ($f in $seedFiles) {
+        $srcFile = Join-Path $src $f
+        $dstFile = Join-Path $dst $f
+        if ((Test-Path $srcFile) -and -not (Test-Path $dstFile)) {
+            Copy-Item -Path $srcFile -Destination $dstFile
+            Ok "seeded $f (first install)"
+        }
+    }
+    # Seed *.local.json files that don't exist at destination
+    Get-ChildItem -Path $src -Filter '*.local.json' -ErrorAction SilentlyContinue | ForEach-Object {
+        $dstFile = Join-Path $dst $_.Name
+        if (-not (Test-Path $dstFile)) {
+            Copy-Item -Path $_.FullName -Destination $dstFile
+            Ok "seeded $($_.Name) (first install)"
+        }
+    }
+}
+
+# Sync the canonical skill union (root skills/ U .claude/skills/, root wins on
+# conflict, excluding skill-creator/ and learned/ runtime dirs) into each installed
+# target's skills/ directory. Mirrors install.sh's sync_skills function.
+function Sync-Skills($srcDir, [string[]]$destDirs) {
+    Step 'Syncing canonical skill union'
+    $rootSkills   = Join-Path $srcDir 'skills'
+    $claudeSkills = Join-Path $srcDir '.claude\skills'
+
+    foreach ($dst in $destDirs) {
+        if (-not $dst) { continue }
+        Info "syncing -> $dst"
+        if (-not (Test-Path $dst)) { New-Item -ItemType Directory -Path $dst -Force | Out-Null }
+
+        # Pass 1: secondary source (.claude/skills — lower priority)
+        if (Test-Path $claudeSkills) {
+            $roboArgs = @(
+                $claudeSkills, $dst, '/E',
+                '/XD', (Join-Path $claudeSkills 'learned'),
+                '/XF', '.DS_Store',
+                '/NFL', '/NDL', '/NJH', '/NJS', '/NP', '/R:1', '/W:1'
+            )
+            & robocopy.exe @roboArgs | Out-Null
+            if ($LASTEXITCODE -ge 8) { Warn "robocopy warning copying .claude/skills -> $dst (exit $LASTEXITCODE)" }
+            $global:LASTEXITCODE = 0
+        }
+
+        # Pass 2: primary source (root skills — wins on conflict)
+        if (Test-Path $rootSkills) {
+            $roboArgs = @(
+                $rootSkills, $dst, '/E',
+                '/XD', (Join-Path $rootSkills 'skill-creator'), (Join-Path $rootSkills 'learned'),
+                '/XF', '.DS_Store',
+                '/NFL', '/NDL', '/NJH', '/NJS', '/NP', '/R:1', '/W:1'
+            )
+            & robocopy.exe @roboArgs | Out-Null
+            if ($LASTEXITCODE -ge 8) { Warn "robocopy warning copying skills -> $dst (exit $LASTEXITCODE)" }
+            $global:LASTEXITCODE = 0
+        }
+
+        $count = (Get-ChildItem -Path $dst -Directory -ErrorAction SilentlyContinue | Measure-Object).Count
+        Ok "$count skill dirs in $dst"
+    }
+}
+
 function Backup-IfExists($path) {
     if (Test-Path $path) {
         $stamp  = Get-Date -Format 'yyyyMMdd-HHmmss'
@@ -218,8 +303,8 @@ if ($NoClaude) {
     $sourceClaude = Join-Path $SrcDir '.claude'
     if (Test-Path $sourceClaude) {
         Step "Installing Claude Code mirror into $ClaudeDir"
-        Copy-Tree $sourceClaude $ClaudeDir
-        Ok "copied .claude mirror (existing runtime state preserved)"
+        Copy-TreeWithSeed $sourceClaude $ClaudeDir
+        Ok "copied .claude mirror (personal config files seeded, not overwritten on reinstall)"
     } else {
         Warn '.claude not found in repo, skipping mirror'
     }
@@ -247,6 +332,15 @@ if ($NoOpencode) {
     Ok 'wrote OPENCODE_MODEL_* and OPENCODE_REASONING_* (User scope)'
     Info 'These are defaults for the myMistral provider — edit them for your own provider:'
     Info '  setx OPENCODE_MODEL_CONDUCTOR "yourprovider/your-model"'
+}
+
+# ------------------------------ skill sync -----------------------------------
+
+$skillDests = @()
+if (-not $NoOpencode) { $skillDests += (Join-Path $OpencodeDir 'skills') }
+if (-not $NoClaude)   { $skillDests += (Join-Path $ClaudeDir   'skills') }
+if ($skillDests.Count -gt 0) {
+    Sync-Skills $SrcDir $skillDests
 }
 
 # ------------------------------ next steps -----------------------------------

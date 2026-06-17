@@ -158,6 +158,71 @@ copy_tree() {
         "$src/" "$dst/"
 }
 
+# Copy src/ into dst/ but protect personal config files from being overwritten
+# on reinstall. Repo-managed content (skills/, agents/, rules/, etc.) is still
+# updated normally. Personal files (settings.json, settings.local.json,
+# policy-limits.json, *.local.json) are seeded on first install only.
+copy_tree_with_seed() {
+    local src="$1" dst="$2"
+    if ! command -v rsync >/dev/null 2>&1; then
+        err "rsync is required to copy files into the install target"
+        err "  macOS: rsync ships by default"
+        err "  Debian/Ubuntu: sudo apt install -y rsync"
+        exit 1
+    fi
+    mkdir -p "$dst"
+
+    # Pass 1: update all repo-managed content, excluding personal config files.
+    rsync -a \
+        --exclude='node_modules' \
+        --exclude='.git' \
+        --exclude='*.log' \
+        --exclude='.DS_Store' \
+        --exclude='*.bak' \
+        --exclude='*.bak.*' \
+        --exclude='.serena' \
+        --exclude='install.sh' \
+        --exclude='install-cursor.sh' \
+        --exclude='bootstrap.sh' \
+        --exclude='bootstrap.ps1' \
+        --exclude='settings.json' \
+        --exclude='settings.local.json' \
+        --exclude='policy-limits.json' \
+        --exclude='*.local.json' \
+        "$src/" "$dst/"
+
+    # Pass 2: seed personal config files on first install only (--ignore-existing
+    # means they are never overwritten on reinstall, preserving user edits).
+    rsync -a --ignore-existing \
+        --include='settings.json' \
+        --include='settings.local.json' \
+        --include='policy-limits.json' \
+        --include='*.local.json' \
+        --exclude='*' \
+        "$src/" "$dst/"
+}
+
+# Sync the canonical skill union (root skills/ ∪ .claude/skills/, root wins)
+# into each installed target's skills/ directory.  Delegates to scripts/sync-skills.sh.
+sync_skills() {
+    local sync_script="$REPO_DIR/scripts/sync-skills.sh"
+    if [ ! -x "$sync_script" ]; then
+        warn "scripts/sync-skills.sh not found or not executable — skipping skill sync"
+        return 0
+    fi
+
+    step "Syncing canonical skill union"
+    local dests=()
+    [ "$SKIP_OPENCODE" != "1" ] && dests+=("$TARGET_OPENCODE/skills")
+    [ "$SKIP_CLAUDE" != "1" ]   && dests+=("$TARGET_CLAUDE/skills")
+
+    if [ "${#dests[@]}" -gt 0 ]; then
+        "$sync_script" "${dests[@]}"
+    else
+        info "no install targets active — skill sync skipped"
+    fi
+}
+
 # ------------------------------ env-var block --------------------------------
 
 env_block_content() {
@@ -535,8 +600,8 @@ install_claude_mirror() {
         elif [ -L "$TARGET_CLAUDE" ]; then
             rm "$TARGET_CLAUDE"
         fi
-        copy_tree "$source_claude" "$TARGET_CLAUDE"
-        ok "copied $source_claude -> $TARGET_CLAUDE"
+        copy_tree_with_seed "$source_claude" "$TARGET_CLAUDE"
+        ok "copied $source_claude -> $TARGET_CLAUDE (personal config files seeded, not overwritten)"
         return 0
     fi
 
@@ -548,12 +613,12 @@ install_claude_mirror() {
         if ask "back it up before copying? (runtime state like memory/ and projects/ is preserved on re-runs, not on this replace)" Y; then
             backup_path "$TARGET_CLAUDE"
         else
-            info "merging fresh copy into existing $TARGET_CLAUDE (existing files preserved)"
+            info "merging fresh copy into existing $TARGET_CLAUDE (personal config files never overwritten)"
         fi
     fi
 
-    copy_tree "$source_claude" "$TARGET_CLAUDE"
-    ok "copied $source_claude -> $TARGET_CLAUDE"
+    copy_tree_with_seed "$source_claude" "$TARGET_CLAUDE"
+    ok "copied $source_claude -> $TARGET_CLAUDE (personal config files seeded, not overwritten)"
 }
 
 print_next_steps() {
@@ -801,4 +866,5 @@ if [ "$SKIP_OPENCODE" != "1" ]; then
     fi
 fi
 install_claude_mirror
+sync_skills
 print_next_steps

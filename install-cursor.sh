@@ -171,22 +171,30 @@ install_skills() {
     backup_existing "$dst"
     mkdir -p "$dst"
 
-    # Source 1: ~/.claude/skills (every entry is a folder containing SKILL.md or similar)
-    if [ -d "$CLAUDE_DIR/skills" ]; then
-        copy_tree "$CLAUDE_DIR/skills" "$dst"
-        ok "copied ~/.claude/skills -> $dst"
-    fi
-
-    # Source 2: repo/skills (will overlay; same names get overwritten by repo version)
-    if [ -d "$REPO_DIR/skills" ]; then
-        copy_tree "$REPO_DIR/skills" "$dst"
-        ok "copied repo/skills -> $dst (overlay)"
-    fi
-
-    # Source 3: repo/.claude/skills (Claude-native overlay)
-    if [ -d "$REPO_DIR/.claude/skills" ]; then
-        copy_tree "$REPO_DIR/.claude/skills" "$dst"
-        ok "copied repo/.claude/skills -> $dst (overlay)"
+    # Delegate to scripts/sync-skills.sh — the canonical union-merge implementation
+    # shared by install.sh, install-cursor.sh, and bootstrap.ps1.
+    # It builds root/skills ∪ .claude/skills (root wins on conflict, excluding
+    # skill-creator/ and learned/ runtime dirs) and overlays them into $dst.
+    local sync_script="$REPO_DIR/scripts/sync-skills.sh"
+    if [ -x "$sync_script" ]; then
+        "$sync_script" "$dst"
+    else
+        # Fallback: inline union-merge (kept for safety if sync-skills.sh is missing)
+        # Source 1: ~/.claude/skills
+        if [ -d "$CLAUDE_DIR/skills" ]; then
+            copy_tree "$CLAUDE_DIR/skills" "$dst"
+            ok "copied ~/.claude/skills -> $dst"
+        fi
+        # Source 2: repo/skills (overlays; root wins on conflict)
+        if [ -d "$REPO_DIR/skills" ]; then
+            copy_tree "$REPO_DIR/skills" "$dst"
+            ok "copied repo/skills -> $dst (overlay)"
+        fi
+        # Source 3: repo/.claude/skills (Claude-native overlay)
+        if [ -d "$REPO_DIR/.claude/skills" ]; then
+            copy_tree "$REPO_DIR/.claude/skills" "$dst"
+            ok "copied repo/.claude/skills -> $dst (overlay)"
+        fi
     fi
 
     local count

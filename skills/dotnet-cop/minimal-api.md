@@ -43,15 +43,17 @@ return Results.Ok(response);
 // GOOD — 201 + Location header
 return Results.Created($"/{resource}/{response.Id}", response);
 ```
-And for errors, always use ProblemDetails:
+And for errors, use the Result pattern for business/validation errors:
 ```csharp
-// BAD — plain string error
-return Results.BadRequest("Invalid input");
-
-// GOOD — typed ProblemDetails via domain exception handler
+// BAD — throws exception for expected error
 throw new ValidationException("Field is required");
-// Global ExceptionHandler converts to ProblemDetails automatically
+
+// GOOD — returns error via Result pattern
+var validationError = new Error(400, "ValidationFailed", "Field is required");
+return Result<T>.Fail(validationError).ToHttpResult();
 ```
+
+The global `ExceptionHandler` is reserved for genuinely unexpected exceptions only (DB/IO/framework crashes) → 500 response.
 
 ## 🟠 Security
 
@@ -68,7 +70,11 @@ app.MapPost("/users", async (CreateUserRequest req, ICreateUser useCase,
     var result = await validator.ValidateAsync(req);
     if (!result.IsValid)
         return Results.ValidationProblem(result.ToDictionary());
-    return Results.Created("/users", await useCase.HandleAsync(req));
+    
+    var useCaseResult = await useCase.HandleAsync(req);
+    return useCaseResult.IsSuccess
+        ? Results.Created("/users", useCaseResult.Value)
+        : useCaseResult.ToHttpResult();
 });
 ```
 Or use `AddValidatorsFromAssemblyContaining<T>()` + a validation endpoint filter to apply automatically.

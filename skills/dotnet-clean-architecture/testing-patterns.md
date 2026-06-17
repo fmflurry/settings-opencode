@@ -15,25 +15,27 @@ public class <VerbNoun>Should
     }
 
     [Fact]
-    public async Task Return_Result_When_Successful()
+    public async Task Return_Success_Result_When_Valid()
     {
         _port.<ValidationCheck>(Arg.Any<string>()).Returns(true);
         _port.<ExecuteOperation>(Arg.Any<<RequestModel>>()).Returns(Guid.NewGuid());
 
         var result = await _useCase.HandleAsync(new <RequestModel> { Field = "value" });
 
-        result.Id.Should().NotBeEmpty();
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Id.Should().NotBeEmpty();
         await _port.Received().<ExecuteOperation>(Arg.Any<<RequestModel>>());
     }
 
     [Fact]
-    public async Task Throw_Exception_When_Business_Rule_Violated()
+    public async Task Return_Error_Result_When_Business_Rule_Violated()
     {
         _port.<ValidationCheck>(Arg.Any<string>()).Returns(false);
 
-        var act = async () => await _useCase.HandleAsync(new <RequestModel> { Field = "value" });
+        var result = await _useCase.HandleAsync(new <RequestModel> { Field = "value" });
 
-        await act.Should().ThrowExactlyAsync<<Domain>Exception>();
+        result.IsSuccess.Should().BeFalse();
+        result.Error!.StatusCode.Should().Be(400);
     }
 }
 ```
@@ -83,7 +85,7 @@ public class <VerbNoun>EndpointShould : BaseEndpointWaf
 | Library | Purpose |
 |---------|---------|
 | MinimalApi.Endpoint | Typed minimal API endpoints (`IEndpoint<TResult, TRequest>`) |
-| AutoMapper | DTO <-> Entity mapping |
+| Riok.Mapperly | DTO <-> Entity mapping (compile-time source generation) |
 | FluentValidation | Request validation |
 | Ardalis.GuardClauses | Defensive programming in use cases |
 | NSubstitute | Test mocking (outgoing ports) |

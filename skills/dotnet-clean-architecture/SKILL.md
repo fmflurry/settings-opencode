@@ -34,7 +34,7 @@ api/
 │   │   │       └── Outgoing/             # What domain needs (infra abstractions)
 │   │   └── Infrastructure/               # Driven side (DB, external services)
 │   │       ├── Adapter/                  # Implements outgoing ports
-│   │       └── Mapping/                  # AutoMapper profiles
+│   │       └── Mapping/                  # Riok.Mapperly mapper classes
 ├── Core/                                  # Shared kernel
 │   ├── Data/
 │   │   ├── Entities/                     # EF Core entities
@@ -91,14 +91,40 @@ public class BaseRequest(Guid correlationId) : BaseMessage;
 public class BaseResponse(Guid correlationId) : BaseMessage;
 ```
 
-## Domain Exceptions
+## Error Handling: Result Pattern
 
-All domain exceptions extend `ProblemDetailsException`. The global `ExceptionHandler` converts them to RFC 7807 ProblemDetails responses (400 for domain, 500 for unexpected).
+For **expected / business errors**, return a `Result<T>` instead of throwing. Throwing is reserved for genuinely unexpected/unrecoverable exceptions only.
 
 ```csharp
-public class ProblemDetailsException(string detail) : Exception(detail);
-public class <Name>Exception(string detail)
-    : ProblemDetailsException($"<User-friendly message>: {detail}");
+public sealed class Result<T>
+{
+    public bool IsSuccess { get; }
+    public T? Value { get; }
+    public Error? Error { get; }
+
+    private Result(T value) => (IsSuccess, Value, Error) = (true, value, null);
+    private Result(Error error) => (IsSuccess, Value, Error) = (false, default, error);
+
+    public static Result<T> Ok(T value) => new(value);
+    public static Result<T> Fail(Error error) => new(error);
+}
+
+public sealed record Error(int StatusCode, string Title, string Detail);
+```
+
+**Mapping to HTTP**: The global `ExceptionHandler` is reserved for genuinely unexpected exceptions only (IO/DB/framework crashes) → 500 response. Business/validation errors must return a `Result<T>` and map via:
+
+```csharp
+public static class ResultExtensions
+{
+    public static IResult ToHttpResult<T>(this Result<T> result) =>
+        result.IsSuccess
+            ? Results.Ok(result.Value)
+            : Results.Problem(
+                statusCode: result.Error!.StatusCode,
+                title: result.Error.Title,
+                detail: result.Error.Detail);
+}
 ```
 
 ## Implementation Playbook
@@ -111,7 +137,7 @@ Follow these steps **in order**. **For full templates with code**: See [implemen
 4. Define outgoing port in `Core/Ports/Outgoing/I<VerbNoun>Port.cs`
 5. Implement use case in `Core/<VerbNoun>.cs` — pure business logic
 6. Implement adapter in `Infrastructure/Adapter/<VerbNoun>Adapter.cs`
-7. Create AutoMapper profile in `Infrastructure/Mapping/<VerbNoun>Profile.cs`
+7. Create Riok.Mapperly mapper in `Infrastructure/Mapping/<VerbNoun>Mapper.cs`
 8. Create validator (optional) in `Application/Validator/<VerbNoun>Validator.cs`
 9. Create endpoint in `Application/Endpoint/<VerbNoun>Endpoint.cs`
 10. Register all bindings in `<ModuleName>Module.cs`
@@ -140,32 +166,18 @@ Target **80%+ coverage**.
 | Adapter | `<VerbNoun>Adapter` | `RegisterUserAdapter` |
 | Endpoint | `<VerbNoun>Endpoint` | `RegisterUserEndpoint` |
 | Validator | `<VerbNoun>Validator` | `RegisterUserValidator` |
-| Mapper profile | `<VerbNoun>Profile` | `RegisterUserProfile` |
+| Mapper class | `<VerbNoun>Mapper` | `RegisterUserMapper` |
 | Request DTO | `<VerbNoun>Request` | `RegisterUserRequest` |
 | Response DTO | `<VerbNoun>Response` | `RegisterUserResponse` |
 | Domain exception | `<Noun>Exception` | `UserAlreadyExistsException` |
 | Narrow test class | `<VerbNoun>Should` | `RegisterUserShould` |
 | Wide test class | `<VerbNoun>EndpointShould` | `RegisterUserEndpointShould` |
 
-## MUST (BLOCK) — non-negotiable invariants
-
-Violations of these rules fail review immediately. Full severity list + tooling templates: [skills/dotnet-cop/enforcement.md](../dotnet-cop/enforcement.md).
-
-- **No direct cross-module type reference** — modules communicate only via shared contracts or a port + adapter.
-- **Core has zero infrastructure dependencies** — no `using Microsoft.EntityFrameworkCore` or any infra namespace inside `Core/` or `Application/`.
-- **EF entities must not cross the port boundary into Core** — port signatures use domain models; adapters map before crossing.
-- **Business logic belongs in Core use cases, never in endpoint handlers** — endpoint delegates to incoming port only.
-- **Read-only EF queries must use `.AsNoTracking()`** — omitting it on non-saving paths is a BLOCK finding.
-- **All async I/O must propagate `CancellationToken`** — passing the token through every `await` is mandatory.
-- **`FromSqlRaw`/`ExecuteSqlRaw` must never use string interpolation** — use parameterized form or LINQ.
-- **Nullable reference types must be enabled; `!` null-forgiving operator requires a guard** — unjustified `!` is a BLOCK finding.
-- **Domain exceptions must flow through `ProblemDetailsException` → global `ExceptionHandler`** — no raw 500 escaping the handler.
-
 ## Known Tradeoffs
 
 - Module isolation is by **convention** (namespaces + folders) unless you split into separate projects/assemblies.
 - Reflection-based discovery ties modules to the host assembly; expand `DiscoverModules()` if modules move to other assemblies.
-- EF Core entities and repository concerns should stay **out of module Core**; map in adapters via AutoMapper.
+- EF Core entities and repository concerns should stay **out of module Core**; map in adapters via Riok.Mapperly.
 - One incoming port per use case keeps interfaces focused (ISP); avoid god-interfaces grouping multiple operations.
 
 ## Checklist: Adding a New Feature
@@ -176,11 +188,11 @@ Violations of these rules fail review immediately. Full severity list + tooling 
 - [ ] Define outgoing port: `Core/Ports/Outgoing/I<VerbNoun>Port.cs`
 - [ ] Implement use case: `Core/<VerbNoun>.cs`
 - [ ] Implement adapter: `Infrastructure/Adapter/<VerbNoun>Adapter.cs`
-- [ ] Create AutoMapper profile: `Infrastructure/Mapping/<VerbNoun>Profile.cs`
+- [ ] Create Riok.Mapperly mapper: `Infrastructure/Mapping/<VerbNoun>Mapper.cs`
 - [ ] Create validator (if needed): `Application/Validator/<VerbNoun>Validator.cs`
 - [ ] Create endpoint: `Application/Endpoint/<VerbNoun>Endpoint.cs`
 - [ ] Register bindings in module: `<ModuleName>Module.cs`
-- [ ] Add domain exceptions if needed
+- [ ] Business errors return `Result<T>`, not exceptions
 - [ ] Write narrow tests (mock outgoing ports)
 - [ ] Write wide tests (WebApplicationFactory + service overrides)
 - [ ] Verify 80%+ test coverage

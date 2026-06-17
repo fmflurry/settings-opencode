@@ -40,7 +40,7 @@ Example:
 
 <details><summary>🔵 Nits (8) / ❓ Questions (1)</summary>
 
-- `Module/User/UserModule.cs`:L10: 🔵 nit: `RegisterModule` registers `AutoMapper` after scoped services — consider grouping infrastructure registrations.
+- `Module/User/UserModule.cs`:L10: 🔵 nit: `RegisterModule` registers `Riok.Mapperly` mapper after scoped services — consider grouping infrastructure registrations.
 - `Module/Order/Core/CreateOrder.cs`:L4: ❓ q: intentional that `CreateOrder` does not check for duplicate order within the same day?
 </details>
 

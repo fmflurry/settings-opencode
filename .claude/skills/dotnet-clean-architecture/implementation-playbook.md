@@ -16,8 +16,8 @@ public class <ModuleName>Module : IModule
         // Outgoing port -> adapter
         services.AddScoped<I<VerbNoun>Port, <VerbNoun>Adapter>();
 
-        // AutoMapper
-        services.AddAutoMapper(typeof(<VerbNoun>Profile).Assembly);
+        // Riok.Mapperly mapper (optional — use only if this module registers its own)
+        services.AddSingleton<<VerbNoun>Mapper>();
 
         return services;
     }
@@ -67,16 +67,19 @@ public interface I<VerbNoun>Port
 // Core/<VerbNoun>.cs
 public class <VerbNoun>(I<VerbNoun>Port port) : I<VerbNoun>
 {
-    public async Task<<ResponseModel>> HandleAsync(<RequestModel> request)
+    public async Task<Result<<ResponseModel>>> HandleAsync(<RequestModel> request)
     {
         Guard.Against.NullOrEmpty(request.Field);
 
         var valid = await port.<ValidationCheck>(request.Field);
         if (!valid)
-            throw new <Domain>Exception(request.Field);
+            return Result<<ResponseModel>>.Fail(new Error(
+                StatusCode: 400,
+                Title: "<Domain>Conflict",
+                Detail: $"<User-friendly message>: {request.Field}"));
 
         var id = await port.<ExecuteOperation>(request);
-        return new <ResponseModel> { Id = id };
+        return Result<<ResponseModel>>.Ok(new <ResponseModel> { Id = id });
     }
 }
 ```
@@ -103,16 +106,17 @@ public class <VerbNoun>Adapter(
 }
 ```
 
-## 7. Create AutoMapper Profile
+## 7. Create Riok.Mapperly Mapper
 
 ```csharp
-// Infrastructure/Mapping/<VerbNoun>Profile.cs
-public class <VerbNoun>Profile : Profile
+// Infrastructure/Mapping/<VerbNoun>Mapper.cs
+using Riok.Mapperly.Abstractions;
+
+[Mapper]
+public partial class <VerbNoun>Mapper
 {
-    public <VerbNoun>Profile()
-    {
-        CreateMap<<RequestModel>, <Entity>>();
-    }
+    public partial <DomainModel> ToDomain(<Entity> entity);
+    public partial <Entity> ToEntity(<DomainModel> model);
 }
 ```
 
@@ -145,18 +149,18 @@ public class <VerbNoun>Endpoint(
         app.MapPost("api/<resource>", ([FromBody] <RequestDto> request) => HandleAsync(request));
     }
 
-    public async Task<Results<Created<<ResponseDto>>, BadRequest<ProblemDetails>>> HandleAsync(<RequestDto> request)
+    public async Task<IResult> HandleAsync(<RequestDto> request)
     {
         var validation = await validator.ValidateAsync(request);
         if (!validation.IsValid)
-            return TypedResults.BadRequest<ProblemDetails>(new ProblemDetails
-            {
-                Detail = string.Join("; ", validation.Errors.Select(e => e.ErrorMessage))
-            });
+            return Results.ValidationProblem(validation.ToDictionary());
 
         var result = await useCase.HandleAsync(request);
-        return TypedResults.Created($"api/<resource>/{result.Id}",
-            new <ResponseDto>(request.CorrelationId) { Id = result.Id });
+        if (!result.IsSuccess)
+            return result.ToHttpResult();
+
+        return TypedResults.Created($"api/<resource>/{result.Value!.Id}",
+            new <ResponseDto>(request.CorrelationId) { Id = result.Value!.Id });
     }
 }
 ```
@@ -165,10 +169,23 @@ public class <VerbNoun>Endpoint(
 
 Update `<ModuleName>Module.cs` with all bindings (see step 1).
 
-## 11. Add Domain Exceptions (If Needed)
+## 11. Business Errors (Result Pattern)
+
+Business/expected errors are now returned via `Result<T>`, not thrown as exceptions:
 
 ```csharp
-// Core/Exception/<Specific>Exception.cs  (or Shared/Exceptions/)
-public class <Specific>Exception(string detail)
-    : ProblemDetailsException($"<User-friendly message>: {detail}");
+// In use case, return error result instead of throwing
+return Result<T>.Fail(new Error(
+    StatusCode: 400,  // or 404, 409, etc. — choose appropriate HTTP status
+    Title: "ValidationFailed",
+    Detail: "User-friendly message explaining the error"
+));
+```
+
+**Exceptions are reserved for genuinely unexpected conditions** (DB crashes, IO failures, framework bugs). The global `ExceptionHandler` catches these and returns 500.
+
+For domain-specific exceptions (for unrecoverable, non-business-rule conditions):
+```csharp
+// Only for UNEXPECTED exceptions, not business rules
+public class <UnexpectedCondition>Exception(string detail) : Exception(detail);
 ```

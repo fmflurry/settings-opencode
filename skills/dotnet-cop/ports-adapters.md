@@ -29,7 +29,7 @@ public interface IGetOrderPort
     Task<Order> FindByIdAsync(Guid id);        // domain model, no EF dependency
 }
 ```
-EF entities stay in `Infrastructure/`. Map in the adapter using AutoMapper before crossing the port.
+EF entities stay in `Infrastructure/`. Map in the adapter using Riok.Mapperly before crossing the port.
 
 ### Adapter imports from another module's Core
 ```csharp
@@ -108,12 +108,12 @@ public async Task<Order> SaveAsync(Order order)
 }
 ```
 
-### AutoMapper profile defined outside Infrastructure
-AutoMapper profiles map between EF entities and domain models. They belong in `Infrastructure/Mapping/`, not in Core or Application:
+### Riok.Mapperly mapper defined outside Infrastructure
+Riok.Mapperly mappers map between EF entities and domain models. They belong in `Infrastructure/Mapping/`, not in Core or Application:
 ```
-✅ Infrastructure/Mapping/CreateOrderProfile.cs
-❌ Core/Mapping/CreateOrderProfile.cs
-❌ Application/Mapping/CreateOrderProfile.cs
+✅ Infrastructure/Mapping/CreateOrderMapper.cs
+❌ Core/Mapping/CreateOrderMapper.cs
+❌ Application/Mapping/CreateOrderMapper.cs
 ```
 
 ### One adapter handles multiple unrelated outgoing ports

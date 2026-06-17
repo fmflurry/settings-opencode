@@ -137,9 +137,11 @@ cd ~/Workspace/settings-opencode
 1. Verify your prerequisites (`git`, `bun`/`npm`, `uv`).
 2. Symlink the repo into `~/.config/opencode` (backing up any existing config to `*.bak.<timestamp>`).
 3. Run `bun install` (or `npm ci` if Bun isn't available).
-4. Add the `OPENCODE_MODEL_*` and `OPENCODE_REASONING_*` defaults to your shell rc, fenced with markers so re-runs and uninstalls are idempotent.
-5. Optionally symlink `.claude/` into `~/.claude` (skip with `--no-claude` if you only want the OpenCode half, or use `--no-opencode` to install Claude Code only).
-6. Print a smoke-test command and the locations to tweak afterwards.
+4. Sync skills from the canonical set into both harnesses via `scripts/sync-skills.sh`.
+5. Seed personal config files (`settings.json`, `settings.local.json`, `policy-limits.json`) **only on first install**; preserve user edits on reinstall.
+6. Add the `OPENCODE_MODEL_*` and `OPENCODE_REASONING_*` defaults to your shell rc, fenced with markers so re-runs and uninstalls are idempotent.
+7. Optionally symlink `.claude/` into `~/.claude` (skip with `--no-claude` if you only want the OpenCode half, or use `--no-opencode` to install Claude Code only).
+8. Print a smoke-test command and the locations to tweak afterwards.
 
 Useful flags:
 
@@ -253,11 +255,11 @@ cp -R ~/.config/opencode/.claude ~/.claude
 What this installs:
 
 - `.claude/CLAUDE.md` — global user instructions Claude Code reads on every session.
-- `.claude/settings.json` — permissions, hooks, env vars (`API_TIMEOUT_MS`, autocompact threshold, etc.).
+- `.claude/settings.json` — permissions, hooks, env vars (`API_TIMEOUT_MS`, autocompact threshold, etc.). Seeded on first install only; user edits preserved on reinstall.
 - `.claude/hooks/*.sh` — pre-tool-use security warnings + stop hook.
 - `.claude/rules/{common,typescript}/*.md` — coding-style/testing/security rule packs.
 - `.claude/commands/*.md` — extra slash commands (`/create-pull-request`, `/curate-learned-skills`, `/update-codemaps`).
-- `.claude/skills/**` — a curated catalog of "learned" skills (project-specific patterns, debugging recipes).
+- `.claude/skills/**` — **full parity copy of canonical skill set** (same as `skills/` at repo root, computed and synced by `scripts/sync-skills.sh`). Includes all OpenCode skills plus any Claude-specific learned skills; both sides stay in sync.
 - `.claude/homunculus/` — the shared instinct store used by continuous-learning v2 (kept empty in fresh installs; populated by the OpenCode plugins as you work).
 
 </details>
@@ -327,7 +329,7 @@ Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primar
 
 - Configs: `opencode.jsonc`, `dcp.jsonc` (dynamic context pruning), `ocx.jsonc` (OCX registries), `tui.json` (TUI theme).
 - Profiles: `profiles/<name>/` (per-profile overrides + `AGENTS.md`, run with `ocx opencode -p <name>`).
-- Skills: `skills/*/SKILL.md` (plus auxiliary docs).
+- Skills: `skills/*/SKILL.md` (plus auxiliary docs) — **canonical set, shared with Claude Code via** `sync-skills.sh`.
 - Agent prompts: `prompts/agents/*.txt`.
 - Slash commands: `commands/*.md`.
 - OpenCode plugins: `plugins/*.{ts,js}` + `plugins/kdco-primitives/`, `plugins/worktree/`.
@@ -335,9 +337,9 @@ Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primar
 - Custom tools: `tools/*.ts`.
 - Mode notes: `contexts/*.md`.
 - Global instructions: `instructions/subagent-routing.md`, `instructions/codememory-first.md`, `instructions/caveman-ultra.md`.
-- Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`.
-- Claude mirror: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/skills/`, `.claude/commands/`, `.claude/homunculus/`.
-- Intentional exclusions (`.gitignore`): `node_modules/`, `.instinct-digest-state.json`, `antigravity-*`, `.DS_Store`, local `.env*` files except `.env.example`.
+- Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`, `scripts/sync-skills.sh` (sync canonical skill set to both harnesses).
+- Claude mirror: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/skills/` (full parity copy), `.claude/commands/`, `.claude/homunculus/`.
+- Intentional exclusions (`.gitignore`): `node_modules/`, `.instinct-digest-state.json`, `antigravity-*`, `.DS_Store`, local `.env*` files except `.env.example`, runtime dirs `skills/skill-creator/` and `skills/learned/*` (not synced).
 
 <a id="config-en"></a>
 ### Configuration: `opencode.jsonc`
@@ -431,12 +433,15 @@ Templates in `commands/`. Most run as `subtask: true` (delegated to a specialist
 <a id="skills-en"></a>
 ### Skills
 
+**All skills are kept at full parity across OpenCode (`skills/`) and Claude Code (`.claude/skills/`) via the canonical union computed and synced by `scripts/sync-skills.sh`.** Both `skills/` (root, source of truth) and `.claude/skills/` (mirror) are self-contained; a raw `cp -R .claude ~/.claude` yields a complete skill set.
+
 Always-on (declared in `instructions`):
 
 - `skills/socratic-design/SKILL.md` — evidence-first decision gating.
 - `skills/security-review/SKILL.md` — security checklist + scenarios.
 - `skills/coding-standards/SKILL.md` — naming, immutability, file size, error handling.
 - `skills/git-workflow/SKILL.md` — branches, conventional commits, push guards.
+
 On-demand (loaded by description / by command):
 
 - `skills/tdd-workflow/SKILL.md` — full TDD methodology.
@@ -444,11 +449,20 @@ On-demand (loaded by description / by command):
 - `skills/strategic-compact/SKILL.md` — manual compaction at logical breakpoints.
 - `skills/dotnet-clean-architecture/SKILL.md` (+ playbooks) — .NET 8 BFF scaffolding.
 - `skills/angular-clean-architecture/SKILL.md` (+ store, migration, testing) — Angular 18 standalone scaffolding.
+- `skills/angular-cop/SKILL.md` — Angular + TS pre-merge review rules.
+- `skills/dotnet-cop/SKILL.md` — .NET pre-merge review rules.
 - `skills/angular-accessibility/SKILL.md` — Angular ARIA audit.
 - `skills/compress/SKILL.md` — context compression.
 - `skills/flurryx/SKILL.md` — domain-specific patterns.
 - `skills/continuous-learning/SKILL.md` — learned-draft schema.
-- `skills/learned/` — auto-generated drafts from the stop hook.
+- `skills/ddd-type-duplication-across-layers/SKILL.md` — union-type scaffolding across DDD layers.
+- `skills/learned-codemap-generator-hygiene/SKILL.md` — codemap generator updates.
+- `skills/learned-codemap-jump-navigation-angular/SKILL.md` — Angular feature navigation.
+- `skills/transloco/SKILL.md` — Transloco i18n management.
+- `skills/transloco-testing-flat-keys/SKILL.md` — Transloco testing helpers.
+- `skills/learned/` — auto-generated drafts from the stop hook (excluded from sync).
+
+**Sync behavior:** `scripts/sync-skills.sh` computes the canonical union (root `skills/` ∪ `.claude/skills/`, root wins on conflicts), excludes runtime dirs (`skills/skill-creator/`, `skills/learned/*`), and copies into the given destination(s). Runs standalone and is invoked by installers.
 
 <a id="plugins-en"></a>
 ### Plugins & hooks
@@ -499,12 +513,12 @@ Curation:
 ### Claude Code mirror (`.claude/`)
 
 - `CLAUDE.md` — global user instructions (no `any`, facade != UseCase).
-- `settings.json` — allow/deny permissions, env (`API_TIMEOUT_MS=3000000`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80`), `PreToolUse` / `PostToolUse` / `Stop` hooks.
+- `settings.json` — allow/deny permissions, env (`API_TIMEOUT_MS=3000000`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80`), `PreToolUse` / `PostToolUse` / `Stop` hooks. Seeded on first install; personal edits preserved on reinstall.
 - `hooks/pre-tool-use.sh` — warning-only checks on sensitive commands/files.
 - `hooks/stop.sh` — Claude Code stop hook.
 - `rules/common/*.md` + `rules/typescript/*.md` — rule packs (style, testing, security, patterns, hooks, agents).
 - `commands/{create-pull-request,curate-learned-skills,update-codemaps}.md` — Claude commands.
-- `skills/**` — curated catalog of "learned" skills.
+- `skills/**` — **full parity copy of canonical skill set** (synced via `scripts/sync-skills.sh`). Both OpenCode and Claude Code see the same skills; updates to root `skills/` propagate to `.claude/skills/` on install/sync.
 - `homunculus/{instincts,evolved,observations.archive}` — store shared with OpenCode.
 
 <a id="flow-en"></a>
@@ -531,12 +545,9 @@ Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un ag
 - Securite: skill `security-review` chargee par defaut + hooks pre-tool-use.
 - Apprentissage continu: capture automatique des "instincts" dans `~/.claude/homunculus`, surface dans le system prompt a la session suivante.
 
-<a id="structure-fr"></a>
-### Structure du repo
-
 - Configs: `opencode.jsonc`, `dcp.jsonc` (dynamic context pruning), `ocx.jsonc` (registries OCX), `tui.json` (theme TUI).
 - Profils: `profiles/<name>/` (override `opencode.jsonc` + `AGENTS.md` par profil, lance via `ocx opencode -p <name>`).
-- Skills: `skills/*/SKILL.md` (+ ressources auxiliaires).
+- Skills: `skills/*/SKILL.md` (+ ressources auxiliaires) — **ensemble canonical, partage avec Claude Code via `sync-skills.sh`**.
 - Prompts agents: `prompts/agents/*.txt`.
 - Commandes slash: `commands/*.md`.
 - Plugins OpenCode: `plugins/*.{ts,js}` (+ `plugins/kdco-primitives/`, `plugins/worktree/`).
@@ -544,9 +555,9 @@ Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un ag
 - Outils custom: `tools/*.ts`.
 - Contextes (memos de mode): `contexts/*.md`.
 - Instructions globales: `instructions/subagent-routing.md`, `instructions/codememory-first.md`, `instructions/caveman-ultra.md`.
-- Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`.
-- Mirror Claude Code: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/skills/`, `.claude/commands/`, `.claude/homunculus/`.
-- Exclusions volontaires (`.gitignore`): `node_modules/`, `.instinct-digest-state.json`, `antigravity-*`, `.DS_Store`, fichiers locaux `.env*` sauf `.env.example`.
+- Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`, `scripts/sync-skills.sh` (synchronise l'ensemble canonical des skills aux deux harnesses).
+- Mirror Claude Code: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/skills/` (copie en parité complète), `.claude/commands/`, `.claude/homunculus/`.
+- Exclusions volontaires (`.gitignore`): `node_modules/`, `.instinct-digest-state.json`, `antigravity-*`, `.DS_Store`, fichiers locaux `.env*` sauf `.env.example`, répertoires runtime `skills/skill-creator/` et `skills/learned/*` (non synchronisés).
 
 <a id="config-fr"></a>
 ### Configuration: `opencode.jsonc`
@@ -640,24 +651,36 @@ Templates dans `commands/`. La plupart sont `subtask: true` -> elles s'executent
 <a id="skills-fr"></a>
 ### Skills
 
-Skills toujours actives (declared dans `instructions`):
+**Tous les skills sont en parité complète entre OpenCode (`skills/`) et Claude Code (`.claude/skills/`) via l'union canonique calculée et synchronisée par `scripts/sync-skills.sh`.** Les deux `skills/` (root, source de vérité) et `.claude/skills/` (miroir) sont auto-contenus; une simple `cp -R .claude ~/.claude` donne l'ensemble complet des skills.
+
+Skills toujours actifs (déclarés dans `instructions`):
 
 - `skills/socratic-design/SKILL.md` — decision-gating "evidence-first".
-- `skills/security-review/SKILL.md` — checklist securite + scenarios.
-- `skills/coding-standards/SKILL.md` — naming, immutabilite, taille fichier, error handling.
+- `skills/security-review/SKILL.md` — checklist sécurité + scenarios.
+- `skills/coding-standards/SKILL.md` — naming, immutabilité, taille fichier, error handling.
 - `skills/git-workflow/SKILL.md` — branches, conventional commits, garde-fous push.
-Skills sur demande (chargees par leur description / par une commande):
 
-- `skills/tdd-workflow/SKILL.md` — methode TDD detaillee.
+Skills sur demande (chargés par description / par commande):
+
+- `skills/tdd-workflow/SKILL.md` — méthode TDD détaillée.
 - `skills/caveman/SKILL.md`, `caveman-commit`, `caveman-review` — mode terse.
 - `skills/strategic-compact/SKILL.md` — compaction manuelle aux paliers logiques.
 - `skills/dotnet-clean-architecture/SKILL.md` (+ playbooks) — scaffold .NET 8 BFF.
 - `skills/angular-clean-architecture/SKILL.md` (+ store, migration, tests) — scaffold Angular 18 standalone.
+- `skills/angular-cop/SKILL.md` — règles pre-merge Angular + TS.
+- `skills/dotnet-cop/SKILL.md` — règles pre-merge .NET.
 - `skills/angular-accessibility/SKILL.md` — audit ARIA Angular.
 - `skills/compress/SKILL.md` — compression de contexte.
-- `skills/flurryx/SKILL.md` — patterns specifiques.
-- `skills/continuous-learning/SKILL.md` — schema des drafts learned.
-- `skills/learned/` — drafts produits par le stop-hook.
+- `skills/flurryx/SKILL.md` — patterns spécifiques au domaine.
+- `skills/continuous-learning/SKILL.md` — schéma des drafts learned.
+- `skills/ddd-type-duplication-across-layers/SKILL.md` — scaffold union-types sur couches DDD.
+- `skills/learned-codemap-generator-hygiene/SKILL.md` — mise à jour codemap generators.
+- `skills/learned-codemap-jump-navigation-angular/SKILL.md` — navigation Angular features.
+- `skills/transloco/SKILL.md` — gestion i18n Transloco.
+- `skills/transloco-testing-flat-keys/SKILL.md` — helpers Transloco testing.
+- `skills/learned/` — drafts générés par le stop-hook (exclus de la synchro).
+
+**Comportement sync:** `scripts/sync-skills.sh` calcule l'union canonique (root `skills/` ∪ `.claude/skills/`, root gagne en cas de conflit), exclut les répertoires runtime (`skills/skill-creator/`, `skills/learned/*`), et copie dans la(les) destination(s) donnée(s). S'exécute seul et est invoqué par les installateurs.
 
 <a id="plugins-fr"></a>
 ### Plugins & hooks
@@ -708,12 +731,12 @@ Curation:
 ### Mirror Claude Code (`.claude/`)
 
 - `CLAUDE.md` — instructions globales (no `any`, facade != UseCase).
-- `settings.json` — permissions allow/deny, env vars (`API_TIMEOUT_MS=3000000`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80`), hooks `PreToolUse` / `PostToolUse` / `Stop`.
+- `settings.json` — permissions allow/deny, env vars (`API_TIMEOUT_MS=3000000`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80`), hooks `PreToolUse` / `PostToolUse` / `Stop`. Initialisé à la première install; éditions personnelles conservées à la réinstall.
 - `hooks/pre-tool-use.sh` — warnings sur commandes/fichiers sensibles (warn only).
 - `hooks/stop.sh` — stop hook Claude Code.
-- `rules/common/*.md` + `rules/typescript/*.md` — packs de regles (style, tests, securite, patterns, hooks, agents).
+- `rules/common/*.md` + `rules/typescript/*.md` — packs de règles (style, tests, sécurité, patterns, hooks, agents).
 - `commands/{create-pull-request,curate-learned-skills,update-codemaps}.md` — commandes Claude.
-- `skills/**` — catalogue de skills "learned" (debugging, project-specific, user-corrections).
+- `skills/**` — **copie en parité complète de l'ensemble canonical des skills** (synchronisée via `scripts/sync-skills.sh`). OpenCode et Claude Code voient les mêmes skills; les mises à jour de `skills/` au root se propagent à `.claude/skills/` à l'install/sync.
 - `homunculus/{instincts,evolved,observations.archive}` — store partagé avec OpenCode.
 
 <a id="flow-fr"></a>

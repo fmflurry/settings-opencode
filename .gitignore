@@ -17,6 +17,9 @@ opencode.bkup/
 *.bku
 *.tui-migration.bak
 
+# Backups
+*.bak
+
 # Local agents (not synced)
 /agents/
 

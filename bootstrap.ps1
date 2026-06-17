@@ -94,8 +94,8 @@ function Copy-Tree($src, $dst) {
     if (-not (Test-Path $dst)) { New-Item -ItemType Directory -Path $dst -Force | Out-Null }
     $roboArgs = @(
         $src, $dst, '/E',
-        '/XD', (Join-Path $src 'node_modules'), (Join-Path $src '.git'),
-        '/XF', '*.log', '.DS_Store',
+        '/XD', (Join-Path $src 'node_modules'), (Join-Path $src '.git'), (Join-Path $src '.serena'),
+        '/XF', '*.log', '.DS_Store', '*.bak', 'install.sh', 'install-cursor.sh', 'bootstrap.sh', 'bootstrap.ps1',
         '/NFL', '/NDL', '/NJH', '/NJS', '/NP', '/R:1', '/W:1'
     )
     & robocopy.exe @roboArgs | Out-Null

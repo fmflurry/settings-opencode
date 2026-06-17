@@ -148,6 +148,13 @@ copy_tree() {
         --exclude='.git' \
         --exclude='*.log' \
         --exclude='.DS_Store' \
+        --exclude='*.bak' \
+        --exclude='*.bak.*' \
+        --exclude='.serena' \
+        --exclude='install.sh' \
+        --exclude='install-cursor.sh' \
+        --exclude='bootstrap.sh' \
+        --exclude='bootstrap.ps1' \
         "$src/" "$dst/"
 }
 
@@ -156,7 +163,7 @@ copy_tree() {
 env_block_content() {
     cat <<'EOF'
 # Added by settings-opencode installer. Edit values to match your provider.
-# To remove this block, run: ~/.config/opencode/install.sh --uninstall
+# To remove this block, run: ~/.local/share/settings-opencode/install.sh --uninstall
 # Defaults target the myMistral provider configured in opencode.jsonc.
 export OPENCODE_MODEL_CONDUCTOR="myMistral/mistral-medium-2604"
 export OPENCODE_MODEL_SUBAGENT_PLANNER="myMistral/mistral-large-latest"

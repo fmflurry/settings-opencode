@@ -6,6 +6,8 @@
 # Flags:
 #   --yes, -y       Non-interactive, accept all defaults
 #   --no-claude     Skip ~/.claude mirror install
+#   --no-opencode   Skip OpenCode entirely (repo copy, deps, env vars); install
+#                   only the Claude mirror
 #   --uninstall     Remove env-var block and installed copies (does not delete the repo)
 #   --local         Project-scoped install into the current working directory
 #                   (./.opencode and ./.claude). Does not touch shell rc files.
@@ -26,6 +28,7 @@ REPO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]:-$0}" )" && pwd )"
 
 ASSUME_YES=0
 SKIP_CLAUDE=0
+SKIP_OPENCODE=0
 DO_UNINSTALL=0
 LOCAL_MODE=0
 WSL_MODE=0
@@ -78,13 +81,16 @@ Usage: ./install.sh [flags]
 Flags:
   --yes, -y       Non-interactive (accept all defaults)
   --no-claude     Skip the ~/.claude mirror install
+  --no-opencode   Skip OpenCode entirely (repo copy, deps, env vars).
+                  Installs only the Claude mirror. Cannot be combined with
+                  --no-claude (nothing would be installed).
   --uninstall     Remove the env-var block and copies created by this script
                   (does not delete the cloned repo or your data)
   --local         Project-scoped install into the current working directory.
                   Copies repo into ./.opencode and .claude into ./.claude.
                   Does not touch global shell rc files. Combine with --yes,
-                  --no-claude, and --uninstall as normal. Do NOT run this
-                  from inside the settings-opencode repo itself.
+                  --no-claude, --no-opencode, and --uninstall as normal. Do
+                  NOT run this from inside the settings-opencode repo itself.
   --help, -h      Show this message
 
 What it does (interactive by default):
@@ -98,6 +104,8 @@ What it does (interactive by default):
 
   With --local, steps 2-3 and 5 target ./.opencode/.claude in the cwd.
   Step 4 (shell rc) is skipped; the env block is printed to stdout instead.
+
+  With --no-opencode, steps 2-4 are skipped entirely; only step 5 runs.
 EOF
 }
 
@@ -617,25 +625,33 @@ run_uninstall() {
     fi
 
     if [ "$LOCAL_MODE" = "1" ]; then
-        if [ -d "$TARGET_OPENCODE" ]; then
-            if ask "delete local directory $TARGET_OPENCODE ?" N; then
-                rm -rf "$TARGET_OPENCODE"
-                ok "removed $TARGET_OPENCODE"
+        if [ "$SKIP_OPENCODE" != "1" ]; then
+            if [ -d "$TARGET_OPENCODE" ]; then
+                if ask "delete local directory $TARGET_OPENCODE ?" N; then
+                    rm -rf "$TARGET_OPENCODE"
+                    ok "removed $TARGET_OPENCODE"
+                else
+                    info "left $TARGET_OPENCODE in place"
+                fi
             else
-                info "left $TARGET_OPENCODE in place"
+                info "$TARGET_OPENCODE not found, skipping"
             fi
         else
-            info "$TARGET_OPENCODE not found, skipping"
+            info "OpenCode target skipped (--no-opencode)"
         fi
-        if [ -d "$TARGET_CLAUDE" ]; then
-            if ask "delete local directory $TARGET_CLAUDE ?" N; then
-                rm -rf "$TARGET_CLAUDE"
-                ok "removed $TARGET_CLAUDE"
+        if [ "$SKIP_CLAUDE" != "1" ]; then
+            if [ -d "$TARGET_CLAUDE" ]; then
+                if ask "delete local directory $TARGET_CLAUDE ?" N; then
+                    rm -rf "$TARGET_CLAUDE"
+                    ok "removed $TARGET_CLAUDE"
+                else
+                    info "left $TARGET_CLAUDE in place"
+                fi
             else
-                info "left $TARGET_CLAUDE in place"
+                info "$TARGET_CLAUDE not found, skipping"
             fi
         else
-            info "$TARGET_CLAUDE not found, skipping"
+            info "Claude target skipped (--no-claude)"
         fi
         step "Done. Local copies removed."
         return 0
@@ -643,55 +659,75 @@ run_uninstall() {
 
     local rc
     rc="$(detect_shell_rc)"
-    [ -n "$rc" ] && remove_env_block "$rc" || warn "no known shell rc detected, skipping env block"
+    if [ "$SKIP_OPENCODE" != "1" ]; then
+        [ -n "$rc" ] && remove_env_block "$rc" || warn "no known shell rc detected, skipping env block"
+    else
+        info "env block removal skipped (--no-opencode)"
+    fi
 
     if [ "$WSL_MODE" = "1" ]; then
-        if [ -d "$TARGET_OPENCODE" ] && [ ! -L "$TARGET_OPENCODE" ]; then
-            if ask "delete copied directory $TARGET_OPENCODE ?" N; then
-                rm -rf "$TARGET_OPENCODE"
-                ok "removed $TARGET_OPENCODE"
+        if [ "$SKIP_OPENCODE" != "1" ]; then
+            if [ -d "$TARGET_OPENCODE" ] && [ ! -L "$TARGET_OPENCODE" ]; then
+                if ask "delete copied directory $TARGET_OPENCODE ?" N; then
+                    rm -rf "$TARGET_OPENCODE"
+                    ok "removed $TARGET_OPENCODE"
+                else
+                    info "left $TARGET_OPENCODE in place"
+                fi
             else
-                info "left $TARGET_OPENCODE in place"
+                info "$TARGET_OPENCODE not found or not a directory, skipping"
             fi
         else
-            info "$TARGET_OPENCODE not found or not a directory, skipping"
+            info "OpenCode target skipped (--no-opencode)"
         fi
-        if [ -d "$TARGET_CLAUDE" ] && [ ! -L "$TARGET_CLAUDE" ]; then
-            if ask "delete copied directory $TARGET_CLAUDE ?" N; then
-                rm -rf "$TARGET_CLAUDE"
-                ok "removed $TARGET_CLAUDE"
+        if [ "$SKIP_CLAUDE" != "1" ]; then
+            if [ -d "$TARGET_CLAUDE" ] && [ ! -L "$TARGET_CLAUDE" ]; then
+                if ask "delete copied directory $TARGET_CLAUDE ?" N; then
+                    rm -rf "$TARGET_CLAUDE"
+                    ok "removed $TARGET_CLAUDE"
+                else
+                    info "left $TARGET_CLAUDE in place"
+                fi
             else
-                info "left $TARGET_CLAUDE in place"
+                info "$TARGET_CLAUDE not found or not a directory, skipping"
             fi
         else
-            info "$TARGET_CLAUDE not found or not a directory, skipping"
+            info "Claude target skipped (--no-claude)"
         fi
     else
-        if [ -L "$TARGET_OPENCODE" ] && [ "$(readlink "$TARGET_OPENCODE")" = "$REPO_DIR" ]; then
-            rm "$TARGET_OPENCODE"
-            ok "removed legacy symlink $TARGET_OPENCODE"
-        elif [ -d "$TARGET_OPENCODE" ] && [ "$TARGET_OPENCODE" != "$REPO_DIR" ]; then
-            if ask "delete copied directory $TARGET_OPENCODE ?" N; then
-                rm -rf "$TARGET_OPENCODE"
-                ok "removed $TARGET_OPENCODE"
+        if [ "$SKIP_OPENCODE" != "1" ]; then
+            if [ -L "$TARGET_OPENCODE" ] && [ "$(readlink "$TARGET_OPENCODE")" = "$REPO_DIR" ]; then
+                rm "$TARGET_OPENCODE"
+                ok "removed legacy symlink $TARGET_OPENCODE"
+            elif [ -d "$TARGET_OPENCODE" ] && [ "$TARGET_OPENCODE" != "$REPO_DIR" ]; then
+                if ask "delete copied directory $TARGET_OPENCODE ?" N; then
+                    rm -rf "$TARGET_OPENCODE"
+                    ok "removed $TARGET_OPENCODE"
+                else
+                    info "left $TARGET_OPENCODE in place"
+                fi
             else
-                info "left $TARGET_OPENCODE in place"
+                info "$TARGET_OPENCODE is not managed by this installer, leaving it alone"
             fi
         else
-            info "$TARGET_OPENCODE is not managed by this installer, leaving it alone"
+            info "OpenCode target skipped (--no-opencode)"
         fi
-        if [ -L "$TARGET_CLAUDE" ] && [ "$(readlink "$TARGET_CLAUDE")" = "$REPO_DIR/.claude" ]; then
-            rm "$TARGET_CLAUDE"
-            ok "removed legacy symlink $TARGET_CLAUDE"
-        elif [ -d "$TARGET_CLAUDE" ]; then
-            if ask "delete copied directory $TARGET_CLAUDE ? (this includes any runtime state stored there)" N; then
-                rm -rf "$TARGET_CLAUDE"
-                ok "removed $TARGET_CLAUDE"
+        if [ "$SKIP_CLAUDE" != "1" ]; then
+            if [ -L "$TARGET_CLAUDE" ] && [ "$(readlink "$TARGET_CLAUDE")" = "$REPO_DIR/.claude" ]; then
+                rm "$TARGET_CLAUDE"
+                ok "removed legacy symlink $TARGET_CLAUDE"
+            elif [ -d "$TARGET_CLAUDE" ]; then
+                if ask "delete copied directory $TARGET_CLAUDE ? (this includes any runtime state stored there)" N; then
+                    rm -rf "$TARGET_CLAUDE"
+                    ok "removed $TARGET_CLAUDE"
+                else
+                    info "left $TARGET_CLAUDE in place"
+                fi
             else
-                info "left $TARGET_CLAUDE in place"
+                info "$TARGET_CLAUDE is not managed by this installer, leaving it alone"
             fi
         else
-            info "$TARGET_CLAUDE is not managed by this installer, leaving it alone"
+            info "Claude target skipped (--no-claude)"
         fi
     fi
 
@@ -702,11 +738,12 @@ run_uninstall() {
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --yes|-y)     ASSUME_YES=1 ;;
-        --no-claude)  SKIP_CLAUDE=1 ;;
-        --uninstall)  DO_UNINSTALL=1 ;;
-        --local)      LOCAL_MODE=1 ;;
-        -h|--help)    print_help; exit 0 ;;
+        --yes|-y)        ASSUME_YES=1 ;;
+        --no-claude)     SKIP_CLAUDE=1 ;;
+        --no-opencode)   SKIP_OPENCODE=1 ;;
+        --uninstall)     DO_UNINSTALL=1 ;;
+        --local)         LOCAL_MODE=1 ;;
+        -h|--help)       print_help; exit 0 ;;
         *) err "unknown flag: $1"; print_help; exit 1 ;;
     esac
     shift
@@ -722,6 +759,11 @@ if [ "$LOCAL_MODE" = "1" ]; then
     TARGET_CLAUDE="$INVOKE_DIR/.claude"
 fi
 
+if [ "$SKIP_CLAUDE" = "1" ] && [ "$SKIP_OPENCODE" = "1" ]; then
+    err "nothing to install (both --no-claude and --no-opencode given)"
+    exit 1
+fi
+
 if [ "$DO_UNINSTALL" = "1" ]; then
     run_uninstall
     exit 0
@@ -735,19 +777,21 @@ configure_wsl_targets
 check_prereqs
 check_environment
 
-info "target:  $TARGET_OPENCODE"
-info "claude:  $([ "$SKIP_CLAUDE" = "1" ] && echo "skipped" || echo "$TARGET_CLAUDE")"
+info "target:  $([ "$SKIP_OPENCODE" = "1" ] && echo "skipped (--no-opencode)" || echo "$TARGET_OPENCODE")"
+info "claude:  $([ "$SKIP_CLAUDE" = "1" ] && echo "skipped (--no-claude)" || echo "$TARGET_CLAUDE")"
 
-install_repo_link
-install_deps
-if [ "$LOCAL_MODE" = "1" ]; then
-    step "Shell environment variables — skipped (--local does not modify global rc)"
-    info "To use per-project env vars, add the following to a .envrc or source it manually:"
-    printf "\n"
-    env_block_content | sed 's/^/        /'
-    printf "\n"
-else
-    install_env_vars
+if [ "$SKIP_OPENCODE" != "1" ]; then
+    install_repo_link
+    install_deps
+    if [ "$LOCAL_MODE" = "1" ]; then
+        step "Shell environment variables — skipped (--local does not modify global rc)"
+        info "To use per-project env vars, add the following to a .envrc or source it manually:"
+        printf "\n"
+        env_block_content | sed 's/^/        /'
+        printf "\n"
+    else
+        install_env_vars
+    fi
 fi
 install_claude_mirror
 print_next_steps

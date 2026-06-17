@@ -89,7 +89,9 @@ curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/b
 On WSL it installs to the **Windows** side (`/mnt/c/Users/<you>/.config/opencode`), matching `install.sh`'s WSL behaviour. Pass installer flags through after `-s --`:
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash -s -- --local
 curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash -s -- --no-claude
+curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash -s -- --no-opencode
 curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash -s -- --uninstall
 ```
 
@@ -102,8 +104,12 @@ irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstra
 Copies into `%USERPROFILE%\.config\opencode` + `\.claude`, runs `npm install` (or `bun install`), and writes the `OPENCODE_*` defaults as **persistent User environment variables**. Open a new terminal afterwards so they take effect. Variants:
 
 ```powershell
+# project-scoped install
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -Local
 # skip the Claude mirror
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -NoClaude
+# skip OpenCode (install Claude only)
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -NoOpencode
 # uninstall (removes the OPENCODE_* env vars; leaves copied config in place)
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -Uninstall
 ```
@@ -132,7 +138,7 @@ cd ~/Workspace/settings-opencode
 2. Symlink the repo into `~/.config/opencode` (backing up any existing config to `*.bak.<timestamp>`).
 3. Run `bun install` (or `npm ci` if Bun isn't available).
 4. Add the `OPENCODE_MODEL_*` and `OPENCODE_REASONING_*` defaults to your shell rc, fenced with markers so re-runs and uninstalls are idempotent.
-5. Optionally symlink `.claude/` into `~/.claude` (skip with `--no-claude` if you only want the OpenCode half).
+5. Optionally symlink `.claude/` into `~/.claude` (skip with `--no-claude` if you only want the OpenCode half, or use `--no-opencode` to install Claude Code only).
 6. Print a smoke-test command and the locations to tweak afterwards.
 
 Useful flags:
@@ -141,7 +147,9 @@ Useful flags:
 | ---- | --------- |
 | _(none)_ | Interactive walk-through with `[Y/n]` prompts and sensible defaults. |
 | `--yes`, `-y` | Non-interactive — accept all defaults. Still backs up existing dirs before clobbering. |
+| `--local` | Project-scoped install into the current directory (`./.opencode` + `./.claude`); skips the global shell-rc env block (prints it as a hint instead). |
 | `--no-claude` | Skip the `~/.claude` mirror (handy if you only use OpenCode, or want to manage Claude Code separately). |
+| `--no-opencode` | Skip OpenCode entirely (repo copy, deps, and env block); install only the `~/.claude` mirror. Mutually exclusive with `--no-claude`. |
 | `--uninstall` | Remove the env-var block + the two symlinks. **Never deletes the cloned repo, your data, or `*.bak.*` backups.** |
 | `--help`, `-h` | Print usage. |
 

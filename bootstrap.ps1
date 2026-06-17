@@ -12,6 +12,13 @@
     Re-running the exact same one-liner pulls the latest and re-applies it — that
     is the update path.
 
+    Use -Local for a project-scoped install: copies into .\.opencode and .\.claude
+    in the current directory; does NOT persist env vars (prints them as a hint instead).
+    Do NOT run -Local from inside the settings-opencode clone itself.
+
+    Use -NoOpencode to skip OpenCode entirely (no repo copy, no deps, no env vars)
+    and install only the Claude mirror. Cannot be combined with -NoClaude.
+
 .EXAMPLE
     irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1 | iex
 
@@ -19,22 +26,41 @@
     # Skip the Claude mirror, or uninstall:
     & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -NoClaude
     & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -Uninstall
+
+.EXAMPLE
+    # Project-scoped install (run from your project directory, not the clone):
+    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -Local
+
+.EXAMPLE
+    # Install only the Claude mirror (skip OpenCode):
+    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -NoOpencode
 #>
 [CmdletBinding()]
 param(
     [switch]$NoClaude,
+    [switch]$NoOpencode,
+    [switch]$Local,
     [switch]$Uninstall
 )
 
 $ErrorActionPreference = 'Stop'
+
+# Capture invocation directory before any Push-Location happens.
+$InvokeDir = (Get-Location).Path
 
 # ------------------------------ constants ------------------------------------
 
 $RepoUrl       = 'https://github.com/fmflurry/settings-opencode.git'
 $Branch        = if ($env:SETTINGS_OPENCODE_BRANCH) { $env:SETTINGS_OPENCODE_BRANCH } else { 'master' }
 $SrcDir        = if ($env:SETTINGS_OPENCODE_SRC) { $env:SETTINGS_OPENCODE_SRC } else { Join-Path $env:USERPROFILE '.local\share\settings-opencode' }
-$OpencodeDir   = Join-Path $env:USERPROFILE '.config\opencode'
-$ClaudeDir     = Join-Path $env:USERPROFILE '.claude'
+
+if ($Local) {
+    $OpencodeDir = Join-Path $InvokeDir '.opencode'
+    $ClaudeDir   = Join-Path $InvokeDir '.claude'
+} else {
+    $OpencodeDir = Join-Path $env:USERPROFILE '.config\opencode'
+    $ClaudeDir   = Join-Path $env:USERPROFILE '.claude'
+}
 
 $EnvVars = [ordered]@{
     OPENCODE_MODEL_CONDUCTOR        = 'myMistral/mistral-medium-2604'
@@ -88,17 +114,29 @@ function Backup-IfExists($path) {
     }
 }
 
+# ------------------------------ guards --------------------------------------
+
+if ($NoClaude -and $NoOpencode) {
+    Die 'nothing to install (both -NoClaude and -NoOpencode given)'
+}
+
 # ------------------------------ uninstall ------------------------------------
 
 if ($Uninstall) {
     Step 'Uninstall'
-    foreach ($name in $EnvVars.Keys) {
-        [Environment]::SetEnvironmentVariable($name, $null, 'User')
+    if (-not $Local -and -not $NoOpencode) {
+        foreach ($name in $EnvVars.Keys) {
+            [Environment]::SetEnvironmentVariable($name, $null, 'User')
+        }
+        Ok 'removed OPENCODE_* User environment variables'
+    } elseif ($Local) {
+        Info 'env vars not removed — -Local mode never persisted them'
+    } else {
+        Info 'env vars not removed — OpenCode was skipped (-NoOpencode)'
     }
-    Ok 'removed OPENCODE_* User environment variables'
     Info "Copied config left in place (delete manually if you want it gone):"
-    Info "  $OpencodeDir"
-    Info "  $ClaudeDir"
+    if (-not $NoOpencode) { Info "  $OpencodeDir" }
+    if (-not $NoClaude)   { Info "  $ClaudeDir" }
     Info "Source clone left at: $SrcDir"
     exit 0
 }
@@ -109,12 +147,14 @@ Step 'Checking prerequisites'
 Require-Cmd 'git' 'Install from https://git-scm.com/download/win  (or: winget install --id Git.Git)'
 
 $pkgManager = $null
-if (Get-Command bun -ErrorAction SilentlyContinue) {
-    $pkgManager = 'bun'; Ok "bun $(bun --version)"
-} elseif (Get-Command npm -ErrorAction SilentlyContinue) {
-    $pkgManager = 'npm'; Ok "npm $(npm --version) (bun not found, will use npm)"
-} else {
-    Die 'neither bun nor npm found. Install Node.js 20+ (winget install --id OpenJS.NodeJS.LTS) or Bun (https://bun.sh), then re-run.'
+if (-not $NoOpencode) {
+    if (Get-Command bun -ErrorAction SilentlyContinue) {
+        $pkgManager = 'bun'; Ok "bun $(bun --version)"
+    } elseif (Get-Command npm -ErrorAction SilentlyContinue) {
+        $pkgManager = 'npm'; Ok "npm $(npm --version) (bun not found, will use npm)"
+    } else {
+        Die 'neither bun nor npm found. Install Node.js 20+ (winget install --id OpenJS.NodeJS.LTS) or Bun (https://bun.sh), then re-run.'
+    }
 }
 Ok "git $((git --version) -replace 'git version ','')"
 
@@ -136,29 +176,39 @@ if (Test-Path (Join-Path $SrcDir '.git')) {
 if ($LASTEXITCODE -ne 0) { Die 'git fetch/clone failed' }
 Ok "source ready at $SrcDir"
 
+# ------------------------------ local guard ----------------------------------
+
+if ($Local -and ($InvokeDir -eq $SrcDir)) {
+    Die 'run -Local from your project directory, not the settings-opencode clone'
+}
+
 # ------------------------------ opencode config ------------------------------
 
-Step "Installing OpenCode config into $OpencodeDir"
-if ((Test-Path $OpencodeDir) -and -not (Test-Path (Join-Path $OpencodeDir '.git'))) {
-    Backup-IfExists $OpencodeDir
-}
-Copy-Tree $SrcDir $OpencodeDir
-Ok "copied config (node_modules and .git excluded)"
-
-Step "Installing JS dependencies ($pkgManager)"
-Push-Location $OpencodeDir
-try {
-    if ($pkgManager -eq 'bun') {
-        bun install
-    } else {
-        npm ci
-        if ($LASTEXITCODE -ne 0) { npm install }
+if ($NoOpencode) {
+    Step 'OpenCode config — skipped (-NoOpencode)'
+} else {
+    Step "Installing OpenCode config into $OpencodeDir"
+    if ((Test-Path $OpencodeDir) -and -not (Test-Path (Join-Path $OpencodeDir '.git'))) {
+        Backup-IfExists $OpencodeDir
     }
-    if ($LASTEXITCODE -ne 0) { Die 'dependency install failed' }
-} finally {
-    Pop-Location
+    Copy-Tree $SrcDir $OpencodeDir
+    Ok "copied config (node_modules and .git excluded)"
+
+    Step "Installing JS dependencies ($pkgManager)"
+    Push-Location $OpencodeDir
+    try {
+        if ($pkgManager -eq 'bun') {
+            bun install
+        } else {
+            npm ci
+            if ($LASTEXITCODE -ne 0) { npm install }
+        }
+        if ($LASTEXITCODE -ne 0) { Die 'dependency install failed' }
+    } finally {
+        Pop-Location
+    }
+    Ok 'deps installed'
 }
-Ok 'deps installed'
 
 # ------------------------------ claude mirror --------------------------------
 
@@ -177,24 +227,44 @@ if ($NoClaude) {
 
 # ------------------------------ env vars -------------------------------------
 
-Step 'Configuring User environment variables'
-foreach ($name in $EnvVars.Keys) {
-    [Environment]::SetEnvironmentVariable($name, $EnvVars[$name], 'User')
-    # Make them available in the current session too.
-    Set-Item -Path "Env:$name" -Value $EnvVars[$name]
+if ($NoOpencode) {
+    Step 'Environment variables — skipped (-NoOpencode)'
+} elseif ($Local) {
+    Step 'Environment variables — not persisted (-Local mode)'
+    Info 'Add the following to a per-project .envrc (direnv) or source it manually:'
+    Info ''
+    foreach ($name in $EnvVars.Keys) {
+        Info "  `$env:$name = '$($EnvVars[$name])'"
+    }
+    Info ''
+} else {
+    Step 'Configuring User environment variables'
+    foreach ($name in $EnvVars.Keys) {
+        [Environment]::SetEnvironmentVariable($name, $EnvVars[$name], 'User')
+        # Make them available in the current session too.
+        Set-Item -Path "Env:$name" -Value $EnvVars[$name]
+    }
+    Ok 'wrote OPENCODE_MODEL_* and OPENCODE_REASONING_* (User scope)'
+    Info 'These are defaults for the myMistral provider — edit them for your own provider:'
+    Info '  setx OPENCODE_MODEL_CONDUCTOR "yourprovider/your-model"'
 }
-Ok 'wrote OPENCODE_MODEL_* and OPENCODE_REASONING_* (User scope)'
-Info 'These are defaults for the myMistral provider — edit them for your own provider:'
-Info '  setx OPENCODE_MODEL_CONDUCTOR "yourprovider/your-model"'
 
 # ------------------------------ next steps -----------------------------------
 
 Step 'Done'
-Info "OpenCode config: $OpencodeDir"
-if (-not $NoClaude) { Info "Claude mirror:   $ClaudeDir" }
-Info 'Open a NEW terminal so the environment variables take effect, then run: opencode'
-Info ''
-Info 'Update later — re-run the same one-liner:'
-Info '  irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1 | iex'
-Info 'Uninstall:'
-Info '  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -Uninstall'
+if (-not $NoOpencode) { Info "OpenCode config: $OpencodeDir" }
+if (-not $NoClaude)   { Info "Claude mirror:   $ClaudeDir" }
+if ($Local) {
+    Info 'Project-scoped install — applies only when working in:'
+    Info "  $InvokeDir"
+    Info 'No new terminal needed — no persistent env vars were written.'
+    Info "Re-run anytime: bootstrap.ps1 -Local"
+    Info "Uninstall local copy: remove $OpencodeDir and $ClaudeDir manually"
+} else {
+    Info 'Open a NEW terminal so the environment variables take effect, then run: opencode'
+    Info ''
+    Info 'Update later — re-run the same one-liner:'
+    Info '  irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1 | iex'
+    Info 'Uninstall:'
+    Info '  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -Uninstall'
+}

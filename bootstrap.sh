@@ -5,9 +5,11 @@
 # Usage (install or update — same command):
 #   curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash
 #
-# Pass flags through to install.sh after `-s --`, e.g. skip the Claude mirror:
+# Pass flags through to install.sh after `-s --`, e.g.:
 #   curl -fsSL .../bootstrap.sh | bash -s -- --no-claude
 #   curl -fsSL .../bootstrap.sh | bash -s -- --uninstall
+#   curl -fsSL .../bootstrap.sh | bash -s -- --local
+#   curl -fsSL .../bootstrap.sh | bash -s -- --no-opencode
 #
 # It clones (or fast-forwards) the repo into a local source dir, then hands off
 # to install.sh, which copies the config into ~/.config/opencode and ~/.claude.

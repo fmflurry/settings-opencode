@@ -1,6 +1,5 @@
 # Dependencies and generated caches
 node_modules/
-.instinct-digest-state.json
 antigravity-*
 .DS_Store
 
@@ -25,9 +24,4 @@ opencode.bkup/
 
 # Plugin-installed skill (regenerated on opencode start)
 skills/skill-creator/
-
-# Continuous-learning runtime artifacts (not yet promoted)
-skills/learned/*.draft.md
-skills/learned/learned-*.md
-skills/learned/.continuous-learning-index.json
 data

@@ -146,7 +146,7 @@ function Copy-TreeWithSeed($src, $dst) {
 }
 
 # Sync the canonical skill union (root skills/ U .claude/skills/, root wins on
-# conflict, excluding skill-creator/ and learned/ runtime dirs) into each installed
+# conflict, excluding skill-creator/ runtime dir) into each installed
 # target's skills/ directory. Mirrors install.sh's sync_skills function.
 function Sync-Skills($srcDir, [string[]]$destDirs) {
     Step 'Syncing canonical skill union'
@@ -162,7 +162,6 @@ function Sync-Skills($srcDir, [string[]]$destDirs) {
         if (Test-Path $claudeSkills) {
             $roboArgs = @(
                 $claudeSkills, $dst, '/E',
-                '/XD', (Join-Path $claudeSkills 'learned'),
                 '/XF', '.DS_Store',
                 '/NFL', '/NDL', '/NJH', '/NJS', '/NP', '/R:1', '/W:1'
             )
@@ -175,7 +174,7 @@ function Sync-Skills($srcDir, [string[]]$destDirs) {
         if (Test-Path $rootSkills) {
             $roboArgs = @(
                 $rootSkills, $dst, '/E',
-                '/XD', (Join-Path $rootSkills 'skill-creator'), (Join-Path $rootSkills 'learned'),
+                '/XD', (Join-Path $rootSkills 'skill-creator'),
                 '/XF', '.DS_Store',
                 '/NFL', '/NDL', '/NJH', '/NJS', '/NP', '/R:1', '/W:1'
             )

@@ -86,7 +86,7 @@ happen inside `coder`/`writer`/etc. subagents whose `enabled_tools` permit them.
 
 opencode TypeScript **plugins** have no Vibe runtime counterpart and were
 skipped: `ecc-hooks` (conductor retry-guard, bash-write guards, console.log
-audit), instinct learning (`instinct-*`, `evolve`), worktree manager,
+audit), worktree manager,
 caveman TUI plugin, auto-compact, notification. Slash skills for `learn`,
 `checkpoint`, `verify`, `eval`, `skill-create` are installed but their
 plugin-backed behavior is inert.

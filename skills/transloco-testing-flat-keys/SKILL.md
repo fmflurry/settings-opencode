@@ -2,7 +2,6 @@
 name: "transloco-testing-flat-keys"
 description: "When testing components that call this.transloco.translate() in TypeScript code"
 version: "1.0.0"
-source: "continuous-learning"
 status: "approved"
 learned_from: "skills/learned/transloco-testing-flat-keys.md"
 ---

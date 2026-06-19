@@ -174,7 +174,7 @@ install_skills() {
     # Delegate to scripts/sync-skills.sh — the canonical union-merge implementation
     # shared by install.sh, install-cursor.sh, and bootstrap.ps1.
     # It builds root/skills ∪ .claude/skills (root wins on conflict, excluding
-    # skill-creator/ and learned/ runtime dirs) and overlays them into $dst.
+    # skill-creator/ runtime dir) and overlays them into $dst.
     local sync_script="$REPO_DIR/scripts/sync-skills.sh"
     if [ -x "$sync_script" ]; then
         "$sync_script" "$dst"

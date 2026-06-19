@@ -33,9 +33,9 @@ A hardened primary `conductor` agent backed by **13 specialist sub-agents** (pla
 - **Front-loaded first-tool gate** in `prompts/agents/conductor.txt`: hard rules at the top, routing table second, six few-shot User → `task` examples (with explicit wrong-way contrasts) so literal models copy the right pattern.
 - **Slash commands** that force routing to the right specialist (`/plan`, `/tdd`, `/security`, `/code-review`, …).
 - **Always-on skills** loaded at session start — Socratic design, security review, coding standards, git workflow, [CodeMemory-first](https://github.com/fmflurry/code-memory) repo orientation.
-- **OpenCode plugins** — ECC hooks (Prettier + `tsc` on save), continuous-learning v2 (the *homunculus* instinct store), worktree spawner, auto-compact, caveman ultra mode, Figma RAG trigger, macOS notifications, startup bootstrap.
+- **OpenCode plugins** — ECC hooks (Prettier + `tsc` on save), worktree spawner, auto-compact, caveman ultra mode, Figma RAG trigger, macOS notifications.
 - **Custom tools** — `run-tests`, `check-coverage`, `security-audit`, plus a codemap generator.
-- **A `.claude/` mirror** — hooks, rule packs, learned skills, and the shared homunculus store, so Claude Code benefits from the same guardrails.
+- **A `.claude/` mirror** — hooks, rule packs, and skills, so Claude Code benefits from the same guardrails.
 
 The two halves stand alone. Use the OpenCode side, the Claude Code mirror, or both — whichever you'd find useful.
 
@@ -52,7 +52,6 @@ The two halves stand alone. Use the OpenCode side, the Claude Code mirror, or bo
   - [Plugins & hooks](#plugins-en)
   - [Custom tools](#tools-en)
   - [TUI plugins](#tui-en)
-  - [Continuous learning](#learning-en)
   - [Claude Code mirror](#claude-en)
   - [How it fits together](#flow-en)
 - [Français](#francais)
@@ -65,7 +64,6 @@ The two halves stand alone. Use the OpenCode side, the Claude Code mirror, or bo
   - [Plugins & hooks](#plugins-fr)
   - [Outils custom](#tools-fr)
   - [TUI plugins](#tui-fr)
-  - [Apprentissage continu](#learning-fr)
   - [Mirror Claude Code](#claude-fr)
   - [Comment tout s'emboite](#flow-fr)
 
@@ -258,9 +256,8 @@ What this installs:
 - `.claude/settings.json` — permissions, hooks, env vars (`API_TIMEOUT_MS`, autocompact threshold, etc.). Seeded on first install only; user edits preserved on reinstall.
 - `.claude/hooks/*.sh` — pre-tool-use security warnings + stop hook.
 - `.claude/rules/{common,typescript}/*.md` — coding-style/testing/security rule packs.
-- `.claude/commands/*.md` — extra slash commands (`/create-pull-request`, `/curate-learned-skills`, `/update-codemaps`).
-- `.claude/skills/**` — **full parity copy of canonical skill set** (same as `skills/` at repo root, computed and synced by `scripts/sync-skills.sh`). Includes all OpenCode skills plus any Claude-specific learned skills; both sides stay in sync.
-- `.claude/homunculus/` — the shared instinct store used by continuous-learning v2 (kept empty in fresh installs; populated by the OpenCode plugins as you work).
+- `.claude/commands/*.md` — extra slash commands (`/create-pull-request`, `/update-codemaps`).
+- `.claude/skills/**` — **full parity copy of canonical skill set** (same as `skills/` at repo root, computed and synced by `scripts/sync-skills.sh`). Includes all OpenCode skills; both sides stay in sync.
 
 </details>
 
@@ -273,7 +270,6 @@ opencode
 You should see:
 
 - The caveman ultra TUI sidebar plugin show up (or be silent if you're not in a caveman session).
-- The continuous-learning v2 injector preload high-confidence instincts into the system prompt.
 
 Then drop a slash command:
 
@@ -314,7 +310,7 @@ If a new plugin shows up, OpenCode picks it up on the next restart. If an env va
 <a id="english"></a>
 ## English
 
-Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primary `conductor` agent (no write/edit perms — must delegate), 13 specialist sub-agents, always-on skills, slash commands, OpenCode plugins (hooks, instincts, worktrees, auto-compact, caveman, figma RAG, notifications), custom tools, and a Claude Code mirror.
+Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primary `conductor` agent (no write/edit perms — must delegate), 13 specialist sub-agents, always-on skills, slash commands, OpenCode plugins (hooks, worktrees, auto-compact, caveman, figma RAG, notifications), custom tools, and a Claude Code mirror.
 
 <a id="goals-en"></a>
 ### Goals
@@ -322,7 +318,6 @@ Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primar
 - Reproducibility: same agent behavior across machines/sessions.
 - Quality: on-demand TDD, frequent verification, centralized conventions.
 - Security: `security-review` skill loaded by default + pre-tool-use hooks.
-- Continuous improvement: instincts captured into `~/.claude/homunculus`, surfaced into the system prompt on the next session.
 
 <a id="layout-en"></a>
 ### Repository layout
@@ -338,8 +333,8 @@ Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primar
 - Mode notes: `contexts/*.md`.
 - Global instructions: `instructions/subagent-routing.md`, `instructions/codememory-first.md`, `instructions/caveman-ultra.md`.
 - Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`, `scripts/sync-skills.sh` (sync canonical skill set to both harnesses).
-- Claude mirror: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/skills/` (full parity copy), `.claude/commands/`, `.claude/homunculus/`.
-- Intentional exclusions (`.gitignore`): `node_modules/`, `.instinct-digest-state.json`, `antigravity-*`, `.DS_Store`, local `.env*` files except `.env.example`, runtime dirs `skills/skill-creator/` and `skills/learned/*` (not synced).
+- Claude mirror: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/skills/` (full parity copy), `.claude/commands/`.
+- Intentional exclusions (`.gitignore`): `node_modules/`, `antigravity-*`, `.DS_Store`, local `.env*` files except `.env.example`, runtime dir `skills/skill-creator/` (not synced).
 
 <a id="config-en"></a>
 ### Configuration: `opencode.jsonc`
@@ -419,16 +414,9 @@ Templates in `commands/`. Most run as `subtask: true` (delegated to a specialist
 | `/update-docs`        | doc-updater           | Doc updates.                                     |
 | `/update-codemaps`    | doc-updater           | Generates `docs/CODEMAPS/`.                      |
 | `/test-coverage`      | tdd-guide             | Coverage analysis.                               |
-| `/learn`              | (primary)             | Extract reusable patterns from the session.      |
-| `/checkpoint`         | (primary)             | Save verification + progress state.              |
 | `/verify`             | (primary)             | Verification loop.                               |
 | `/eval`               | (primary)             | Evaluate against criteria.                       |
-| `/setup-pm`           | (primary)             | Configure package manager.                       |
 | `/skill-create`       | (primary)             | Generate a skill from git history.               |
-| `/instinct-status`    | (primary)             | Inspect learned instincts.                       |
-| `/instinct-import`    | (primary)             | Import instincts.                                |
-| `/instinct-export`    | (primary)             | Export instincts.                                |
-| `/evolve`             | (primary)             | Cluster instincts into skills.                   |
 
 <a id="skills-en"></a>
 ### Skills
@@ -454,15 +442,11 @@ On-demand (loaded by description / by command):
 - `skills/angular-accessibility/SKILL.md` — Angular ARIA audit.
 - `skills/compress/SKILL.md` — context compression.
 - `skills/flurryx/SKILL.md` — domain-specific patterns.
-- `skills/continuous-learning/SKILL.md` — learned-draft schema.
 - `skills/ddd-type-duplication-across-layers/SKILL.md` — union-type scaffolding across DDD layers.
-- `skills/learned-codemap-generator-hygiene/SKILL.md` — codemap generator updates.
-- `skills/learned-codemap-jump-navigation-angular/SKILL.md` — Angular feature navigation.
 - `skills/transloco/SKILL.md` — Transloco i18n management.
 - `skills/transloco-testing-flat-keys/SKILL.md` — Transloco testing helpers.
-- `skills/learned/` — auto-generated drafts from the stop hook (excluded from sync).
 
-**Sync behavior:** `scripts/sync-skills.sh` computes the canonical union (root `skills/` ∪ `.claude/skills/`, root wins on conflicts), excludes runtime dirs (`skills/skill-creator/`, `skills/learned/*`), and copies into the given destination(s). Runs standalone and is invoked by installers.
+**Sync behavior:** `scripts/sync-skills.sh` computes the canonical union (root `skills/` ∪ `.claude/skills/`, root wins on conflicts), excludes runtime dir (`skills/skill-creator/`), and copies into the given destination(s). Runs standalone and is invoked by installers.
 
 <a id="plugins-en"></a>
 ### Plugins & hooks
@@ -470,10 +454,6 @@ On-demand (loaded by description / by command):
 All TypeScript plugins use `@opencode-ai/plugin@1.4.6`.
 
 - `plugins/ecc-hooks.ts` — Prettier on edited JS/TS, `console.log` detection, sensitive-command reminders (`git push` etc.), and the **conductor hard-stop**: aborts bash redirects (`>`, `>>`, `tee`, `sed -i`, heredocs, `python -c open().write`) targeting source files so delegation cannot be bypassed via shell.
-- `plugins/instinct-injector.ts` — reads `~/.claude/homunculus`, filters by confidence, injects instincts into the system prompt (continuous-learning v2 read side).
-- `plugins/instinct-observer.ts` — captures `tool.execute.before/after` events and appends to `observations.jsonl` (write side).
-- `plugins/instinct-digest.ts` — session-start diff: surfaces new/updated instincts since last session.
-- `plugins/continuous-learning-stop-hook.js` — legacy v1 stop hook, calls `skills/continuous-learning/bin/evaluate-session.js` to write a draft into `skills/learned/`.
 - `plugins/auto-compact.js` — auto-compacts once `OC_COMPACT_THRESHOLD` tool calls are reached, only while idle.
 - `plugins/notification.js` — macOS notification + sound on `session.idle`.
 - `plugins/caveman-server.ts` + `tui-plugins/caveman.tsx` — injects caveman instructions into the system prompt + TUI sidebar showing active mode.
@@ -496,19 +476,6 @@ Reusable OpenCode tools exposed via `tools/index.ts`:
 
 `tui-plugins/caveman.tsx` — React sidebar that shows a "CAVEMAN ULTRA" badge when the mode is active (flag file written by `caveman-server.ts`).
 
-<a id="learning-en"></a>
-### Continuous learning
-
-Two pipelines coexist (backwards compat):
-
-1. **v1 (legacy)** — `plugins/continuous-learning-stop-hook.js` -> `skills/continuous-learning/stop.sh` -> `skills/continuous-learning/bin/evaluate-session.js` writes at most one draft into `skills/learned/`.
-2. **v2 (homunculus, shared with Claude Code)** — `plugins/instinct-observer.ts` writes to `~/.claude/homunculus/projects/<id>/observations.jsonl`. A daemon (ECC side) clusters observations into instincts. `plugins/instinct-injector.ts` injects them into the system prompt. `plugins/instinct-digest.ts` produces a session-start diff.
-
-Curation:
-
-- `/curate-learned-skills` (Claude Code side) — reviews drafts in `learned/` and promotes the valuable ones into real skills.
-- `/instinct-status` / `/evolve` — inspect and evolve instincts into skills.
-
 <a id="claude-en"></a>
 ### Claude Code mirror (`.claude/`)
 
@@ -517,33 +484,30 @@ Curation:
 - `hooks/pre-tool-use.sh` — warning-only checks on sensitive commands/files.
 - `hooks/stop.sh` — Claude Code stop hook.
 - `rules/common/*.md` + `rules/typescript/*.md` — rule packs (style, testing, security, patterns, hooks, agents).
-- `commands/{create-pull-request,curate-learned-skills,update-codemaps}.md` — Claude commands.
+- `commands/{create-pull-request,update-codemaps}.md` — Claude commands.
 - `skills/**` — **full parity copy of canonical skill set** (synced via `scripts/sync-skills.sh`). Both OpenCode and Claude Code see the same skills; updates to root `skills/` propagate to `.claude/skills/` on install/sync.
-- `homunculus/{instincts,evolved,observations.archive}` — store shared with OpenCode.
 
 <a id="flow-en"></a>
 ### How it fits together
 
-1. Startup: OpenCode loads `opencode.jsonc` -> always-on instructions -> `instinct-injector` preloads instincts -> `instinct-digest` produces a diff -> `caveman-server` adds caveman preamble if active.
-2. Dev: `conductor` executes — it cannot write files; it dispatches Task calls to specialists. `ecc-hooks` formats / flags `console.log` / blocks bash-write bypasses. `instinct-observer` archives events.
+1. Startup: OpenCode loads `opencode.jsonc` -> always-on instructions -> `caveman-server` adds caveman preamble if active.
+2. Dev: `conductor` executes — it cannot write files; it dispatches Task calls to specialists. `ecc-hooks` formats / flags `console.log` / blocks bash-write bypasses.
 4. Workflow: `conductor` routes to specialists through Task (perm-enforced); `/plan`, `/tdd`, `/security`, etc. force the same routing explicitly.
 5. Idle: `auto-compact` triggers when the tool-call threshold is reached; `notification` pings macOS.
-6. Stop: v1 hook writes a draft; v2 daemon clusters observations into instincts for the next session.
 
 ---
 
 <a id="francais"></a>
 ## Français
 
-Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), treize sous-agents specialises, des skills toujours actives, des commandes slash, des plugins (hooks, instincts, worktrees, auto-compact, caveman, figma RAG), des outils custom et un mirror Claude Code.
+Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), treize sous-agents specialises, des skills toujours actives, des commandes slash, des plugins (hooks, worktrees, auto-compact, caveman, figma RAG), des outils custom et un mirror Claude Code.
 
 <a id="objectif-fr"></a>
 ### Objectif
 
 - Reproductibilite: meme comportement entre machines/sessions.
 - Qualite: TDD a la demande, verification reguliere, conventions centralisees.
-- Securite: skill `security-review` chargee par defaut + hooks pre-tool-use.
-- Apprentissage continu: capture automatique des "instincts" dans `~/.claude/homunculus`, surface dans le system prompt a la session suivante.
+- Securite: skill `security-review` chargee par defaut + hooks pre-tool-use (security warnings).
 
 - Configs: `opencode.jsonc`, `dcp.jsonc` (dynamic context pruning), `ocx.jsonc` (registries OCX), `tui.json` (theme TUI).
 - Profils: `profiles/<name>/` (override `opencode.jsonc` + `AGENTS.md` par profil, lance via `ocx opencode -p <name>`).
@@ -556,8 +520,8 @@ Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un ag
 - Contextes (memos de mode): `contexts/*.md`.
 - Instructions globales: `instructions/subagent-routing.md`, `instructions/codememory-first.md`, `instructions/caveman-ultra.md`.
 - Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`, `scripts/sync-skills.sh` (synchronise l'ensemble canonical des skills aux deux harnesses).
-- Mirror Claude Code: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/skills/` (copie en parité complète), `.claude/commands/`, `.claude/homunculus/`.
-- Exclusions volontaires (`.gitignore`): `node_modules/`, `.instinct-digest-state.json`, `antigravity-*`, `.DS_Store`, fichiers locaux `.env*` sauf `.env.example`, répertoires runtime `skills/skill-creator/` et `skills/learned/*` (non synchronisés).
+- Mirror Claude Code: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/skills/` (copie en parité complète), `.claude/commands/`.
+- Exclusions volontaires (`.gitignore`): `node_modules/`, `antigravity-*`, `.DS_Store`, fichiers locaux `.env*` sauf `.env.example`, répertoire runtime `skills/skill-creator/` (non synchronisé).
 
 <a id="config-fr"></a>
 ### Configuration: `opencode.jsonc`
@@ -637,16 +601,9 @@ Templates dans `commands/`. La plupart sont `subtask: true` -> elles s'executent
 | `/update-docs`        | doc-updater         | Mise a jour de la doc.                             |
 | `/update-codemaps`    | doc-updater         | Genere `docs/CODEMAPS/`.                           |
 | `/test-coverage`      | tdd-guide           | Analyse coverage.                                  |
-| `/learn`              | (primary)           | Extrait patterns reutilisables de la session.      |
-| `/checkpoint`         | (primary)           | Sauvegarde verification + progress.                |
 | `/verify`             | (primary)           | Boucle de verification.                            |
 | `/eval`               | (primary)           | Evaluation contre criteres.                        |
-| `/setup-pm`           | (primary)           | Configure le package manager.                      |
 | `/skill-create`       | (primary)           | Genere une skill depuis l'historique git.          |
-| `/instinct-status`    | (primary)           | Affiche les instincts appris.                      |
-| `/instinct-import`    | (primary)           | Import d'instincts.                                |
-| `/instinct-export`    | (primary)           | Export d'instincts.                                |
-| `/evolve`             | (primary)           | Cluster instincts -> skills.                       |
 
 <a id="skills-fr"></a>
 ### Skills
@@ -672,15 +629,11 @@ Skills sur demande (chargés par description / par commande):
 - `skills/angular-accessibility/SKILL.md` — audit ARIA Angular.
 - `skills/compress/SKILL.md` — compression de contexte.
 - `skills/flurryx/SKILL.md` — patterns spécifiques au domaine.
-- `skills/continuous-learning/SKILL.md` — schéma des drafts learned.
 - `skills/ddd-type-duplication-across-layers/SKILL.md` — scaffold union-types sur couches DDD.
-- `skills/learned-codemap-generator-hygiene/SKILL.md` — mise à jour codemap generators.
-- `skills/learned-codemap-jump-navigation-angular/SKILL.md` — navigation Angular features.
 - `skills/transloco/SKILL.md` — gestion i18n Transloco.
 - `skills/transloco-testing-flat-keys/SKILL.md` — helpers Transloco testing.
-- `skills/learned/` — drafts générés par le stop-hook (exclus de la synchro).
 
-**Comportement sync:** `scripts/sync-skills.sh` calcule l'union canonique (root `skills/` ∪ `.claude/skills/`, root gagne en cas de conflit), exclut les répertoires runtime (`skills/skill-creator/`, `skills/learned/*`), et copie dans la(les) destination(s) donnée(s). S'exécute seul et est invoqué par les installateurs.
+**Comportement sync:** `scripts/sync-skills.sh` calcule l'union canonique (root `skills/` ∪ `.claude/skills/`, root gagne en cas de conflit), exclut le répertoire runtime (`skills/skill-creator/`), et copie dans la(les) destination(s) donnée(s). S'exécute seul et est invoqué par les installateurs.
 
 <a id="plugins-fr"></a>
 ### Plugins & hooks
@@ -688,10 +641,6 @@ Skills sur demande (chargés par description / par commande):
 Tous les plugins TypeScript utilisent `@opencode-ai/plugin@1.4.6`.
 
 - `plugins/ecc-hooks.ts` — Prettier sur fichiers JS/TS edites, detection `console.log`, rappels sur commandes sensibles (`git push` etc.), et le **hard-stop conductor**: avorte les redirections bash (`>`, `>>`, `tee`, `sed -i`, heredocs, `python -c open().write`) qui visent du code source, pour que la delegation ne puisse pas etre contournee via le shell.
-- `plugins/instinct-injector.ts` — lit `~/.claude/homunculus`, filtre par confidence, injecte les instincts dans le system prompt (continuous-learning v2 read-side).
-- `plugins/instinct-observer.ts` — capture les events `tool.execute.before/after` et append dans `observations.jsonl` (write-side).
-- `plugins/instinct-digest.ts` — diff session-start: surface les instincts nouveaux/modifies depuis la derniere session.
-- `plugins/continuous-learning-stop-hook.js` — stop hook v1 (legacy) qui appelle `skills/continuous-learning/bin/evaluate-session.js` pour produire un draft dans `skills/learned/`.
 - `plugins/auto-compact.js` — auto-compaction quand `OC_COMPACT_THRESHOLD` est atteint, en idle uniquement.
 - `plugins/notification.js` — notification macOS (osascript + Glass.aiff) sur `session.idle`.
 - `plugins/caveman-server.ts` + `tui-plugins/caveman.tsx` — injecte les instructions caveman dans le system prompt + sidebar TUI qui affiche le mode actif.
@@ -714,19 +663,6 @@ Outils OpenCode reutilisables exposes via `tools/index.ts`:
 
 `tui-plugins/caveman.tsx` — sidebar React qui affiche un badge "CAVEMAN ULTRA" quand le mode est actif (drapeau ecrit par `caveman-server.ts`).
 
-<a id="learning-fr"></a>
-### Apprentissage continu
-
-Deux pipelines coexistent (compatibilite ascendante):
-
-1. **v1 (legacy)** — `plugins/continuous-learning-stop-hook.js` -> `skills/continuous-learning/stop.sh` -> `skills/continuous-learning/bin/evaluate-session.js` ecrit au plus un draft dans `skills/learned/`.
-2. **v2 (homunculus, partagé avec Claude Code)** — `plugins/instinct-observer.ts` ecrit dans `~/.claude/homunculus/projects/<id>/observations.jsonl`. Un daemon (cote ECC) cluster les observations en "instincts". `plugins/instinct-injector.ts` les injecte dans le system prompt. `plugins/instinct-digest.ts` produit un diff session-start.
-
-Curation:
-
-- `/curate-learned-skills` (cote Claude Code) — relit les drafts dans `learned/` et promeut les bons en vraies skills.
-- `/instinct-status` / `/evolve` — inspecte et fait evoluer les instincts en skills.
-
 <a id="claude-fr"></a>
 ### Mirror Claude Code (`.claude/`)
 
@@ -735,15 +671,13 @@ Curation:
 - `hooks/pre-tool-use.sh` — warnings sur commandes/fichiers sensibles (warn only).
 - `hooks/stop.sh` — stop hook Claude Code.
 - `rules/common/*.md` + `rules/typescript/*.md` — packs de règles (style, tests, sécurité, patterns, hooks, agents).
-- `commands/{create-pull-request,curate-learned-skills,update-codemaps}.md` — commandes Claude.
+- `commands/{create-pull-request,update-codemaps}.md` — commandes Claude.
 - `skills/**` — **copie en parité complète de l'ensemble canonical des skills** (synchronisée via `scripts/sync-skills.sh`). OpenCode et Claude Code voient les mêmes skills; les mises à jour de `skills/` au root se propagent à `.claude/skills/` à l'install/sync.
-- `homunculus/{instincts,evolved,observations.archive}` — store partagé avec OpenCode.
 
 <a id="flow-fr"></a>
 ### Comment tout s'emboite
 
-1. Demarrage: OpenCode charge `opencode.jsonc` -> instructions globales -> plugin `instinct-injector` injecte les instincts -> `instinct-digest` produit un diff -> `caveman-server` ajoute le preamble si actif.
-2. Dev: `conductor` execute — il n'a pas le droit d'ecrire; il dispatche des Task vers les specialistes. `ecc-hooks` formate / flag les `console.log` / bloque les bypasses bash-write. `instinct-observer` archive les events.
+1. Demarrage: OpenCode charge `opencode.jsonc` -> instructions globales -> `caveman-server` ajoute le preamble si actif.
+2. Dev: `conductor` execute — il n'a pas le droit d'ecrire; il dispatche des Task vers les specialistes. `ecc-hooks` formate / flag les `console.log` / bloque les bypasses bash-write.
 4. Workflow: `conductor` route via Task (impose par permissions); `/plan`, `/tdd`, `/security`, etc. forcent explicitement le meme routage.
 5. Idle: `auto-compact` declenche un compact quand le seuil de tool calls est atteint. `notification` ping macOS.
-6. Stop: hook v1 produit un draft, hook v2 cluster les observations en instincts pour la session suivante.

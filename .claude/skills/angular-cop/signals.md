@@ -77,7 +77,7 @@ return computed(() => this.signal());
 
 ## Helpers vs. standalone functions
 
-Per global instinct: pure helpers used by computed signals stay as **private methods on the class**, not standalone module functions. Use functional style (pure, no side effects) inside the class.
+Convention: pure helpers used by computed signals stay as **private methods on the class**, not standalone module functions. Use functional style (pure, no side effects) inside the class.
 
 ```ts
 class FooComponent {

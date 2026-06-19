@@ -4,6 +4,8 @@ description: Generate skills from git history analysis
 
 # Skill Create Command
 
+> CC: no dedicated subagent — the primary agent runs these steps directly.
+
 Analyze git history to generate OpenCode skills: $ARGUMENTS
 
 ## Your Task

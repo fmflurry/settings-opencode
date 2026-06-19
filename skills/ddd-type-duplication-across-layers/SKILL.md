@@ -2,7 +2,6 @@
 name: "ddd-type-duplication-across-layers"
 description: "When adding values to any union type in a domains/models/ file"
 version: "1.0.0"
-source: "continuous-learning"
 status: "approved"
 learned_from: "skills/learned/ddd-type-duplication-across-layers.md"
 ---

@@ -1,11 +1,10 @@
 ---
 description: Commit relevant changes and push through the git workflow
-agent: git-specialist
 ---
 
 # Push Changes Command
 
-Delegate to the `git-specialist` agent (sonnet) to commit and push.
+> CC: delegate this to the `git-specialist` subagent via the Agent tool (subagent_type: `git-specialist`). The subagent inspects the repo and runs the steps below.
 
 ## Task
 

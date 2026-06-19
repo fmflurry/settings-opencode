@@ -11,7 +11,6 @@
 #
 # Runtime/plugin dirs excluded from the union:
 #   skills/skill-creator/   (plugin-regenerated, not a committed skill)
-#   skills/learned/         (continuous-learning runtime artifacts)
 #
 # Behaviour:
 #   - Additive overlay: new skill dirs are created, existing files are updated.
@@ -79,7 +78,6 @@ copy_skill_source() {
     if [ "$_USE_RSYNC" = "1" ]; then
         rsync -a \
             --exclude='skill-creator' \
-            --exclude='learned' \
             --exclude='.DS_Store' \
             --exclude='node_modules' \
             --exclude='.git' \
@@ -87,7 +85,6 @@ copy_skill_source() {
     else
         ( cd "$src" && tar -h -cf - \
             --exclude='./skill-creator' \
-            --exclude='./learned' \
             --exclude='.DS_Store' \
             --exclude='node_modules' \
             --exclude='.git' \
@@ -110,7 +107,7 @@ info "repo:          $REPO_DIR"
 info "source 1:      $ROOT_SKILLS (primary — wins on conflict)"
 info "source 2:      $CLAUDE_SKILLS (secondary)"
 info "destinations:  $*"
-info "excluded:      skill-creator/ learned/"
+info "excluded:      skill-creator/"
 
 SYNCED_COUNT=0
 for DEST in "$@"; do

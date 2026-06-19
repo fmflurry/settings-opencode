@@ -11,6 +11,8 @@
 #
 # Usage:
 #   ./vibe/install-vibe.sh            # install (backs up existing files)
+#   ./vibe/install-vibe.sh --yes      # non-interactive install (skip prompts)
+#   ./vibe/install-vibe.sh --uninstall  # remove provisioned content from VIBE_HOME
 #   VIBE_HOME=/custom ./vibe/install-vibe.sh
 #
 set -euo pipefail
@@ -19,10 +21,47 @@ REPO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]:-$0}" )/.." && pwd )"
 VIBE_HOME="${VIBE_HOME:-$HOME/.vibe}"
 SRC="$REPO_DIR/vibe"
 
+# Minimal arg parsing: accept --yes/-y and --uninstall.
+ASSUME_YES=0
+DO_UNINSTALL=0
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --yes|-y)    ASSUME_YES=1 ;;
+        --uninstall) DO_UNINSTALL=1 ;;
+        *) printf '[vibe] unknown flag: %s\n' "$1" >&2; exit 1 ;;
+    esac
+    shift
+done
+
 say()  { printf '\033[1;36m[vibe]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[vibe]\033[0m %s\n' "$*"; }
 
 backup() { [ -e "$1" ] && cp -a "$1" "$1.bak.$(date +%s)" && warn "backed up $1"; return 0; }
+
+# Uninstall: remove provisioned VIBE_HOME content.
+if [ "$DO_UNINSTALL" = "1" ]; then
+    if [ ! -d "$VIBE_HOME" ]; then
+        warn "VIBE_HOME=$VIBE_HOME does not exist — nothing to remove"
+        exit 0
+    fi
+    if [ "$ASSUME_YES" = "1" ]; then
+        rm -rf "$VIBE_HOME"
+        say "removed $VIBE_HOME"
+    else
+        printf '\033[1;33m[vibe]\033[0m Remove %s? [y/N] ' "$VIBE_HOME"
+        read -r _reply || _reply=""
+        case "${_reply:-N}" in
+            Y|y|Yes|yes)
+                rm -rf "$VIBE_HOME"
+                say "removed $VIBE_HOME"
+                ;;
+            *)
+                warn "aborted — $VIBE_HOME left in place"
+                ;;
+        esac
+    fi
+    exit 0
+fi
 
 mkdir -p "$VIBE_HOME/agents" "$VIBE_HOME/prompts" "$VIBE_HOME/skills"
 

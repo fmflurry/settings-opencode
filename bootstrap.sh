@@ -10,6 +10,9 @@
 #   curl -fsSL .../bootstrap.sh | bash -s -- --uninstall
 #   curl -fsSL .../bootstrap.sh | bash -s -- --local
 #   curl -fsSL .../bootstrap.sh | bash -s -- --no-opencode
+#   curl -fsSL .../bootstrap.sh | bash -s -- --vibe
+#   curl -fsSL .../bootstrap.sh | bash -s -- --no-vibe
+#   curl -fsSL .../bootstrap.sh | bash -s -- --opencode --vibe --yes
 #
 # It clones (or fast-forwards) the repo into a local source dir, then hands off
 # to install.sh, which copies the config into ~/.config/opencode and ~/.claude.

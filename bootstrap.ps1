@@ -39,6 +39,10 @@
 param(
     [switch]$NoClaude,
     [switch]$NoOpencode,
+    [switch]$NoVibe,
+    [switch]$Opencode,
+    [switch]$Claude,
+    [switch]$Vibe,
     [switch]$Local,
     [switch]$Uninstall
 )
@@ -57,9 +61,34 @@ $SrcDir        = if ($env:SETTINGS_OPENCODE_SRC) { $env:SETTINGS_OPENCODE_SRC } 
 if ($Local) {
     $OpencodeDir = Join-Path $InvokeDir '.opencode'
     $ClaudeDir   = Join-Path $InvokeDir '.claude'
+    $VibeDir     = Join-Path $InvokeDir '.vibe'
 } else {
     $OpencodeDir = Join-Path $env:USERPROFILE '.config\opencode'
     $ClaudeDir   = Join-Path $env:USERPROFILE '.claude'
+    $VibeDir     = Join-Path $env:USERPROFILE '.vibe'
+}
+
+# Allowlist / opt-out resolver — mirrors install.sh logic.
+# Defaults: opencode ON, claude ON, vibe OFF (opt-in).
+$doOpencode = $true
+$doClaude   = $true
+$doVibe     = $false
+
+if ($Opencode -or $Claude -or $Vibe) {
+    # Allowlist mode: only listed targets are candidates, others default OFF.
+    $doOpencode = $Opencode.IsPresent
+    $doClaude   = $Claude.IsPresent
+    $doVibe     = $Vibe.IsPresent
+}
+
+# Opt-outs win over allowlist (applied last).
+if ($NoOpencode) { $doOpencode = $false }
+if ($NoClaude)   { $doClaude   = $false }
+if ($NoVibe)     { $doVibe     = $false }
+
+# Three-way empty-set guard.
+if (-not $doOpencode -and -not $doClaude -and -not $doVibe) {
+    Die 'nothing to install (all three targets disabled)'
 }
 
 $EnvVars = [ordered]@{
@@ -94,7 +123,7 @@ function Copy-Tree($src, $dst) {
     if (-not (Test-Path $dst)) { New-Item -ItemType Directory -Path $dst -Force | Out-Null }
     $roboArgs = @(
         $src, $dst, '/E',
-        '/XD', (Join-Path $src 'node_modules'), (Join-Path $src '.git'), (Join-Path $src '.serena'),
+        '/XD', (Join-Path $src 'node_modules'), (Join-Path $src '.git'), (Join-Path $src '.serena'), (Join-Path $src 'vibe'), (Join-Path $src '.claude'), (Join-Path $src '.vibe'),
         '/XF', '*.log', '.DS_Store', '*.bak', 'install.sh', 'install-cursor.sh', 'bootstrap.sh', 'bootstrap.ps1',
         '/NFL', '/NDL', '/NJH', '/NJS', '/NP', '/R:1', '/W:1'
     )
@@ -198,17 +227,13 @@ function Backup-IfExists($path) {
     }
 }
 
-# ------------------------------ guards --------------------------------------
-
-if ($NoClaude -and $NoOpencode) {
-    Die 'nothing to install (both -NoClaude and -NoOpencode given)'
-}
+# (empty-set guard is handled in the resolver block above)
 
 # ------------------------------ uninstall ------------------------------------
 
 if ($Uninstall) {
     Step 'Uninstall'
-    if (-not $Local -and -not $NoOpencode) {
+    if (-not $Local -and $doOpencode) {
         foreach ($name in $EnvVars.Keys) {
             [Environment]::SetEnvironmentVariable($name, $null, 'User')
         }
@@ -216,11 +241,12 @@ if ($Uninstall) {
     } elseif ($Local) {
         Info 'env vars not removed — -Local mode never persisted them'
     } else {
-        Info 'env vars not removed — OpenCode was skipped (-NoOpencode)'
+        Info 'env vars not removed — OpenCode was skipped'
     }
     Info "Copied config left in place (delete manually if you want it gone):"
-    if (-not $NoOpencode) { Info "  $OpencodeDir" }
-    if (-not $NoClaude)   { Info "  $ClaudeDir" }
+    if ($doOpencode) { Info "  $OpencodeDir" }
+    if ($doClaude)   { Info "  $ClaudeDir" }
+    if ($doVibe)     { Info "  $VibeDir" }
     Info "Source clone left at: $SrcDir"
     exit 0
 }
@@ -231,7 +257,7 @@ Step 'Checking prerequisites'
 Require-Cmd 'git' 'Install from https://git-scm.com/download/win  (or: winget install --id Git.Git)'
 
 $pkgManager = $null
-if (-not $NoOpencode) {
+if ($doOpencode) {
     if (Get-Command bun -ErrorAction SilentlyContinue) {
         $pkgManager = 'bun'; Ok "bun $(bun --version)"
     } elseif (Get-Command npm -ErrorAction SilentlyContinue) {
@@ -268,15 +294,15 @@ if ($Local -and ($InvokeDir -eq $SrcDir)) {
 
 # ------------------------------ opencode config ------------------------------
 
-if ($NoOpencode) {
-    Step 'OpenCode config — skipped (-NoOpencode)'
+if (-not $doOpencode) {
+    Step 'OpenCode config — skipped'
 } else {
     Step "Installing OpenCode config into $OpencodeDir"
     if ((Test-Path $OpencodeDir) -and -not (Test-Path (Join-Path $OpencodeDir '.git'))) {
         Backup-IfExists $OpencodeDir
     }
     Copy-Tree $SrcDir $OpencodeDir
-    Ok "copied config (node_modules and .git excluded)"
+    Ok "copied config (node_modules, .git, .claude, .vibe excluded)"
 
     Step "Installing JS dependencies ($pkgManager)"
     Push-Location $OpencodeDir
@@ -296,8 +322,8 @@ if ($NoOpencode) {
 
 # ------------------------------ claude mirror --------------------------------
 
-if ($NoClaude) {
-    Step 'Claude Code mirror — skipped (-NoClaude)'
+if (-not $doClaude) {
+    Step 'Claude Code mirror — skipped'
 } else {
     $sourceClaude = Join-Path $SrcDir '.claude'
     if (Test-Path $sourceClaude) {
@@ -309,10 +335,28 @@ if ($NoClaude) {
     }
 }
 
+# ------------------------------ vibe install ---------------------------------
+
+if (-not $doVibe) {
+    Step 'Vibe install — skipped (use -Vibe to enable)'
+} else {
+    Step "Installing Vibe config into $VibeDir"
+    $vibeInstaller = Join-Path $SrcDir 'vibe\install-vibe.sh'
+    if (Get-Command bash -ErrorAction SilentlyContinue) {
+        $env:VIBE_HOME = $VibeDir
+        bash $vibeInstaller --yes
+        Ok "vibe installed into $VibeDir"
+    } else {
+        Warn 'bash not found — cannot run vibe/install-vibe.sh automatically'
+        Warn 'To install vibe manually, run from WSL or Git Bash:'
+        Warn "  VIBE_HOME='$VibeDir' bash '$vibeInstaller' --yes"
+    }
+}
+
 # ------------------------------ env vars -------------------------------------
 
-if ($NoOpencode) {
-    Step 'Environment variables — skipped (-NoOpencode)'
+if (-not $doOpencode) {
+    Step 'Environment variables — skipped'
 } elseif ($Local) {
     Step 'Environment variables — not persisted (-Local mode)'
     Info 'Add the following to a per-project .envrc (direnv) or source it manually:'
@@ -336,8 +380,9 @@ if ($NoOpencode) {
 # ------------------------------ skill sync -----------------------------------
 
 $skillDests = @()
-if (-not $NoOpencode) { $skillDests += (Join-Path $OpencodeDir 'skills') }
-if (-not $NoClaude)   { $skillDests += (Join-Path $ClaudeDir   'skills') }
+if ($doOpencode) { $skillDests += (Join-Path $OpencodeDir 'skills') }
+if ($doClaude)   { $skillDests += (Join-Path $ClaudeDir   'skills') }
+# Vibe manages its own skills via install-vibe.sh — do NOT add $VibeDir here.
 if ($skillDests.Count -gt 0) {
     Sync-Skills $SrcDir $skillDests
 }
@@ -345,14 +390,19 @@ if ($skillDests.Count -gt 0) {
 # ------------------------------ next steps -----------------------------------
 
 Step 'Done'
-if (-not $NoOpencode) { Info "OpenCode config: $OpencodeDir" }
-if (-not $NoClaude)   { Info "Claude mirror:   $ClaudeDir" }
+if ($doOpencode) { Info "OpenCode config: $OpencodeDir" }
+if ($doClaude)   { Info "Claude mirror:   $ClaudeDir" }
+if ($doVibe)     { Info "Vibe config:     $VibeDir" }
 if ($Local) {
     Info 'Project-scoped install — applies only when working in:'
     Info "  $InvokeDir"
     Info 'No new terminal needed — no persistent env vars were written.'
     Info "Re-run anytime: bootstrap.ps1 -Local"
-    Info "Uninstall local copy: remove $OpencodeDir and $ClaudeDir manually"
+    $localTargets = @()
+    if ($doOpencode) { $localTargets += $OpencodeDir }
+    if ($doClaude)   { $localTargets += $ClaudeDir }
+    if ($doVibe)     { $localTargets += $VibeDir }
+    Info ("Uninstall local copies: remove manually — " + ($localTargets -join ', '))
 } else {
     Info 'Open a NEW terminal so the environment variables take effect, then run: opencode'
     Info ''

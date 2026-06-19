@@ -89,7 +89,8 @@ On WSL it installs to the **Windows** side (`/mnt/c/Users/<you>/.config/opencode
 ```bash
 curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash -s -- --local
 curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash -s -- --no-claude
-curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash -s -- --no-opencode
+curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash -s -- --vibe
+curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash -s -- --local --opencode --vibe
 curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash -s -- --uninstall
 ```
 
@@ -99,11 +100,13 @@ curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/b
 irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1 | iex
 ```
 
-Copies into `%USERPROFILE%\.config\opencode` + `\.claude`, runs `npm install` (or `bun install`), and writes the `OPENCODE_*` defaults as **persistent User environment variables**. Open a new terminal afterwards so they take effect. Variants:
+Copies into `%USERPROFILE%\.config\opencode`, `\.claude`, and (if requested) `\.vibe`, runs `npm install` (or `bun install`), and writes the `OPENCODE_*` defaults as **persistent User environment variables**. Open a new terminal afterwards so they take effect. Variants:
 
 ```powershell
 # project-scoped install
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -Local
+# install vibe only (requires uv and MISTRAL_API_KEY)
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -Vibe
 # skip the Claude mirror
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -NoClaude
 # skip OpenCode (install Claude only)
@@ -115,10 +118,11 @@ Copies into `%USERPROFILE%\.config\opencode` + `\.claude`, runs `npm install` (o
 ### Prerequisites
 
 - macOS, Linux, WSL, or native Windows (the worktree and notification plugins assume macOS — work on Linux/WSL with minor degradation).
-- [OpenCode CLI](https://opencode.ai) installed and on your `PATH`.
-- [Claude Code](https://claude.com/claude-code) installed if you want the `.claude/` half.
+- [OpenCode CLI](https://opencode.ai) installed and on your `PATH` (unless installing Claude Code only via `--no-opencode`).
+- [Claude Code](https://claude.com/claude-code) installed if you want the `.claude/` mirror (unless skipped via `--no-claude`).
 - Either [Bun](https://bun.sh) (recommended — `bun.lock` is what's checked in) or Node.js 20+ with `npm`.
 - `git`.
+- **For vibe (`--vibe`):** `uv` (Astral's universal Python installer) and `MISTRAL_API_KEY` environment variable set. Windows: `bash` (Git Bash) must be available in `PATH` (vibe install delegates to `bash vibe/install-vibe.sh` and skips with a warning if bash is absent).
 
 ### Quick install (script)
 
@@ -130,27 +134,32 @@ cd ~/Workspace/settings-opencode
 ./install.sh
 ```
 
-`install.sh` is interactive by default. It will:
+`install.sh` is interactive by default. It will prompt for each of three independent targets (OpenCode, Claude Code, Vibe):
 
-1. Verify your prerequisites (`git`, `bun`/`npm`, `uv`).
-2. Symlink the repo into `~/.config/opencode` (backing up any existing config to `*.bak.<timestamp>`).
+1. Verify your prerequisites (`git`, `bun`/`npm`, `uv` if vibe is selected).
+2. **OpenCode** (if selected): symlink the repo into `~/.config/opencode` (or `./.opencode` if `--local`), backing up any existing config to `*.bak.<timestamp>`.
 3. Run `bun install` (or `npm ci` if Bun isn't available).
 4. Sync skills from the canonical set into both harnesses via `scripts/sync-skills.sh`.
 5. Seed personal config files (`settings.json`, `settings.local.json`, `policy-limits.json`) **only on first install**; preserve user edits on reinstall.
-6. Add the `OPENCODE_MODEL_*` and `OPENCODE_REASONING_*` defaults to your shell rc, fenced with markers so re-runs and uninstalls are idempotent.
-7. Optionally symlink `.claude/` into `~/.claude` (skip with `--no-claude` if you only want the OpenCode half, or use `--no-opencode` to install Claude Code only).
-8. Print a smoke-test command and the locations to tweak afterwards.
+6. Add the `OPENCODE_MODEL_*` and `OPENCODE_REASONING_*` defaults to your shell rc, fenced with markers so re-runs and uninstalls are idempotent (OpenCode only, skipped if `--local`).
+7. **Claude Code** (if selected): symlink or copy `.claude/` into `~/.claude` (or `./.claude` if `--local`).
+8. **Vibe** (if selected, opt-in by default): symlink the repo's `vibe/` dir into `~/.vibe` (or `./.vibe` if `--local`), then run `bash vibe/install-vibe.sh`. **Requires `MISTRAL_API_KEY`.** On Windows, if `bash` is unavailable, skips vibe with a warning and prints instructions to run the installer manually.
+9. Print a smoke-test command and the locations to tweak afterwards.
 
 Useful flags:
 
 | Flag | Behaviour |
 | ---- | --------- |
-| _(none)_ | Interactive walk-through with `[Y/n]` prompts and sensible defaults. |
-| `--yes`, `-y` | Non-interactive — accept all defaults. Still backs up existing dirs before clobbering. |
-| `--local` | Project-scoped install into the current directory (`./.opencode` + `./.claude`); skips the global shell-rc env block (prints it as a hint instead). |
-| `--no-claude` | Skip the `~/.claude` mirror (handy if you only use OpenCode, or want to manage Claude Code separately). |
-| `--no-opencode` | Skip OpenCode entirely (repo copy, deps, and env block); install only the `~/.claude` mirror. Mutually exclusive with `--no-claude`. |
-| `--uninstall` | Remove the env-var block + the two symlinks. **Never deletes the cloned repo, your data, or `*.bak.*` backups.** |
+| _(none)_ | Interactive walk-through: prompt `[Y/n]` for OpenCode (default Y), Claude Code (default Y), Vibe (default **N** — opt-in). |
+| `--yes`, `-y` | Non-interactive — accept all defaults: OpenCode ✓, Claude Code ✓, Vibe ✗ (skipped). Still backs up existing dirs before clobbering. |
+| `--local` | Project-scoped install into the current directory (`./.opencode`, `./.claude`, `./.vibe` as three independent siblings); skips the global shell-rc env block (prints it as a hint instead). |
+| `--opencode` | **Allow-list:** install OpenCode only (if combined with other flags, only those are installed). |
+| `--claude` | **Allow-list:** install Claude Code only. |
+| `--vibe` | **Allow-list:** install Vibe only. Requires `MISTRAL_API_KEY` and `uv`. |
+| `--no-opencode` | **Deny:** skip OpenCode entirely (repo copy, deps, and env block). Can be combined with other targets. |
+| `--no-claude` | **Deny:** skip the Claude Code mirror. Can be combined with other targets. |
+| `--no-vibe` | **Deny:** skip Vibe. Default in interactive mode; use `--vibe` to enable. |
+| `--uninstall` | Remove the env-var block + all installed symlinks. **Never deletes the cloned repo, your data, or `*.bak.*` backups.** |
 | `--help`, `-h` | Print usage. |
 
 The script writes a fenced block to your shell rc (`~/.zshrc`, `~/.bashrc`, or `~/.config/fish/config.fish`) that looks like this:
@@ -237,7 +246,9 @@ If your provider doesn't support `reasoningEffort`, OpenCode silently ignores it
 
 #### 5. (Optional) Install the Claude Code mirror
 
-The repo ships a `.claude/` subtree. If you also use Claude Code, link or copy it into `~/.claude/`. The two halves don't depend on each other — install only what you need.
+The repo ships a `.claude/` subtree (and optionally a `vibe/` dir). Each is independent and can be installed separately. The three targets — OpenCode, Claude Code, Vibe — never nest inside one another.
+
+**Claude Code:**
 
 ```bash
 # Back up
@@ -258,6 +269,25 @@ What this installs:
 - `.claude/rules/{common,typescript}/*.md` — coding-style/testing/security rule packs.
 - `.claude/commands/*.md` — extra slash commands (`/create-pull-request`, `/update-codemaps`).
 - `.claude/skills/**` — **full parity copy of canonical skill set** (same as `skills/` at repo root, computed and synced by `scripts/sync-skills.sh`). Includes all OpenCode skills; both sides stay in sync.
+
+**Vibe (optional, requires `uv` and `MISTRAL_API_KEY`):**
+
+```bash
+# Back up
+mv ~/.vibe ~/.vibe.bak 2>/dev/null || true
+
+# Symlink approach
+ln -s ~/.config/opencode/vibe ~/.vibe
+cd ~/.vibe
+bash install-vibe.sh
+
+# Or copy approach
+cp -R ~/.config/opencode/vibe ~/.vibe
+cd ~/.vibe
+bash install-vibe.sh
+```
+
+Vibe installs to `~/.vibe` globally or `./.vibe` locally (three independent paths: no nesting with OpenCode or Claude Code).
 
 </details>
 
@@ -500,7 +530,7 @@ Reusable OpenCode tools exposed via `tools/index.ts`:
 <a id="francais"></a>
 ## Français
 
-Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), treize sous-agents specialises, des skills toujours actives, des commandes slash, des plugins (hooks, worktrees, auto-compact, caveman, figma RAG), des outils custom et un mirror Claude Code.
+Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude` + optionnellement vibe. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), treize sous-agents specialises, des skills toujours actives, des commandes slash, des plugins (hooks, worktrees, auto-compact, caveman, figma RAG), des outils custom et un mirror Claude Code.
 
 <a id="objectif-fr"></a>
 ### Objectif
@@ -521,6 +551,7 @@ Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un ag
 - Instructions globales: `instructions/subagent-routing.md`, `instructions/codememory-first.md`, `instructions/caveman-ultra.md`.
 - Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`, `scripts/sync-skills.sh` (synchronise l'ensemble canonical des skills aux deux harnesses).
 - Mirror Claude Code: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/skills/` (copie en parité complète), `.claude/commands/`.
+- Vibe: `vibe/install-vibe.sh` (optionnel, demande `MISTRAL_API_KEY` et `uv`).
 - Exclusions volontaires (`.gitignore`): `node_modules/`, `antigravity-*`, `.DS_Store`, fichiers locaux `.env*` sauf `.env.example`, répertoire runtime `skills/skill-creator/` (non synchronisé).
 
 <a id="config-fr"></a>

@@ -3,12 +3,12 @@
   "autoupdate": true,
   "default_agent": "conductor",
   "instructions": [
-    "{env:HOME}/.config/opencode/instructions/subagent-routing.md",
-    "{env:HOME}/.config/opencode/instructions/question-handling.md",
-    "{env:HOME}/.config/opencode/instructions/codememory-first.md",
-    "{env:HOME}/.config/opencode/instructions/verification-gate.md",
-    "{env:HOME}/.config/opencode/skills/security-review/SKILL.md",
-    "{env:HOME}/.config/opencode/skills/coding-standards/SKILL.md",
+    "{file:instructions/subagent-routing.md}",
+    "{file:instructions/question-handling.md}",
+    "{file:instructions/codememory-first.md}",
+    "{file:instructions/verification-gate.md}",
+    "{file:skills/security-review/SKILL.md}",
+    "{file:skills/coding-standards/SKILL.md}",
   ],
   "agent": {
     "conductor": {
@@ -457,7 +457,7 @@
       },
     },
   },
-  "plugin": ["opencode-skill-creator"],
+  "plugin": ["opencode-skill-creator", "./plugins/notification.js"],
   "provider": {
     "llama.cpp": {
       "npm": "@ai-sdk/anthropic",

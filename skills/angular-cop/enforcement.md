@@ -21,6 +21,7 @@ Canonical severity list for `angular-cop` and the coder self-check.
 | Non-null assertion `!` on uncertain values | Grep `\b!\b` on property access/function results · ESLint `@typescript-eslint/no-non-null-assertion` | `!` suppresses compiler checks silently. Prefer explicit narrowing or throwing with a clear message. |
 | Unjustified `as` cast bypassing narrowing | `as SomeType` without a preceding type guard · Code review only (ESLint `@typescript-eslint/consistent-type-assertions` at `warn` level) | Casts hide type errors; the bug surfaces at runtime. |
 | Missing `ChangeDetectionStrategy.OnPush` on stateful components | Check `@Component({ changeDetection: … })` absence on components that read facade signals or have `input()` bindings | Without OnPush, Angular runs full tree checks on every browser event. With signals, OnPush is both correct and mandatory for performance. |
+| Inline component template via `template:` property | Grep for `template: \`\|'` inside `@Component({…})` blocks in `*.component.ts` files | External `templateUrl` required. Inline templates prevent HTML tooling, bloat the component class, and obscure git diffs. Always use `templateUrl: './x.component.html'`. |
 
 ---
 

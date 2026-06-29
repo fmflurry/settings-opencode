@@ -36,6 +36,10 @@ ALWAYS validate at system boundaries:
 - Fail fast with clear error messages
 - Never trust external data (API responses, user input, file content)
 
+## Angular Components
+
+Components MUST use `templateUrl: './x.component.html'` (external template file), never inline HTML via `template:` in the `@Component` decorator. External templates preserve HTML tooling, enable IDE refactoring, reduce class file size, and keep diffs clean.
+
 ## Code Quality Checklist
 
 Before marking work complete:

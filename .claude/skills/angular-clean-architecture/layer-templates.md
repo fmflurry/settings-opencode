@@ -320,6 +320,10 @@ export class CustomersListComponent {
 
 Rules: `OnPush` always, `inject()` for all deps, facade-only injection, `signal()`/`computed()`/`effect()` for reactivity, `input()`/`output()` for I/O, project-specific selector prefix, SCSS.
 
+### Component Template Files
+
+Components MUST use `templateUrl: './x.component.html'` to reference an external template file. Never inline HTML via the `template:` property in the `@Component` decorator.
+
 ### Facade-First UI Pattern
 
 1. **Inject facade, not use case** — the facade is the only bridge to domain logic

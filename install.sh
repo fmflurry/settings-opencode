@@ -237,6 +237,25 @@ copy_tree_with_seed() {
         "$src/" "$dst/"
 }
 
+localize_claude_settings_hooks() {
+    local settings_file="$1" tmp grep_status
+
+    if grep -qF '"~/.claude/' "$settings_file"; then
+        :
+    else
+        grep_status=$?
+        [ "$grep_status" -eq 1 ] && return 0
+        return "$grep_status"
+    fi
+
+    info "rewriting hook paths for --local mode"
+    tmp="$(mktemp "${settings_file}.XXXXXX")"
+    cp -p "$settings_file" "$tmp"
+    sed 's|"~/.claude/|"./.claude/|g' "$settings_file" > "$tmp"
+    mv "$tmp" "$settings_file"
+    ok "hook paths localized in $settings_file"
+}
+
 # Sync the canonical skill union (root skills/ ∪ .claude/skills/, root wins)
 # into each installed target's skills/ directory.  Delegates to scripts/sync-skills.sh.
 sync_skills() {
@@ -639,6 +658,9 @@ install_claude_mirror() {
         fi
         copy_tree_with_seed "$source_claude" "$TARGET_CLAUDE"
         ok "copied $source_claude -> $TARGET_CLAUDE (personal config files seeded, not overwritten)"
+        if [ "$LOCAL_MODE" = "1" ] && [ -f "$TARGET_CLAUDE/settings.json" ]; then
+            localize_claude_settings_hooks "$TARGET_CLAUDE/settings.json"
+        fi
         return 0
     fi
 
@@ -656,6 +678,9 @@ install_claude_mirror() {
 
     copy_tree_with_seed "$source_claude" "$TARGET_CLAUDE"
     ok "copied $source_claude -> $TARGET_CLAUDE (personal config files seeded, not overwritten)"
+    if [ "$LOCAL_MODE" = "1" ] && [ -f "$TARGET_CLAUDE/settings.json" ]; then
+        localize_claude_settings_hooks "$TARGET_CLAUDE/settings.json"
+    fi
 }
 
 install_vibe() {

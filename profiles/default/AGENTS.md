@@ -3,6 +3,10 @@
 <!-- Add your custom instructions for this profile here -->
 <!-- These will be included when running `ocx opencode -p default` -->
 
+## Angular Components
+
+Components MUST use `templateUrl: './x.component.html'` (external template file), never inline HTML via `template:` in the `@Component` decorator. External templates preserve HTML tooling, enable IDE refactoring, reduce class file size, and keep diffs clean.
+
 ## Refactoring Rules
 
 **CRITICAL: Always update tests when refactoring code**

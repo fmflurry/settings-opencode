@@ -33,7 +33,7 @@ A hardened primary `conductor` agent backed by **13 specialist sub-agents** (pla
 - **Front-loaded first-tool gate** in `prompts/agents/conductor.txt`: hard rules at the top, routing table second, six few-shot User → `task` examples (with explicit wrong-way contrasts) so literal models copy the right pattern.
 - **Slash commands** that force routing to the right specialist (`/plan`, `/tdd`, `/security`, `/code-review`, …).
 - **Always-on skills** loaded at session start — Socratic design, security review, coding standards, git workflow, [CodeMemory-first](https://github.com/fmflurry/code-memory) repo orientation.
-- **OpenCode plugins** — ECC hooks (Prettier + `tsc` on save), worktree spawner, auto-compact, caveman ultra mode, Figma RAG trigger, macOS notifications.
+- **OpenCode plugins** — ECC hooks (Prettier + `tsc` on save), worktree spawner, auto-compact, caveman ultra mode, Figma RAG trigger, desktop notifications with optional Bark/iPhone push.
 - **Custom tools** — `run-tests`, `check-coverage`, `security-audit`, plus a codemap generator.
 - **A `.claude/` mirror** — hooks, rule packs, and skills, so Claude Code benefits from the same guardrails.
 
@@ -117,7 +117,7 @@ Copies into `%USERPROFILE%\.config\opencode`, `\.claude`, and (if requested) `\.
 
 ### Prerequisites
 
-- macOS, Linux, WSL, or native Windows (the worktree and notification plugins assume macOS — work on Linux/WSL with minor degradation).
+- macOS, Linux, WSL, or native Windows (worktree support is best on macOS; notifications use desktop delivery plus optional Bark/iPhone pushes).
 - [OpenCode CLI](https://opencode.ai) installed and on your `PATH` (unless installing Claude Code only via `--no-opencode`).
 - [Claude Code](https://claude.com/claude-code) installed if you want the `.claude/` mirror (unless skipped via `--no-claude`).
 - Either [Bun](https://bun.sh) (recommended — `bun.lock` is what's checked in) or Node.js 20+ with `npm`.
@@ -485,7 +485,7 @@ All TypeScript plugins use `@opencode-ai/plugin@1.4.6`.
 
 - `plugins/ecc-hooks.ts` — Prettier on edited JS/TS, `console.log` detection, sensitive-command reminders (`git push` etc.), and the **conductor hard-stop**: aborts bash redirects (`>`, `>>`, `tee`, `sed -i`, heredocs, `python -c open().write`) targeting source files so delegation cannot be bypassed via shell.
 - `plugins/auto-compact.js` — auto-compacts once `OC_COMPACT_THRESHOLD` tool calls are reached, only while idle.
-- `plugins/notification.js` — macOS notification + sound on `session.idle`.
+- `plugins/notification.js` — desktop notifications on conductor `message.updated` completions and question/permission events; permission events and top-level completions can also push to iPhone via Bark.
 - `plugins/caveman-server.ts` + `tui-plugins/caveman.tsx` — injects caveman instructions into the system prompt + TUI sidebar showing active mode.
 - `plugins/figma-mcp-trigger.js` — Figma RAG: reads `figma-rag.md` (or `OPENCODE_FIGMA_RAG_PATHS`) and injects snippets when designs are referenced.
 - `plugins/worktree.ts` (+ `plugins/worktree/`) — creates an isolated git worktree for the session and spawns a terminal (mac/Win/Linux). Inspired by opencode-worktree-session.
@@ -523,7 +523,7 @@ Reusable OpenCode tools exposed via `tools/index.ts`:
 1. Startup: OpenCode loads `opencode.jsonc` -> always-on instructions -> `caveman-server` adds caveman preamble if active.
 2. Dev: `conductor` executes — it cannot write files; it dispatches Task calls to specialists. `ecc-hooks` formats / flags `console.log` / blocks bash-write bypasses.
 4. Workflow: `conductor` routes to specialists through Task (perm-enforced); `/plan`, `/tdd`, `/security`, etc. force the same routing explicitly.
-5. Idle: `auto-compact` triggers when the tool-call threshold is reached; `notification` pings macOS.
+5. Idle/completion: `auto-compact` triggers when the tool-call threshold is reached; `notification` sends desktop alerts for `message.updated` completions plus question/permission events, with optional Bark/iPhone pushes.
 
 ---
 
@@ -673,7 +673,7 @@ Tous les plugins TypeScript utilisent `@opencode-ai/plugin@1.4.6`.
 
 - `plugins/ecc-hooks.ts` — Prettier sur fichiers JS/TS edites, detection `console.log`, rappels sur commandes sensibles (`git push` etc.), et le **hard-stop conductor**: avorte les redirections bash (`>`, `>>`, `tee`, `sed -i`, heredocs, `python -c open().write`) qui visent du code source, pour que la delegation ne puisse pas etre contournee via le shell.
 - `plugins/auto-compact.js` — auto-compaction quand `OC_COMPACT_THRESHOLD` est atteint, en idle uniquement.
-- `plugins/notification.js` — notification macOS (osascript + Glass.aiff) sur `session.idle`.
+- `plugins/notification.js` — notifications desktop sur fins de message `message.updated` et evenements question/permission; support optionnel Bark/iPhone.
 - `plugins/caveman-server.ts` + `tui-plugins/caveman.tsx` — injecte les instructions caveman dans le system prompt + sidebar TUI qui affiche le mode actif.
 - `plugins/figma-mcp-trigger.js` — RAG figma: lit `figma-rag.md` (ou `OPENCODE_FIGMA_RAG_PATHS`) et injecte des snippets quand des designs sont referencés.
 - `plugins/worktree.ts` (+ `plugins/worktree/`) — cree un git worktree isolé pour la session et spawn un terminal (mac/Win/Linux). Inspiré d'opencode-worktree-session.
@@ -711,4 +711,4 @@ Outils OpenCode reutilisables exposes via `tools/index.ts`:
 1. Demarrage: OpenCode charge `opencode.jsonc` -> instructions globales -> `caveman-server` ajoute le preamble si actif.
 2. Dev: `conductor` execute — il n'a pas le droit d'ecrire; il dispatche des Task vers les specialistes. `ecc-hooks` formate / flag les `console.log` / bloque les bypasses bash-write.
 4. Workflow: `conductor` route via Task (impose par permissions); `/plan`, `/tdd`, `/security`, etc. forcent explicitement le meme routage.
-5. Idle: `auto-compact` declenche un compact quand le seuil de tool calls est atteint. `notification` ping macOS.
+5. Idle/completion: `auto-compact` declenche un compact quand le seuil de tool calls est atteint. `notification` envoie des alertes desktop sur fins de message `message.updated` et evenements question/permission, avec push Bark/iPhone optionnel.

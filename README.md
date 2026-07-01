@@ -33,7 +33,7 @@ A hardened primary `conductor` agent backed by **13 specialist sub-agents** (pla
 - **Front-loaded first-tool gate** in `prompts/agents/conductor.txt`: hard rules at the top, routing table second, six few-shot User → `task` examples (with explicit wrong-way contrasts) so literal models copy the right pattern.
 - **Slash commands** that force routing to the right specialist (`/plan`, `/tdd`, `/security`, `/cop-review`, …).
 - **Always-on skills** loaded at session start — Socratic design, security review, coding standards, git workflow, [CodeMemory-first](https://github.com/fmflurry/code-memory) repo orientation.
-- **OpenCode plugins** — ECC hooks (Prettier + `tsc` on save), worktree spawner, auto-compact, caveman ultra mode, Figma RAG trigger, desktop notifications with optional Bark/iPhone push.
+- **OpenCode plugins** — ECC hooks (Prettier + `tsc` on save), auto-compact, caveman ultra mode, desktop notifications with optional Bark/iPhone push.
 - **Custom tools** — `run-tests`, `check-coverage`, `security-audit`, plus a codemap generator.
 - **A `.claude/` mirror** — hooks, rule packs, and skills, so Claude Code benefits from the same guardrails.
 
@@ -114,7 +114,7 @@ Merges into `%USERPROFILE%\.config\opencode` and `\.claude`, runs `npm install` 
 
 ### Prerequisites
 
-- macOS, Linux, WSL, or native Windows (worktree support is best on macOS; notifications use desktop delivery plus optional Bark/iPhone pushes).
+- macOS, Linux, WSL, or native Windows (notifications use desktop delivery plus optional Bark/iPhone pushes).
 - [OpenCode CLI](https://opencode.ai) installed and on your `PATH` (unless installing Claude Code only via `--no-opencode`).
 - [Claude Code](https://claude.com/claude-code) installed if you want the `.claude/` mirror (unless skipped via `--no-claude`).
 - Either [Bun](https://bun.sh) (recommended — `bun.lock` is what's checked in) or Node.js 20+ with `npm`.
@@ -301,7 +301,7 @@ If a new plugin shows up, OpenCode picks it up on the next restart. If an env va
 
 ## English
 
-Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primary `conductor` agent (no write/edit perms — must delegate), 13 specialist sub-agents, always-on skills, slash commands, OpenCode plugins (hooks, worktrees, auto-compact, caveman, figma RAG, notifications), custom tools, and a Claude Code mirror.
+Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primary `conductor` agent (no write/edit perms — must delegate), 13 specialist sub-agents, always-on skills, slash commands, OpenCode plugins (hooks, auto-compact, caveman, notifications), custom tools, and a Claude Code mirror.
 
 <a id="goals-en"></a>
 
@@ -320,7 +320,7 @@ Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primar
 - Skills: `skills/*/SKILL.md` (plus auxiliary docs) — **canonical set, shared with Claude Code via** `sync-skills.sh`.
 - Agent prompts: `prompts/agents/*.txt`.
 - Slash commands: `commands/*.md`.
-- OpenCode plugins: `plugins/*.{ts,js}` + `plugins/kdco-primitives/`, `plugins/worktree/`.
+- OpenCode plugins: `plugins/*.{ts,js}` + `plugins/kdco-primitives/`.
 - TUI plugins: `tui-plugins/*.tsx`.
 - Custom tools: `tools/*.ts`.
 - Mode notes: `contexts/*.md`.
@@ -439,9 +439,7 @@ On-demand (loaded by description / by command):
 - `skills/angular-accessibility/SKILL.md` — Angular ARIA audit.
 - `skills/compress/SKILL.md` — context compression.
 - `skills/flurryx/SKILL.md` — domain-specific patterns.
-- `skills/ddd-type-duplication-across-layers/SKILL.md` — union-type scaffolding across DDD layers.
 - `skills/transloco/SKILL.md` — Transloco i18n management.
-- `skills/transloco-testing-flat-keys/SKILL.md` — Transloco testing helpers.
 
 **Sync behavior:** `scripts/sync-skills.sh` computes the canonical union (root `skills/` ∪ `.claude/skills/`, root wins on conflicts), excludes runtime dir (`skills/skill-creator/`), and copies into the given destination(s). Runs standalone and is invoked by installers.
 
@@ -455,8 +453,6 @@ All TypeScript plugins use `@opencode-ai/plugin@1.4.6`.
 - `plugins/auto-compact.js` — auto-compacts once `OC_COMPACT_THRESHOLD` tool calls are reached, only while idle.
 - `plugins/notification.js` — desktop notifications on conductor `message.updated` completions and question/permission events; permission events and top-level completions can also push to iPhone via Bark.
 - `plugins/caveman-server.ts` + `tui-plugins/caveman.tsx` — injects caveman instructions into the system prompt + TUI sidebar showing active mode.
-- `plugins/figma-mcp-trigger.js` — Figma RAG: reads `figma-rag.md` (or `OPENCODE_FIGMA_RAG_PATHS`) and injects snippets when designs are referenced.
-- `plugins/worktree.ts` (+ `plugins/worktree/`) — creates an isolated git worktree for the session and spawns a terminal (mac/Win/Linux). Inspired by opencode-worktree-session.
 - `plugins/kdco-primitives/` — shared utilities (mutex, shell, terminal-detect, project-id resolver, types).
 - `@tarquinen/opencode-dcp@latest` _(external, declared in `opencode.jsonc › plugin`)_ — Dynamic Context Pruning. Trims stale tool results and large files from the live context window so long sessions don't blow past the model's limit. Configured via `dcp.jsonc` at the repo root.
 
@@ -503,7 +499,7 @@ Reusable OpenCode tools exposed via `tools/index.ts`:
 
 ## Français
 
-Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), treize sous-agents specialises, des skills toujours actives, des commandes slash, des plugins (hooks, worktrees, auto-compact, caveman, figma RAG), des outils custom et un mirror Claude Code.
+Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), treize sous-agents specialises, des skills toujours actives, des commandes slash, des plugins (hooks, auto-compact, caveman, notifications), des outils custom et un mirror Claude Code.
 
 <a id="objectif-fr"></a>
 
@@ -518,7 +514,7 @@ Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un ag
 - Skills: `skills/*/SKILL.md` (+ ressources auxiliaires) — **ensemble canonical, partage avec Claude Code via `sync-skills.sh`**.
 - Prompts agents: `prompts/agents/*.txt`.
 - Commandes slash: `commands/*.md`.
-- Plugins OpenCode: `plugins/*.{ts,js}` (+ `plugins/kdco-primitives/`, `plugins/worktree/`).
+- Plugins OpenCode: `plugins/*.{ts,js}` (+ `plugins/kdco-primitives/`).
 - TUI plugins: `tui-plugins/*.tsx` (sidebar React rendue par OpenCode).
 - Outils custom: `tools/*.ts`.
 - Contextes (memos de mode): `contexts/*.md`.
@@ -637,9 +633,7 @@ Skills sur demande (chargés par description / par commande):
 - `skills/angular-accessibility/SKILL.md` — audit ARIA Angular.
 - `skills/compress/SKILL.md` — compression de contexte.
 - `skills/flurryx/SKILL.md` — patterns spécifiques au domaine.
-- `skills/ddd-type-duplication-across-layers/SKILL.md` — scaffold union-types sur couches DDD.
 - `skills/transloco/SKILL.md` — gestion i18n Transloco.
-- `skills/transloco-testing-flat-keys/SKILL.md` — helpers Transloco testing.
 
 **Comportement sync:** `scripts/sync-skills.sh` calcule l'union canonique (root `skills/` ∪ `.claude/skills/`, root gagne en cas de conflit), exclut le répertoire runtime (`skills/skill-creator/`), et copie dans la(les) destination(s) donnée(s). S'exécute seul et est invoqué par les installateurs.
 
@@ -653,8 +647,6 @@ Tous les plugins TypeScript utilisent `@opencode-ai/plugin@1.4.6`.
 - `plugins/auto-compact.js` — auto-compaction quand `OC_COMPACT_THRESHOLD` est atteint, en idle uniquement.
 - `plugins/notification.js` — notifications desktop sur fins de message `message.updated` et evenements question/permission; support optionnel Bark/iPhone.
 - `plugins/caveman-server.ts` + `tui-plugins/caveman.tsx` — injecte les instructions caveman dans le system prompt + sidebar TUI qui affiche le mode actif.
-- `plugins/figma-mcp-trigger.js` — RAG figma: lit `figma-rag.md` (ou `OPENCODE_FIGMA_RAG_PATHS`) et injecte des snippets quand des designs sont referencés.
-- `plugins/worktree.ts` (+ `plugins/worktree/`) — cree un git worktree isolé pour la session et spawn un terminal (mac/Win/Linux). Inspiré d'opencode-worktree-session.
 - `plugins/kdco-primitives/` — utilities partages (mutex, shell, terminal-detect, project-id resolver, types).
 - `@tarquinen/opencode-dcp@latest` _(externe, declare dans `opencode.jsonc › plugin`)_ — Dynamic Context Pruning. Coupe les tool results stagnants et les gros fichiers dans la fenetre de contexte pour que les sessions longues ne depassent pas la limite modele. Configure via `dcp.jsonc` a la racine du repo.
 

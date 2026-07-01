@@ -1,10 +1,9 @@
 ---
 description: Run comprehensive security review
+agent: security-reviewer
 ---
 
 # Security Review Command
-
-> CC: delegate this to the `security-reviewer` subagent via the Agent tool (subagent_type: `security-reviewer`). The subagent inspects the repo and runs the steps below.
 
 Conduct a comprehensive security review: $ARGUMENTS
 

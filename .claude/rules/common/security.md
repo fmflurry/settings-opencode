@@ -19,6 +19,14 @@ Before ANY commit:
 - Validate that required secrets are present at startup
 - Rotate any secrets that may have been exposed
 
+## Dependency Security
+
+- Keep all dependencies up to date: `npm audit`, `npm update`
+- Commit lock files: `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml` — never add `node_modules` to `.gitignore` or `.gitattributes`
+- Use lock files in CI/CD: prefer `npm ci` (or `yarn install --frozen-lockfile`, `pnpm install --frozen-lockfile`) over `npm install`
+- Validate no vulnerabilities before commits: `npm audit` must return clean
+- Enable automated dependency scanning (Dependabot) on GitHub
+
 ## Security Response Protocol
 
 If security issue found:

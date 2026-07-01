@@ -122,8 +122,8 @@ copy_tree() {
             "$src/" "$dst/"
     else
         # tar-pipe merges nested non-empty dirs cleanly; BSD `cp -R` and `ditto` both choke on overlapping subtrees.
-        # `-h` dereferences symlinks (e.g. repo/skills/learned -> ~/.claude/skills/learned) so extraction
-        # writes real files into the target dir instead of trying to plant a symlink atop an existing dir.
+        # `-h` dereferences symlinks so extraction writes real files into the target dir
+        # instead of trying to plant a symlink atop an existing dir.
         ( cd "$src" && tar -h -cf - \
             --exclude='node_modules' --exclude='.git' --exclude='.DS_Store' --exclude='vibe' \
             . ) | ( cd "$dst" && tar xf - )

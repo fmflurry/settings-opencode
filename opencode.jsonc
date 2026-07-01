@@ -7,8 +7,6 @@
     "{file:instructions/question-handling.md}",
     "{file:instructions/codememory-first.md}",
     "{file:instructions/verification-gate.md}",
-    "{file:skills/security-review/SKILL.md}",
-    "{file:skills/coding-standards/SKILL.md}",
   ],
   "agent": {
     "conductor": {
@@ -352,12 +350,6 @@
       "agent": "tdd-guide",
       "subtask": true,
     },
-    "code-review": {
-      "description": "Review code for quality, security, and maintainability",
-      "template": "{file:commands/code-review.md}\n\n$ARGUMENTS",
-      "agent": "code-reviewer",
-      "subtask": true,
-    },
     "cop-review": {
       "description": "Pre-merge review of HEAD vs a target branch. Stack-aware: angular.json → angular-cop (signals, RxJS, flurryx, TS strict); *.csproj/*.sln → dotnet-cop (Minimal API, ports & adapters, EF Core). Usage: /cop-review <target> [--level=junior|senior] [--scope=...] [--no-tools]",
       "template": "{file:commands/cop-review.md}\n\n$ARGUMENTS",
@@ -457,7 +449,7 @@
       },
     },
   },
-  "plugin": ["opencode-skill-creator", "./plugins/notification.js"],
+  "plugin": ["opencode-skill-creator"],
   "provider": {
     "llama.cpp": {
       "npm": "@ai-sdk/anthropic",

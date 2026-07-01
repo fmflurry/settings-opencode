@@ -27,9 +27,6 @@ fi
 # macOS notification when attention is required
 osascript -e 'display notification "Your attention is required" with title "Claude Code" sound name "Glass"' 2>/dev/null &
 
-# iPhone push notification via Bark
-"${OPENCODE_NOTIFY_IPHONE_SCRIPT:-$HOME/.config/opencode/scripts/notify-iphone.sh}" "Claude Code" "Your attention is required" 2>/dev/null &
-
 # Check for uncommitted secrets (warn only)
 if git rev-parse --git-dir > /dev/null 2>&1; then
   if git diff --name-only 2>/dev/null | grep -qE "\.env$|secrets\."; then

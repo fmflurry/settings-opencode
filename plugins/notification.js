@@ -211,11 +211,11 @@ export const NotificationPlugin = async ({ $ }) => {
         const { title, message } = humanInterventionMessage(event);
         // Permissions are blocking — send iPhone notification. Questions stay desktop-only.
         const isPermission = PERMISSION_EVENTS.has(event.type);
-        await notify($, title, message, {
+        void notify($, title, message, {
           iphone: isPermission,
           iphoneTitle: "OpenCode permission needed",
           iphoneMessage: "A permission request is waiting.",
-        });
+        }).catch(() => {});
         return;
       }
 
@@ -273,7 +273,7 @@ export const NotificationPlugin = async ({ $ }) => {
       const dispatchedTask = dispatchedTaskBySession.get(sessionKey) ?? false;
       dispatchedTaskBySession.set(sessionKey, false);
 
-      await notify($, TITLE, MESSAGE, { iphone: !dispatchedTask });
+      void notify($, TITLE, MESSAGE, { iphone: !dispatchedTask }).catch(() => {});
     },
   };
 };

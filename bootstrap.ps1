@@ -4,7 +4,7 @@
     settings-opencode bootstrap — one-line installer for native Windows (PowerShell).
 
 .DESCRIPTION
-    Clones (or fast-forwards) the repo into a local source dir, then copies the
+    Clones (or fast-forwards) the repo into a local source dir, then merges the
     config into %USERPROFILE%\.config\opencode and %USERPROFILE%\.claude, installs
     JS dependencies, and writes the OPENCODE_MODEL_* / OPENCODE_REASONING_* defaults
     as persistent User environment variables.
@@ -39,10 +39,8 @@
 param(
     [switch]$NoClaude,
     [switch]$NoOpencode,
-    [switch]$NoVibe,
     [switch]$Opencode,
     [switch]$Claude,
-    [switch]$Vibe,
     [switch]$Local,
     [switch]$Uninstall
 )
@@ -61,34 +59,29 @@ $SrcDir        = if ($env:SETTINGS_OPENCODE_SRC) { $env:SETTINGS_OPENCODE_SRC } 
 if ($Local) {
     $OpencodeDir = Join-Path $InvokeDir '.opencode'
     $ClaudeDir   = Join-Path $InvokeDir '.claude'
-    $VibeDir     = Join-Path $InvokeDir '.vibe'
 } else {
     $OpencodeDir = Join-Path $env:USERPROFILE '.config\opencode'
     $ClaudeDir   = Join-Path $env:USERPROFILE '.claude'
-    $VibeDir     = Join-Path $env:USERPROFILE '.vibe'
 }
 
 # Allowlist / opt-out resolver — mirrors install.sh logic.
-# Defaults: opencode ON, claude ON, vibe OFF (opt-in).
+# Defaults: opencode ON, claude ON.
 $doOpencode = $true
 $doClaude   = $true
-$doVibe     = $false
 
-if ($Opencode -or $Claude -or $Vibe) {
+if ($Opencode -or $Claude) {
     # Allowlist mode: only listed targets are candidates, others default OFF.
     $doOpencode = $Opencode.IsPresent
     $doClaude   = $Claude.IsPresent
-    $doVibe     = $Vibe.IsPresent
 }
 
 # Opt-outs win over allowlist (applied last).
 if ($NoOpencode) { $doOpencode = $false }
 if ($NoClaude)   { $doClaude   = $false }
-if ($NoVibe)     { $doVibe     = $false }
 
-# Three-way empty-set guard.
-if (-not $doOpencode -and -not $doClaude -and -not $doVibe) {
-    Die 'nothing to install (all three targets disabled)'
+# Empty-set guard.
+if (-not $doOpencode -and -not $doClaude) {
+    Die 'nothing to install (both targets disabled)'
 }
 
 $EnvVars = [ordered]@{
@@ -116,21 +109,25 @@ function Require-Cmd($name, $hint) {
     if (-not (Get-Command $name -ErrorAction SilentlyContinue)) { Die "$name is required. $hint" }
 }
 
-# Additive copy that mirrors install.sh's copy_tree: excludes node_modules/.git
-# and transient files, and does NOT purge the destination so runtime state
+# Additive copy that mirrors install.sh's copy_tree: excludes node_modules/.git,
+# assets, vibe, removed OCX files, and transient files. Does NOT purge the destination so runtime state
 # (auth.json, sessions, memory\, projects\) survives re-runs.
 function Copy-Tree($src, $dst) {
     if (-not (Test-Path $dst)) { New-Item -ItemType Directory -Path $dst -Force | Out-Null }
     $roboArgs = @(
         $src, $dst, '/E',
-        '/XD', (Join-Path $src 'node_modules'), (Join-Path $src '.git'), (Join-Path $src '.serena'), (Join-Path $src 'vibe'), (Join-Path $src '.claude'), (Join-Path $src '.vibe'),
-        '/XF', '*.log', '.DS_Store', '*.bak', 'install.sh', 'install-cursor.sh', 'bootstrap.sh', 'bootstrap.ps1',
+        '/XD', (Join-Path $src 'node_modules'), (Join-Path $src '.git'), (Join-Path $src '.serena'), (Join-Path $src 'assets'), (Join-Path $src 'vibe'), (Join-Path $src '.vibe'),
+        '/XF', '*.log', '.DS_Store', '*.bak', 'install.sh', 'install-cursor.sh', 'bootstrap.sh', 'bootstrap.ps1', 'ocx.jsonc',
         '/NFL', '/NDL', '/NJH', '/NJS', '/NP', '/R:1', '/W:1'
     )
     & robocopy.exe @roboArgs | Out-Null
     # robocopy exit codes 0-7 are success; >=8 is a real failure.
     if ($LASTEXITCODE -ge 8) { Die "robocopy failed copying $src -> $dst (exit $LASTEXITCODE)" }
     $global:LASTEXITCODE = 0
+}
+
+function Ensure-OpencodeRuntimeDirs($opencodeDir) {
+    New-Item -ItemType Directory -Path (Join-Path $opencodeDir 'data\opencode') -Force | Out-Null
 }
 
 # Additive copy with seed-only protection for personal config files. Mirrors
@@ -217,14 +214,39 @@ function Sync-Skills($srcDir, [string[]]$destDirs) {
     }
 }
 
-function Backup-IfExists($path) {
-    if (Test-Path $path) {
-        $stamp  = Get-Date -Format 'yyyyMMdd-HHmmss'
-        $backup = "$path.bak.$stamp"
-        Info "backing up existing $path -> $backup"
-        Move-Item -Path $path -Destination $backup
-        Ok "backed up to $backup"
+function Test-ReparsePoint($path) {
+    if (-not (Test-Path -LiteralPath $path)) { return $false }
+    $item = Get-Item -LiteralPath $path -Force
+    return (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)
+}
+
+function Test-SamePath($left, $right) {
+    try {
+        $trimChars = [char[]]@('\', '/')
+        $leftPath = (Resolve-Path -LiteralPath $left).ProviderPath.TrimEnd($trimChars)
+        $rightPath = (Resolve-Path -LiteralPath $right).ProviderPath.TrimEnd($trimChars)
+        return [string]::Equals($leftPath, $rightPath, [StringComparison]::OrdinalIgnoreCase)
+    } catch {
+        return $false
     }
+}
+
+function Get-ReparseTarget($path) {
+    $item = Get-Item -LiteralPath $path -Force
+    if (-not ($item.PSObject.Properties.Name -contains 'Target')) { return $null }
+
+    $target = $item.Target
+    if ($target -is [array]) { $target = $target | Select-Object -First 1 }
+    if (-not $target) { return $null }
+    if ([IO.Path]::IsPathRooted($target)) { return $target }
+
+    return [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $path) $target))
+}
+
+function Test-ReparsePointsTo($path, $expectedTarget) {
+    $target = Get-ReparseTarget $path
+    if (-not $target) { return $false }
+    return (Test-SamePath $target $expectedTarget)
 }
 
 # (empty-set guard is handled in the resolver block above)
@@ -246,7 +268,6 @@ if ($Uninstall) {
     Info "Copied config left in place (delete manually if you want it gone):"
     if ($doOpencode) { Info "  $OpencodeDir" }
     if ($doClaude)   { Info "  $ClaudeDir" }
-    if ($doVibe)     { Info "  $VibeDir" }
     Info "Source clone left at: $SrcDir"
     exit 0
 }
@@ -294,62 +315,91 @@ if ($Local -and ($InvokeDir -eq $SrcDir)) {
 
 # ------------------------------ opencode config ------------------------------
 
+$opencodeTargetReady = $false
 if (-not $doOpencode) {
     Step 'OpenCode config — skipped'
 } else {
     Step "Installing OpenCode config into $OpencodeDir"
-    if ((Test-Path $OpencodeDir) -and -not (Test-Path (Join-Path $OpencodeDir '.git'))) {
-        Backup-IfExists $OpencodeDir
-    }
-    Copy-Tree $SrcDir $OpencodeDir
-    Ok "copied config (node_modules, .git, .claude, .vibe excluded)"
-
-    Step "Installing JS dependencies ($pkgManager)"
-    Push-Location $OpencodeDir
-    try {
-        if ($pkgManager -eq 'bun') {
-            bun install
+    $skipOpencodeCopy = $false
+    if (Test-Path -LiteralPath $OpencodeDir) {
+        if (Test-ReparsePoint $OpencodeDir) {
+            if (Test-ReparsePointsTo $OpencodeDir $SrcDir) {
+                Ok "$OpencodeDir already points at $SrcDir"
+                $skipOpencodeCopy = $true
+                $opencodeTargetReady = $true
+            } else {
+                Warn "$OpencodeDir is a symlink/reparse point; leaving it untouched and skipping OpenCode copy"
+                $skipOpencodeCopy = $true
+            }
+        } elseif (Test-Path -LiteralPath $OpencodeDir -PathType Container) {
+            Info "$OpencodeDir exists; merging repo files into it"
         } else {
-            npm ci
-            if ($LASTEXITCODE -ne 0) { npm install }
+            Warn "$OpencodeDir exists and is not a directory; leaving it untouched and skipping OpenCode copy"
+            $skipOpencodeCopy = $true
         }
-        if ($LASTEXITCODE -ne 0) { Die 'dependency install failed' }
-    } finally {
-        Pop-Location
     }
-    Ok 'deps installed'
+
+    if (-not $skipOpencodeCopy) {
+        Copy-Tree $SrcDir $OpencodeDir
+        Ensure-OpencodeRuntimeDirs $OpencodeDir
+        Ok "copied config (node_modules, .git, assets, vibe, OCX files excluded)"
+        $opencodeTargetReady = $true
+    }
+
+    if ($opencodeTargetReady) {
+        Step "Installing JS dependencies ($pkgManager)"
+        Push-Location $OpencodeDir
+        try {
+            if ($pkgManager -eq 'bun') {
+                bun install
+            } else {
+                npm ci
+                if ($LASTEXITCODE -ne 0) { npm install }
+            }
+            if ($LASTEXITCODE -ne 0) { Die 'dependency install failed' }
+        } finally {
+            Pop-Location
+        }
+        Ok 'deps installed'
+    } else {
+        Warn 'OpenCode target was not modified; skipping dependencies, env vars, and OpenCode skill sync'
+    }
 }
 
 # ------------------------------ claude mirror --------------------------------
 
+$claudeTargetReady = $false
 if (-not $doClaude) {
     Step 'Claude Code mirror — skipped'
 } else {
     $sourceClaude = Join-Path $SrcDir '.claude'
     if (Test-Path $sourceClaude) {
         Step "Installing Claude Code mirror into $ClaudeDir"
-        Copy-TreeWithSeed $sourceClaude $ClaudeDir
-        Ok "copied .claude mirror (personal config files seeded, not overwritten on reinstall)"
+        $skipClaudeCopy = $false
+        if (Test-Path -LiteralPath $ClaudeDir) {
+            if (Test-ReparsePoint $ClaudeDir) {
+                if (Test-ReparsePointsTo $ClaudeDir $sourceClaude) {
+                    Ok "$ClaudeDir already points at $sourceClaude"
+                    $skipClaudeCopy = $true
+                } else {
+                    Warn "$ClaudeDir is a symlink/reparse point; leaving it untouched and skipping Claude copy"
+                    $skipClaudeCopy = $true
+                }
+            } elseif (Test-Path -LiteralPath $ClaudeDir -PathType Container) {
+                Info "$ClaudeDir exists; merging Claude mirror into it"
+            } else {
+                Warn "$ClaudeDir exists and is not a directory; leaving it untouched and skipping Claude copy"
+                $skipClaudeCopy = $true
+            }
+        }
+
+        if (-not $skipClaudeCopy) {
+            Copy-TreeWithSeed $sourceClaude $ClaudeDir
+            Ok "copied .claude mirror (personal config files seeded, not overwritten on reinstall)"
+            $claudeTargetReady = $true
+        }
     } else {
         Warn '.claude not found in repo, skipping mirror'
-    }
-}
-
-# ------------------------------ vibe install ---------------------------------
-
-if (-not $doVibe) {
-    Step 'Vibe install — skipped (use -Vibe to enable)'
-} else {
-    Step "Installing Vibe config into $VibeDir"
-    $vibeInstaller = Join-Path $SrcDir 'vibe\install-vibe.sh'
-    if (Get-Command bash -ErrorAction SilentlyContinue) {
-        $env:VIBE_HOME = $VibeDir
-        bash $vibeInstaller --yes
-        Ok "vibe installed into $VibeDir"
-    } else {
-        Warn 'bash not found — cannot run vibe/install-vibe.sh automatically'
-        Warn 'To install vibe manually, run from WSL or Git Bash:'
-        Warn "  VIBE_HOME='$VibeDir' bash '$vibeInstaller' --yes"
     }
 }
 
@@ -357,6 +407,8 @@ if (-not $doVibe) {
 
 if (-not $doOpencode) {
     Step 'Environment variables — skipped'
+} elseif (-not $opencodeTargetReady) {
+    Step 'Environment variables — skipped (OpenCode target was not modified)'
 } elseif ($Local) {
     Step 'Environment variables — not persisted (-Local mode)'
     Info 'Add the following to a per-project .envrc (direnv) or source it manually:'
@@ -380,9 +432,8 @@ if (-not $doOpencode) {
 # ------------------------------ skill sync -----------------------------------
 
 $skillDests = @()
-if ($doOpencode) { $skillDests += (Join-Path $OpencodeDir 'skills') }
-if ($doClaude)   { $skillDests += (Join-Path $ClaudeDir   'skills') }
-# Vibe manages its own skills via install-vibe.sh — do NOT add $VibeDir here.
+if ($doOpencode -and $opencodeTargetReady) { $skillDests += (Join-Path $OpencodeDir 'skills') }
+if ($doClaude -and $claudeTargetReady)     { $skillDests += (Join-Path $ClaudeDir   'skills') }
 if ($skillDests.Count -gt 0) {
     Sync-Skills $SrcDir $skillDests
 }
@@ -390,21 +441,25 @@ if ($skillDests.Count -gt 0) {
 # ------------------------------ next steps -----------------------------------
 
 Step 'Done'
-if ($doOpencode) { Info "OpenCode config: $OpencodeDir" }
-if ($doClaude)   { Info "Claude mirror:   $ClaudeDir" }
-if ($doVibe)     { Info "Vibe config:     $VibeDir" }
+if ($doOpencode -and $opencodeTargetReady) { Info "OpenCode config: $OpencodeDir" }
+if ($doClaude -and $claudeTargetReady)     { Info "Claude mirror:   $ClaudeDir" }
 if ($Local) {
     Info 'Project-scoped install — applies only when working in:'
     Info "  $InvokeDir"
     Info 'No new terminal needed — no persistent env vars were written.'
     Info "Re-run anytime: bootstrap.ps1 -Local"
     $localTargets = @()
-    if ($doOpencode) { $localTargets += $OpencodeDir }
-    if ($doClaude)   { $localTargets += $ClaudeDir }
-    if ($doVibe)     { $localTargets += $VibeDir }
-    Info ("Uninstall local copies: remove manually — " + ($localTargets -join ', '))
+    if ($doOpencode -and $opencodeTargetReady) { $localTargets += $OpencodeDir }
+    if ($doClaude -and $claudeTargetReady)     { $localTargets += $ClaudeDir }
+    if ($localTargets.Count -gt 0) {
+        Info ("Uninstall local copies: remove manually — " + ($localTargets -join ', '))
+    } else {
+        Info 'No local copies were changed.'
+    }
 } else {
-    Info 'Open a NEW terminal so the environment variables take effect, then run: opencode'
+    if ($doOpencode -and $opencodeTargetReady) {
+        Info 'Open a NEW terminal so the environment variables take effect, then run: opencode'
+    }
     Info ''
     Info 'Update later — re-run the same one-liner:'
     Info '  irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1 | iex'

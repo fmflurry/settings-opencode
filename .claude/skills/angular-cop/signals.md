@@ -36,26 +36,6 @@ readonly total = computed(() => {
 });
 ```
 
-### Inline component template
-```ts
-// BAD - template property inline
-@Component({
-  selector: 'app-foo',
-  template: `<div>{{ message }}</div>`,
-  styleUrls: ['./foo.component.scss'],
-})
-export class FooComponent {}
-
-// GOOD - templateUrl external
-@Component({
-  selector: 'app-foo',
-  templateUrl: './foo.component.html',
-  styleUrls: ['./foo.component.scss'],
-})
-export class FooComponent {}
-```
-Why: external templates preserve HTML tooling, enable IDE refactoring, reduce class file size, and keep diffs clean.
-
 ## 🟡 Risks
 
 ### Missing OnPush
@@ -97,7 +77,7 @@ return computed(() => this.signal());
 
 ## Helpers vs. standalone functions
 
-Convention: pure helpers used by computed signals stay as **private methods on the class**, not standalone module functions. Use functional style (pure, no side effects) inside the class.
+Per global instinct: pure helpers used by computed signals stay as **private methods on the class**, not standalone module functions. Use functional style (pure, no side effects) inside the class.
 
 ```ts
 class FooComponent {

@@ -1,5 +1,6 @@
 ---
 description: Pre-merge code review of HEAD vs a target branch (stack-aware: Angular+TS → angular-cop; .NET → dotnet-cop)
+agent: code-reviewer
 subtask: true
 ---
 
@@ -25,12 +26,64 @@ Review the current branch against a target branch before merging. Stack-aware: r
 
 Before loading a skill, detect the project stack by checking these signals in cwd (search recursively):
 
-| Signal | Stack | Agent | Tooling |
-|---|---|---|---|
-| `angular.json` present | Angular + TypeScript | `angular-cop` | `npx tsc --noEmit` + `npm run lint` |
-| `*.csproj` / `*.sln` / `*.slnx` / `global.json` present | .NET | `dotnet-cop` | `dotnet build --nologo -clp:ErrorsOnly` + `dotnet format --verify-no-changes` |
+| Signal                                                  | Stack                | Agent         | Tooling                                                                       |
+| ------------------------------------------------------- | -------------------- | ------------- | ----------------------------------------------------------------------------- |
+| `angular.json` present                                  | Angular + TypeScript | `angular-cop` | `npx tsc --noEmit` + `npm run lint`                                           |
+| `*.csproj` / `*.sln` / `*.slnx` / `global.json` present | .NET                 | `dotnet-cop`  | `dotnet build --nologo -clp:ErrorsOnly` + `dotnet format --verify-no-changes` |
 
 If BOTH are present (rare monorepo), check which language the diff files are in (`.ts`/`.html` → angular-cop; `.cs`/`.csproj` → dotnet-cop). If still ambiguous, default to angular-cop and note the ambiguity in the report header.
+
+## Review Criteria
+
+Review code across these categories:
+
+### Security Issues (CRITICAL)
+- [ ] Hardcoded credentials, API keys, tokens
+- [ ] SQL injection vulnerabilities
+- [ ] XSS vulnerabilities
+- [ ] Missing input validation
+- [ ] Insecure dependencies
+- [ ] Path traversal risks
+- [ ] Authentication/authorization flaws
+
+### Code Quality (HIGH)
+- [ ] Functions > 50 lines
+- [ ] Files > 800 lines
+- [ ] Nesting depth > 4 levels
+- [ ] Missing error handling
+- [ ] console.log statements
+- [ ] TODO/FIXME comments
+- [ ] Missing JSDoc for public APIs
+
+### Best Practices (MEDIUM)
+- [ ] Mutation patterns (use immutable instead)
+- [ ] Unnecessary complexity
+- [ ] Missing tests for new code
+- [ ] Accessibility issues (a11y)
+- [ ] Performance concerns
+
+### Style (LOW)
+- [ ] Inconsistent naming
+- [ ] Missing type annotations
+- [ ] Formatting issues
+
+## Issue Report Format
+
+For each issue found:
+
+```
+**[SEVERITY]** file.ts:123
+Issue: [Description]
+Fix: [How to fix]
+```
+
+## Verdict Rules
+
+- **CRITICAL or HIGH issues**: Block commit, require fixes
+- **MEDIUM issues**: Recommend fixes before merge
+- **LOW issues**: Optional improvements
+
+**IMPORTANT**: Never approve code with security vulnerabilities!
 
 ## What you do
 
@@ -58,6 +111,7 @@ If BOTH are present (rare monorepo), check which language the diff files are in 
 ## Output Contract
 
 A single markdown document with:
+
 - Header (target, base SHA, head SHA, counts table, verdict)
 - Blockers (🔴 / 🟠 / 🟢 when AGENTS.md mandates)
 - Should-fix (🟡)

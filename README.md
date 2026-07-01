@@ -1,8 +1,4 @@
 <p align="center">
-  <img src="assets/opencode-harness.png" alt="opencode harness — conductor-routed multi-agent setup overview" width="100%" />
-</p>
-
-<p align="center">
   <a href="https://github.com/fmflurry/code-memory"><img src="https://img.shields.io/badge/MCP-CodeMemory-7c3aed?logo=github" alt="CodeMemory MCP" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
   <a href="https://opencode.ai"><img src="https://img.shields.io/badge/OpenCode-CLI-000" alt="OpenCode" /></a>
@@ -31,7 +27,7 @@ A hardened primary `conductor` agent backed by **13 specialist sub-agents** (pla
 
 - **Mandatory sub-agent delegation** from `conductor`: the primary has `write` and `edit` denied at the permission layer, plus a `tool.execute.before` hook that blocks bash redirects to source files (`> file.ts`, `tee`, `sed -i`, heredocs, `python -c open().write`). The orchestrator cannot patch files — every change MUST go through `coder` (source code), `writer` (docs/markdown/HTML), `tdd-guide` (tests), or `git-specialist` (commits/PRs). This makes routing **model-agnostic**: even open-weight models that ignore prose rules are mechanically forced to delegate.
 - **Front-loaded first-tool gate** in `prompts/agents/conductor.txt`: hard rules at the top, routing table second, six few-shot User → `task` examples (with explicit wrong-way contrasts) so literal models copy the right pattern.
-- **Slash commands** that force routing to the right specialist (`/plan`, `/tdd`, `/security`, `/code-review`, …).
+- **Slash commands** that force routing to the right specialist (`/plan`, `/tdd`, `/security`, `/cop-review`, …).
 - **Always-on skills** loaded at session start — Socratic design, security review, coding standards, git workflow, [CodeMemory-first](https://github.com/fmflurry/code-memory) repo orientation.
 - **OpenCode plugins** — ECC hooks (Prettier + `tsc` on save), worktree spawner, auto-compact, caveman ultra mode, Figma RAG trigger, desktop notifications with optional Bark/iPhone push.
 - **Custom tools** — `run-tests`, `check-coverage`, `security-audit`, plus a codemap generator.
@@ -70,9 +66,10 @@ The two halves stand alone. Use the OpenCode side, the Claude Code mirror, or bo
 ---
 
 <a id="public-install"></a>
+
 ## Public install
 
-The repo is designed to *become* (or symlink into) `~/.config/opencode/`, plus an optional `~/.claude/` mirror. There are three paths: a **one-line install** (recommended — nothing to clone by hand), a one-shot script if you already have the repo, and a manual walk-through if you want to see every step.
+The repo is designed to merge into `~/.config/opencode/`, plus an optional `~/.claude/` mirror. There are three paths: a **one-line install** (recommended — nothing to clone by hand), a one-shot script if you already have the repo, and a manual walk-through if you want to see every step.
 
 ### One-line install
 
@@ -89,8 +86,6 @@ On WSL it installs to the **Windows** side (`/mnt/c/Users/<you>/.config/opencode
 ```bash
 curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash -s -- --local
 curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash -s -- --no-claude
-curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash -s -- --vibe
-curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash -s -- --local --opencode --vibe
 curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash -s -- --uninstall
 ```
 
@@ -100,13 +95,11 @@ curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/b
 irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1 | iex
 ```
 
-Copies into `%USERPROFILE%\.config\opencode`, `\.claude`, and (if requested) `\.vibe`, runs `npm install` (or `bun install`), and writes the `OPENCODE_*` defaults as **persistent User environment variables**. Open a new terminal afterwards so they take effect. Variants:
+Merges into `%USERPROFILE%\.config\opencode` and `\.claude`, runs `npm install` (or `bun install`), and writes the `OPENCODE_*` defaults as **persistent User environment variables**. Open a new terminal afterwards so they take effect. Variants:
 
 ```powershell
 # project-scoped install
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -Local
-# install vibe only (requires uv and MISTRAL_API_KEY)
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -Vibe
 # skip the Claude mirror
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -NoClaude
 # skip OpenCode (install Claude only)
@@ -122,7 +115,6 @@ Copies into `%USERPROFILE%\.config\opencode`, `\.claude`, and (if requested) `\.
 - [Claude Code](https://claude.com/claude-code) installed if you want the `.claude/` mirror (unless skipped via `--no-claude`).
 - Either [Bun](https://bun.sh) (recommended — `bun.lock` is what's checked in) or Node.js 20+ with `npm`.
 - `git`.
-- **For vibe (`--vibe`):** `uv` (Astral's universal Python installer) and `MISTRAL_API_KEY` environment variable set. Windows: `bash` (Git Bash) must be available in `PATH` (vibe install delegates to `bash vibe/install-vibe.sh` and skips with a warning if bash is absent).
 
 ### Quick install (script)
 
@@ -134,33 +126,30 @@ cd ~/Workspace/settings-opencode
 ./install.sh
 ```
 
-`install.sh` is interactive by default. It will prompt for each of three independent targets (OpenCode, Claude Code, Vibe):
+`install.sh` is interactive by default. It will prompt for each of two independent targets (OpenCode and Claude Code):
 
-1. Verify your prerequisites (`git`, `bun`/`npm`, `uv` if vibe is selected).
-2. **OpenCode** (if selected): symlink the repo into `~/.config/opencode` (or `./.opencode` if `--local`), backing up any existing config to `*.bak.<timestamp>`.
+1. Verify your prerequisites (`git`, `bun`/`npm`).
+2. **OpenCode** (if selected): merge repo files into `~/.config/opencode` (or `./.opencode` if `--local`) without removing existing user config.
 3. Run `bun install` (or `npm ci` if Bun isn't available).
 4. Sync skills from the canonical set into both harnesses via `scripts/sync-skills.sh`.
 5. Seed personal config files (`settings.json`, `settings.local.json`, `policy-limits.json`) **only on first install**; preserve user edits on reinstall.
 6. Add the `OPENCODE_MODEL_*` and `OPENCODE_REASONING_*` defaults to your shell rc, fenced with markers so re-runs and uninstalls are idempotent (OpenCode only, skipped if `--local`).
-7. **Claude Code** (if selected): symlink or copy `.claude/` into `~/.claude` (or `./.claude` if `--local`).
-8. **Vibe** (if selected, opt-in by default): symlink the repo's `vibe/` dir into `~/.vibe` (or `./.vibe` if `--local`), then run `bash vibe/install-vibe.sh`. **Requires `MISTRAL_API_KEY`.** On Windows, if `bash` is unavailable, skips vibe with a warning and prints instructions to run the installer manually.
-9. Print a smoke-test command and the locations to tweak afterwards.
+7. **Claude Code** (if selected): merge `.claude/` into `~/.claude` (or `./.claude` if `--local`).
+8. Print a smoke-test command and the locations to tweak afterwards.
 
 Useful flags:
 
-| Flag | Behaviour |
-| ---- | --------- |
-| _(none)_ | Interactive walk-through: prompt `[Y/n]` for OpenCode (default Y), Claude Code (default Y), Vibe (default **N** — opt-in). |
-| `--yes`, `-y` | Non-interactive — accept all defaults: OpenCode ✓, Claude Code ✓, Vibe ✗ (skipped). Still backs up existing dirs before clobbering. |
-| `--local` | Project-scoped install into the current directory (`./.opencode`, `./.claude`, `./.vibe` as three independent siblings); skips the global shell-rc env block (prints it as a hint instead). |
-| `--opencode` | **Allow-list:** install OpenCode only (if combined with other flags, only those are installed). |
-| `--claude` | **Allow-list:** install Claude Code only. |
-| `--vibe` | **Allow-list:** install Vibe only. Requires `MISTRAL_API_KEY` and `uv`. |
-| `--no-opencode` | **Deny:** skip OpenCode entirely (repo copy, deps, and env block). Can be combined with other targets. |
-| `--no-claude` | **Deny:** skip the Claude Code mirror. Can be combined with other targets. |
-| `--no-vibe` | **Deny:** skip Vibe. Default in interactive mode; use `--vibe` to enable. |
-| `--uninstall` | Remove the env-var block + all installed symlinks. **Never deletes the cloned repo, your data, or `*.bak.*` backups.** |
-| `--help`, `-h` | Print usage. |
+| Flag            | Behaviour                                                                                                                                                                                   |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| _(none)_        | Interactive walk-through: prompt `[Y/n]` for OpenCode (default Y) and Claude Code (default Y).                                                                                               |
+| `--yes`, `-y`   | Non-interactive — accept all defaults: OpenCode ✓, Claude Code ✓. Existing normal directories are merged, not removed or backed up.                                                           |
+| `--local`       | Project-scoped install into the current directory (`./.opencode`, `./.claude` as independent siblings); skips the global shell-rc env block (prints it as a hint instead).                   |
+| `--opencode`    | **Allow-list:** install OpenCode only (if combined with other flags, only those are installed).                                                                                             |
+| `--claude`      | **Allow-list:** install Claude Code only.                                                                                                                                                   |
+| `--no-opencode` | **Deny:** skip OpenCode entirely (repo copy, deps, and env block). Can be combined with other targets.                                                                                      |
+| `--no-claude`   | **Deny:** skip the Claude Code mirror. Can be combined with other targets.                                                                                                                  |
+| `--uninstall`   | Remove the env-var block and optionally remove copied local/global dirs after confirmation. **Never deletes the cloned repo or your data without confirmation.**                               |
+| `--help`, `-h`  | Print usage.                                                                                                                                                                                |
 
 The script writes a fenced block to your shell rc (`~/.zshrc`, `~/.bashrc`, or `~/.config/fish/config.fish`) that looks like this:
 
@@ -186,24 +175,16 @@ If your shell isn't bash/zsh/fish, the script prints the env block for you to pa
 <details>
 <summary>Click to expand the step-by-step manual walk-through (same outcome as the script).</summary>
 
-#### 1. Clone the repo into the OpenCode config dir
+#### 1. Clone the repo, then merge it into the OpenCode config dir
 
-OpenCode loads `~/.config/opencode/opencode.jsonc` at startup, so the simplest install is to clone (or symlink) the repo there.
+OpenCode loads `~/.config/opencode/opencode.jsonc` at startup. Keep the repo wherever you like, then copy it additively into the config dir.
 
 ```bash
-# Back up anything you already have there
-mv ~/.config/opencode ~/.config/opencode.bak 2>/dev/null || true
-
 # Clone
-git clone https://github.com/fmflurry/settings-opencode.git ~/.config/opencode
-cd ~/.config/opencode
-```
-
-Prefer keeping the repo elsewhere? Symlink it instead:
-
-```bash
 git clone https://github.com/fmflurry/settings-opencode.git ~/Workspace/settings-opencode
-ln -s ~/Workspace/settings-opencode ~/.config/opencode
+mkdir -p ~/.config/opencode
+rsync -a --exclude node_modules --exclude .git ~/Workspace/settings-opencode/ ~/.config/opencode/
+cd ~/.config/opencode
 ```
 
 #### 2. Install plugin/tool dependencies
@@ -237,28 +218,22 @@ If your provider doesn't support `reasoningEffort`, OpenCode silently ignores it
 
 `opencode.jsonc` declares three MCP servers, plus an externally-registered fourth one (`code-memory`). **CodeMemory is strongly recommended** — `instructions/codememory-first.md` routes repo orientation through it before falling back to `grep`/`read`. The others are optional but documented here so you know what you're opting into.
 
-| Server       | Install                                                                                       | Status                                                                       |
-| ------------ | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| code-memory  | register externally (user-level MCP) — see [`fmflurry/code-memory`](https://github.com/fmflurry/code-memory) | **Recommended.** Semantic repo orientation; `code-memory_*` tools are pre-allowlisted for every subagent. Pairs with `instructions/codememory-first.md`. |
-| context7     | nothing — `npx -y @upstash/context7-mcp@latest` is auto-installed at session start            | Live docs lookup. Auto-bootstraps on first use.                              |
-| wallaby      | install [Wallaby.js](https://wallabyjs.com) and run `wallaby update-mcp`                      | Optional. Runtime-test introspection.                                        |
-| Figma        | `enabled: false` by default                                                                   | Optional. Flip `enabled: true` and set up [Figma MCP](https://help.figma.com) for design-system tools. |
+| Server      | Install                                                                                                      | Status                                                                                                                                                   |
+| ----------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| code-memory | register externally (user-level MCP) — see [`fmflurry/code-memory`](https://github.com/fmflurry/code-memory) | **Recommended.** Semantic repo orientation; `code-memory_*` tools are pre-allowlisted for every subagent. Pairs with `instructions/codememory-first.md`. |
+| context7    | nothing — `npx -y @upstash/context7-mcp@latest` is auto-installed at session start                           | Live docs lookup. Auto-bootstraps on first use.                                                                                                          |
+| wallaby     | install [Wallaby.js](https://wallabyjs.com) and run `wallaby update-mcp`                                     | Optional. Runtime-test introspection.                                                                                                                    |
+| Figma       | `enabled: false` by default                                                                                  | Optional. Flip `enabled: true` and set up [Figma MCP](https://help.figma.com) for design-system tools.                                                   |
 
 #### 5. (Optional) Install the Claude Code mirror
 
-The repo ships a `.claude/` subtree (and optionally a `vibe/` dir). Each is independent and can be installed separately. The three targets — OpenCode, Claude Code, Vibe — never nest inside one another.
+The repo ships a `.claude/` subtree. OpenCode and Claude Code can be installed separately and never nest inside one another.
 
 **Claude Code:**
 
 ```bash
-# Back up
-mv ~/.claude ~/.claude.bak 2>/dev/null || true
-
-# Symlink approach (recommended — stays in sync with the repo)
-ln -s ~/.config/opencode/.claude ~/.claude
-
-# Or copy approach (independent of the repo)
-cp -R ~/.config/opencode/.claude ~/.claude
+mkdir -p ~/.claude
+rsync -a ~/.config/opencode/.claude/ ~/.claude/
 ```
 
 What this installs:
@@ -269,25 +244,6 @@ What this installs:
 - `.claude/rules/{common,typescript}/*.md` — coding-style/testing/security rule packs.
 - `.claude/commands/*.md` — extra slash commands (`/create-pull-request`, `/update-codemaps`).
 - `.claude/skills/**` — **full parity copy of canonical skill set** (same as `skills/` at repo root, computed and synced by `scripts/sync-skills.sh`). Includes all OpenCode skills; both sides stay in sync.
-
-**Vibe (optional, requires `uv` and `MISTRAL_API_KEY`):**
-
-```bash
-# Back up
-mv ~/.vibe ~/.vibe.bak 2>/dev/null || true
-
-# Symlink approach
-ln -s ~/.config/opencode/vibe ~/.vibe
-cd ~/.vibe
-bash install-vibe.sh
-
-# Or copy approach
-cp -R ~/.config/opencode/vibe ~/.vibe
-cd ~/.vibe
-bash install-vibe.sh
-```
-
-Vibe installs to `~/.vibe` globally or `./.vibe` locally (three independent paths: no nesting with OpenCode or Claude Code).
 
 </details>
 
@@ -338,11 +294,13 @@ If a new plugin shows up, OpenCode picks it up on the next restart. If an env va
 ---
 
 <a id="english"></a>
+
 ## English
 
 Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primary `conductor` agent (no write/edit perms — must delegate), 13 specialist sub-agents, always-on skills, slash commands, OpenCode plugins (hooks, worktrees, auto-compact, caveman, figma RAG, notifications), custom tools, and a Claude Code mirror.
 
 <a id="goals-en"></a>
+
 ### Goals
 
 - Reproducibility: same agent behavior across machines/sessions.
@@ -350,10 +308,11 @@ Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primar
 - Security: `security-review` skill loaded by default + pre-tool-use hooks.
 
 <a id="layout-en"></a>
+
 ### Repository layout
 
-- Configs: `opencode.jsonc`, `dcp.jsonc` (dynamic context pruning), `ocx.jsonc` (OCX registries), `tui.json` (TUI theme).
-- Profiles: `profiles/<name>/` (per-profile overrides + `AGENTS.md`, run with `ocx opencode -p <name>`).
+- Configs: `opencode.jsonc`, `dcp.jsonc` (dynamic context pruning), `tui.json` (TUI theme).
+- Profiles: `profiles/<name>/` (per-profile overrides + `AGENTS.md`).
 - Skills: `skills/*/SKILL.md` (plus auxiliary docs) — **canonical set, shared with Claude Code via** `sync-skills.sh`.
 - Agent prompts: `prompts/agents/*.txt`.
 - Slash commands: `commands/*.md`.
@@ -367,6 +326,7 @@ Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primar
 - Intentional exclusions (`.gitignore`): `node_modules/`, `antigravity-*`, `.DS_Store`, local `.env*` files except `.env.example`, runtime dir `skills/skill-creator/` (not synced).
 
 <a id="config-en"></a>
+
 ### Configuration: `opencode.jsonc`
 
 Six concerns wired in one file:
@@ -384,29 +344,30 @@ Six concerns wired in one file:
 5. `mcp`: context7, wallaby, Figma (disabled). Plus externally-registered [`code-memory`](https://github.com/fmflurry/code-memory) — tool perms `code-memory_*` are pre-allowlisted for every subagent.
 6. `plugin`: external marketplace plugins (`@tarquinen/opencode-dcp@latest`).
 
-`dcp.jsonc` configures the Dynamic Context Pruning plugin. `ocx.jsonc` registers OCX [registries](https://ocx.kdco.dev).
+`dcp.jsonc` configures the Dynamic Context Pruning plugin.
 
 <a id="agents-en"></a>
+
 ### Agents
 
 Defined in `opencode.jsonc` under `agent`:
 
-| Agent                  | Mode     | Role                                                                                |
-| ---------------------- | -------- | ----------------------------------------------------------------------------------- |
+| Agent                  | Mode     | Role                                                                                                                                                                              |
+| ---------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `conductor`            | primary  | Orchestrator. `write` + `edit` **denied** at the permission layer. Routes every change to a specialist via Task. Bash redirects to source files blocked by the ECC pre-tool hook. |
-| `planner`              | subagent | Plan + risks before large changes. Read+bash, no edit.                              |
-| `architect`            | subagent | System design / scalability decisions. Read+bash only.                              |
-| `coder`                | subagent | Pure non-test implementation. Mandatory build+lint+standards self-check before reporting done. Socratic ambiguity gate. |
-| `writer`               | subagent | Writes docs/markdown/HTML/text artifacts. Forbidden from touching source code — refuses out-of-scope files back to the conductor. |
-| `code-reviewer`        | subagent | Quality review over diffs and conventions. Read-only — findings only; fixes go to `coder`. |
-| `security-reviewer`    | subagent | OWASP/secrets/deps review. Read-only — reports vulnerabilities; remediation routed to `coder`. |
-| `tdd-guide`            | subagent | RED -> GREEN -> REFACTOR + 80% coverage. Writes tests; delegates GREEN impl to `coder` via scoped Task perm. |
-| `build-error-resolver` | subagent | Build/TS error fixes with minimal diffs.                                            |
-| `e2e-runner`           | subagent | Playwright E2E tests.                                                               |
-| `doc-updater`          | subagent | Generated docs + codemaps.                                                          |
-| `refactor-cleaner`     | subagent | Dead-code removal + consolidation.                                                  |
-| `database-reviewer`    | subagent | PostgreSQL / Supabase schema, perf, security.                                       |
-| `git-specialist`       | subagent | Branches, commits, pushes, PRs (mini model).                                        |
+| `planner`              | subagent | Plan + risks before large changes. Read+bash, no edit.                                                                                                                            |
+| `architect`            | subagent | System design / scalability decisions. Read+bash only.                                                                                                                            |
+| `coder`                | subagent | Pure non-test implementation. Mandatory build+lint+standards self-check before reporting done. Socratic ambiguity gate.                                                           |
+| `writer`               | subagent | Writes docs/markdown/HTML/text artifacts. Forbidden from touching source code — refuses out-of-scope files back to the conductor.                                                 |
+| `code-reviewer`        | subagent | Quality review over diffs and conventions. Read-only — findings only; fixes go to `coder`.                                                                                        |
+| `security-reviewer`    | subagent | OWASP/secrets/deps review. Read-only — reports vulnerabilities; remediation routed to `coder`.                                                                                    |
+| `tdd-guide`            | subagent | RED -> GREEN -> REFACTOR + 80% coverage. Writes tests; delegates GREEN impl to `coder` via scoped Task perm.                                                                      |
+| `build-error-resolver` | subagent | Build/TS error fixes with minimal diffs.                                                                                                                                          |
+| `e2e-runner`           | subagent | Playwright E2E tests.                                                                                                                                                             |
+| `doc-updater`          | subagent | Generated docs + codemaps.                                                                                                                                                        |
+| `refactor-cleaner`     | subagent | Dead-code removal + consolidation.                                                                                                                                                |
+| `database-reviewer`    | subagent | PostgreSQL / Supabase schema, perf, security.                                                                                                                                     |
+| `git-specialist`       | subagent | Branches, commits, pushes, PRs (mini model).                                                                                                                                      |
 
 ### Hardened sub-agent orchestration
 
@@ -425,30 +386,32 @@ Use these paths depending on how much control you want:
 Why this exists: GPT/Claude often infer delegation from short descriptions, but open-source/open-weight models are more literal and tend to inspect or edit first. Permissions + the hook + the front-loaded gate make delegation **mechanically enforced** rather than instruction-dependent.
 
 <a id="commands-en"></a>
+
 ### Slash commands
 
 Templates in `commands/`. Most run as `subtask: true` (delegated to a specialist).
 
-| Command               | Sub-agent             | Purpose                                          |
-| --------------------- | --------------------- | ------------------------------------------------ |
-| `/git`                | git-specialist        | Bounded git ops (branches, commits).             |
-| `/push-changes`       | git-specialist        | Commit + push with upstream guard.               |
-| `/plan`               | planner               | Implementation plan.                             |
-| `/tdd`                | tdd-guide             | TDD cycle with coverage.                         |
-| `/code-review`        | code-reviewer         | Quality review.                                  |
-| `/security`           | security-reviewer     | Security audit.                                  |
-| `/build-fix`          | build-error-resolver  | Build/TS error resolution.                       |
-| `/e2e`                | e2e-runner            | E2E test generation/run.                         |
-| `/refactor-clean`     | refactor-cleaner      | Dead-code cleanup.                               |
-| `/orchestrate`        | planner               | Multi-agent orchestration.                       |
-| `/update-docs`        | doc-updater           | Doc updates.                                     |
-| `/update-codemaps`    | doc-updater           | Generates `docs/CODEMAPS/`.                      |
-| `/test-coverage`      | tdd-guide             | Coverage analysis.                               |
-| `/verify`             | (primary)             | Verification loop.                               |
-| `/eval`               | (primary)             | Evaluate against criteria.                       |
-| `/skill-create`       | (primary)             | Generate a skill from git history.               |
+| Command            | Sub-agent            | Purpose                              |
+| ------------------ | -------------------- | ------------------------------------ |
+| `/git`             | git-specialist       | Bounded git ops (branches, commits). |
+| `/push-changes`    | git-specialist       | Commit + push with upstream guard.   |
+| `/plan`            | planner              | Implementation plan.                 |
+| `/tdd`             | tdd-guide            | TDD cycle with coverage.             |
+| `/cop-review`      | code-reviewer        | Quality review.                      |
+| `/security`        | security-reviewer    | Security audit.                      |
+| `/build-fix`       | build-error-resolver | Build/TS error resolution.           |
+| `/e2e`             | e2e-runner           | E2E test generation/run.             |
+| `/refactor-clean`  | refactor-cleaner     | Dead-code cleanup.                   |
+| `/orchestrate`     | planner              | Multi-agent orchestration.           |
+| `/update-docs`     | doc-updater          | Doc updates.                         |
+| `/update-codemaps` | doc-updater          | Generates `docs/CODEMAPS/`.          |
+| `/test-coverage`   | tdd-guide            | Coverage analysis.                   |
+| `/verify`          | (primary)            | Verification loop.                   |
+| `/eval`            | (primary)            | Evaluate against criteria.           |
+| `/skill-create`    | (primary)            | Generate a skill from git history.   |
 
 <a id="skills-en"></a>
+
 ### Skills
 
 **All skills are kept at full parity across OpenCode (`skills/`) and Claude Code (`.claude/skills/`) via the canonical union computed and synced by `scripts/sync-skills.sh`.** Both `skills/` (root, source of truth) and `.claude/skills/` (mirror) are self-contained; a raw `cp -R .claude ~/.claude` yields a complete skill set.
@@ -479,6 +442,7 @@ On-demand (loaded by description / by command):
 **Sync behavior:** `scripts/sync-skills.sh` computes the canonical union (root `skills/` ∪ `.claude/skills/`, root wins on conflicts), excludes runtime dir (`skills/skill-creator/`), and copies into the given destination(s). Runs standalone and is invoked by installers.
 
 <a id="plugins-en"></a>
+
 ### Plugins & hooks
 
 All TypeScript plugins use `@opencode-ai/plugin@1.4.6`.
@@ -490,9 +454,10 @@ All TypeScript plugins use `@opencode-ai/plugin@1.4.6`.
 - `plugins/figma-mcp-trigger.js` — Figma RAG: reads `figma-rag.md` (or `OPENCODE_FIGMA_RAG_PATHS`) and injects snippets when designs are referenced.
 - `plugins/worktree.ts` (+ `plugins/worktree/`) — creates an isolated git worktree for the session and spawns a terminal (mac/Win/Linux). Inspired by opencode-worktree-session.
 - `plugins/kdco-primitives/` — shared utilities (mutex, shell, terminal-detect, project-id resolver, types).
-- `@tarquinen/opencode-dcp@latest` *(external, declared in `opencode.jsonc › plugin`)* — Dynamic Context Pruning. Trims stale tool results and large files from the live context window so long sessions don't blow past the model's limit. Configured via `dcp.jsonc` at the repo root.
+- `@tarquinen/opencode-dcp@latest` _(external, declared in `opencode.jsonc › plugin`)_ — Dynamic Context Pruning. Trims stale tool results and large files from the live context window so long sessions don't blow past the model's limit. Configured via `dcp.jsonc` at the repo root.
 
 <a id="tools-en"></a>
+
 ### Custom tools (`tools/`)
 
 Reusable OpenCode tools exposed via `tools/index.ts`:
@@ -502,11 +467,13 @@ Reusable OpenCode tools exposed via `tools/index.ts`:
 - `tools/security-audit.ts` — scans deps + secrets + risky patterns.
 
 <a id="tui-en"></a>
+
 ### TUI plugins
 
 `tui-plugins/caveman.tsx` — React sidebar that shows a "CAVEMAN ULTRA" badge when the mode is active (flag file written by `caveman-server.ts`).
 
 <a id="claude-en"></a>
+
 ### Claude Code mirror (`.claude/`)
 
 - `CLAUDE.md` — global user instructions (no `any`, facade != UseCase).
@@ -518,29 +485,32 @@ Reusable OpenCode tools exposed via `tools/index.ts`:
 - `skills/**` — **full parity copy of canonical skill set** (synced via `scripts/sync-skills.sh`). Both OpenCode and Claude Code see the same skills; updates to root `skills/` propagate to `.claude/skills/` on install/sync.
 
 <a id="flow-en"></a>
+
 ### How it fits together
 
 1. Startup: OpenCode loads `opencode.jsonc` -> always-on instructions -> `caveman-server` adds caveman preamble if active.
 2. Dev: `conductor` executes — it cannot write files; it dispatches Task calls to specialists. `ecc-hooks` formats / flags `console.log` / blocks bash-write bypasses.
-4. Workflow: `conductor` routes to specialists through Task (perm-enforced); `/plan`, `/tdd`, `/security`, etc. force the same routing explicitly.
-5. Idle/completion: `auto-compact` triggers when the tool-call threshold is reached; `notification` sends desktop alerts for `message.updated` completions plus question/permission events, with optional Bark/iPhone pushes.
+3. Workflow: `conductor` routes to specialists through Task (perm-enforced); `/plan`, `/tdd`, `/security`, etc. force the same routing explicitly.
+4. Idle/completion: `auto-compact` triggers when the tool-call threshold is reached; `notification` sends desktop alerts for `message.updated` completions plus question/permission events, with optional Bark/iPhone pushes.
 
 ---
 
 <a id="francais"></a>
+
 ## Français
 
-Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude` + optionnellement vibe. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), treize sous-agents specialises, des skills toujours actives, des commandes slash, des plugins (hooks, worktrees, auto-compact, caveman, figma RAG), des outils custom et un mirror Claude Code.
+Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), treize sous-agents specialises, des skills toujours actives, des commandes slash, des plugins (hooks, worktrees, auto-compact, caveman, figma RAG), des outils custom et un mirror Claude Code.
 
 <a id="objectif-fr"></a>
+
 ### Objectif
 
 - Reproductibilite: meme comportement entre machines/sessions.
 - Qualite: TDD a la demande, verification reguliere, conventions centralisees.
 - Securite: skill `security-review` chargee par defaut + hooks pre-tool-use (security warnings).
 
-- Configs: `opencode.jsonc`, `dcp.jsonc` (dynamic context pruning), `ocx.jsonc` (registries OCX), `tui.json` (theme TUI).
-- Profils: `profiles/<name>/` (override `opencode.jsonc` + `AGENTS.md` par profil, lance via `ocx opencode -p <name>`).
+- Configs: `opencode.jsonc`, `dcp.jsonc` (dynamic context pruning), `tui.json` (theme TUI).
+- Profils: `profiles/<name>/` (override `opencode.jsonc` + `AGENTS.md` par profil).
 - Skills: `skills/*/SKILL.md` (+ ressources auxiliaires) — **ensemble canonical, partage avec Claude Code via `sync-skills.sh`**.
 - Prompts agents: `prompts/agents/*.txt`.
 - Commandes slash: `commands/*.md`.
@@ -551,10 +521,10 @@ Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude` + optionnelleme
 - Instructions globales: `instructions/subagent-routing.md`, `instructions/codememory-first.md`, `instructions/caveman-ultra.md`.
 - Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`, `scripts/sync-skills.sh` (synchronise l'ensemble canonical des skills aux deux harnesses).
 - Mirror Claude Code: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/skills/` (copie en parité complète), `.claude/commands/`.
-- Vibe: `vibe/install-vibe.sh` (optionnel, demande `MISTRAL_API_KEY` et `uv`).
 - Exclusions volontaires (`.gitignore`): `node_modules/`, `antigravity-*`, `.DS_Store`, fichiers locaux `.env*` sauf `.env.example`, répertoire runtime `skills/skill-creator/` (non synchronisé).
 
 <a id="config-fr"></a>
+
 ### Configuration: `opencode.jsonc`
 
 Le fichier orchestre six choses:
@@ -572,29 +542,30 @@ Le fichier orchestre six choses:
 5. `mcp`: context7, wallaby, Figma (desactive par defaut). Plus [`code-memory`](https://github.com/fmflurry/code-memory) enregistre en externe — perms `code-memory_*` pre-allowlistees pour chaque sous-agent.
 6. `plugin`: marketplace plugins externes (`@tarquinen/opencode-dcp@latest`).
 
-`dcp.jsonc` configure le plugin Dynamic Context Pruning. `ocx.jsonc` declare les registries pour le wrapper [OCX](https://ocx.kdco.dev).
+`dcp.jsonc` configure le plugin Dynamic Context Pruning.
 
 <a id="agents-fr"></a>
+
 ### Agents
 
 Definis dans `opencode.jsonc` (champ `agent`):
 
-| Agent                  | Mode      | Role                                                                                  |
-| ---------------------- | --------- | ------------------------------------------------------------------------------------- |
-| `conductor`            | primary   | Orchestrateur. `write` + `edit` **interdits** par permission. Route chaque modif via Task vers un specialiste. Les redirections bash vers du code sont bloquees par le hook ECC. |
-| `planner`              | subagent  | Plan + risques avant grosse modif. Read+bash, pas d'edit.                             |
-| `architect`            | subagent  | Decisions de design / scalabilite. Read+bash uniquement.                              |
-| `coder`                | subagent  | Implementation pure (hors tests). Verification build+lint+standards obligatoire avant de rendre. Gate socratique en cas d'ambiguite. |
-| `writer`               | subagent  | Ecrit docs/markdown/HTML/texte. Interdit de toucher au code source — refuse les fichiers hors scope au conductor. |
-| `code-reviewer`        | subagent  | Revue qualite (diff, conventions, tests). Read-only — findings seulement; les fixes passent par `coder`. |
-| `security-reviewer`    | subagent  | Revue OWASP/secrets/deps. Read-only — rapporte les vulnerabilites; remediation routee vers `coder`. |
-| `tdd-guide`            | subagent  | RED -> GREEN -> REFACTOR + 80% coverage. Ecrit les tests; delegue le GREEN au `coder` via permission Task ciblee. |
-| `build-error-resolver` | subagent  | Fix build/TS errors avec diff minimal.                                                |
-| `e2e-runner`           | subagent  | Tests E2E Playwright.                                                                 |
-| `doc-updater`          | subagent  | Codemaps + docs generees.                                                             |
-| `refactor-cleaner`     | subagent  | Suppression code mort + consolidation.                                                |
-| `database-reviewer`    | subagent  | PostgreSQL / Supabase: schema, perfs, securite.                                       |
-| `git-specialist`       | subagent  | Branches, commits, push, PRs (modele mini).                                           |
+| Agent                  | Mode     | Role                                                                                                                                                                             |
+| ---------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `conductor`            | primary  | Orchestrateur. `write` + `edit` **interdits** par permission. Route chaque modif via Task vers un specialiste. Les redirections bash vers du code sont bloquees par le hook ECC. |
+| `planner`              | subagent | Plan + risques avant grosse modif. Read+bash, pas d'edit.                                                                                                                        |
+| `architect`            | subagent | Decisions de design / scalabilite. Read+bash uniquement.                                                                                                                         |
+| `coder`                | subagent | Implementation pure (hors tests). Verification build+lint+standards obligatoire avant de rendre. Gate socratique en cas d'ambiguite.                                             |
+| `writer`               | subagent | Ecrit docs/markdown/HTML/texte. Interdit de toucher au code source — refuse les fichiers hors scope au conductor.                                                                |
+| `code-reviewer`        | subagent | Revue qualite (diff, conventions, tests). Read-only — findings seulement; les fixes passent par `coder`.                                                                         |
+| `security-reviewer`    | subagent | Revue OWASP/secrets/deps. Read-only — rapporte les vulnerabilites; remediation routee vers `coder`.                                                                              |
+| `tdd-guide`            | subagent | RED -> GREEN -> REFACTOR + 80% coverage. Ecrit les tests; delegue le GREEN au `coder` via permission Task ciblee.                                                                |
+| `build-error-resolver` | subagent | Fix build/TS errors avec diff minimal.                                                                                                                                           |
+| `e2e-runner`           | subagent | Tests E2E Playwright.                                                                                                                                                            |
+| `doc-updater`          | subagent | Codemaps + docs generees.                                                                                                                                                        |
+| `refactor-cleaner`     | subagent | Suppression code mort + consolidation.                                                                                                                                           |
+| `database-reviewer`    | subagent | PostgreSQL / Supabase: schema, perfs, securite.                                                                                                                                  |
+| `git-specialist`       | subagent | Branches, commits, push, PRs (modele mini).                                                                                                                                      |
 
 ### Orchestration durcie des sous-agents
 
@@ -613,30 +584,32 @@ Chemins possibles:
 Pourquoi: GPT/Claude inferent souvent la delegation depuis des descriptions courtes, mais les modeles open-source/open-weight sont plus litteraux et inspectent ou editent souvent avant de deleguer. Permissions + hook + gate front-loaded rendent la delegation **mecaniquement imposee** plutot que dependante de l'instruction.
 
 <a id="commands-fr"></a>
+
 ### Commandes slash
 
 Templates dans `commands/`. La plupart sont `subtask: true` -> elles s'executent dans un sous-agent isolé.
 
-| Commande              | Sous-agent          | But                                                |
-| --------------------- | ------------------- | -------------------------------------------------- |
-| `/git`                | git-specialist      | Operations git encadrees (branche/commit).         |
-| `/push-changes`       | git-specialist      | Commit + push (avec garde sur upstream).           |
-| `/plan`               | planner             | Plan d'implementation.                             |
-| `/tdd`                | tdd-guide           | Cycle TDD avec coverage.                           |
-| `/code-review`        | code-reviewer       | Revue qualite.                                     |
-| `/security`           | security-reviewer   | Audit securite.                                    |
-| `/build-fix`          | build-error-resolver | Resolution build/TS errors.                       |
-| `/e2e`                | e2e-runner          | Generation/run tests E2E.                          |
-| `/refactor-clean`     | refactor-cleaner    | Nettoyage code mort.                               |
-| `/orchestrate`        | planner             | Orchestration multi-agents.                        |
-| `/update-docs`        | doc-updater         | Mise a jour de la doc.                             |
-| `/update-codemaps`    | doc-updater         | Genere `docs/CODEMAPS/`.                           |
-| `/test-coverage`      | tdd-guide           | Analyse coverage.                                  |
-| `/verify`             | (primary)           | Boucle de verification.                            |
-| `/eval`               | (primary)           | Evaluation contre criteres.                        |
-| `/skill-create`       | (primary)           | Genere une skill depuis l'historique git.          |
+| Commande           | Sous-agent           | But                                        |
+| ------------------ | -------------------- | ------------------------------------------ |
+| `/git`             | git-specialist       | Operations git encadrees (branche/commit). |
+| `/push-changes`    | git-specialist       | Commit + push (avec garde sur upstream).   |
+| `/plan`            | planner              | Plan d'implementation.                     |
+| `/tdd`             | tdd-guide            | Cycle TDD avec coverage.                   |
+| `/cop-review`      | code-reviewer        | Revue qualite.                             |
+| `/security`        | security-reviewer    | Audit securite.                            |
+| `/build-fix`       | build-error-resolver | Resolution build/TS errors.                |
+| `/e2e`             | e2e-runner           | Generation/run tests E2E.                  |
+| `/refactor-clean`  | refactor-cleaner     | Nettoyage code mort.                       |
+| `/orchestrate`     | planner              | Orchestration multi-agents.                |
+| `/update-docs`     | doc-updater          | Mise a jour de la doc.                     |
+| `/update-codemaps` | doc-updater          | Genere `docs/CODEMAPS/`.                   |
+| `/test-coverage`   | tdd-guide            | Analyse coverage.                          |
+| `/verify`          | (primary)            | Boucle de verification.                    |
+| `/eval`            | (primary)            | Evaluation contre criteres.                |
+| `/skill-create`    | (primary)            | Genere une skill depuis l'historique git.  |
 
 <a id="skills-fr"></a>
+
 ### Skills
 
 **Tous les skills sont en parité complète entre OpenCode (`skills/`) et Claude Code (`.claude/skills/`) via l'union canonique calculée et synchronisée par `scripts/sync-skills.sh`.** Les deux `skills/` (root, source de vérité) et `.claude/skills/` (miroir) sont auto-contenus; une simple `cp -R .claude ~/.claude` donne l'ensemble complet des skills.
@@ -667,6 +640,7 @@ Skills sur demande (chargés par description / par commande):
 **Comportement sync:** `scripts/sync-skills.sh` calcule l'union canonique (root `skills/` ∪ `.claude/skills/`, root gagne en cas de conflit), exclut le répertoire runtime (`skills/skill-creator/`), et copie dans la(les) destination(s) donnée(s). S'exécute seul et est invoqué par les installateurs.
 
 <a id="plugins-fr"></a>
+
 ### Plugins & hooks
 
 Tous les plugins TypeScript utilisent `@opencode-ai/plugin@1.4.6`.
@@ -678,9 +652,10 @@ Tous les plugins TypeScript utilisent `@opencode-ai/plugin@1.4.6`.
 - `plugins/figma-mcp-trigger.js` — RAG figma: lit `figma-rag.md` (ou `OPENCODE_FIGMA_RAG_PATHS`) et injecte des snippets quand des designs sont referencés.
 - `plugins/worktree.ts` (+ `plugins/worktree/`) — cree un git worktree isolé pour la session et spawn un terminal (mac/Win/Linux). Inspiré d'opencode-worktree-session.
 - `plugins/kdco-primitives/` — utilities partages (mutex, shell, terminal-detect, project-id resolver, types).
-- `@tarquinen/opencode-dcp@latest` *(externe, declare dans `opencode.jsonc › plugin`)* — Dynamic Context Pruning. Coupe les tool results stagnants et les gros fichiers dans la fenetre de contexte pour que les sessions longues ne depassent pas la limite modele. Configure via `dcp.jsonc` a la racine du repo.
+- `@tarquinen/opencode-dcp@latest` _(externe, declare dans `opencode.jsonc › plugin`)_ — Dynamic Context Pruning. Coupe les tool results stagnants et les gros fichiers dans la fenetre de contexte pour que les sessions longues ne depassent pas la limite modele. Configure via `dcp.jsonc` a la racine du repo.
 
 <a id="tools-fr"></a>
+
 ### Outils custom (`tools/`)
 
 Outils OpenCode reutilisables exposes via `tools/index.ts`:
@@ -690,11 +665,13 @@ Outils OpenCode reutilisables exposes via `tools/index.ts`:
 - `tools/security-audit.ts` — scan deps + secrets + patterns a risque.
 
 <a id="tui-fr"></a>
+
 ### TUI plugins
 
 `tui-plugins/caveman.tsx` — sidebar React qui affiche un badge "CAVEMAN ULTRA" quand le mode est actif (drapeau ecrit par `caveman-server.ts`).
 
 <a id="claude-fr"></a>
+
 ### Mirror Claude Code (`.claude/`)
 
 - `CLAUDE.md` — instructions globales (no `any`, facade != UseCase).
@@ -706,9 +683,10 @@ Outils OpenCode reutilisables exposes via `tools/index.ts`:
 - `skills/**` — **copie en parité complète de l'ensemble canonical des skills** (synchronisée via `scripts/sync-skills.sh`). OpenCode et Claude Code voient les mêmes skills; les mises à jour de `skills/` au root se propagent à `.claude/skills/` à l'install/sync.
 
 <a id="flow-fr"></a>
+
 ### Comment tout s'emboite
 
 1. Demarrage: OpenCode charge `opencode.jsonc` -> instructions globales -> `caveman-server` ajoute le preamble si actif.
 2. Dev: `conductor` execute — il n'a pas le droit d'ecrire; il dispatche des Task vers les specialistes. `ecc-hooks` formate / flag les `console.log` / bloque les bypasses bash-write.
-4. Workflow: `conductor` route via Task (impose par permissions); `/plan`, `/tdd`, `/security`, etc. forcent explicitement le meme routage.
-5. Idle/completion: `auto-compact` declenche un compact quand le seuil de tool calls est atteint. `notification` envoie des alertes desktop sur fins de message `message.updated` et evenements question/permission, avec push Bark/iPhone optionnel.
+3. Workflow: `conductor` route via Task (impose par permissions); `/plan`, `/tdd`, `/security`, etc. forcent explicitement le meme routage.
+4. Idle/completion: `auto-compact` declenche un compact quand le seuil de tool calls est atteint. `notification` envoie des alertes desktop sur fins de message `message.updated` et evenements question/permission, avec push Bark/iPhone optionnel.

@@ -55,7 +55,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/rtk-rewrite.sh"
+            "command": "/Users/fmflurry/.claude/hooks/rtk-rewrite.sh"
           }
         ]
       },
@@ -82,17 +82,8 @@
     ]
   },
   "enabledPlugins": {
-    "csharp-lsp@claude-plugins-official": true,
-    "code-memory@code-memory": true
+    "csharp-lsp@claude-plugins-official": true
   },
   "skipDangerousModePermissionPrompt": true,
-  "extraKnownMarketplaces": {
-    "code-memory": {
-      "source": {
-        "source": "git",
-        "url": "https://github.com/fmflurry/code-memory.git"
-      }
-    }
-  },
   "model": "claude-opus-4-8"
 }

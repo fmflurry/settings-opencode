@@ -5,15 +5,13 @@
 # Default: interactive, prompts each step.
 # Flags:
 #   --yes, -y       Non-interactive, accept all defaults
-#   --opencode      Allowlist: install opencode only (unless combined with --claude/--vibe)
-#   --claude        Allowlist: install claude only (unless combined with --opencode/--vibe)
-#   --vibe          Allowlist + opt-in: install vibe (delegated to vibe/install-vibe.sh)
+#   --opencode      Allowlist: install opencode only (unless combined with --claude)
+#   --claude        Allowlist: install claude only (unless combined with --opencode)
 #   --no-opencode   Force-skip opencode (wins over allowlist)
 #   --no-claude     Force-skip claude (wins over allowlist)
-#   --no-vibe       Force-skip vibe (wins over allowlist)
 #   --uninstall     Remove env-var block and installed copies (does not delete the repo)
 #   --local         Project-scoped install into the current working directory
-#                   (./.opencode, ./.claude, ./.vibe). Does not touch shell rc files.
+#                   (./.opencode, ./.claude). Does not touch shell rc files.
 #   --help, -h      Show usage
 #
 set -euo pipefail
@@ -27,23 +25,22 @@ MARKER_START="# >>> settings-opencode >>>"
 MARKER_END="# <<< settings-opencode <<<"
 TARGET_OPENCODE="$HOME/.config/opencode"
 TARGET_CLAUDE="$HOME/.claude"
-TARGET_VIBE="$HOME/.vibe"
 REPO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]:-$0}" )" && pwd )"
 
 ASSUME_YES=0
 SKIP_CLAUDE=0
 SKIP_OPENCODE=0
-SKIP_VIBE=1
 DO_UNINSTALL=0
 LOCAL_MODE=0
 WSL_MODE=0
 WSL_WIN_HOME=""
 WSL_OPENCODE_WIN_PATH=""
+OPENCODE_TARGET_READY=0
+CLAUDE_TARGET_READY=0
 
 # Positive-flag allowlist trackers (0 = not explicitly requested)
 FLAG_OPENCODE=0
 FLAG_CLAUDE=0
-FLAG_VIBE=0
 
 # ------------------------------ presentation ---------------------------------
 
@@ -92,50 +89,45 @@ Flags:
   --yes, -y       Non-interactive (accept all defaults)
   --opencode      Install opencode config into ~/.config/opencode (allowlist flag)
   --claude        Install claude config into ~/.claude (allowlist flag)
-  --vibe          Install vibe config into ~/.vibe via vibe/install-vibe.sh (opt-in, allowlist flag)
   --no-opencode   Force-skip opencode (wins over any allowlist)
   --no-claude     Force-skip claude (wins over any allowlist)
-  --no-vibe       Force-skip vibe (wins over any allowlist)
   --uninstall     Remove the env-var block and copies created by this script
                   (does not delete the cloned repo or your data)
   --local         Project-scoped install into the current working directory.
-                  Copies repo into ./.opencode, ./.claude, and (if vibe active) ./.vibe.
+                  Copies repo into ./.opencode and ./.claude.
                   Does not touch global shell rc files. Combine with --yes,
-                  --no-claude, --no-opencode, --vibe, and --uninstall as normal. Do
+                  --no-claude, --no-opencode, and --uninstall as normal. Do
                   NOT run this from inside the settings-opencode repo itself.
   --help, -h      Show this message
 
 Target paths (global mode):
   opencode → ~/.config/opencode
   claude   → ~/.claude
-  vibe     → ~/.vibe  (delegated to vibe/install-vibe.sh)
 
 Target paths (--local mode):
   opencode → ./.opencode
   claude   → ./.claude
-  vibe     → ./.vibe
 
 Allowlist semantics:
-  By default: opencode ON, claude ON, vibe OFF (opt-in).
-  If ANY positive flag (--opencode / --claude / --vibe) is present, only those
+  By default: opencode ON, claude ON.
+  If ANY positive flag (--opencode / --claude) is present, only those
   targets are candidates — the others default to OFF.
   Opt-out flags (--no-*) force their target OFF and win over the allowlist.
-  If all three targets end up OFF → error "nothing to install".
+  If both targets end up OFF → error "nothing to install".
 
 What it does (interactive by default):
   1. Verifies prerequisites (git, bun or npm).
-  2. Copies this repo into ~/.config/opencode (or uses it in place).
+  2. Merges this repo into ~/.config/opencode (or uses it in place).
   3. Installs JS deps with bun (if available) or npm.
   4. Adds OPENCODE_MODEL_* and OPENCODE_REASONING_* defaults to your shell rc,
      fenced with markers so re-runs and uninstalls are idempotent.
-  5. Optionally copies the .claude/ mirror into ~/.claude.
-  6. Optionally delegates to vibe/install-vibe.sh to install ~/.vibe.
-  7. Prints next steps for MCP servers and a smoke test.
+  5. Optionally merges the .claude/ mirror into ~/.claude.
+  6. Prints next steps for MCP servers and a smoke test.
 
-  With --local, steps 2-3 and 5-6 target ./.opencode/.claude/.vibe in the cwd.
+  With --local, steps 2-3 and 5 target ./.opencode/.claude in the cwd.
   Step 4 (shell rc) is skipped; the env block is printed to stdout instead.
 
-  With --no-opencode, steps 2-4 are skipped entirely; only steps 5-6 run.
+  With --no-opencode, steps 2-4 are skipped entirely; only step 5 runs.
 EOF
 }
 
@@ -150,19 +142,11 @@ detect_shell_rc() {
     esac
 }
 
-backup_path() {
-    local target="$1" backup
-    backup="${target}.bak.$(date +%Y%m%d-%H%M%S)"
-    info "moving existing $target -> $backup"
-    mv "$target" "$backup"
-    ok "backed up to $backup"
-}
-
 # Copy src/ contents into dst/ as a real copy (not a symlink).
 # Used for both the local install and the WSL -> Windows install (where symlinks
 # across /mnt/c don't work). Excludes node_modules (reinstalled in the target),
-# .git, and transient artifacts. Also excludes .claude and .vibe to prevent
-# nesting — those are independent targets installed by their own steps.
+# .git, and transient artifacts. Also excludes assets, vibe, and removed OCX
+# files so they are never installed even if reintroduced accidentally.
 # Additive — does NOT use --delete, so runtime state created in the target
 # (auth.json, sessions, memory/, projects/) survives re-runs. Files removed
 # from the repo are therefore not pruned from the target.
@@ -183,7 +167,9 @@ copy_tree() {
         --exclude='*.bak' \
         --exclude='*.bak.*' \
         --exclude='.serena' \
-        --exclude='.claude' \
+        --exclude='assets' \
+        --exclude='ocx.jsonc' \
+        --exclude='profiles/default/ocx.jsonc' \
         --exclude='.vibe' \
         --exclude='vibe' \
         --exclude='install.sh' \
@@ -191,6 +177,10 @@ copy_tree() {
         --exclude='bootstrap.sh' \
         --exclude='bootstrap.ps1' \
         "$src/" "$dst/"
+}
+
+ensure_opencode_runtime_dirs() {
+    mkdir -p "$TARGET_OPENCODE/data/opencode"
 }
 
 # Copy src/ into dst/ but protect personal config files from being overwritten
@@ -267,8 +257,8 @@ sync_skills() {
 
     step "Syncing canonical skill union"
     local dests=()
-    [ "$SKIP_OPENCODE" != "1" ] && dests+=("$TARGET_OPENCODE/skills")
-    [ "$SKIP_CLAUDE" != "1" ]   && dests+=("$TARGET_CLAUDE/skills")
+    [ "$SKIP_OPENCODE" != "1" ] && [ "$OPENCODE_TARGET_READY" = "1" ] && dests+=("$TARGET_OPENCODE/skills")
+    [ "$SKIP_CLAUDE" != "1" ] && [ "$CLAUDE_TARGET_READY" = "1" ] && dests+=("$TARGET_CLAUDE/skills")
 
     if [ "${#dests[@]}" -gt 0 ]; then
         "$sync_script" "${dests[@]}"
@@ -385,12 +375,10 @@ configure_wsl_targets() {
     WSL_WIN_HOME="/mnt/c/Users/$winuser"
     TARGET_OPENCODE="$WSL_WIN_HOME/.config/opencode"
     TARGET_CLAUDE="$WSL_WIN_HOME/.claude"
-    TARGET_VIBE="$WSL_WIN_HOME/.vibe"
     WSL_MODE=1
     ok "Windows home: $WSL_WIN_HOME"
     ok "opencode target: $TARGET_OPENCODE"
     ok "claude target:   $TARGET_CLAUDE"
-    ok "vibe target:     $TARGET_VIBE"
 }
 
 check_prereqs() {
@@ -501,22 +489,28 @@ check_environment() {
 }
 
 install_repo_link() {
+    OPENCODE_TARGET_READY=0
+
     if [ "$WSL_MODE" = "1" ]; then
         step "Copying repo into $TARGET_OPENCODE (WSL -> Windows)"
-        if [ -e "$TARGET_OPENCODE" ] && [ ! -L "$TARGET_OPENCODE" ]; then
-            info "$TARGET_OPENCODE exists"
-            if ask "back it up and replace with a fresh copy of $REPO_DIR?" Y; then
-                backup_path "$TARGET_OPENCODE"
-            else
-                warn "skipping copy — Windows opencode will keep using whatever is already there"
+        if [ -L "$TARGET_OPENCODE" ]; then
+            if [ "$(readlink "$TARGET_OPENCODE")" = "$REPO_DIR" ]; then
+                ok "$TARGET_OPENCODE already points at $REPO_DIR"
+                OPENCODE_TARGET_READY=1
                 return 0
             fi
-        elif [ -L "$TARGET_OPENCODE" ]; then
-            info "$TARGET_OPENCODE is a symlink — removing (Windows can't follow WSL symlinks)"
-            rm "$TARGET_OPENCODE"
+            warn "$TARGET_OPENCODE is a symlink; leaving it untouched and skipping OpenCode copy"
+            return 0
+        elif [ -d "$TARGET_OPENCODE" ]; then
+            info "$TARGET_OPENCODE exists; merging repo files into it"
+        elif [ -e "$TARGET_OPENCODE" ]; then
+            warn "$TARGET_OPENCODE exists and is not a directory; leaving it untouched and skipping OpenCode copy"
+            return 0
         fi
         copy_tree "$REPO_DIR" "$TARGET_OPENCODE"
+        ensure_opencode_runtime_dirs
         ok "copied $REPO_DIR -> $TARGET_OPENCODE (node_modules excluded)"
+        OPENCODE_TARGET_READY=1
         return 0
     fi
 
@@ -524,24 +518,29 @@ install_repo_link() {
 
     if [ "$REPO_DIR" = "$TARGET_OPENCODE" ]; then
         ok "repo already lives at $TARGET_OPENCODE"
+        OPENCODE_TARGET_READY=1
         return 0
     fi
 
     if [ -L "$TARGET_OPENCODE" ]; then
-        info "$TARGET_OPENCODE is a legacy symlink — removing before copying"
-        rm "$TARGET_OPENCODE"
-    elif [ -e "$TARGET_OPENCODE" ]; then
-        info "$TARGET_OPENCODE exists"
-        if ask "back it up and replace with a fresh copy of $REPO_DIR?" Y; then
-            backup_path "$TARGET_OPENCODE"
-        else
-            warn "skipping copy step — you'll need to point OpenCode at this repo manually"
+        if [ "$(readlink "$TARGET_OPENCODE")" = "$REPO_DIR" ]; then
+            ok "$TARGET_OPENCODE already points at $REPO_DIR"
+            OPENCODE_TARGET_READY=1
             return 0
         fi
+        warn "$TARGET_OPENCODE is a symlink; leaving it untouched and skipping OpenCode copy"
+        return 0
+    elif [ -d "$TARGET_OPENCODE" ]; then
+        info "$TARGET_OPENCODE exists; merging repo files into it"
+    elif [ -e "$TARGET_OPENCODE" ]; then
+        warn "$TARGET_OPENCODE exists and is not a directory; leaving it untouched and skipping OpenCode copy"
+        return 0
     fi
 
     copy_tree "$REPO_DIR" "$TARGET_OPENCODE"
+    ensure_opencode_runtime_dirs
     ok "copied $REPO_DIR -> $TARGET_OPENCODE (node_modules excluded)"
+    OPENCODE_TARGET_READY=1
 }
 
 install_deps() {
@@ -627,6 +626,8 @@ install_env_vars() {
 }
 
 install_claude_mirror() {
+    CLAUDE_TARGET_READY=0
+
     if [ "$SKIP_CLAUDE" = "1" ]; then
         step "Claude Code mirror — skipped (--no-claude)"
         return 0
@@ -646,18 +647,22 @@ install_claude_mirror() {
 
     if [ "$WSL_MODE" = "1" ]; then
         info "WSL mode — copying instead of symlinking"
-        if [ -e "$TARGET_CLAUDE" ] && [ ! -L "$TARGET_CLAUDE" ]; then
-            if ask "back up existing $TARGET_CLAUDE and replace with fresh copy?" Y; then
-                backup_path "$TARGET_CLAUDE"
-            else
-                warn "skipping"
+        if [ -L "$TARGET_CLAUDE" ]; then
+            if [ "$(readlink "$TARGET_CLAUDE")" = "$source_claude" ]; then
+                ok "$TARGET_CLAUDE already points at $source_claude"
                 return 0
             fi
-        elif [ -L "$TARGET_CLAUDE" ]; then
-            rm "$TARGET_CLAUDE"
+            warn "$TARGET_CLAUDE is a symlink; leaving it untouched and skipping Claude copy"
+            return 0
+        elif [ -d "$TARGET_CLAUDE" ]; then
+            info "$TARGET_CLAUDE exists; merging Claude mirror into it"
+        elif [ -e "$TARGET_CLAUDE" ]; then
+            warn "$TARGET_CLAUDE exists and is not a directory; leaving it untouched and skipping Claude copy"
+            return 0
         fi
         copy_tree_with_seed "$source_claude" "$TARGET_CLAUDE"
         ok "copied $source_claude -> $TARGET_CLAUDE (personal config files seeded, not overwritten)"
+        CLAUDE_TARGET_READY=1
         if [ "$LOCAL_MODE" = "1" ] && [ -f "$TARGET_CLAUDE/settings.json" ]; then
             localize_claude_settings_hooks "$TARGET_CLAUDE/settings.json"
         fi
@@ -665,55 +670,25 @@ install_claude_mirror() {
     fi
 
     if [ -L "$TARGET_CLAUDE" ]; then
-        info "$TARGET_CLAUDE is a legacy symlink — removing before copying"
-        rm "$TARGET_CLAUDE"
-    elif [ -e "$TARGET_CLAUDE" ]; then
-        info "$TARGET_CLAUDE exists"
-        if ask "back it up before copying? (runtime state like memory/ and projects/ is preserved on re-runs, not on this replace)" Y; then
-            backup_path "$TARGET_CLAUDE"
-        else
-            info "merging fresh copy into existing $TARGET_CLAUDE (personal config files never overwritten)"
+        if [ "$(readlink "$TARGET_CLAUDE")" = "$source_claude" ]; then
+            ok "$TARGET_CLAUDE already points at $source_claude"
+            return 0
         fi
+        warn "$TARGET_CLAUDE is a symlink; leaving it untouched and skipping Claude copy"
+        return 0
+    elif [ -d "$TARGET_CLAUDE" ]; then
+        info "$TARGET_CLAUDE exists; merging Claude mirror into it (personal config files never overwritten)"
+    elif [ -e "$TARGET_CLAUDE" ]; then
+        warn "$TARGET_CLAUDE exists and is not a directory; leaving it untouched and skipping Claude copy"
+        return 0
     fi
 
     copy_tree_with_seed "$source_claude" "$TARGET_CLAUDE"
     ok "copied $source_claude -> $TARGET_CLAUDE (personal config files seeded, not overwritten)"
+    CLAUDE_TARGET_READY=1
     if [ "$LOCAL_MODE" = "1" ] && [ -f "$TARGET_CLAUDE/settings.json" ]; then
         localize_claude_settings_hooks "$TARGET_CLAUDE/settings.json"
     fi
-}
-
-install_vibe() {
-    if [ "$SKIP_VIBE" = "1" ]; then
-        step "Vibe install — skipped"
-        return 0
-    fi
-
-    step "Vibe install"
-
-    # When --vibe was explicitly passed, treat as confirmed (no default-N prompt).
-    # When vibe ended up ON via allowlist with --vibe, FLAG_VIBE=1 covers this too.
-    # Interactive default is N (opt-in), so only prompt when not already confirmed.
-    if [ "$FLAG_VIBE" != "1" ] && [ "$ASSUME_YES" != "1" ]; then
-        if ! ask "install vibe config into $TARGET_VIBE?" N; then
-            info "skipped"
-            return 0
-        fi
-    fi
-
-    local vibe_installer="$REPO_DIR/vibe/install-vibe.sh"
-    if [ ! -f "$vibe_installer" ]; then
-        warn "vibe/install-vibe.sh not found — skipping vibe install"
-        warn "To install manually: VIBE_HOME=$TARGET_VIBE bash vibe/install-vibe.sh"
-        return 0
-    fi
-
-    local vibe_args=()
-    [ "$ASSUME_YES" = "1" ] && vibe_args+=(--yes)
-
-    info "delegating to vibe/install-vibe.sh (VIBE_HOME=$TARGET_VIBE)"
-    VIBE_HOME="$TARGET_VIBE" bash "$vibe_installer" "${vibe_args[@]+"${vibe_args[@]}"}"
-    ok "vibe installed into $TARGET_VIBE"
 }
 
 print_next_steps() {
@@ -724,9 +699,8 @@ print_next_steps() {
       $INVOKE_DIR
 
     Installed:
-      $INVOKE_DIR/.opencode   (opencode config + deps)
-$([ "$SKIP_CLAUDE" = "1" ] && echo "      ./.claude              (skipped via --no-claude)" || echo "      $INVOKE_DIR/.claude    (Claude Code mirror)")
-$([ "$SKIP_VIBE" = "1" ] && echo "      ./.vibe                (skipped — use --vibe to enable)" || echo "      $INVOKE_DIR/.vibe      (vibe config)")
+      $([ "$SKIP_OPENCODE" = "1" ] && echo "$INVOKE_DIR/.opencode   (skipped via --no-opencode)" || { [ "$OPENCODE_TARGET_READY" = "1" ] && echo "$INVOKE_DIR/.opencode   (opencode config + deps)" || echo "$INVOKE_DIR/.opencode   (left unchanged)"; })
+$([ "$SKIP_CLAUDE" = "1" ] && echo "      ./.claude              (skipped via --no-claude)" || { [ "$CLAUDE_TARGET_READY" = "1" ] && echo "      $INVOKE_DIR/.claude    (Claude Code mirror)" || echo "      $INVOKE_DIR/.claude    (left unchanged)"; })
 
     No shell reload needed — no global rc was modified.
     To set model env-vars for this project only, add the block printed above
@@ -739,7 +713,9 @@ EOF
     fi
     if [ "$WSL_MODE" = "1" ]; then
         local dep_hint="Dependencies were installed on the Windows side from this terminal."
-        if [ -n "${WSL_OPENCODE_WIN_PATH:-}" ]; then
+        if [ "$OPENCODE_TARGET_READY" != "1" ]; then
+            dep_hint="OpenCode target was left unchanged; dependencies were not installed."
+        elif [ -n "${WSL_OPENCODE_WIN_PATH:-}" ]; then
             dep_hint="If you skipped the dependency step, run it from THIS WSL terminal:
         cmd.exe /c 'cd /d \"$WSL_OPENCODE_WIN_PATH\" && npm install'"
         fi
@@ -753,12 +729,11 @@ EOF
     Adjust env-var values for your provider in $(detect_shell_rc)
     Re-run anytime: $REPO_DIR/install.sh
     Uninstall:     $REPO_DIR/install.sh --uninstall
-$([ "$SKIP_VIBE" != "1" ] && echo "    Vibe:          $TARGET_VIBE" || true)
 EOF
         return 0
     fi
     cat <<EOF
-    1. Reload your shell (or:  source "$(detect_shell_rc)")
+    $([ "$OPENCODE_TARGET_READY" = "1" ] && echo "1. Reload your shell (or:  source \"$(detect_shell_rc)\")" || echo "1. OpenCode target was left unchanged; no shell env was written")
     2. Optional: install Wallaby.js + run \`wallaby update-mcp\` if you want runtime-test introspection
     3. Smoke test:
            opencode
@@ -767,7 +742,6 @@ EOF
     Adjust env-var values for your provider in $(detect_shell_rc)
     Re-run anytime: $REPO_DIR/install.sh
     Uninstall:     $REPO_DIR/install.sh --uninstall
-$([ "$SKIP_VIBE" != "1" ] && echo "    Vibe:          $TARGET_VIBE (re-run: $REPO_DIR/install.sh --vibe)" || echo "    Vibe:          not installed (add --vibe to enable)")
 EOF
 }
 
@@ -781,14 +755,12 @@ run_uninstall() {
         info "this will (local mode):"
         info "  - remove $TARGET_OPENCODE (after confirm)"
         info "  - remove $TARGET_CLAUDE (after confirm)"
-        [ "$SKIP_VIBE" != "1" ] && info "  - remove $TARGET_VIBE (after confirm)"
         info "  - shell rc is NOT modified (local mode never touched it)"
     else
         info "this will:"
         info "  - remove the marker-fenced env block from your shell rc"
         info "  - remove the copied directory at $TARGET_OPENCODE (after confirm)"
         info "  - remove the copied directory at $TARGET_CLAUDE (after confirm)"
-        [ "$SKIP_VIBE" != "1" ] && info "  - remove the copied directory at $TARGET_VIBE (after confirm)"
     fi
     info "the cloned repo at $REPO_DIR is left intact."
     if ! ask "proceed?" N; then
@@ -824,20 +796,6 @@ run_uninstall() {
             fi
         else
             info "Claude target skipped (--no-claude)"
-        fi
-        if [ "$SKIP_VIBE" != "1" ]; then
-            if [ -d "$TARGET_VIBE" ]; then
-                if ask "delete local directory $TARGET_VIBE ?" N; then
-                    rm -rf "$TARGET_VIBE"
-                    ok "removed $TARGET_VIBE"
-                else
-                    info "left $TARGET_VIBE in place"
-                fi
-            else
-                info "$TARGET_VIBE not found, skipping"
-            fi
-        else
-            info "Vibe target skipped"
         fi
         step "Done. Local copies removed."
         return 0
@@ -880,20 +838,6 @@ run_uninstall() {
         else
             info "Claude target skipped (--no-claude)"
         fi
-        if [ "$SKIP_VIBE" != "1" ]; then
-            if [ -d "$TARGET_VIBE" ] && [ ! -L "$TARGET_VIBE" ]; then
-                if ask "delete copied directory $TARGET_VIBE ?" N; then
-                    rm -rf "$TARGET_VIBE"
-                    ok "removed $TARGET_VIBE"
-                else
-                    info "left $TARGET_VIBE in place"
-                fi
-            else
-                info "$TARGET_VIBE not found or not a directory, skipping"
-            fi
-        else
-            info "Vibe target skipped"
-        fi
     else
         if [ "$SKIP_OPENCODE" != "1" ]; then
             if [ -L "$TARGET_OPENCODE" ] && [ "$(readlink "$TARGET_OPENCODE")" = "$REPO_DIR" ]; then
@@ -929,23 +873,9 @@ run_uninstall() {
         else
             info "Claude target skipped (--no-claude)"
         fi
-        if [ "$SKIP_VIBE" != "1" ]; then
-            if [ -d "$TARGET_VIBE" ]; then
-                if ask "delete copied directory $TARGET_VIBE ?" N; then
-                    rm -rf "$TARGET_VIBE"
-                    ok "removed $TARGET_VIBE"
-                else
-                    info "left $TARGET_VIBE in place"
-                fi
-            else
-                info "$TARGET_VIBE is not managed by this installer, leaving it alone"
-            fi
-        else
-            info "Vibe target skipped"
-        fi
     fi
 
-    step "Done. Backups (if any) are at *.bak.YYYYMMDD-HHMMSS — restore manually if you want them back."
+    step "Done."
 }
 
 # ------------------------------ main -----------------------------------------
@@ -955,10 +885,8 @@ while [ $# -gt 0 ]; do
         --yes|-y)        ASSUME_YES=1 ;;
         --no-claude)     SKIP_CLAUDE=1 ;;
         --no-opencode)   SKIP_OPENCODE=1 ;;
-        --no-vibe)       SKIP_VIBE=1 ;;
         --opencode)      FLAG_OPENCODE=1 ;;
         --claude)        FLAG_CLAUDE=1 ;;
-        --vibe)          FLAG_VIBE=1 ;;
         --uninstall)     DO_UNINSTALL=1 ;;
         --local)         LOCAL_MODE=1 ;;
         -h|--help)       print_help; exit 0 ;;
@@ -970,21 +898,14 @@ done
 # Allowlist resolution: if ANY positive flag is present, only listed targets
 # are candidates; unlisted targets default to OFF (skipped). Opt-outs are
 # applied afterward and always win (override the allowlist).
-if [ "$FLAG_OPENCODE" = "1" ] || [ "$FLAG_CLAUDE" = "1" ] || [ "$FLAG_VIBE" = "1" ]; then
+if [ "$FLAG_OPENCODE" = "1" ] || [ "$FLAG_CLAUDE" = "1" ]; then
     # Allowlist mode: start with everything skipped, then enable what was listed.
     [ "$FLAG_OPENCODE" != "1" ] && SKIP_OPENCODE=1
     [ "$FLAG_CLAUDE"   != "1" ] && SKIP_CLAUDE=1
-    [ "$FLAG_VIBE"     = "1" ]  && SKIP_VIBE=0
 fi
-
-# When --vibe (positive flag) was passed, vibe is explicitly ON regardless of
-# ASSUME_YES — no default-N prompt needed. SKIP_VIBE stays 0 from above.
-# When no positive flags were passed and SKIP_VIBE is still 1, vibe stays OFF
-# (default opt-out).
 
 # Opt-out flags win over allowlist (applied last).
 # SKIP_CLAUDE and SKIP_OPENCODE are already set by --no-* flags earlier.
-# SKIP_VIBE defaults to 1 unless --vibe was passed; --no-vibe forces it back to 1.
 
 # Apply local-mode target overrides before any other logic runs.
 if [ "$LOCAL_MODE" = "1" ]; then
@@ -994,12 +915,11 @@ if [ "$LOCAL_MODE" = "1" ]; then
     fi
     TARGET_OPENCODE="$INVOKE_DIR/.opencode"
     TARGET_CLAUDE="$INVOKE_DIR/.claude"
-    TARGET_VIBE="$INVOKE_DIR/.vibe"
 fi
 
-# Three-way empty-set guard.
-if [ "$SKIP_OPENCODE" = "1" ] && [ "$SKIP_CLAUDE" = "1" ] && [ "$SKIP_VIBE" = "1" ]; then
-    err "nothing to install (all three targets disabled)"
+# Empty-set guard.
+if [ "$SKIP_OPENCODE" = "1" ] && [ "$SKIP_CLAUDE" = "1" ]; then
+    err "nothing to install (both targets disabled)"
     exit 1
 fi
 
@@ -1018,22 +938,24 @@ check_environment
 
 info "target:  $([ "$SKIP_OPENCODE" = "1" ] && echo "skipped" || echo "$TARGET_OPENCODE")"
 info "claude:  $([ "$SKIP_CLAUDE" = "1" ] && echo "skipped" || echo "$TARGET_CLAUDE")"
-info "vibe:    $([ "$SKIP_VIBE" = "1" ] && echo "skipped (use --vibe to enable)" || echo "$TARGET_VIBE")"
 
 if [ "$SKIP_OPENCODE" != "1" ]; then
     install_repo_link
-    install_deps
-    if [ "$LOCAL_MODE" = "1" ]; then
-        step "Shell environment variables — skipped (--local does not modify global rc)"
-        info "To use per-project env vars, add the following to a .envrc or source it manually:"
-        printf "\n"
-        env_block_content | sed 's/^/        /'
-        printf "\n"
+    if [ "$OPENCODE_TARGET_READY" = "1" ]; then
+        install_deps
+        if [ "$LOCAL_MODE" = "1" ]; then
+            step "Shell environment variables — skipped (--local does not modify global rc)"
+            info "To use per-project env vars, add the following to a .envrc or source it manually:"
+            printf "\n"
+            env_block_content | sed 's/^/        /'
+            printf "\n"
+        else
+            install_env_vars
+        fi
     else
-        install_env_vars
+        warn "OpenCode target was not modified; skipping dependencies, env vars, and OpenCode skill sync"
     fi
 fi
 install_claude_mirror
-install_vibe
 sync_skills
 print_next_steps

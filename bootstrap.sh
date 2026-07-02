@@ -49,17 +49,12 @@ fi
 
 [ -f "$SRC_DIR/install.sh" ] || die "install.sh not found in $SRC_DIR after fetch"
 
-# Forward any user-supplied flags to install.sh. When this script is piped
-# (stdin is not a TTY) install.sh can't prompt, so default to --yes unless the
-# caller already passed an interactivity flag.
+# Forward any user-supplied flags to install.sh. install.sh reads prompts from
+# the controlling terminal when stdin is a pipe, so curl | bash stays interactive.
 args=( ${@+"$@"} )
-has_yes=0
-for a in ${args[@]+"${args[@]}"}; do
-    case "$a" in -y|--yes) has_yes=1 ;; esac
-done
-if [ ! -t 0 ] && [ "$has_yes" -eq 0 ]; then
-    args+=( --yes )
-fi
 
 step "Running installer"
+if [ -r /dev/tty ]; then
+    exec bash "$SRC_DIR/install.sh" ${args[@]+"${args[@]}"} </dev/tty
+fi
 exec bash "$SRC_DIR/install.sh" ${args[@]+"${args[@]}"}

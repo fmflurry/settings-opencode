@@ -41,6 +41,7 @@ CLAUDE_TARGET_READY=0
 # Positive-flag allowlist trackers (0 = not explicitly requested)
 FLAG_OPENCODE=0
 FLAG_CLAUDE=0
+FLAG_LOCAL=0
 
 # ------------------------------ presentation ---------------------------------
 
@@ -58,6 +59,35 @@ ok()   { printf "    ${GREEN}OK${RESET}   %s\n" "$*"; }
 warn() { printf "    ${YELLOW}WARN${RESET} %s\n" "$*"; }
 err()  { printf "    ${RED}ERR${RESET}  %s\n" "$*" >&2; }
 
+read_reply() {
+    local __var="$1" reply
+    if [ -r /dev/tty ]; then
+        read -r reply </dev/tty || reply=""
+    else
+        err "cannot prompt without a controlling TTY; pass --yes for non-interactive defaults"
+        exit 1
+    fi
+    printf -v "$__var" "%s" "$reply"
+}
+
+confirm_existing_local_opencode() {
+    [ "$LOCAL_MODE" = "1" ] || return 0
+    [ -d "$TARGET_OPENCODE" ] || return 0
+
+    if [ "$ASSUME_YES" = "1" ]; then
+        warn "$TARGET_OPENCODE exists; --yes does not merge into an existing local .opencode without target-specific confirmation"
+        return 1
+    fi
+
+    local reply
+    printf "    ${BOLD}?${RESET} Merge settings-opencode files into existing local target $TARGET_OPENCODE? Type yes to continue [y/N] "
+    read_reply reply
+    case "$reply" in
+        Y|y|Yes|yes) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 # Ask yes/no with default. $1 = prompt, $2 = default (Y or N)
 ask() {
     local prompt="$1" default="${2:-Y}" hint reply
@@ -67,12 +97,59 @@ ask() {
     if [ "$default" = "Y" ]; then hint="[Y/n]"; else hint="[y/N]"; fi
     while :; do
         printf "    ${BOLD}?${RESET} %s %s " "$prompt" "$hint"
-        read -r reply || reply=""
+        read_reply reply
         reply="${reply:-$default}"
         case "$reply" in
             Y|y|Yes|yes) return 0 ;;
             N|n|No|no)   return 1 ;;
             *) printf "    please answer y or n\n" ;;
+        esac
+    done
+}
+
+ask_harness_choice() {
+    local reply
+    while :; do
+        printf "    ${BOLD}?${RESET} Choose harness to install: ClaudeCode, OpenCode, or both [both] "
+        read_reply reply
+        reply="${reply:-both}"
+        case "$reply" in
+            1|ClaudeCode|Claude\ Code|claudecode|claude-code|claude)
+                SKIP_CLAUDE=0
+                SKIP_OPENCODE=1
+                return 0
+                ;;
+            2|OpenCode|opencode|open-code)
+                SKIP_CLAUDE=1
+                SKIP_OPENCODE=0
+                return 0
+                ;;
+            3|both|Both|BOTH)
+                SKIP_CLAUDE=0
+                SKIP_OPENCODE=0
+                return 0
+                ;;
+            *) printf "    please answer ClaudeCode, OpenCode, or both\n" ;;
+        esac
+    done
+}
+
+ask_install_scope() {
+    local reply
+    while :; do
+        printf "    ${BOLD}?${RESET} Choose install scope: global or local current directory [global] "
+        read_reply reply
+        reply="${reply:-global}"
+        case "$reply" in
+            1|global|Global|GLOBAL)
+                LOCAL_MODE=0
+                return 0
+                ;;
+            2|local|Local|LOCAL|cwd|CWD)
+                LOCAL_MODE=1
+                return 0
+                ;;
+            *) printf "    please answer global or local\n" ;;
         esac
     done
 }
@@ -365,7 +442,7 @@ configure_wsl_targets() {
             exit 1
         fi
         printf "    ${BOLD}?${RESET} Enter your Windows username (folder under /mnt/c/Users): "
-        read -r winuser || winuser=""
+        read_reply winuser
         winuser="$(printf "%s" "$winuser" | tr -d '\r\n')"
         if [ -z "$winuser" ] || [ ! -d "/mnt/c/Users/$winuser" ]; then
             err "invalid Windows user — /mnt/c/Users/$winuser does not exist"
@@ -531,6 +608,10 @@ install_repo_link() {
         warn "$TARGET_OPENCODE is a symlink; leaving it untouched and skipping OpenCode copy"
         return 0
     elif [ -d "$TARGET_OPENCODE" ]; then
+        if ! confirm_existing_local_opencode; then
+            info "$TARGET_OPENCODE exists; leaving it unchanged"
+            return 0
+        fi
         info "$TARGET_OPENCODE exists; merging repo files into it"
     elif [ -e "$TARGET_OPENCODE" ]; then
         warn "$TARGET_OPENCODE exists and is not a directory; leaving it untouched and skipping OpenCode copy"
@@ -888,7 +969,7 @@ while [ $# -gt 0 ]; do
         --opencode)      FLAG_OPENCODE=1 ;;
         --claude)        FLAG_CLAUDE=1 ;;
         --uninstall)     DO_UNINSTALL=1 ;;
-        --local)         LOCAL_MODE=1 ;;
+        --local)         LOCAL_MODE=1; FLAG_LOCAL=1 ;;
         -h|--help)       print_help; exit 0 ;;
         *) err "unknown flag: $1"; print_help; exit 1 ;;
     esac
@@ -907,6 +988,26 @@ fi
 # Opt-out flags win over allowlist (applied last).
 # SKIP_CLAUDE and SKIP_OPENCODE are already set by --no-* flags earlier.
 
+# Empty-set guard must run before any interactive scope prompt.
+if [ "$SKIP_OPENCODE" = "1" ] && [ "$SKIP_CLAUDE" = "1" ]; then
+    err "nothing to install (both targets disabled)"
+    exit 1
+fi
+
+if [ "$ASSUME_YES" != "1" ] && [ ! -t 0 ]; then
+    err "non-interactive stdin cannot answer prompts; run from a terminal or pass --yes"
+    exit 1
+fi
+
+if [ "$ASSUME_YES" != "1" ] && [ "$DO_UNINSTALL" != "1" ]; then
+    if [ "$FLAG_OPENCODE" != "1" ] && [ "$FLAG_CLAUDE" != "1" ] && [ "$SKIP_OPENCODE" != "1" ] && [ "$SKIP_CLAUDE" != "1" ]; then
+        ask_harness_choice
+    fi
+    if [ "$FLAG_LOCAL" != "1" ]; then
+        ask_install_scope
+    fi
+fi
+
 # Apply local-mode target overrides before any other logic runs.
 if [ "$LOCAL_MODE" = "1" ]; then
     if [ "$INVOKE_DIR" = "$REPO_DIR" ]; then
@@ -915,12 +1016,6 @@ if [ "$LOCAL_MODE" = "1" ]; then
     fi
     TARGET_OPENCODE="$INVOKE_DIR/.opencode"
     TARGET_CLAUDE="$INVOKE_DIR/.claude"
-fi
-
-# Empty-set guard.
-if [ "$SKIP_OPENCODE" = "1" ] && [ "$SKIP_CLAUDE" = "1" ]; then
-    err "nothing to install (both targets disabled)"
-    exit 1
 fi
 
 if [ "$DO_UNINSTALL" = "1" ]; then

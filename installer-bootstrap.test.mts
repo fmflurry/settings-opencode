@@ -42,6 +42,104 @@ function writeFakeNpm(binDir: string): void {
   chmodSync(fakeNpm, 0o755);
 }
 
+function runRemoteStyleInteractiveInstaller(
+  input: string,
+  cwd: string,
+  env: Record<string, string | undefined>,
+): ReturnType<typeof spawnSync> {
+  const ptyDriver = String.raw`
+import errno
+import os
+import pty
+import select
+import sys
+
+replies = [line.encode() for line in sys.argv[1].splitlines()]
+reply_markers = [
+    b"Choose harness",
+    b"Choose install scope",
+    b"write the OPENCODE_MODEL_",
+    b"install the .claude mirror",
+]
+command = sys.argv[2:]
+
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvpe(command[0], command, os.environ)
+
+status = None
+sent = 0
+seen = b""
+
+def emit(data):
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+
+while True:
+    ready, _, _ = select.select([fd], [], [], 0.1)
+    if ready:
+        try:
+            data = os.read(fd, 4096)
+        except OSError as error:
+            if error.errno == errno.EIO:
+                break
+            raise
+        if not data:
+            break
+        emit(data)
+        seen += data
+        if sent < len(replies) and sent < len(reply_markers) and reply_markers[sent] in seen:
+            os.write(fd, replies[sent] + b"\n")
+            sent += 1
+            seen = b""
+
+    ended_pid, ended_status = os.waitpid(pid, os.WNOHANG)
+    if ended_pid == pid:
+        status = ended_status
+        break
+
+while True:
+    try:
+        data = os.read(fd, 4096)
+    except OSError as error:
+        if error.errno == errno.EIO:
+            break
+        raise
+    if not data:
+        break
+    emit(data)
+
+if status is None:
+    _, status = os.waitpid(pid, 0)
+
+if os.WIFEXITED(status):
+    sys.exit(os.WEXITSTATUS(status))
+if os.WIFSIGNALED(status):
+    sys.exit(128 + os.WTERMSIG(status))
+sys.exit(1)
+`;
+
+  return spawnSync(
+    "python3",
+    [
+      "-c",
+      ptyDriver,
+      input,
+      "bash",
+      "-c",
+      'exec bash "$1" </dev/tty',
+      "remote-bootstrap",
+      installerPath,
+    ],
+    {
+      cwd,
+      encoding: "utf8",
+      env,
+      timeout: 15_000,
+    },
+  );
+}
+
 test("remote bootstrap keeps install.sh interactive instead of forcing --yes", () => {
   const bootstrap = readRepoFile("bootstrap.sh");
 
@@ -156,6 +254,64 @@ test("installer rejects disabling both targets before prompting for scope", () =
     assert.ok(
       result.status !== 0 && !/Choose install scope/i.test(output),
       `install.sh must fail the empty target set before asking for install scope; got status ${result.status}\n${output}`,
+    );
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test("remote bootstrap interactive OpenCode local installs only the local OpenCode target", () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), "settings-opencode-install-"));
+  try {
+    const projectDir = join(tmpRoot, "project");
+    const homeDir = join(tmpRoot, "home");
+    const fakeBin = join(tmpRoot, "bin");
+    mkdirSync(projectDir);
+    mkdirSync(homeDir);
+    mkdirSync(fakeBin);
+    writeFakeNpm(fakeBin);
+
+    const result = runRemoteStyleInteractiveInstaller(
+      "OpenCode\nlocal\nn\nn\nn\n",
+      projectDir,
+      {
+        ...process.env,
+        HOME: homeDir,
+        PATH: `${fakeBin}:/usr/bin:/bin:/usr/sbin:/sbin`,
+        SHELL: "/bin/zsh",
+      },
+    );
+    const output = `${result.stdout}\n${result.stderr}`;
+
+    assert.equal(
+      result.status,
+      0,
+      `interactive remote-style install must succeed after answers OpenCode then local\n${output}`,
+    );
+    assert.equal(
+      existsSync(join(projectDir, ".opencode", "opencode.jsonc")),
+      true,
+      `OpenCode config must be installed into the local cwd target\n${output}`,
+    );
+    assert.equal(
+      existsSync(join(homeDir, ".config", "opencode")),
+      false,
+      `OpenCode local answer must not install into the global opencode target\n${output}`,
+    );
+    assert.equal(
+      existsSync(join(projectDir, ".claude")),
+      false,
+      `OpenCode-only answer must not install the local Claude mirror\n${output}`,
+    );
+    assert.equal(
+      existsSync(join(homeDir, ".claude")),
+      false,
+      `OpenCode-only answer must not install the global Claude mirror\n${output}`,
+    );
+    assert.doesNotMatch(
+      output,
+      /install the \.claude mirror|copied .* -> .*\.claude|Syncing to .*\.claude\/skills/i,
+      `OpenCode-only answer must not run Claude mirror install or sync Claude destinations\n${output}`,
     );
   } finally {
     rmSync(tmpRoot, { recursive: true, force: true });

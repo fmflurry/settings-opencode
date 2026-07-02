@@ -60,14 +60,14 @@ warn() { printf "    ${YELLOW}WARN${RESET} %s\n" "$*"; }
 err()  { printf "    ${RED}ERR${RESET}  %s\n" "$*" >&2; }
 
 read_reply() {
-    local __var="$1" reply
+    local __var="$1" __reply
     if [ -r /dev/tty ]; then
-        read -r reply </dev/tty || reply=""
+        read -r __reply </dev/tty || __reply=""
     else
         err "cannot prompt without a controlling TTY; pass --yes for non-interactive defaults"
         exit 1
     fi
-    printf -v "$__var" "%s" "$reply"
+    printf -v "$__var" "%s" "$__reply"
 }
 
 confirm_existing_local_opencode() {

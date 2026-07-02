@@ -449,7 +449,7 @@
       },
     },
   },
-  "plugin": ["opencode-skill-creator", "./plugins/notification.js"],
+  "plugin": ["opencode-skill-creator", "./plugins/notification.js", "./plugins/mistral-affinity.js"],
   "provider": {
     "llama.cpp": {
       "npm": "@ai-sdk/anthropic",

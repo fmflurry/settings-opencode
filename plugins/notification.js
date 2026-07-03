@@ -14,7 +14,6 @@ const REPO_IPHONE_SCRIPT = join(
   "notify-iphone.sh",
 );
 const GLOBAL_SESSION_KEY = "__global__";
-const QUESTION_EVENTS = new Set(["question.asked", "question.v2.asked"]);
 const PERMISSION_EVENTS = new Set([
   "permission.asked",
   "permission.updated",
@@ -74,29 +73,31 @@ function eventDedupeKey(event) {
   const properties = eventProperties(event);
   const id =
     stringProperty(properties, "id") ??
-    stringProperty(properties, "permissionID") ??
-    stringProperty(properties, "questionID");
+    stringProperty(properties, "permissionID");
 
   return id
     ? `${sessionKeyFrom(event)}:${id}`
     : `${sessionKeyFrom(event)}:${event.type}`;
 }
 
+function toolCallIDFrom(input) {
+  return stringProperty(input, "callID") ?? stringProperty(input, "callId");
+}
+
+function questionDedupeKey(input) {
+  const callID = toolCallIDFrom(input);
+
+  return callID ? `${sessionKeyFrom(input)}:${callID}` : undefined;
+}
+
 function isHumanInterventionEvent(event) {
-  return QUESTION_EVENTS.has(event.type) || PERMISSION_EVENTS.has(event.type);
+  return PERMISSION_EVENTS.has(event.type);
 }
 
 function humanInterventionMessage(event) {
   const properties = eventProperties(event);
   const session = sessionKeyFrom(event);
   const suffix = session === GLOBAL_SESSION_KEY ? "" : ` Session ${session.slice(0, 8)}.`;
-
-  if (QUESTION_EVENTS.has(event.type)) {
-    return {
-      title: "OpenCode needs input",
-      message: `A question is waiting.${suffix}`,
-    };
-  }
 
   return {
     title: "OpenCode permission needed",
@@ -189,6 +190,27 @@ export const NotificationPlugin = async ({ $ }) => {
   const notifiedHumanInterventionEvents = new Set();
 
   return {
+    "tool.execute.before": async (input) => {
+      if (input?.tool !== "question") {
+        return;
+      }
+
+      const key = questionDedupeKey(input);
+      if (key) {
+        if (notifiedHumanInterventionEvents.has(key)) {
+          return;
+        }
+        notifiedHumanInterventionEvents.add(key);
+      }
+      const session = sessionKeyFrom(input);
+      const suffix = session === GLOBAL_SESSION_KEY ? "" : ` Session ${session.slice(0, 8)}.`;
+      void notify($, "OpenCode needs input", `A question is waiting.${suffix}`, {
+        iphone: true,
+        iphoneTitle: "OpenCode needs input",
+        iphoneMessage: "A question is waiting.",
+      }).catch(() => {});
+    },
+
     "tool.execute.after": async (input) => {
       const key = sessionKeyFrom(input);
       hasSubstantiveToolWorkBySession.set(key, true);
@@ -209,10 +231,8 @@ export const NotificationPlugin = async ({ $ }) => {
 
         notifiedHumanInterventionEvents.add(key);
         const { title, message } = humanInterventionMessage(event);
-        // Permissions are blocking — send iPhone notification. Questions stay desktop-only.
-        const isPermission = PERMISSION_EVENTS.has(event.type);
         void notify($, title, message, {
-          iphone: isPermission,
+          iphone: true,
           iphoneTitle: "OpenCode permission needed",
           iphoneMessage: "A permission request is waiting.",
         }).catch(() => {});
@@ -260,18 +280,30 @@ export const NotificationPlugin = async ({ $ }) => {
         return;
       }
 
-      consumedWorkKeys.forEach((key) => {
-        hasSubstantiveToolWorkBySession.set(key, false);
-      });
-      if (completedKey !== null) {
-        completedConductorMessages.add(completedKey);
-      }
-
       // If the conductor dispatched a task in this turn, it was delegating to
       // a subagent — this is an intermediate completion, not the final response.
       // Skip iPhone notification; only fire desktop notification.
       const dispatchedTask = dispatchedTaskBySession.get(sessionKey) ?? false;
       dispatchedTaskBySession.set(sessionKey, false);
+
+      // Only consume the substantive-work flag for the FINAL completion.
+      // Intermediate completions (dispatchedTask=true) must leave the flag so
+      // the final completion still detects work and fires a notification.
+      if (!dispatchedTask) {
+        consumedWorkKeys.forEach((key) => {
+          hasSubstantiveToolWorkBySession.set(key, false);
+        });
+
+        // Dedupe final completions only — intermediate and final share the same
+        // info.id (same message), so adding the key on an intermediate would
+        // silently suppress the final notification.
+        if (completedKey !== null) {
+          if (completedConductorMessages.has(completedKey)) {
+            return;
+          }
+          completedConductorMessages.add(completedKey);
+        }
+      }
 
       void notify($, TITLE, MESSAGE, { iphone: !dispatchedTask }).catch(() => {});
     },

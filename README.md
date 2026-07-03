@@ -27,13 +27,13 @@
 
 ## What's inside
 
-A hardened primary `conductor` agent backed by **13 specialist sub-agents** (planner, architect, coder, writer, code/security/database review, TDD, build-fix, e2e, doc, refactor, git), wired together by:
+A hardened primary `conductor` agent backed by **14 specialist sub-agents** (planner, architect, coder, writer, code/security/database review, TDD, build-fix, e2e, doc, refactor, git, learning-reviewer), wired together by:
 
 - **Mandatory sub-agent delegation** from `conductor`: the primary has `write` and `edit` denied at the permission layer, plus a `tool.execute.before` hook that blocks bash redirects to source files (`> file.ts`, `tee`, `sed -i`, heredocs, `python -c open().write`). The orchestrator cannot patch files — every change MUST go through `coder` (source code), `writer` (docs/markdown/HTML), `tdd-guide` (tests), or `git-specialist` (commits/PRs). This makes routing **model-agnostic**: even open-weight models that ignore prose rules are mechanically forced to delegate.
 - **Front-loaded first-tool gate** in `prompts/agents/conductor.txt`: hard rules at the top, routing table second, six few-shot User → `task` examples (with explicit wrong-way contrasts) so literal models copy the right pattern.
 - **Slash commands** that force routing to the right specialist (`/plan`, `/tdd`, `/security`, `/cop-review`, …).
 - **Always-on skills** loaded at session start — Socratic design, security review, coding standards, git workflow, [CodeMemory-first](https://github.com/fmflurry/code-memory) repo orientation.
-- **OpenCode plugins** — ECC hooks (Prettier + `tsc` on save), auto-compact, caveman ultra mode, desktop notifications with optional Bark/iPhone push.
+- **OpenCode plugins** — ECC hooks (Prettier + `tsc` on save), auto-compact, caveman ultra mode, desktop notifications with optional Bark/iPhone push, learning loop (per-turn background learning extraction).
 - **Custom tools** — `run-tests`, `check-coverage`, `security-audit`, plus a codemap generator.
 - **A `.claude/` mirror** — hooks, rule packs, and skills, so Claude Code benefits from the same guardrails.
 
@@ -372,6 +372,7 @@ Defined in `opencode.jsonc` under `agent`:
 | `refactor-cleaner`     | subagent | Dead-code removal + consolidation.                                                                                                                                                |
 | `database-reviewer`    | subagent | PostgreSQL / Supabase schema, perf, security.                                                                                                                                     |
 | `git-specialist`       | subagent | Branches, commits, pushes, PRs (mini model).                                                                                                                                      |
+| `learning-reviewer`    | subagent | Per-turn background learning reviewer. Extracts project memories + skill proposals non-interactively.                                                                             |
 
 ### Hardened sub-agent orchestration
 
@@ -454,6 +455,7 @@ All TypeScript plugins use `@opencode-ai/plugin@1.4.6`.
 - `plugins/notification.js` — desktop notifications on conductor `message.updated` completions and question/permission events; permission events and top-level completions can also push to iPhone via Bark.
 - `plugins/caveman-server.ts` + `tui-plugins/caveman.tsx` — injects caveman instructions into the system prompt + TUI sidebar showing active mode.
 - `plugins/kdco-primitives/` — shared utilities (mutex, shell, terminal-detect, project-id resolver, types).
+- `plugins/learning-loop.ts` — per-turn background learning extraction. After every assistant message, spawns a `learning-reviewer` subagent that analyzes the conversation and persists durable learnings (project memories via `codememory_assert_claim`, skill proposals as pending files).
 - `@tarquinen/opencode-dcp@latest` _(external, declared in `opencode.jsonc › plugin`)_ — Dynamic Context Pruning. Trims stale tool results and large files from the live context window so long sessions don't blow past the model's limit. Configured via `dcp.jsonc` at the repo root.
 
 <a id="tools-en"></a>
@@ -499,7 +501,7 @@ Reusable OpenCode tools exposed via `tools/index.ts`:
 
 ## Français
 
-Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), treize sous-agents specialises, des skills toujours actives, des commandes slash, des plugins (hooks, auto-compact, caveman, notifications), des outils custom et un mirror Claude Code.
+Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), quatorze sous-agents specialises, des skills toujours actives, des commandes slash, des plugins (hooks, auto-compact, caveman, notifications, learning loop), des outils custom et un mirror Claude Code.
 
 <a id="objectif-fr"></a>
 
@@ -566,6 +568,7 @@ Definis dans `opencode.jsonc` (champ `agent`):
 | `refactor-cleaner`     | subagent | Suppression code mort + consolidation.                                                                                                                                           |
 | `database-reviewer`    | subagent | PostgreSQL / Supabase: schema, perfs, securite.                                                                                                                                  |
 | `git-specialist`       | subagent | Branches, commits, push, PRs (modele mini).                                                                                                                                      |
+| `learning-reviewer`    | subagent | Revue d'apprentissage en arriere-plan a chaque tour. Extrait les memoires projet + les propositions de skill de maniere non-interactive.                                          |
 
 ### Orchestration durcie des sous-agents
 
@@ -646,6 +649,7 @@ Tous les plugins TypeScript utilisent `@opencode-ai/plugin@1.4.6`.
 - `plugins/ecc-hooks.ts` — Prettier sur fichiers JS/TS edites, detection `console.log`, rappels sur commandes sensibles (`git push` etc.), et le **hard-stop conductor**: avorte les redirections bash (`>`, `>>`, `tee`, `sed -i`, heredocs, `python -c open().write`) qui visent du code source, pour que la delegation ne puisse pas etre contournee via le shell.
 - `plugins/auto-compact.js` — auto-compaction quand `OC_COMPACT_THRESHOLD` est atteint, en idle uniquement.
 - `plugins/notification.js` — notifications desktop sur fins de message `message.updated` et evenements question/permission; support optionnel Bark/iPhone.
+- `plugins/learning-loop.ts` — extraction d'apprentissage en arriere-plan a chaque tour de conversation. Apres chaque message assistant, lance un sous-agent `learning-reviewer` qui analyse l'echange et persiste les connaissances durables (memoires projet via `codememory_assert_claim`, propositions de skill dans `pending/`).
 - `plugins/caveman-server.ts` + `tui-plugins/caveman.tsx` — injecte les instructions caveman dans le system prompt + sidebar TUI qui affiche le mode actif.
 - `plugins/kdco-primitives/` — utilities partages (mutex, shell, terminal-detect, project-id resolver, types).
 - `@tarquinen/opencode-dcp@latest` _(externe, declare dans `opencode.jsonc › plugin`)_ — Dynamic Context Pruning. Coupe les tool results stagnants et les gros fichiers dans la fenetre de contexte pour que les sessions longues ne depassent pas la limite modele. Configure via `dcp.jsonc` a la racine du repo.

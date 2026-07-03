@@ -94,15 +94,78 @@ function isHumanInterventionEvent(event) {
   return PERMISSION_EVENTS.has(event.type);
 }
 
-function humanInterventionMessage(event) {
+function extractPermissionContent(event) {
   const properties = eventProperties(event);
-  const session = sessionKeyFrom(event);
-  const suffix = session === GLOBAL_SESSION_KEY ? "" : ` Session ${session.slice(0, 8)}.`;
-
+  
+  const title = stringProperty(properties, "title") ?? stringProperty(properties, "type") ?? "Permission request";
+  const detail = stringProperty(properties, "detail") ?? stringProperty(properties, "description") ?? "";
+  
   return {
     title: "OpenCode permission needed",
-    message: `${stringProperty(properties, "title") ?? stringProperty(properties, "type") ?? "Permission request"}.${suffix}`,
+    message: detail ? `${title}: ${detail}` : `${title}.`,
   };
+}
+
+function extractQuestionContent(input) {
+  const args = input?.args;
+  const questions = args?.questions;
+  
+  if (Array.isArray(questions) && questions.length > 0) {
+    const questionObj = questions[0];
+    if (questionObj && typeof questionObj === "object") {
+      const questionText =
+        questionObj.question ??
+        questionObj.text ??
+        questionObj.prompt ??
+        questionObj.message ??
+        JSON.stringify(questionObj);
+      
+      if (questionText) {
+        const displayText = typeof questionText === "string" && questionText.length > 100
+          ? questionText.substring(0, 100) + "..."
+          : questionText;
+        return {
+          title: "OpenCode needs input",
+          message: displayText,
+        };
+      }
+    }
+  }
+  
+  return null;
+}
+
+function extractCompletionContent(event) {
+  const properties = eventProperties(event);
+  const info = properties?.info;
+
+  // Try to get message content from summary.title or summary.body
+  if (info && typeof info === "object") {
+    const summary = info.summary;
+    if (summary && typeof summary === "object") {
+      // Try summary.title first
+      const summaryTitle = summary.title;
+      if (summaryTitle) {
+        const displayText = typeof summaryTitle === "string" ? (summaryTitle.length > 100 ? summaryTitle.substring(0, 100) + "..." : summaryTitle) : "";
+        return {
+          title: TITLE,
+          message: displayText,
+        };
+      }
+      
+      // Try summary.body second
+      const summaryBody = summary.body;
+      if (summaryBody) {
+        const body = typeof summaryBody === "string" ? (summaryBody.length > 100 ? summaryBody.substring(0, 100) + "..." : summaryBody) : "";
+        return {
+          title: TITLE,
+          message: body,
+        };
+      }
+    }
+  }
+  
+  return null;
 }
 
 /**
@@ -183,6 +246,25 @@ async function notify(
   );
 }
 
+// Max entries for dedup Sets/Maps to prevent unbounded memory growth.
+// When exceeded, the entire structure is cleared — worst case is a duplicate
+// notification (harmless) or a missed dedup (one extra notify per session).
+const MAX_DEDUP_SIZE = 2000;
+
+
+// ── LRU caps: prevent unbounded growth over long-running sessions ─────
+const MAX_MAP_SIZE = 500;
+const MAX_SET_SIZE = 5000;
+
+function evictOldestMap(map) {
+  const first = map.keys().next();
+  if (!first.done) map.delete(first.value);
+}
+function evictOldestSet(set) {
+  const first = set.values().next();
+  if (!first.done) set.delete(first.value);
+}
+
 export const NotificationPlugin = async ({ $ }) => {
   const hasSubstantiveToolWorkBySession = new Map();
   const dispatchedTaskBySession = new Map();
@@ -190,51 +272,78 @@ export const NotificationPlugin = async ({ $ }) => {
   const notifiedHumanInterventionEvents = new Set();
 
   return {
-    "tool.execute.before": async (input) => {
+    "tool.execute.before": async (input, output) => {
       if (input?.tool !== "question") {
         return;
       }
 
       const key = questionDedupeKey(input);
       if (key) {
+        if (notifiedHumanInterventionEvents.size > MAX_DEDUP_SIZE) {
+          notifiedHumanInterventionEvents.clear();
+        }
         if (notifiedHumanInterventionEvents.has(key)) {
           return;
         }
         notifiedHumanInterventionEvents.add(key);
+        if (notifiedHumanInterventionEvents.size > MAX_SET_SIZE) evictOldestSet(notifiedHumanInterventionEvents);
       }
+      
+      // tool.execute.before passes args in the second parameter (output.args)
+      const questionContent = extractQuestionContent(output ?? input);
       const session = sessionKeyFrom(input);
       const suffix = session === GLOBAL_SESSION_KEY ? "" : ` Session ${session.slice(0, 8)}.`;
-      void notify($, "OpenCode needs input", `A question is waiting.${suffix}`, {
+      
+      const title = questionContent?.title ?? "OpenCode needs input";
+      const message = questionContent?.message ?? `A question is waiting.`;
+      const finalMessage = `${message}${suffix}`;
+      
+      void notify($, title, finalMessage, {
         iphone: true,
-        iphoneTitle: "OpenCode needs input",
-        iphoneMessage: "A question is waiting.",
+        iphoneTitle: title,
+        iphoneMessage: finalMessage,
       }).catch(() => {});
     },
 
     "tool.execute.after": async (input) => {
       const key = sessionKeyFrom(input);
+      if (hasSubstantiveToolWorkBySession.size > MAX_DEDUP_SIZE) {
+        hasSubstantiveToolWorkBySession.clear();
+      }
       hasSubstantiveToolWorkBySession.set(key, true);
+      if (hasSubstantiveToolWorkBySession.size > MAX_MAP_SIZE) evictOldestMap(hasSubstantiveToolWorkBySession);
 
       // Track when the conductor dispatches a subagent task so we know
       // the completion is intermediate, not the top-level final response.
       if (input?.tool === "task") {
+        if (dispatchedTaskBySession.size > MAX_DEDUP_SIZE) {
+          dispatchedTaskBySession.clear();
+        }
         dispatchedTaskBySession.set(key, true);
+        if (dispatchedTaskBySession.size > MAX_MAP_SIZE) evictOldestMap(dispatchedTaskBySession);
       }
     },
 
     event: async ({ event }) => {
       if (isHumanInterventionEvent(event)) {
         const key = eventDedupeKey(event);
+        if (notifiedHumanInterventionEvents.size > MAX_DEDUP_SIZE) {
+          notifiedHumanInterventionEvents.clear();
+        }
         if (notifiedHumanInterventionEvents.has(key)) {
           return;
         }
 
         notifiedHumanInterventionEvents.add(key);
-        const { title, message } = humanInterventionMessage(event);
-        void notify($, title, message, {
+        if (notifiedHumanInterventionEvents.size > MAX_SET_SIZE) evictOldestSet(notifiedHumanInterventionEvents);
+        const { title, message } = extractPermissionContent(event);
+        const session = sessionKeyFrom(event);
+        const suffix = session === GLOBAL_SESSION_KEY ? "" : ` Session ${session.slice(0, 8)}.`;
+        const finalMessage = `${message}${suffix}`;
+        void notify($, title, finalMessage, {
           iphone: true,
-          iphoneTitle: "OpenCode permission needed",
-          iphoneMessage: "A permission request is waiting.",
+          iphoneTitle: title,
+          iphoneMessage: finalMessage,
         }).catch(() => {});
         return;
       }
@@ -276,6 +385,9 @@ export const NotificationPlugin = async ({ $ }) => {
           ? `${sessionKey}:${info.id}`
           : null;
 
+      if (completedConductorMessages.size > MAX_DEDUP_SIZE) {
+        completedConductorMessages.clear();
+      }
       if (completedKey !== null && completedConductorMessages.has(completedKey)) {
         return;
       }
@@ -285,6 +397,7 @@ export const NotificationPlugin = async ({ $ }) => {
       // Skip iPhone notification; only fire desktop notification.
       const dispatchedTask = dispatchedTaskBySession.get(sessionKey) ?? false;
       dispatchedTaskBySession.set(sessionKey, false);
+      if (dispatchedTaskBySession.size > MAX_MAP_SIZE) evictOldestMap(dispatchedTaskBySession);
 
       // Only consume the substantive-work flag for the FINAL completion.
       // Intermediate completions (dispatchedTask=true) must leave the flag so
@@ -293,6 +406,7 @@ export const NotificationPlugin = async ({ $ }) => {
         consumedWorkKeys.forEach((key) => {
           hasSubstantiveToolWorkBySession.set(key, false);
         });
+        if (hasSubstantiveToolWorkBySession.size > MAX_MAP_SIZE) evictOldestMap(hasSubstantiveToolWorkBySession);
 
         // Dedupe final completions only — intermediate and final share the same
         // info.id (same message), so adding the key on an intermediate would
@@ -302,10 +416,18 @@ export const NotificationPlugin = async ({ $ }) => {
             return;
           }
           completedConductorMessages.add(completedKey);
+          if (completedConductorMessages.size > MAX_SET_SIZE) evictOldestSet(completedConductorMessages);
         }
       }
 
-      void notify($, TITLE, MESSAGE, { iphone: !dispatchedTask }).catch(() => {});
+      const completionContent = extractCompletionContent(event);
+      const title = completionContent?.title ?? TITLE;
+      const message = completionContent?.message ?? MESSAGE;
+      const session = sessionKeyFrom(event);
+      const suffix = session === GLOBAL_SESSION_KEY ? "" : ` Session ${session.slice(0, 8)}.`;
+      const finalMessage = `${message}${suffix}`;
+      
+      void notify($, title, finalMessage, { iphone: !dispatchedTask }).catch(() => {});
     },
   };
 };

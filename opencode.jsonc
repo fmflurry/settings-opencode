@@ -318,16 +318,10 @@
         "glob": false,
       },
     },
-    "build": {
-      "disable": true,
-    },
-    "plan": {
-      "disable": true,
-    },
     "learning-reviewer": {
       "description": "Background reviewer that analyzes conversation turns and extracts durable learnings (memories, skills). Runs per-turn, non-blocking. Project memories auto-apply; self-improvement changes are staged for approval.",
       "mode": "subagent",
-      "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_MINI}",
       "reasoningEffort": "{env:OPENCODE_REASONING_TERTIARY}",
       "prompt": "{.config/opencode/prompts/agents/learning-reviewer.txt}",
       "temperature": 0.3,
@@ -335,12 +329,17 @@
       "tools": {
         "read": true,
         "write": true,
-        "edit": true,
         "bash": true,
-        "code-memory_*": true,
+        "grep": true,
         "glob": true,
-        "grep": true
+        "code-memory_*": true,
       },
+    },
+    "build": {
+      "disable": true,
+    },
+    "plan": {
+      "disable": true,
     },
   },
   "command": {

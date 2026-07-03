@@ -25,3 +25,7 @@ opencode.bkup/
 # Plugin-installed skill (regenerated on opencode start)
 skills/skill-creator/
 data
+
+# Learning loop pending proposals (transient — keep dirs via .gitkeep)
+pending/skills/*.json
+pending/memory/*.json

@@ -21,5 +21,4 @@ plugins/marketplaces/
 plugins/install-counts-cache.json
 plugins/known_marketplaces.json
 plugins/installed_plugins.json
-homunculus/observations.jsonl
 skills/learned/

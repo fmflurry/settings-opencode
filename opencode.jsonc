@@ -324,6 +324,24 @@
     "plan": {
       "disable": true,
     },
+    "learning-reviewer": {
+      "description": "Background reviewer that analyzes conversation turns and extracts durable learnings (memories, skills). Runs per-turn, non-blocking. Project memories auto-apply; self-improvement changes are staged for approval.",
+      "mode": "subagent",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
+      "reasoningEffort": "{env:OPENCODE_REASONING_TERTIARY}",
+      "prompt": "{.config/opencode/prompts/agents/learning-reviewer.txt}",
+      "temperature": 0.3,
+      "topP": 0.9,
+      "tools": {
+        "read": true,
+        "write": true,
+        "edit": true,
+        "bash": true,
+        "code-memory_*": true,
+        "glob": true,
+        "grep": true
+      },
+    },
   },
   "command": {
     "git": {
@@ -416,6 +434,30 @@
       "description": "Generate skills from git history",
       "template": "{file:commands/skill-create.md}\n\n$ARGUMENTS",
     },
+    "learn-pending": {
+      "description": "List all staged learning changes awaiting approval (skills + memories)",
+      "template": "{file:commands/learn-pending.md}\n\n$ARGUMENTS",
+      "agent": "conductor",
+      "subtask": true
+    },
+    "learn-approve": {
+      "description": "Approve a staged learning change by ID",
+      "template": "{file:commands/learn-approve.md}\n\n$ARGUMENTS",
+      "agent": "conductor",
+      "subtask": true
+    },
+    "learn-reject": {
+      "description": "Reject a staged learning change by ID",
+      "template": "{file:commands/learn-reject.md}\n\n$ARGUMENTS",
+      "agent": "conductor",
+      "subtask": true
+    },
+    "learn-review": {
+      "description": "Manually trigger a learning review of the current session",
+      "template": "{file:commands/learn-review.md}\n\n$ARGUMENTS",
+      "agent": "conductor",
+      "subtask": true
+    },
   },
   "mcp": {
     "context7": {
@@ -449,7 +491,7 @@
       },
     },
   },
-  "plugin": ["opencode-skill-creator", "./plugins/notification.js", "./plugins/mistral-affinity.js"],
+  "plugin": ["opencode-skill-creator", "./plugins/notification.js", "./plugins/mistral-affinity.js", "./plugins/learning-loop.ts"],
   "provider": {
     "llama.cpp": {
       "npm": "@ai-sdk/anthropic",

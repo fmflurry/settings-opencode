@@ -88,6 +88,59 @@ confirm_existing_local_opencode() {
     esac
 }
 
+confirm_existing_local_claude() {
+    [ "$LOCAL_MODE" = "1" ] || return 0
+    [ -d "$TARGET_CLAUDE" ] || return 0
+
+    if [ "$ASSUME_YES" = "1" ]; then
+        warn "$TARGET_CLAUDE exists; --yes does not merge into an existing local .claude without target-specific confirmation"
+        return 1
+    fi
+
+    local reply
+    printf "    ${BOLD}?${RESET} Merge settings-opencode files into existing local target $TARGET_CLAUDE? Type yes to continue [y/N] "
+    read_reply reply
+    case "$reply" in
+        Y|y|Yes|yes) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+handle_nested_opencode_claude() {
+    local nested_claude="$TARGET_OPENCODE/.claude"
+    [ -e "$nested_claude" ] || [ -L "$nested_claude" ] || return 0
+
+    if [ "$REPO_DIR" = "$TARGET_OPENCODE" ]; then
+        err "repo already lives at the OpenCode target and contains nested .claude: $nested_claude"
+        err "refusing to continue; move or remove that .claude directory explicitly, then re-run the installer"
+        exit 1
+    fi
+
+    if [ "$ASSUME_YES" = "1" ]; then
+        err "unexpected nested .claude inside OpenCode target: $nested_claude"
+        err "--yes cannot remove it without target-specific confirmation; remove it manually or re-run interactively and confirm deletion"
+        exit 1
+    fi
+
+    if ask "delete unexpected nested .claude inside the OpenCode target at $nested_claude ?" N; then
+        if ! rm -rf "$nested_claude"; then
+            err "failed to remove nested .claude inside OpenCode target: $nested_claude"
+            err "refusing to continue until it is removed"
+            exit 1
+        fi
+        if [ -e "$nested_claude" ] || [ -L "$nested_claude" ]; then
+            err "failed to remove nested .claude inside OpenCode target: $nested_claude"
+            err "refusing to continue until it is removed"
+            exit 1
+        fi
+        ok "removed $nested_claude"
+    else
+        err "left unexpected nested .claude in place: $nested_claude"
+        err "refusing to continue; remove it manually or re-run and confirm deletion"
+        exit 1
+    fi
+}
+
 # Ask yes/no with default. $1 = prompt, $2 = default (Y or N)
 ask() {
     local prompt="$1" default="${2:-Y}" hint reply
@@ -201,7 +254,7 @@ What it does (interactive by default):
   5. Optionally merges the .claude/ mirror into ~/.claude.
   6. Prints next steps for MCP servers and a smoke test.
 
-  With --local, steps 2-3 and 5 target ./.opencode/.claude in the cwd.
+  With --local, steps 2-3 and 5 target ./.opencode and ./.claude in the cwd.
   Step 4 (shell rc) is skipped; the env block is printed to stdout instead.
 
   With --no-opencode, steps 2-4 are skipped entirely; only step 5 runs.
@@ -222,8 +275,8 @@ detect_shell_rc() {
 # Copy src/ contents into dst/ as a real copy (not a symlink).
 # Used for both the local install and the WSL -> Windows install (where symlinks
 # across /mnt/c don't work). Excludes node_modules (reinstalled in the target),
-# .git, and transient artifacts. Also excludes assets, vibe, and removed OCX
-# files so they are never installed even if reintroduced accidentally.
+# .git, the ClaudeCode mirror, and transient artifacts. Also excludes assets,
+# vibe, and removed OCX files so they are never installed even if reintroduced accidentally.
 # Additive — does NOT use --delete, so runtime state created in the target
 # (auth.json, sessions, memory/, projects/) survives re-runs. Files removed
 # from the repo are therefore not pruned from the target.
@@ -239,6 +292,7 @@ copy_tree() {
     rsync -a \
         --exclude='node_modules' \
         --exclude='.git' \
+        --exclude='.claude' \
         --exclude='*.log' \
         --exclude='.DS_Store' \
         --exclude='*.bak' \
@@ -572,6 +626,11 @@ install_repo_link() {
         step "Copying repo into $TARGET_OPENCODE (WSL -> Windows)"
         if [ -L "$TARGET_OPENCODE" ]; then
             if [ "$(readlink "$TARGET_OPENCODE")" = "$REPO_DIR" ]; then
+                if [ -e "$TARGET_OPENCODE/.claude" ] || [ -L "$TARGET_OPENCODE/.claude" ]; then
+                    err "OpenCode target is a symlink to the repo and exposes nested .claude: $TARGET_OPENCODE/.claude"
+                    err "refusing to mark OpenCode ready; replace the symlink or remove that .claude explicitly, then re-run the installer"
+                    exit 1
+                fi
                 ok "$TARGET_OPENCODE already points at $REPO_DIR"
                 OPENCODE_TARGET_READY=1
                 return 0
@@ -584,6 +643,7 @@ install_repo_link() {
             warn "$TARGET_OPENCODE exists and is not a directory; leaving it untouched and skipping OpenCode copy"
             return 0
         fi
+        handle_nested_opencode_claude
         copy_tree "$REPO_DIR" "$TARGET_OPENCODE"
         ensure_opencode_runtime_dirs
         ok "copied $REPO_DIR -> $TARGET_OPENCODE (node_modules excluded)"
@@ -594,6 +654,7 @@ install_repo_link() {
     step "Copying repo into $TARGET_OPENCODE"
 
     if [ "$REPO_DIR" = "$TARGET_OPENCODE" ]; then
+        handle_nested_opencode_claude
         ok "repo already lives at $TARGET_OPENCODE"
         OPENCODE_TARGET_READY=1
         return 0
@@ -601,13 +662,22 @@ install_repo_link() {
 
     if [ -L "$TARGET_OPENCODE" ]; then
         if [ "$(readlink "$TARGET_OPENCODE")" = "$REPO_DIR" ]; then
+            if [ -e "$TARGET_OPENCODE/.claude" ] || [ -L "$TARGET_OPENCODE/.claude" ]; then
+                err "OpenCode target is a symlink to the repo and exposes nested .claude: $TARGET_OPENCODE/.claude"
+                err "refusing to mark OpenCode ready; replace the symlink or remove that .claude explicitly, then re-run the installer"
+                exit 1
+            fi
             ok "$TARGET_OPENCODE already points at $REPO_DIR"
             OPENCODE_TARGET_READY=1
             return 0
         fi
+        if [ -e "$TARGET_OPENCODE/.claude" ]; then
+            warn "OpenCode target exposes nested .claude through symlink: $TARGET_OPENCODE/.claude"
+        fi
         warn "$TARGET_OPENCODE is a symlink; leaving it untouched and skipping OpenCode copy"
         return 0
     elif [ -d "$TARGET_OPENCODE" ]; then
+        handle_nested_opencode_claude
         if ! confirm_existing_local_opencode; then
             info "$TARGET_OPENCODE exists; leaving it unchanged"
             return 0
@@ -758,6 +828,10 @@ install_claude_mirror() {
         warn "$TARGET_CLAUDE is a symlink; leaving it untouched and skipping Claude copy"
         return 0
     elif [ -d "$TARGET_CLAUDE" ]; then
+        if ! confirm_existing_local_claude; then
+            info "$TARGET_CLAUDE exists; leaving it unchanged"
+            return 0
+        fi
         info "$TARGET_CLAUDE exists; merging Claude mirror into it (personal config files never overwritten)"
     elif [ -e "$TARGET_CLAUDE" ]; then
         warn "$TARGET_CLAUDE exists and is not a directory; leaving it untouched and skipping Claude copy"

@@ -107,7 +107,7 @@ rules:
   # Errors must use problem+json
   zalando-problem-json:
     description: "Error responses must use application/problem+json"
-    given: "$.paths[*][get,post,put,delete,patch].responses[4xx,5xx][*]"
+    given: "$.paths[*]['get','post','put','delete','patch'].responses['400','401','403','404','409','412','422','429','500','503']"
     then:
       function: truthy
       field: "content['application/problem+json']"
@@ -133,7 +133,7 @@ rules:
 
 Use with:
 ```bash
-npx @spectral/spectral-cli lint api-specs/*.openapi.yaml --ruleset .spectral-zalando.yaml
+npx @stoplight/spectral-cli lint api-specs/*.openapi.yaml --ruleset .spectral-zalando.yaml
 ```
 
 ---

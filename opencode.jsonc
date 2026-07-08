@@ -505,7 +505,7 @@
       "type": "remote",
       "url": "https://swagger.mcp.smartbear.com/mcp",
       "headers": {},
-      "enabled": true,
+      "enabled": false,
     },
     "code-memory": {
       "type": "local",

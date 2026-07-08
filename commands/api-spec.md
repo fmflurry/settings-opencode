@@ -211,12 +211,12 @@ If not connected, either:
 
 ## Reference
 
-- **Skill**: [api-spec-openapi](../skills/api-spec-openapi/SKILL.md) — Zalando conventions, templates, validation.
+- **Skill**: [api-spec-openapi](skills/api-spec-openapi/SKILL.md) — Zalando conventions, templates, validation.
 - **Agent prompt**: [api-spec-architect.txt](../prompts/agents/api-spec-architect.txt) — Orchestrates the workflow.
-- **Zalando Checklist**: [zalando-checklist.md](../skills/api-spec-openapi/zalando-checklist.md) — Verifiable rules per section.
-- **OpenAPI 3.1 Guide**: [openapi-3.1-template.md](../skills/api-spec-openapi/openapi-3.1-template.md) — Templates and idioms.
-- **Error Model**: [problem-json.md](../skills/api-spec-openapi/problem-json.md) — RFC 9457 Problem schema.
-- **Validation**: [validation.md](../skills/api-spec-openapi/validation.md) — Spectral, Redocly, SwaggerHub fallback.
+- **Zalando Checklist**: [zalando-checklist.md](skills/api-spec-openapi/zalando-checklist.md) — Verifiable rules per section.
+- **OpenAPI 3.1 Guide**: [openapi-3.1-template.md](skills/api-spec-openapi/openapi-3.1-template.md) — Templates and idioms.
+- **Error Model**: [problem-json.md](skills/api-spec-openapi/problem-json.md) — RFC 9457 Problem schema.
+- **Validation**: [validation.md](skills/api-spec-openapi/validation.md) — Spectral, Redocly, SwaggerHub fallback.
 
 ---
 

@@ -255,14 +255,6 @@ components:
         default: 20
       required: false
 
-    IfMatchHeader:
-      name: If-Match
-      in: header
-      description: "ETag from GET response for optimistic concurrency control"
-      schema:
-        type: string
-      required: false
-
   responses:
     Problem400:
       description: "Bad Request"

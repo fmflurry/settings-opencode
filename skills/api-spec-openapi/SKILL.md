@@ -17,7 +17,7 @@ description: Generate OpenAPI 3.1 specs that follow the Zalando RESTful API Guid
 
 The highest-value Zalando rules are embedded below. Full checklist with verifiable YAML snippets: [zalando-checklist.md](zalando-checklist.md).
 
-### 1. **Naming**
+### **Naming**
 - Paths: **kebab-case**, lowercase, **plural resource nouns**, no trailing slash.
   ```yaml
   /v1/users
@@ -31,7 +31,7 @@ The highest-value Zalando rules are embedded below. Full checklist with verifiab
   is_active: boolean
   ```
 
-### 2. **HTTP Semantics**
+### **HTTP Semantics**
 - **GET**: retrieve (200 OK or 404).
 - **POST**: create new resource (201 Created, Location header with URI).
 - **PUT**: replace entire resource, idempotent (200 or 204).
@@ -39,7 +39,7 @@ The highest-value Zalando rules are embedded below. Full checklist with verifiab
 - **PATCH**: partial update (not recommended; use PUT or POST instead).
 - **Status codes**: Use 200/201/202/204/207/400/401/403/404/409/412/422/429/500. See [zalando-checklist.md § HTTP Status Codes](zalando-checklist.md#http-status-codes) for mappings.
 
-### 3. **Pagination (Cursor-Based, No Offset)**
+### **Pagination (Cursor-Based, No Offset)**
 - Cursor pagination: `?cursor=<opaque-value>&limit=<int>` (default limit 20, max 100).
 - **Forbid `?offset=` and `?page=`** — they are inefficient at scale.
 - Response envelope includes `_links.next` / `_links.prev` for navigation.
@@ -50,7 +50,7 @@ The highest-value Zalando rules are embedded below. Full checklist with verifiab
     prev: { href: "https://api.example.com/v1/users?cursor=xyz789&limit=20" }
   ```
 
-### 4. **Errors: RFC 9457 Problem+JSON**
+### **Errors: RFC 9457 Problem+JSON**
 - All 4xx/5xx responses use `application/problem+json` (RFC 9457 / RFC 7807).
 - Single reusable `Problem` schema across all endpoints.
   ```yaml
@@ -61,43 +61,43 @@ The highest-value Zalando rules are embedded below. Full checklist with verifiab
   instance: string    # URI to affected resource
   ```
 
-### 5. **Versioning (URL Major Only)**
+### **Versioning (URL Major Only)**
 - Major versions encoded in URL: `/v1/`, `/v2/`.
 - **Preferred within-version evolution**: Additive only (no breaking changes within `/v1`).
 - Alternative: Media-type versioning (content negotiation `Accept: application/vnd.example.v1+json`); see [openapi-3.1-template.md](openapi-3.1-template.md).
 - **MUST NOT break** existing clients mid-version; bump major version if backward-incompatible.
 
-### 6. **Idempotency**
+### **Idempotency**
 - **POST (create)**: Require `Idempotency-Key` header (UUID or user-provided).
 - **PUT / DELETE**: Inherently idempotent; safe to retry.
 - Server returns same response if the same `Idempotency-Key` is submitted.
 
-### 7. **Filtering & Sorting**
+### **Filtering & Sorting**
 - Filtering: Query parameters per resource (`?user_id=123`, `?status=active`).
 - Searching: `?q=<query>` for free-text search.
 - Sorting: `?sort=field,-field` (ascending by default, `-` prefix for descending).
 
-### 8. **Hypermedia & Links**
+### **Hypermedia & Links**
 - Include `_links` object in responses for navigation (cursor pagination, related resources, actions).
 - Standard link relations: `self`, `next`, `prev`, `first`, `last`.
 
-### 9. **Headers & Content Types**
+### **Headers & Content Types**
 - Default: `application/json`.
 - Errors: `application/problem+json`.
 - Concurrency: `ETag` / `If-Match` for optimistic locking.
 - Retry: `Retry-After` on 429 (rate limit) and 503 (service unavailable).
 
-### 10. **Deprecation**
+### **Deprecation**
 - Use `Deprecation: true` header in responses.
 - Use `Sunset` header with a date when the endpoint will be removed.
 - Mark deprecated fields in schema with `deprecated: true`.
 
-### 11. **Security**
+### **Security**
 - Define `securitySchemes` (e.g., OAuth2, Bearer token).
 - Apply security per operation (not globally) for granular control.
 - Never include secrets or credentials in examples or default values.
 
-### 12. **One File Per Bounded Context**
+### **One File Per Bounded Context**
 - Split the API specification by domain/bounded context.
 - Naming: `<bounded-context>.openapi.yaml` in `api-specs/` folder (kebab-case).
 - Each BC spec is independently publishable to SwaggerHub; minimize cross-file `$ref`.
@@ -216,14 +216,6 @@ components:
         type: string
         format: uuid
       required: true
-
-    IfMatchHeader:
-      name: If-Match
-      in: header
-      description: "ETag for optimistic concurrency control"
-      schema:
-        type: string
-      required: false
 
   responses:
     Problem400:

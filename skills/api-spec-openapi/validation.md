@@ -136,6 +136,8 @@ Use with:
 npx @stoplight/spectral-cli lint api-specs/*.openapi.yaml --ruleset .spectral-zalando.yaml
 ```
 
+> **Offline/CI**: Pre-install with `npm install -g @stoplight/spectral-cli` to avoid `npx` downloading on every run.
+
 ---
 
 ## Alternative Validator: Redocly CLI

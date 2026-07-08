@@ -303,7 +303,7 @@
       },
     },
     "api-spec-architect": {
-      "description": "MUST delegate for generating or updating OpenAPI 3.1 specifications and publishing them to SmartBear SwaggerHub. Produces one Zalando-compliant YAML per bounded context and pushes via the SwaggerHub MCP.",
+      "description": "MUST delegate for generating or updating OpenAPI 3.1 specifications and publishing them to SmartBear SwaggerHub. Produces one Zalando-compliant YAML per bounded context and optionally publishes via the SwaggerHub MCP.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_PLANNER}",
       "reasoningEffort": "{env:OPENCODE_REASONING_PRIMARY}",

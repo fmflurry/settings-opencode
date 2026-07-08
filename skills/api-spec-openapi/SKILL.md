@@ -287,6 +287,24 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
 
+
+    Problem412:
+      description: "Precondition Failed"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+
+    Problem503:
+      description: "Service Unavailable"
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
   schemas:
     Problem:
       type: object

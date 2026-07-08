@@ -456,6 +456,9 @@ components:
     UpdateUserRequest:
       type: object
       title: "Update User Request"
+      required:
+        - email
+        - name
       properties:
         email:
           type: string

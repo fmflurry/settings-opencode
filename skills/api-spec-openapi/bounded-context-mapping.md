@@ -158,7 +158,7 @@ components:
 
 **Why**: Each BC spec must be self-contained. A consuming tool (like SwaggerHub) should not require resolving references to another BC's file.
 
-### When to Use $ref (Cross-BC)
+### ⚠️ When to Use `$ref` (Cross-BC) — Local Only, Not SwaggerHub-Compatible
 
 If you have a **truly shared contract** (e.g., a published event schema used by multiple BCs), you may define it in a shared file:
 
@@ -179,7 +179,7 @@ components:
       $ref: "shared/integration-events.openapi.yaml#/components/schemas/UserCreatedEvent"
 ```
 
-**Constraint**: This works locally but SwaggerHub may not resolve cross-file references. For SwaggerHub, **always inline or duplicate shared schemas per BC file**.
+> **Warning:** This pattern works for local development and preview but will **fail on SwaggerHub**, which cannot resolve cross-file `$ref`s. For SwaggerHub publication, always inline or duplicate shared schemas per BC file.
 
 ---
 

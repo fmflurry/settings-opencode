@@ -362,14 +362,152 @@ Before running `/api-spec` to publish:
 
 ---
 
+## Consolidating Multiple BCs Into a Single SwaggerHub API
+
+### When to Consolidate
+
+By default, the convention is **one file per BC, one API per file on SwaggerHub**. However, in some cases (e.g., a "Sprint0" consolidated API, a backend-for-frontend with multiple domains, or an early-stage MVP), you may publish multiple BCs into a **single OpenAPI spec and single SwaggerHub API**.
+
+### How to Structure a Consolidated API
+
+When merging N BCs into one API:
+
+1. **Create a single OpenAPI file** (e.g., `api-specs/unified-api.openapi.yaml`) that contains endpoints from multiple BCs.
+2. **Move BC boundaries to tags** — each BC becomes exactly one Title-Case English tag (see [zalando-checklist.md § Tags](zalando-checklist.md#tags)).
+3. **Group operations by BC tag** — every endpoint carries the tag of its originating BC.
+4. **Preserve path semantics** — path prefixes still follow per-BC resource naming (e.g., `/v1/users` for User Accounts BC, `/v1/invoices` for Billing BC).
+
+#### Example: Consolidated API with Multiple BCs
+
+```yaml
+# api-specs/unified-api.openapi.yaml
+
+openapi: 3.1.0
+info:
+  title: "Consolidated Platform API"
+  version: "1.0.0"
+  description: "Unified REST API exposing User Accounts, Billing, and Order Fulfillment domains."
+
+servers:
+  - url: "https://api.example.com"
+    description: "Production"
+
+tags:
+  - name: "User Accounts"
+    description: "User account lifecycle (BC: User Management)"
+  - name: "Billing"
+    description: "Invoice and payment operations (BC: Payment Processing)"
+  - name: "Order Fulfillment"
+    description: "Order processing and shipment (BC: Order Fulfillment)"
+
+paths:
+  /v1/users:
+    get:
+      operationId: "listUsers"
+      tags: ["User Accounts"]
+      summary: "List users"
+      responses:
+        "200":
+          description: "Users list"
+
+  /v1/invoices:
+    get:
+      operationId: "listInvoices"
+      tags: ["Billing"]
+      summary: "List invoices"
+      responses:
+        "200":
+          description: "Invoices list"
+
+  /v1/orders:
+    get:
+      operationId: "listOrders"
+      tags: ["Order Fulfillment"]
+      summary: "List orders"
+      responses:
+        "200":
+          description: "Orders list"
+
+components:
+  schemas:
+    # Shared schemas (Problem, Link, CursorPage)
+    Problem: { ... }
+    CursorPage: { ... }
+    
+    # User Accounts BC schemas
+    User: { ... }
+    CreateUserRequest: { ... }
+    
+    # Billing BC schemas
+    Invoice: { ... }
+    CreateInvoiceRequest: { ... }
+    
+    # Order Fulfillment BC schemas
+    Order: { ... }
+    CreateOrderRequest: { ... }
+```
+
+### Tradeoff: Single Version Lifecycle & Schema Namespace
+
+When consolidating:
+
+- **Shared version**: All BCs share a single version number (`1.0.0` in the example). A breaking change in one BC requires a major version bump of the entire API, affecting all BCs.
+- **Shared component namespace**: All schemas live in `components/schemas/` within one file. **Watch for name collisions** — if two BCs define the same schema name (e.g., `Address`), you must either:
+  - **Prefix component names** per BC: `UserAddress`, `OrderAddress`.
+  - **Namespace using nested objects or discriminators** if they represent different concepts.
+
+**Example collision resolution**:
+```yaml
+components:
+  schemas:
+    UserAddress:           # From User Accounts BC
+      type: object
+      properties:
+        street: string
+        city: string
+        postal_code: string
+    
+    OrderShippingAddress:  # From Order Fulfillment BC
+      type: object
+      properties:
+        street: string
+        city: string
+        postal_code: string
+        delivery_instructions: string
+```
+
+### Consolidation Checklist
+
+- [ ] Single OpenAPI file contains all endpoints.
+- [ ] Each BC has exactly one Title-Case English tag.
+- [ ] Every operation is tagged with its originating BC's tag.
+- [ ] Path prefixes reflect per-BC resource naming (no collision).
+- [ ] Component names are prefixed or namespaced to avoid collisions.
+- [ ] All validation (Spectral, Redocly) passes on the consolidated spec.
+- [ ] SwaggerHub API name reflects the consolidated scope (e.g., `platform-api` or `unified-api`).
+
+### Migration Path: From Consolidated to Multi-API
+
+If the consolidated API grows unwieldy or BCs need independent versioning later, you can split it:
+
+1. **Extract each BC's paths and schemas** from the consolidated file.
+2. **Create individual `<bc-name>.openapi.yaml` files** per BC.
+3. **Publish each to SwaggerHub as a separate API**.
+4. **Update client integrations** to use per-BC API URLs (or maintain a routing layer that maps consolidated API paths to per-BC endpoints).
+
+---
+
 ## Workflow Summary
 
 1. **Identify BCs** in your codebase (one Module/feature = one BC).
-2. **Create `api-specs/<bc-name>.openapi.yaml`** per BC.
-3. **Fill each spec** with paths, schemas, and Zalando conventions.
-4. **Validate** with Spectral or Redocly.
-5. **Publish** to SwaggerHub via the agent (when MCP connected).
-6. **Maintain mapping** in a table for discoverability.
+2. **Choose deployment model**:
+   - **Default**: One file per BC, one API per file on SwaggerHub.
+   - **Consolidation**: Multiple BCs in one file, one API per consolidated file on SwaggerHub (see § Consolidating Multiple BCs Into a Single SwaggerHub API).
+3. **Create `api-specs/<name>.openapi.yaml`** per file/API.
+4. **Fill each spec** with paths, schemas, and Zalando conventions.
+5. **Validate** with Spectral or Redocly.
+6. **Publish** to SwaggerHub via the agent (when MCP connected).
+7. **Maintain mapping** in a table for discoverability.
 
 ---
 

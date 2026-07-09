@@ -49,6 +49,32 @@ Concrete, verifiable rules. Each item includes a checkbox, one-line rule, and YA
   GET /v1/users/
   ```
 
+- [ ] **English-only identifiers** — ALL exposed identifiers MUST be English, even if source code uses another language
+  All identifiers exposed in the API — path segments, resource names, query/path/body property names, enum values, operationIds, schema/component names — **MUST be English**. Domain nouns from source code or business context must be translated to standard English equivalents, not transliterated or left in the source language.
+  ```yaml
+  # GOOD: Translated to English
+  /v1/customers/{id}/invoices
+  /v1/payments
+  /v1/settlements
+  properties:
+    customer_id: string
+    invoice_number: string
+    settlement_date: string
+    status:
+      enum: [pending, approved, rejected]
+  
+  # BAD: French terms (or other languages) in identifiers
+  /v1/clients/{id}/factures
+  /v1/reglements
+  properties:
+    client_id: string
+    numero_facture: string
+    date_reglement: string
+    statut:
+      enum: [en_attente, approuve, rejete]
+  ```
+  **Rationale**: API contracts are language-agnostic; using the lingua franca of REST APIs (English) ensures discoverable endpoints, proper client code generation, and seamless integration across international teams.
+
 ### JSON Properties
 
 - [ ] **snake_case** — not camelCase, not kebab-case
@@ -63,6 +89,44 @@ Concrete, verifiable rules. Each item includes a checkbox, one-line rule, and YA
   userId: string          # camelCase
   created-at: string      # kebab-case
   IsActive: boolean       # Pascal
+  ```
+
+### Tags
+
+- [ ] **Title-Case, English tags** — one tag per bounded context
+  Every OpenAPI `tags` entry MUST be Title-Case, English, and there MUST be exactly one tag per bounded context. Operations are grouped under their originating BC's tag.
+  ```yaml
+  # GOOD: Title-Case, one tag per BC
+  tags:
+    - name: "User Accounts"
+      description: "User account lifecycle and management"
+    - name: "Billing"
+      description: "Invoice and payment operations"
+    - name: "Order Fulfillment"
+      description: "Order processing and shipment tracking"
+  
+  # BAD: Incorrect casing, foreign language, or too many/too few tags
+  tags:
+    - name: "users"             # lowercase
+    - name: "factures"          # French term
+    - name: "user-accounts"     # kebab-case
+    - name: "UserAcc1"          # camelCase variant
+    - name: "Account-Admin-User-Profile"  # Overly granular
+  ```
+  ```yaml
+  # Tag assignment in operations
+  paths:
+    /v1/users:
+      get:
+        tags: ["User Accounts"]      # References the BC tag
+      post:
+        tags: ["User Accounts"]
+    /v1/invoices:
+      get:
+        tags: ["Billing"]
+    /v1/orders:
+      get:
+        tags: ["Order Fulfillment"]
   ```
 
 ---

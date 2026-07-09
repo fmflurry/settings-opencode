@@ -413,6 +413,7 @@ export OPENCODE_REASONING_CONDUCTOR="high"
 export OPENCODE_REASONING_PRIMARY="high"
 export OPENCODE_REASONING_SECONDARY="medium"
 export OPENCODE_REASONING_TERTIARY="low"
+alias ocp="$HOME/.config/opencode/bin/opencode-pick"
 EOF
 }
 
@@ -646,6 +647,7 @@ install_repo_link() {
         handle_nested_opencode_claude
         copy_tree "$REPO_DIR" "$TARGET_OPENCODE"
         ensure_opencode_runtime_dirs
+        [ -f "$TARGET_OPENCODE/bin/opencode-pick" ] && chmod +x "$TARGET_OPENCODE/bin/opencode-pick"
         ok "copied $REPO_DIR -> $TARGET_OPENCODE (node_modules excluded)"
         OPENCODE_TARGET_READY=1
         return 0
@@ -690,6 +692,7 @@ install_repo_link() {
 
     copy_tree "$REPO_DIR" "$TARGET_OPENCODE"
     ensure_opencode_runtime_dirs
+    [ -f "$TARGET_OPENCODE/bin/opencode-pick" ] && chmod +x "$TARGET_OPENCODE/bin/opencode-pick"
     ok "copied $REPO_DIR -> $TARGET_OPENCODE (node_modules excluded)"
     OPENCODE_TARGET_READY=1
 }

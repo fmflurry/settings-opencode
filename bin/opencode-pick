@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+# opencode-pick — launch opencode with a profile selected from
+# ~/.config/zsh/60-opencode-models.zsh without touching global env.
+#
+# Profile format in that file: blocks separated by blank lines, each starting
+# with `# <Name>` header followed by `export ...` or `# export ...` lines.
+# Whether lines are commented or not is irrelevant — the picker enables them.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+PROFILE_FILE="${OPENCODE_PROFILE_FILE:-$SCRIPT_DIR/opencode-models.zsh}"
+
+if [[ ! -r "$PROFILE_FILE" ]]; then
+  echo "opencode-pick: cannot read $PROFILE_FILE" >&2
+  exit 1
+fi
+
+# Parse blocks. Emit "NAME<TAB>line1\nline2\n..." per profile.
+# Lines are normalized by stripping leading `# ` so commented exports activate.
+parse_profiles() {
+  awk '
+    BEGIN { name=""; buf="" }
+    function flush() {
+      if (name != "" && buf != "") {
+        gsub(/\n+$/, "", buf)
+        printf("%s\t%s\037", name, buf)
+      }
+      name=""; buf=""
+    }
+    /^[[:space:]]*$/ { flush(); next }
+    {
+      line=$0
+      if (name == "" && line ~ /^#[[:space:]]*[^[:space:]]/) {
+        sub(/^#[[:space:]]*/, "", line)
+        name=line
+        next
+      }
+      sub(/^#[[:space:]]*/, "", line)
+      if (line ~ /^export[[:space:]]+OPENCODE_/) {
+        buf = buf line "\n"
+      }
+    }
+    END { flush() }
+  ' "$PROFILE_FILE"
+}
+
+PROFILES_RAW="$(parse_profiles)"
+
+if [[ -z "$PROFILES_RAW" ]]; then
+  echo "opencode-pick: no profiles found in $PROFILE_FILE" >&2
+  exit 1
+fi
+
+# Build name list (one per line) preserving order.
+NAMES="$(printf '%s' "$PROFILES_RAW" | tr '\037' '\n' | awk -F'\t' 'NF>=2 {print $1}')"
+
+usage() {
+  cat >&2 <<'EOF'
+opencode-pick [--list] [--profile <name>] [-- <opencode args...>]
+  No args               : interactive picker (fzf if available, else select)
+  --list                : print profile names and exit
+  --profile <name>      : skip picker, use named profile
+  --                    : everything after is forwarded to opencode
+  -h | --help           : this help
+EOF
+}
+
+PROFILE_ARG=""
+FORWARD=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    --list)
+      printf '%s\n' "$NAMES"
+      exit 0
+      ;;
+    -p|--profile)
+      [[ $# -ge 2 ]] || { echo "missing value for $1" >&2; exit 2; }
+      PROFILE_ARG="$2"; shift 2 ;;
+    --) shift; FORWARD=("$@"); break ;;
+    *) echo "unknown arg: $1 (use -- to forward args to opencode)" >&2; usage; exit 2 ;;
+  esac
+done
+
+choose() {
+  if [[ -n "$PROFILE_ARG" ]]; then
+    printf '%s\n' "$PROFILE_ARG"
+    return
+  fi
+  if command -v fzf >/dev/null 2>&1; then
+    printf '%s\n' "$NAMES" | fzf --prompt='opencode profile> ' --height=40% --reverse --no-multi
+    return
+  fi
+  PS3=$'\nSelect profile: '
+  local IFS=$'\n'
+  local arr=( $NAMES )
+  select pick in "${arr[@]}"; do
+    if [[ -n "${pick:-}" ]]; then printf '%s\n' "$pick"; return; fi
+  done
+}
+
+CHOICE="$(choose || true)"
+if [[ -z "${CHOICE:-}" ]]; then
+  echo "opencode-pick: no profile selected" >&2
+  exit 130
+fi
+
+# Extract chosen block's exports.
+BLOCK="$(
+  printf '%s' "$PROFILES_RAW" \
+    | awk -v target="$CHOICE" 'BEGIN{RS="\037"; FS="\t"} $1==target {print $2}'
+)"
+
+if [[ -z "$BLOCK" ]]; then
+  echo "opencode-pick: profile '$CHOICE' not found" >&2
+  exit 1
+fi
+
+# Apply exports in current shell and exec opencode.
+echo "→ profile: $CHOICE" >&2
+while IFS= read -r line; do
+  [[ -z "$line" ]] && continue
+  # shellcheck disable=SC2086
+  eval "$line"
+done <<< "$BLOCK"
+
+# Show what was applied (stderr) for transparency.
+env | grep -E '^OPENCODE_' | sort >&2
+
+# ---------------------------------------------------------------------------
+# Reasoning overlay — inject reasoningEffort only for models that support it.
+# opencode deep-merges OPENCODE_CONFIG_CONTENT on top of the base config, so
+# keys present here ADD to agents; absent key = omitted from request entirely.
+# Sending "" (unset env via {env:VAR}) causes kimi/openai-compatible providers
+# to forward reasoning_effort:"" which those APIs reject.
+# Compatible with bash 3.2 (macOS default) — uses parallel indexed arrays.
+# ---------------------------------------------------------------------------
+
+# Parallel arrays: agent names and their corresponding tier env-var names.
+_RM_AGENTS=(
+  conductor
+  planner
+  architect
+  coder
+  writer
+  code-reviewer
+  angular-cop
+  dotnet-cop
+  gdpr-specialist
+  security-reviewer
+  tdd-guide
+  build-error-resolver
+  doc-updater
+  refactor-cleaner
+  api-spec-architect
+  git-specialist
+  learning-reviewer
+)
+_RM_VARS=(
+  OPENCODE_REASONING_CONDUCTOR
+  OPENCODE_REASONING_PRIMARY
+  OPENCODE_REASONING_SECONDARY
+  OPENCODE_REASONING_SECONDARY
+  OPENCODE_REASONING_TERTIARY
+  OPENCODE_REASONING_SECONDARY
+  OPENCODE_REASONING_SECONDARY
+  OPENCODE_REASONING_SECONDARY
+  OPENCODE_REASONING_SECONDARY
+  OPENCODE_REASONING_SECONDARY
+  OPENCODE_REASONING_SECONDARY
+  OPENCODE_REASONING_SECONDARY
+  OPENCODE_REASONING_SECONDARY
+  OPENCODE_REASONING_SECONDARY
+  OPENCODE_REASONING_PRIMARY
+  OPENCODE_REASONING_TERTIARY
+  OPENCODE_REASONING_TERTIARY
+)
+
+_OVERLAY_ENTRIES=""   # comma-separated JSON agent entries
+_OVERLAY_LOG=""       # log for stderr
+
+for _i in "${!_RM_AGENTS[@]}"; do
+  _agent="${_RM_AGENTS[$_i]}"
+  _tier_var="${_RM_VARS[$_i]}"
+  _val="${!_tier_var:-}"
+  if [[ -n "$_val" ]]; then
+    # Collect raw JSON fragments; values are simple tokens (high/xhigh/low/max/medium)
+    # — no escaping hazards. If jq is present we re-encode the full object at the end.
+    _OVERLAY_ENTRIES="${_OVERLAY_ENTRIES}${_OVERLAY_ENTRIES:+,}\"${_agent}\":{\"reasoningEffort\":\"${_val}\"}"
+    _OVERLAY_LOG="${_OVERLAY_LOG}   ${_agent}=${_val}"$'\n'
+  fi
+done
+
+if [[ -n "${_OVERLAY_ENTRIES:-}" ]]; then
+  if command -v jq >/dev/null 2>&1; then
+    # Re-encode through jq to guarantee valid JSON output
+    _AGENT_OBJ="$(printf '{%s}' "$_OVERLAY_ENTRIES" | jq -c '.')"
+  else
+    _AGENT_OBJ="{${_OVERLAY_ENTRIES}}"
+  fi
+  export OPENCODE_CONFIG_CONTENT="{\"agent\":${_AGENT_OBJ}}"
+  echo "→ reasoning overlay:" >&2
+  printf '%s' "${_OVERLAY_LOG}" >&2
+fi
+
+unset _i _agent _tier_var _val _OVERLAY_ENTRIES _OVERLAY_LOG _AGENT_OBJ _RM_AGENTS _RM_VARS
+
+exec opencode "${FORWARD[@]+"${FORWARD[@]}"}"

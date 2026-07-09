@@ -30,6 +30,7 @@ The highest-value Zalando rules are embedded below. Full checklist with verifiab
   created_at: string
   is_active: boolean
   ```
+- **Identifiers MUST be English** — all path segments, property names, enum values, operationIds, and schema names MUST be English (e.g., `/customers/{id}/invoices`, not `/clients/{id}/factures`). See [zalando-checklist.md § English-only identifiers](zalando-checklist.md#english-only-identifiers).
 
 ### **HTTP Semantics**
 - **GET**: retrieve (200 OK or 404).
@@ -97,10 +98,17 @@ The highest-value Zalando rules are embedded below. Full checklist with verifiab
 - Apply security per operation (not globally) for granular control.
 - Never include secrets or credentials in examples or default values.
 
-### **One File Per Bounded Context**
-- Split the API specification by domain/bounded context.
+### **Tags (One Per Bounded Context)**
+- Assign one Title-Case English tag per bounded context.
+- Group operations under their originating BC's tag for clear domain organization.
+- Example tags: `"User Accounts"`, `"Billing"`, `"Order Fulfillment"`.
+- See [zalando-checklist.md § Tags](zalando-checklist.md#tags).
+
+### **One File Per Bounded Context (or Consolidate if Needed)**
+- Default: Split the API specification by domain/bounded context.
 - Naming: `<bounded-context>.openapi.yaml` in `api-specs/` folder (kebab-case).
 - Each BC spec is independently publishable to SwaggerHub; minimize cross-file `$ref`.
+- Alternative: Consolidate multiple BCs into a single API file; use tags to denote BC boundaries.
 - See [bounded-context-mapping.md](bounded-context-mapping.md).
 
 ## OpenAPI 3.1 Minimal Skeleton

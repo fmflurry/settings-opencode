@@ -27,7 +27,7 @@
 
 ## What's inside
 
-A hardened primary `conductor` agent backed by **14 specialist sub-agents** (planner, architect, coder, writer, code/security/database review, TDD, build-fix, e2e, doc, refactor, git, learning-reviewer), wired together by:
+A hardened primary `conductor` agent backed by **18 specialist sub-agents** (planner, architect, coder, writer, code-reviewer, angular-cop, dotnet-cop, gdpr-specialist, security-reviewer, tdd-guide, build-error-resolver, e2e-runner, doc-updater, refactor-cleaner, database-reviewer, api-spec-architect, git-specialist, learning-reviewer), wired together by:
 
 - **Mandatory sub-agent delegation** from `conductor`: the primary has `write` and `edit` denied at the permission layer, plus a `tool.execute.before` hook that blocks bash redirects to source files (`> file.ts`, `tee`, `sed -i`, heredocs, `python -c open().write`). The orchestrator cannot patch files — every change MUST go through `coder` (source code), `writer` (docs/markdown/HTML), `tdd-guide` (tests), or `git-specialist` (commits/PRs). This makes routing **model-agnostic**: even open-weight models that ignore prose rules are mechanically forced to delegate.
 - **Front-loaded first-tool gate** in `prompts/agents/conductor.txt`: hard rules at the top, routing table second, six few-shot User → `task` examples (with explicit wrong-way contrasts) so literal models copy the right pattern.
@@ -119,6 +119,14 @@ Merges into `%USERPROFILE%\.config\opencode` and `\.claude`, runs `npm install` 
 - [Claude Code](https://claude.com/claude-code) installed if you want the `.claude/` mirror (unless skipped via `--no-claude`).
 - Either [Bun](https://bun.sh) (recommended — `bun.lock` is what's checked in) or Node.js 20+ with `npm`.
 - `git`.
+
+### Secrets
+
+This repo stores **no API keys**. If you use the `myMistral` provider in `opencode.jsonc`, set `MISTRAL_API_KEY` by:
+- Copying `.env.example` → `.env` and filling in your key, OR
+- Exporting `MISTRAL_API_KEY` in your shell rc.
+
+Other providers (Anthropic, OpenAI, GitHub Copilot, OpenCode Go) need their own keys set the same way if you select their profiles. Both `.env` and `.env` variants are git-ignored; only `.env.example` is tracked.
 
 ### Quick install (script)
 
@@ -269,6 +277,21 @@ Then drop a slash command:
 
 It should route to the `planner` sub-agent and return a structured plan without writing code.
 
+### Model profile picker (`ocp`)
+
+`ocp` (alias for `opencode-pick`) launches OpenCode with a chosen model/reasoning profile. Profiles live in `~/.config/opencode/bin/opencode-models.zsh` — edit that file to add or adjust profiles (blocks of `OPENCODE_MODEL_*` / `OPENCODE_REASONING_*` exports).
+
+**Usage:**
+
+```bash
+ocp                          # Interactive picker (fzf if installed, else numbered menu)
+ocp --list                   # List available profiles
+ocp --profile "<name>"       # Launch with a named profile
+ocp -- <args>                # Forward args to opencode
+```
+
+The picker reads only `OPENCODE_*` env vars and injects per-agent reasoning as an `OPENCODE_CONFIG_CONTENT` overlay at launch — no secrets involved. **Bash-based, macOS/Linux/WSL only** (native Windows uses static `OPENCODE_*` env vars written by `bootstrap.ps1`).
+
 ### Updating
 
 If you installed via the one-liner, **re-run the exact same command** — it pulls the latest and re-applies it:
@@ -301,7 +324,7 @@ If a new plugin shows up, OpenCode picks it up on the next restart. If an env va
 
 ## English
 
-Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primary `conductor` agent (no write/edit perms — must delegate), 13 specialist sub-agents, always-on skills, slash commands, OpenCode plugins (hooks, auto-compact, caveman, notifications), custom tools, and a Claude Code mirror.
+Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primary `conductor` agent (no write/edit perms — must delegate), **18 specialist sub-agents**, always-on skills, slash commands, OpenCode plugins (hooks, auto-compact, caveman, notifications), custom tools, and a Claude Code mirror.
 
 <a id="goals-en"></a>
 
@@ -364,6 +387,9 @@ Defined in `opencode.jsonc` under `agent`:
 | `coder`                | subagent | Pure non-test implementation. Mandatory build+lint+standards self-check before reporting done. Socratic ambiguity gate.                                                           |
 | `writer`               | subagent | Writes docs/markdown/HTML/text artifacts. Forbidden from touching source code — refuses out-of-scope files back to the conductor.                                                 |
 | `code-reviewer`        | subagent | Quality review over diffs and conventions. Read-only — findings only; fixes go to `coder`.                                                                                        |
+| `angular-cop`          | subagent | Pre-merge review for Angular + TypeScript PRs.                                                                                                                                     |
+| `dotnet-cop`           | subagent | Pre-merge review for .NET / Minimal API / modular-monolith PRs.                                                                                                                     |
+| `gdpr-specialist`      | subagent | GDPR/CNIL compliance review of code (France-focused).                                                                                                                              |
 | `security-reviewer`    | subagent | OWASP/secrets/deps review. Read-only — reports vulnerabilities; remediation routed to `coder`.                                                                                    |
 | `tdd-guide`            | subagent | RED -> GREEN -> REFACTOR + 80% coverage. Writes tests; delegates GREEN impl to `coder` via scoped Task perm.                                                                      |
 | `build-error-resolver` | subagent | Build/TS error fixes with minimal diffs.                                                                                                                                          |
@@ -371,6 +397,7 @@ Defined in `opencode.jsonc` under `agent`:
 | `doc-updater`          | subagent | Generated docs + codemaps.                                                                                                                                                        |
 | `refactor-cleaner`     | subagent | Dead-code removal + consolidation.                                                                                                                                                |
 | `database-reviewer`    | subagent | PostgreSQL / Supabase schema, perf, security.                                                                                                                                     |
+| `api-spec-architect`   | subagent | OpenAPI / API specification design.                                                                                                                                               |
 | `git-specialist`       | subagent | Branches, commits, pushes, PRs (mini model).                                                                                                                                      |
 | `learning-reviewer`    | subagent | Per-turn background learning reviewer. Extracts project memories + skill proposals non-interactively.                                                                             |
 
@@ -501,7 +528,7 @@ Reusable OpenCode tools exposed via `tools/index.ts`:
 
 ## Français
 
-Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), quatorze sous-agents specialises, des skills toujours actives, des commandes slash, des plugins (hooks, auto-compact, caveman, notifications, learning loop), des outils custom et un mirror Claude Code.
+Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), **dix-huit sous-agents specialises**, des skills toujours actives, des commandes slash, des plugins (hooks, auto-compact, caveman, notifications, learning loop), des outils custom et un mirror Claude Code.
 
 <a id="objectif-fr"></a>
 
@@ -560,6 +587,9 @@ Definis dans `opencode.jsonc` (champ `agent`):
 | `coder`                | subagent | Implementation pure (hors tests). Verification build+lint+standards obligatoire avant de rendre. Gate socratique en cas d'ambiguite.                                             |
 | `writer`               | subagent | Ecrit docs/markdown/HTML/texte. Interdit de toucher au code source — refuse les fichiers hors scope au conductor.                                                                |
 | `code-reviewer`        | subagent | Revue qualite (diff, conventions, tests). Read-only — findings seulement; les fixes passent par `coder`.                                                                         |
+| `angular-cop`          | subagent | Revue pre-merge pour Angular + TypeScript PRs.                                                                                                                                   |
+| `dotnet-cop`           | subagent | Revue pre-merge pour .NET / Minimal API / modular-monolith PRs.                                                                                                                   |
+| `gdpr-specialist`      | subagent | Revue conformite GDPR/CNIL du code (focus France).                                                                                                                               |
 | `security-reviewer`    | subagent | Revue OWASP/secrets/deps. Read-only — rapporte les vulnerabilites; remediation routee vers `coder`.                                                                              |
 | `tdd-guide`            | subagent | RED -> GREEN -> REFACTOR + 80% coverage. Ecrit les tests; delegue le GREEN au `coder` via permission Task ciblee.                                                                |
 | `build-error-resolver` | subagent | Fix build/TS errors avec diff minimal.                                                                                                                                           |
@@ -567,6 +597,7 @@ Definis dans `opencode.jsonc` (champ `agent`):
 | `doc-updater`          | subagent | Codemaps + docs generees.                                                                                                                                                        |
 | `refactor-cleaner`     | subagent | Suppression code mort + consolidation.                                                                                                                                           |
 | `database-reviewer`    | subagent | PostgreSQL / Supabase: schema, perfs, securite.                                                                                                                                  |
+| `api-spec-architect`   | subagent | Design OpenAPI / specification API.                                                                                                                                              |
 | `git-specialist`       | subagent | Branches, commits, push, PRs (modele mini).                                                                                                                                      |
 | `learning-reviewer`    | subagent | Revue d'apprentissage en arriere-plan a chaque tour. Extrait les memoires projet + les propositions de skill de maniere non-interactive.                                          |
 

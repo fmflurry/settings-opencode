@@ -399,7 +399,7 @@ Defined in `opencode.jsonc` under `agent`:
 | `database-reviewer`    | subagent | PostgreSQL / Supabase schema, perf, security.                                                                                                                                     |
 | `api-spec-architect`   | subagent | OpenAPI / API specification design.                                                                                                                                               |
 | `git-specialist`       | subagent | Branches, commits, pushes, PRs (mini model).                                                                                                                                      |
-| `learning-reviewer`    | subagent | Per-turn background learning reviewer. Extracts project memories + skill proposals non-interactively.                                                                             |
+| `learning-reviewer`    | subagent | Idle-window background learning reviewer. Extracts project memories + skill proposals non-interactively, once per idle window per session.                                         |
 
 ### Hardened sub-agent orchestration
 
@@ -482,7 +482,7 @@ All TypeScript plugins use `@opencode-ai/plugin@1.4.6`.
 - `plugins/notification.js` — desktop notifications on conductor `message.updated` completions and question/permission events; permission events and top-level completions can also push to iPhone via Bark.
 - `plugins/caveman-server.ts` + `tui-plugins/caveman.tsx` — injects caveman instructions into the system prompt + TUI sidebar showing active mode.
 - `plugins/kdco-primitives/` — shared utilities (mutex, shell, terminal-detect, project-id resolver, types).
-- `plugins/learning-loop.ts` — per-turn background learning extraction. After every assistant message, spawns a `learning-reviewer` subagent that analyzes the conversation and persists durable learnings (project memories via `codememory_assert_claim`, skill proposals as pending files).
+- `plugins/learning-loop.ts` — idle-window background learning extraction. When a session goes idle, a debounced timer fires after `LEARNING_LOOP_IDLE_MS` (default 300s); if the session becomes active again before it fires, the timer resets. Exactly one `learning-reviewer` subagent dispatches per idle window per session, extracting durable learnings (project memories via `codememory_assert_claim`, skill proposals as pending files). Guarded by daily cap `LEARNING_LOOP_DAILY_CAP` (default 50) and per-window budget `LEARNING_LOOP_BUDGET` (default 1); circuit breaker disables further dispatches on any auth/quota error.
 - `@tarquinen/opencode-dcp@latest` _(external, declared in `opencode.jsonc › plugin`)_ — Dynamic Context Pruning. Trims stale tool results and large files from the live context window so long sessions don't blow past the model's limit. Configured via `dcp.jsonc` at the repo root.
 
 <a id="tools-en"></a>
@@ -599,7 +599,7 @@ Definis dans `opencode.jsonc` (champ `agent`):
 | `database-reviewer`    | subagent | PostgreSQL / Supabase: schema, perfs, securite.                                                                                                                                  |
 | `api-spec-architect`   | subagent | Design OpenAPI / specification API.                                                                                                                                              |
 | `git-specialist`       | subagent | Branches, commits, push, PRs (modele mini).                                                                                                                                      |
-| `learning-reviewer`    | subagent | Revue d'apprentissage en arriere-plan a chaque tour. Extrait les memoires projet + les propositions de skill de maniere non-interactive.                                          |
+| `learning-reviewer`    | subagent | Revue d'apprentissage en arriere-plan par fenetre d'inactivite. Extrait les memoires projet + les propositions de skill de maniere non-interactive, une fois par fenetre inactif par session.                |
 
 ### Orchestration durcie des sous-agents
 
@@ -680,7 +680,7 @@ Tous les plugins TypeScript utilisent `@opencode-ai/plugin@1.4.6`.
 - `plugins/ecc-hooks.ts` — Prettier sur fichiers JS/TS edites, detection `console.log`, rappels sur commandes sensibles (`git push` etc.), et le **hard-stop conductor**: avorte les redirections bash (`>`, `>>`, `tee`, `sed -i`, heredocs, `python -c open().write`) qui visent du code source, pour que la delegation ne puisse pas etre contournee via le shell.
 - `plugins/auto-compact.js` — auto-compaction quand `OC_COMPACT_THRESHOLD` est atteint, en idle uniquement.
 - `plugins/notification.js` — notifications desktop sur fins de message `message.updated` et evenements question/permission; support optionnel Bark/iPhone.
-- `plugins/learning-loop.ts` — extraction d'apprentissage en arriere-plan a chaque tour de conversation. Apres chaque message assistant, lance un sous-agent `learning-reviewer` qui analyse l'echange et persiste les connaissances durables (memoires projet via `codememory_assert_claim`, propositions de skill dans `pending/`).
+- `plugins/learning-loop.ts` — extraction d'apprentissage en arriere-plan par fenetre d'inactivite. Quand une session devient inactive, un timer debounce se declenche apres `LEARNING_LOOP_IDLE_MS` (defaut 300s); si la session se reactve avant, le timer se remet a zero. Un seul sous-agent `learning-reviewer` se dispatche par fenetre inactif par session, extrayant les connaissances durables (memoires projet via `codememory_assert_claim`, propositions de skill dans `pending/`). Protege par cap journalier `LEARNING_LOOP_DAILY_CAP` (defaut 50) et budget par fenetre `LEARNING_LOOP_BUDGET` (defaut 1); circuit breaker desactive les futurs dispatchs sur erreur auth/quota.
 - `plugins/caveman-server.ts` + `tui-plugins/caveman.tsx` — injecte les instructions caveman dans le system prompt + sidebar TUI qui affiche le mode actif.
 - `plugins/kdco-primitives/` — utilities partages (mutex, shell, terminal-detect, project-id resolver, types).
 - `@tarquinen/opencode-dcp@latest` _(externe, declare dans `opencode.jsonc › plugin`)_ — Dynamic Context Pruning. Coupe les tool results stagnants et les gros fichiers dans la fenetre de contexte pour que les sessions longues ne depassent pas la limite modele. Configure via `dcp.jsonc` a la racine du repo.

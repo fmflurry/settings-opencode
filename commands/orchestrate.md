@@ -29,7 +29,6 @@ Orchestrate multiple specialized agents for this complex task: $ARGUMENTS
 | e2e-runner             | E2E testing             | User flow testing       |
 | doc-updater            | Documentation           | Updating docs           |
 | refactor-cleaner       | Code cleanup            | Dead code removal       |
-| [ build-error-resolver | Build fixes             | TypeScript/build errors |
 | database-reviewer      | Database                | Query optimization      |
 
 ## Orchestration Patterns

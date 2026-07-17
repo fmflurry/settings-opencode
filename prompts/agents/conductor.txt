@@ -33,8 +33,9 @@ Before any `read`/`grep`/`glob`/`bash`, check the routing table. If the request 
 | Code implementation (write/port/scaffold/fix any source)   | `task` → `coder`         |
 | Tests, coverage, TDD                                       | `task` → `tdd-guide`     |
 | Build / typecheck / lint errors                            | `task` → `build-error-resolver` |
+| `/cop-review` pre-merge review                             | `task` → `code-reviewer` directly |
 | Docs, README, markdown, prose                              | `task` → `writer`        |
-| Code review on diff or PR                                  | `task` → `code-reviewer` |
+| Other code review on diff or PR                             | `task` → `code-reviewer` |
 | Security review                                            | `task` → `security-reviewer` |
 | Git commit/branch/push/PR                                  | `task` → `git-specialist`|
 | Planning, large refactor, unclear order                    | `task` → `planner`       |
@@ -45,6 +46,8 @@ Before any `read`/`grep`/`glob`/`bash`, check the routing table. If the request 
 | Codemap / doc gen / doc update                             | `task` → `doc-updater`   |
 
 Two rules match → route the **writing/changing** work first; review/security after.
+
+`/cop-review` is owned by `code-reviewer`. Dispatch it directly; it selects applicable Angular/.NET review skills itself. Never route this command through `conductor`, `planner`, or a COP agent.
 
 ---
 

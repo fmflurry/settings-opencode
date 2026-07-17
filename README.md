@@ -429,7 +429,7 @@ Templates in `commands/`. Most run as `subtask: true` (delegated to a specialist
 | `/push-changes`    | git-specialist       | Commit + push with upstream guard.   |
 | `/plan`            | planner              | Implementation plan.                 |
 | `/tdd`             | tdd-guide            | TDD cycle with coverage.             |
-| `/cop-review`      | code-reviewer        | Quality review.                      |
+| `/cop-review`      | code-reviewer        | Direct pre-merge review; selects stack guidance. |
 | `/security`        | security-reviewer    | Security audit.                      |
 | `/build-fix`       | build-error-resolver | Build/TS error resolution.           |
 | `/e2e`             | e2e-runner           | E2E test generation/run.             |
@@ -460,7 +460,7 @@ On-demand (loaded by description / by command):
 - `skills/tdd-workflow/SKILL.md` — full TDD methodology.
 - `skills/caveman/SKILL.md`, `caveman-commit`, `caveman-review` — terse mode.
 - `skills/strategic-compact/SKILL.md` — manual compaction at logical breakpoints.
-- `skills/dotnet-clean-architecture/SKILL.md` (+ playbooks) — .NET 8 BFF scaffolding.
+- `skills/dotnet-clean-architecture/SKILL.md` (+ playbooks) — .NET 10 BFF scaffolding.
 - `skills/angular-clean-architecture/SKILL.md` (+ store, migration, testing) — Angular 18 standalone scaffolding.
 - `skills/angular-cop/SKILL.md` — Angular + TS pre-merge review rules.
 - `skills/dotnet-cop/SKILL.md` — .NET pre-merge review rules.
@@ -629,7 +629,7 @@ Templates dans `commands/`. La plupart sont `subtask: true` -> elles s'executent
 | `/push-changes`    | git-specialist       | Commit + push (avec garde sur upstream).   |
 | `/plan`            | planner              | Plan d'implementation.                     |
 | `/tdd`             | tdd-guide            | Cycle TDD avec coverage.                   |
-| `/cop-review`      | code-reviewer        | Revue qualite.                             |
+| `/cop-review`      | code-reviewer        | Revue pre-merge directe; selectionne le guide du stack. |
 | `/security`        | security-reviewer    | Audit securite.                            |
 | `/build-fix`       | build-error-resolver | Resolution build/TS errors.                |
 | `/e2e`             | e2e-runner           | Generation/run tests E2E.                  |
@@ -660,7 +660,7 @@ Skills sur demande (chargés par description / par commande):
 - `skills/tdd-workflow/SKILL.md` — méthode TDD détaillée.
 - `skills/caveman/SKILL.md`, `caveman-commit`, `caveman-review` — mode terse.
 - `skills/strategic-compact/SKILL.md` — compaction manuelle aux paliers logiques.
-- `skills/dotnet-clean-architecture/SKILL.md` (+ playbooks) — scaffold .NET 8 BFF.
+- `skills/dotnet-clean-architecture/SKILL.md` (+ playbooks) — scaffold .NET 10 BFF.
 - `skills/angular-clean-architecture/SKILL.md` (+ store, migration, tests) — scaffold Angular 18 standalone.
 - `skills/angular-cop/SKILL.md` — règles pre-merge Angular + TS.
 - `skills/dotnet-cop/SKILL.md` — règles pre-merge .NET.

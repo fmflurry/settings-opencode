@@ -1,12 +1,11 @@
 ---
-description: Pre-merge code review of HEAD vs a target branch (stack-aware: Angular+TS → angular-cop; .NET → dotnet-cop)
+description: Direct pre-merge code review of HEAD vs a target branch by code-reviewer
 agent: code-reviewer
-subtask: true
 ---
 
 # /cop-review — Pre-Merge Review
 
-Review the current branch against a target branch before merging. Stack-aware: routes to the correct cop agent based on the detected project type. Loads `AGENTS.md` from cwd. Runs tooling checks. Emits tiered report.
+Review the current branch against a target branch before merging. `code-reviewer` owns and executes this command directly. It may load the applicable `angular-cop` and/or `dotnet-cop` **skills** for review guidance, but must never route through `conductor` or delegate to another agent.
 
 ## Usage
 
@@ -22,16 +21,16 @@ Review the current branch against a target branch before merging. Stack-aware: r
 - `--scope=...` — limit to a subset of checklists. Comma list. Defaults to all.
 - `--no-tools` — skip tooling checks and produce static review only (faster).
 
-## Stack detection & routing
+## Stack detection & direct skill selection
 
-Before loading a skill, detect the project stack by checking these signals in cwd (search recursively):
+Detect the project stack in cwd, then load the applicable review skill yourself:
 
-| Signal                                                  | Stack                | Agent         | Tooling                                                                       |
+| Signal                                                  | Stack                | Skill to load | Tooling                                                                       |
 | ------------------------------------------------------- | -------------------- | ------------- | ----------------------------------------------------------------------------- |
 | `angular.json` present                                  | Angular + TypeScript | `angular-cop` | `npx tsc --noEmit` + `npm run lint`                                           |
 | `*.csproj` / `*.sln` / `*.slnx` / `global.json` present | .NET                 | `dotnet-cop`  | `dotnet build --nologo -clp:ErrorsOnly` + `dotnet format --verify-no-changes` |
 
-If BOTH are present (rare monorepo), check which language the diff files are in (`.ts`/`.html` → angular-cop; `.cs`/`.csproj` → dotnet-cop). If still ambiguous, default to angular-cop and note the ambiguity in the report header.
+If BOTH are present (rare monorepo), check which language the diff files are in (`.ts`/`.html` → angular-cop skill; `.cs`/`.csproj` → dotnet-cop skill). Load both skills when the diff contains both language groups. If still ambiguous, default to angular-cop and note the ambiguity in the report header.
 
 ## Review Criteria
 
@@ -88,16 +87,12 @@ Fix: [How to fix]
 ## What you do
 
 1. Parse `$ARGUMENTS`:
-   - First positional token = `target`.
-   - Flags as documented above.
-   - If `target` missing, print usage and stop.
-2. Verify you're inside a git repo (`git rev-parse --is-inside-work-tree`).
-3. Detect the project stack using the rules above.
-4. **Angular stack:** Load the **angular-cop** skill at `skills/angular-cop/SKILL.md`. Follow its pipeline section verbatim.
-   **dotnet stack:** Load the **dotnet-cop** skill at `skills/dotnet-cop/SKILL.md`. Follow its pipeline section verbatim.
-5. Load `AGENTS.md` from repo root if it exists.
-6. Execute the pipeline (steps 1-7 in the skill / agent prompt).
-7. Emit the single markdown report. No preamble. No epilogue.
+    - First positional token = `target`.
+    - Flags as documented above.
+    - If `target` missing, print usage and stop.
+2. Resolve the review window yourself with `git merge-base HEAD <remote>/<target>` (fall back to the local target branch when necessary), then inspect only `BASE..HEAD`.
+3. Apply the direct skill-selection rules above. Load the matching `angular-cop` and/or `dotnet-cop` skill as guidance; do not invoke their agents, `planner`, or `conductor`.
+4. Run the applicable read-only tooling unless `--no-tools` is present, then render one report using the output contract below. No preamble. No epilogue.
 
 ## Examples
 

@@ -96,7 +96,7 @@ dotnet_separate_import_directive_groups = true
 Add these `<PackageReference>` entries to a shared `Directory.Packages.props` (Central Package Management) or directly to each `.csproj`.
 
 ```xml
-<!-- Microsoft built-in — ships with the SDK; no PackageReference needed for net8.0+ -->
+<!-- Microsoft built-in — ships with the SDK; no PackageReference needed for net10.0+ -->
 <!-- Microsoft.CodeAnalysis.NetAnalyzers is included automatically. -->
 
 <!-- Meziantou.Analyzer — broad correctness + async rules -->

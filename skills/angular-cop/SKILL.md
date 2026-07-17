@@ -5,8 +5,8 @@ description: >
   against a target branch, applies Angular-specific checklists (signals, RxJS, clean
   architecture, flurryx, TS strict), runs lint + tsc, and emits a tiered report
   (verbose for juniors, terse for seniors). Auto-loads project AGENTS.md rules.
-  Use when user runs /cop-review, says "pre-merge review", "review before merging",
-  "check my PR against <branch>", or invokes the angular-cop agent.
+   Use when `code-reviewer` selects Angular guidance for /cop-review, or when the
+   angular-cop specialist is explicitly invoked.
 ---
 
 # angular-cop
@@ -15,10 +15,8 @@ Pre-merge review. Compares HEAD vs `origin/<target>`. Angular-aware. Project-awa
 
 ## When to Activate
 
-- `/cop-review <target>` slash command
-- User asks for review before merging a PR
-- User specifies a target branch and wants a diff review
-- angular-cop agent is invoked
+- Selected by `code-reviewer` for Angular guidance during `/cop-review`
+- angular-cop specialist is explicitly invoked
 
 ## Inputs
 

@@ -1,6 +1,6 @@
 ---
 name: dotnet-clean-architecture
-description: Scaffolds and extends .NET 8 Minimal API BFF modules using Clean Architecture (Application/Core/Infrastructure), Hexagonal port/adapter boundaries, and reflection-based module isolation. Use when creating new .NET modules, adding endpoints/use-cases with infrastructure integration, or refactoring toward ports/adapters and module isolation.
+description: Scaffolds and extends .NET 10 Minimal API BFF modules using Clean Architecture (Application/Core/Infrastructure), Hexagonal port/adapter boundaries, and reflection-based module isolation. Use when creating new .NET modules, adding endpoints/use-cases with infrastructure integration, or refactoring toward ports/adapters and module isolation.
 ---
 
 # .NET Clean + Hexagonal + Modular Architecture

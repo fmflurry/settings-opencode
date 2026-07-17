@@ -1,6 +1,6 @@
 ---
 description: Configure package manager preference
-agent: build
+agent: conductor
 ---
 
 # Setup Package Manager Command

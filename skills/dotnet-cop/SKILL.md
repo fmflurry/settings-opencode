@@ -1,13 +1,13 @@
 ---
 name: dotnet-cop
 description: >
-  Pre-merge code review for .NET 8 Minimal API / modular monolith pull requests.
+  Pre-merge code review for .NET 10 Minimal API / modular monolith pull requests.
   Diffs current branch against a target branch, applies .NET-specific checklists
   (Minimal API endpoints, modular isolation, ports & adapters / hexagonal, EF Core,
   C# strictness), runs dotnet build + dotnet format --verify-no-changes, and emits
   a tiered report (verbose for juniors, terse for seniors). Auto-loads project
-  AGENTS.md rules. Use when user runs /cop-review, says "pre-merge review", "review
-  before merging", "check my PR against <branch>", or invokes the dotnet-cop agent.
+   AGENTS.md rules. Use when `code-reviewer` selects .NET guidance for /cop-review,
+   or when the dotnet-cop specialist is explicitly invoked.
 ---
 
 # dotnet-cop
@@ -16,10 +16,8 @@ Pre-merge review. Compares HEAD vs `origin/<target>`. .NET-aware. Project-aware 
 
 ## When to Activate
 
-- `/cop-review <target>` slash command on a .NET repo
-- User asks for review before merging a PR in a .NET / C# project
-- User specifies a target branch and wants a diff review
-- dotnet-cop agent is invoked
+- Selected by `code-reviewer` for .NET guidance during `/cop-review`
+- dotnet-cop specialist is explicitly invoked
 
 ## Inputs
 

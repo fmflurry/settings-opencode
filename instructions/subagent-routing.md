@@ -19,7 +19,9 @@ After the first Task gate is satisfied, primary agents MUST use CodeMemory for r
 - Implementation work: write/port/scaffold/apply-spec non-test code -> `coder`
 - Writing or editing docs, README, markdown, HTML reports, release notes, ADRs, prose -> `writer`
 - Git, commit, branch, push, pull request creation/status, PR creation/status -> `git-specialist`
+- `/cop-review` pre-merge review -> `code-reviewer` directly. It owns the command, selects applicable `angular-cop`/`dotnet-cop` skills itself, and never delegates or routes through `conductor`.
 - Code review, PR review, pull request review, current-change review, "does this need review" -> `code-reviewer` (read-only; fixes go to `coder`)
+- OpenCode/Claude Code ecosystem audit, skill or agent parity, harness coherence -> `ecosystem-auditor` (read-only; findings only)
 - Security review, auth, secrets, user input, API endpoints -> `security-reviewer` (read-only; fixes go to `coder`)
 - Build, lint, typecheck, or TypeScript errors -> `build-error-resolver`
 - Planning, complex features, unclear order, large refactors -> `planner`

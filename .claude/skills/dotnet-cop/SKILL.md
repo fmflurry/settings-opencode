@@ -1,7 +1,7 @@
 ---
 name: dotnet-cop
 description: >
-  Pre-merge code review for .NET 8 Minimal API / modular monolith pull requests.
+  Pre-merge code review for .NET 10 Minimal API / modular monolith pull requests.
   Diffs current branch against a target branch, applies .NET-specific checklists
   (Minimal API endpoints, modular isolation, ports & adapters / hexagonal, EF Core,
   C# strictness), runs dotnet build + dotnet format --verify-no-changes, and emits

@@ -1,10 +1,12 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { PluginInput } from "@opencode-ai/plugin";
+import type { Plugin, PluginInput } from "@opencode-ai/plugin";
 
 const TITLE = "OpenCode";
 const MESSAGE = "Conductor stopped — input may be needed";
+const IPHONE_TITLE = TITLE;
+const IPHONE_MESSAGE = MESSAGE;
 const HOME_IPHONE_SCRIPT = process.env.HOME
   ? join(process.env.HOME, ".config", "opencode", "scripts", "notify-iphone.sh")
   : undefined;
@@ -87,6 +89,10 @@ function sessionIDFrom(value: unknown): string | undefined {
 
 function sessionKeyFrom(value: unknown): SessionKey {
   return sessionIDFrom(value) ?? GLOBAL_SESSION_KEY;
+}
+
+function messageUpdatedSessionID(event: unknown): string | undefined {
+  return stringProperty<{ sessionID?: string }>(eventProperties(event).info, "sessionID");
 }
 
 function eventProperties(event: unknown): Record<string, unknown> {
@@ -223,12 +229,12 @@ async function notify(
   $: PluginInput["$"],
   title: string,
   message: string,
-  { iphone = false, iphoneTitle = title, iphoneMessage = message } = {},
+  { iphone = false } = {},
 ): Promise<void> {
   const notifiers = buildDesktopNotifiers($, title, message);
 
   if (iphone) {
-    const iphoneNotifier = buildIphoneNotifier($, iphoneTitle, iphoneMessage);
+    const iphoneNotifier = buildIphoneNotifier($, IPHONE_TITLE, IPHONE_MESSAGE);
     if (iphoneNotifier) notifiers.push(iphoneNotifier);
   }
 
@@ -247,16 +253,27 @@ async function notify(
   );
 }
 
-export const NotificationPlugin = async ({ $ }: PluginInput) => {
+export const NotificationPlugin = (async ({ $ }: PluginInput) => {
   const hasSubstantiveToolWorkBySession = new Map<SessionKey, boolean>();
   const dispatchedTaskBySession = new Map<SessionKey, boolean>();
   const completedConductorMessages = new Set<string>();
   const notifiedHumanInterventionEvents = new Set<string>();
+  const rootConductorSessionIDs = new Set<SessionKey>();
+  const isRootConductorSession = (sessionID: string | undefined): boolean =>
+    sessionID !== undefined && rootConductorSessionIDs.has(sessionID);
   // Sessions where a question is pending — set from question.asked/question.v2.asked
   // so that message.updated(finish:stop) can be suppressed (no spurious completion).
   const questionPendingBySession = new Set<SessionKey>();
 
   return {
+    "chat.message": async ({ sessionID, agent }) => {
+      if (agent === "conductor") {
+        rootConductorSessionIDs.add(sessionID);
+      } else if (agent) {
+        rootConductorSessionIDs.delete(sessionID);
+      }
+    },
+
     // "tool.execute.before" fires AFTER message.updated(finish:stop) for the same
     // turn, so it CANNOT reliably send the question notification. Its only job here
     // is to set questionPendingBySession as a safety net for the rare case where
@@ -325,9 +342,7 @@ export const NotificationPlugin = async ({ $ }: PluginInput) => {
 
         const { title, message } = extractPermissionContent(event);
         void notify($, title, message, {
-          iphone: true,
-          iphoneTitle: title,
-          iphoneMessage: message,
+          iphone: isRootConductorSession(sessionIDFrom(event)),
         }).catch(() => {});
 
         if (notifiedHumanInterventionEvents.size > 1000) notifiedHumanInterventionEvents.clear();
@@ -372,16 +387,14 @@ export const NotificationPlugin = async ({ $ }: PluginInput) => {
         });
 
         void notify($, title, message, {
-          iphone: true,
-          iphoneTitle: "OpenCode asked",
-          iphoneMessage: message,
+          iphone: isRootConductorSession(sessionID),
         }).catch(() => {});
 
         if (notifiedHumanInterventionEvents.size > 1000) notifiedHumanInterventionEvents.clear();
         return;
       }
 
-      // ── message.updated: conductor completion ────────────────────────────
+      // ── message.updated: assistant completion ────────────────────────────
       if (eventType !== "message.updated") {
         return;
       }
@@ -393,15 +406,14 @@ export const NotificationPlugin = async ({ $ }: PluginInput) => {
         return;
       }
 
-      if ((info as { mode?: string })?.mode !== "conductor") {
+      const sessionKey = messageUpdatedSessionID(event);
+      if (!sessionKey) {
         return;
       }
 
       if ((info as { finish?: string })?.finish !== "stop") {
         return;
       }
-
-      const sessionKey = sessionKeyFrom(event);
 
       // Suppress if a question is pending for this session.
       // This works because message.part.updated(pending) fires before
@@ -413,15 +425,7 @@ export const NotificationPlugin = async ({ $ }: PluginInput) => {
         return;
       }
 
-      const substantiveWorkKeys =
-        sessionKey === GLOBAL_SESSION_KEY
-          ? [GLOBAL_SESSION_KEY]
-          : [sessionKey, GLOBAL_SESSION_KEY];
-      const consumedWorkKeys = substantiveWorkKeys.filter((key) =>
-        hasSubstantiveToolWorkBySession.get(key),
-      );
-
-      if (consumedWorkKeys.length === 0) {
+      if (!hasSubstantiveToolWorkBySession.get(sessionKey)) {
         return;
       }
 
@@ -438,9 +442,7 @@ export const NotificationPlugin = async ({ $ }: PluginInput) => {
       dispatchedTaskBySession.set(sessionKey, false);
 
       if (!dispatchedTask) {
-        consumedWorkKeys.forEach((key) => {
-          hasSubstantiveToolWorkBySession.set(key, false);
-        });
+        hasSubstantiveToolWorkBySession.set(sessionKey, false);
 
         if (completedKey !== null) {
           completedConductorMessages.add(completedKey);
@@ -451,7 +453,9 @@ export const NotificationPlugin = async ({ $ }: PluginInput) => {
       const title = completionContent?.title ?? TITLE;
       const message = completionContent?.message ?? MESSAGE;
 
-      void notify($, title, message, { iphone: !dispatchedTask }).catch(() => {});
+      void notify($, title, message, {
+        iphone: isRootConductorSession(sessionKey) && !dispatchedTask,
+      }).catch(() => {});
     },
   };
-};
+}) satisfies Plugin;

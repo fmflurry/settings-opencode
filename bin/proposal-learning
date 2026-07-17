@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+STATE_CLI="$ROOT/plugins/learning/state-cli.ts"
+[ -f "$STATE_CLI" ] || STATE_CLI="$ROOT/hooks/learning/state-cli.ts"
+exec node --experimental-strip-types "$STATE_CLI" "$@"

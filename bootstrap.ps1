@@ -46,6 +46,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
 
 # Capture invocation directory before any Push-Location happens.
 $InvokeDir = (Get-Location).Path
@@ -214,6 +215,44 @@ function Sync-Skills($srcDir, [string[]]$destDirs) {
     }
 }
 
+function Sync-LearningRuntime($srcDir, $opencodeDir, $claudeDir, [bool]$opencodeReady, [bool]$claudeReady) {
+    if (-not $opencodeReady -and -not $claudeReady) { return }
+    $node = Get-Command node -ErrorAction SilentlyContinue
+    if (-not $node) { Die 'proposal-learning runtime synchronization requires node' }
+    $args = @('--experimental-strip-types', (Join-Path $srcDir 'plugins\learning\installer-cli.ts'), '--source-root', $srcDir, '--opencode-root', $opencodeDir, '--claude-root', $claudeDir)
+    if ($opencodeReady) { $args += '--opencode' }
+    if ($claudeReady) { $args += '--claude' }
+    & $node.Source @args
+    if ($LASTEXITCODE -ne 0) { Die 'proposal-learning runtime synchronization failed' }
+    Ok 'synchronized proposal-learning runtime'
+}
+
+function Install-LearningMaintenance($runtimeRoot) {
+    if (-not $runtimeRoot -or -not [IO.Path]::IsPathRooted($runtimeRoot) -or $runtimeRoot.IndexOfAny([char[]]@("`r", "`n", "`t")) -ge 0) {
+        Die 'proposal-learning maintenance rejected an unsafe runtime path'
+    }
+    $node = Get-Command node -ErrorAction SilentlyContinue
+    if (-not $node -or -not [IO.Path]::IsPathRooted($node.Source)) { Die 'proposal-learning maintenance requires an absolute node executable' }
+    $stateCli = Join-Path $runtimeRoot 'state-cli.ts'
+    if (-not (Test-Path -LiteralPath $stateCli -PathType Leaf)) { Die 'proposal-learning state CLI is unavailable' }
+    $stateHome = if ($env:XDG_STATE_HOME) { $env:XDG_STATE_HOME } else { Join-Path $env:USERPROFILE '.local\state' }
+    if (-not [IO.Path]::IsPathRooted($stateHome) -or $stateHome.IndexOfAny([char[]]@("`r", "`n", "`t")) -ge 0) { Die 'proposal-learning maintenance rejected an unsafe XDG state path' }
+    $escapePowerShellLiteral = { param($value) return $value.Replace("'", "''") }
+    $wrapper = Join-Path $runtimeRoot 'proposal-learning-purge.ps1'
+    @(
+        "`$ErrorActionPreference = 'Stop'",
+        "`$env:XDG_STATE_HOME = '$(& $escapePowerShellLiteral $stateHome)'",
+        "& '$(& $escapePowerShellLiteral $node.Source)' --experimental-strip-types '$(& $escapePowerShellLiteral $stateCli)' purge",
+        'exit $LASTEXITCODE'
+    ) | Set-Content -LiteralPath $wrapper -Encoding utf8
+    $taskName = 'settings-opencode-proposal-learning-purge'
+    $action = New-ScheduledTaskAction -Execute (Join-Path $PSHOME 'powershell.exe') -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$wrapper`""
+    $trigger = New-ScheduledTaskTrigger -Daily -At 03:00
+    $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable
+    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description 'state-cli.ts purge' -Force | Out-Null
+    Ok 'registered daily proposal-learning maintenance'
+}
+
 function Test-ReparsePoint($path) {
     if (-not (Test-Path -LiteralPath $path)) { return $false }
     $item = Get-Item -LiteralPath $path -Force
@@ -278,15 +317,16 @@ Step 'Checking prerequisites'
 Require-Cmd 'git' 'Install from https://git-scm.com/download/win  (or: winget install --id Git.Git)'
 
 $pkgManager = $null
-if ($doOpencode) {
+if ($doOpencode -or $doClaude) {
     if (Get-Command bun -ErrorAction SilentlyContinue) {
         $pkgManager = 'bun'; Ok "bun $(bun --version)"
     } elseif (Get-Command npm -ErrorAction SilentlyContinue) {
         $pkgManager = 'npm'; Ok "npm $(npm --version) (bun not found, will use npm)"
     } else {
-        Die 'neither bun nor npm found. Install Node.js 20+ (winget install --id OpenJS.NodeJS.LTS) or Bun (https://bun.sh), then re-run.'
+        Die 'neither bun nor npm found. Install Node.js 22.6+ (winget install --id OpenJS.NodeJS.LTS) or Bun (https://bun.sh), then re-run.'
     }
 }
+Require-Cmd 'node' 'Install Node.js 22.6+ (winget install --id OpenJS.NodeJS.LTS), then re-run.'
 Ok "git $((git --version) -replace 'git version ','')"
 
 # ------------------------------ fetch ----------------------------------------
@@ -436,6 +476,13 @@ if ($doOpencode -and $opencodeTargetReady) { $skillDests += (Join-Path $Opencode
 if ($doClaude -and $claudeTargetReady)     { $skillDests += (Join-Path $ClaudeDir   'skills') }
 if ($skillDests.Count -gt 0) {
     Sync-Skills $SrcDir $skillDests
+}
+
+Sync-LearningRuntime $SrcDir $OpencodeDir $ClaudeDir $opencodeTargetReady $claudeTargetReady
+if ($opencodeTargetReady) {
+    Install-LearningMaintenance (Join-Path $OpencodeDir 'plugins\learning')
+} elseif ($claudeTargetReady) {
+    Install-LearningMaintenance (Join-Path $ClaudeDir 'hooks\learning')
 }
 
 # ------------------------------ next steps -----------------------------------

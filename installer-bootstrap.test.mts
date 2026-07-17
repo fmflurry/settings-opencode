@@ -42,6 +42,14 @@ function writeFakeNpm(binDir: string): void {
     "#!/usr/bin/env bash\ncase \"${1:-}\" in\n  --version) printf '10.0.0\\n' ;;\n  ci|install) exit 0 ;;\n  *) exit 0 ;;\nesac\n",
   );
   chmodSync(fakeNpm, 0o755);
+  for (const command of ["launchctl", "systemctl"]) {
+    const executable = join(binDir, command);
+    writeFileSync(executable, "#!/usr/bin/env bash\nexit 0\n");
+    chmodSync(executable, 0o755);
+  }
+  const fakeNode = join(binDir, "node");
+  writeFileSync(fakeNode, "#!/usr/bin/env bash\ncase \"${1:-}\" in\n  -p) printf '22.6.0\\n' ;;\n  --version) printf 'v22.6.0\\n' ;;\n  *) exit 0 ;;\nesac\n");
+  chmodSync(fakeNode, 0o755);
 }
 
 function runRemoteStyleInteractiveInstaller(
@@ -807,12 +815,7 @@ test("OpenCode local install syncs the repository config payload exactly", () =>
     mkdirSync(projectDir);
     mkdirSync(homeDir);
     mkdirSync(fakeBin);
-    const fakeNpm = join(fakeBin, "npm");
-    writeFileSync(
-      fakeNpm,
-      "#!/usr/bin/env bash\ncase \"${1:-}\" in\n  --version) printf '10.0.0\\n' ;;\n  ci|install) exit 0 ;;\n  *) exit 0 ;;\nesac\n",
-    );
-    chmodSync(fakeNpm, 0o755);
+    writeFakeNpm(fakeBin);
 
     const result = spawnSync(
       "bash",

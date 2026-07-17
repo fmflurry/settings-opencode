@@ -358,6 +358,47 @@ copy_tree_with_seed() {
         "$src/" "$dst/"
 }
 
+# Claude Code stores conversation and runtime data alongside configuration. Never
+# mirror that tree wholesale: only canonical, repository-owned assets are copied.
+CLAUDE_MANAGED_ALLOWLIST=("CLAUDE.md" "RTK.md" "agents" "hooks" "rules" "skills" "policy-limits.json")
+
+copy_claude_allowlist() {
+    local src="$1" dst="$2" managed
+    if ! command -v rsync >/dev/null 2>&1; then
+        err "rsync is required to copy managed Claude Code assets"
+        exit 1
+    fi
+    mkdir -p "$dst"
+    for managed in "${CLAUDE_MANAGED_ALLOWLIST[@]}"; do
+        [ -e "$src/$managed" ] || continue
+        mkdir -p "$dst/$(dirname "$managed")"
+        rsync -a \
+            --exclude='projects' \
+            --exclude='sessions' \
+            --exclude='history' \
+            --exclude='backups' \
+            --exclude='debug' \
+            --exclude='statsig' \
+            --exclude='todos' \
+            --exclude='file-history' \
+            --exclude='session-env' \
+            --exclude='shell-snapshots' \
+            --exclude='homunculus' \
+            --exclude='cache' \
+            --exclude='data' \
+            --exclude='*.log' \
+            --exclude='*.bak' \
+            "$src/$managed" "$dst/$(dirname "$managed")/"
+    done
+    # Fresh and Claude-only installs need the canonical baseline before the
+    # runtime merger adds its one managed hook. Existing user settings are
+    # deliberately never replaced.
+    if [ -f "$src/settings.json" ] && [ ! -e "$dst/settings.json" ] && [ ! -L "$dst/settings.json" ]; then
+        cp "$src/settings.json" "$dst/settings.json"
+        chmod 600 "$dst/settings.json"
+    fi
+}
+
 localize_claude_settings_hooks() {
     local settings_file="$1" tmp grep_status
 
@@ -398,9 +439,169 @@ sync_skills() {
     fi
 }
 
+sync_learning_runtime() {
+    if [ "$OPENCODE_TARGET_READY" != "1" ] && [ "$CLAUDE_TARGET_READY" != "1" ]; then
+        err "proposal-learning runtime sync failed: no selected harness target is ready"
+        return 1
+    fi
+    if ! command -v node >/dev/null 2>&1; then
+        err "proposal-learning runtime sync failed: node is unavailable"
+        return 1
+    fi
+    if node --experimental-strip-types "$REPO_DIR/plugins/learning/installer-cli.ts" \
+        --source-root "$REPO_DIR" \
+        --opencode-root "$TARGET_OPENCODE" \
+        --claude-root "$TARGET_CLAUDE" \
+        $([ "$OPENCODE_TARGET_READY" = "1" ] && printf '%s' '--opencode') \
+        $([ "$CLAUDE_TARGET_READY" = "1" ] && printf '%s' '--claude'); then
+        ok "synchronized proposal-learning runtime"
+    else
+        err "proposal-learning runtime sync failed; existing harness settings were left unchanged"
+        return 1
+    fi
+}
+
+install_learning_maintenance() {
+    [ "$OPENCODE_TARGET_READY" = "1" ] || [ "$CLAUDE_TARGET_READY" = "1" ] || return 0
+    if ! command -v node >/dev/null 2>&1; then
+        err "proposal-learning maintenance cannot be registered: node is unavailable"
+        return 1
+    fi
+
+    local runtime_root="$TARGET_CLAUDE/hooks/learning"
+    [ "$OPENCODE_TARGET_READY" = "1" ] && runtime_root="$TARGET_OPENCODE/plugins/learning"
+    local node_path
+    node_path="$(command -v node)"
+    local state_home="${XDG_STATE_HOME:-}"
+    case "$runtime_root:$node_path" in
+        *$'\n'*|*$'\r'*|*$'\t'*|*' '*|*'..'*|*'//'*|:* )
+            err "proposal-learning maintenance rejected an unsafe runtime, executable, or state path"
+            return 1
+            ;;
+    esac
+    case "$runtime_root:$node_path" in
+        /*:/*) ;;
+        *)
+            err "proposal-learning maintenance requires absolute runtime and executable paths"
+            return 1
+            ;;
+    esac
+    if [ -n "$state_home" ]; then
+        case "$state_home" in
+            /*) ;;
+            *)
+                err "proposal-learning maintenance requires an absolute XDG state path when XDG_STATE_HOME is set"
+                return 1
+                ;;
+        esac
+    fi
+
+    plist_escape() {
+        printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g; s/'"'"'/\&apos;/g'
+    }
+
+    case "$(uname -s)" in
+    Darwin)
+    if ! command -v launchctl >/dev/null 2>&1; then
+        err "proposal-learning maintenance cannot be registered: launchctl is unavailable"
+        return 1
+    fi
+    local launch_agents="$HOME/Library/LaunchAgents"
+    local label="com.settings-opencode.proposal-learning-maintenance"
+    local plist="$launch_agents/$label.plist"
+    local temporary state_environment_xml=""
+    if [ -n "$state_home" ]; then
+        state_environment_xml="<key>EnvironmentVariables</key><dict><key>XDG_STATE_HOME</key><string>$(plist_escape "$state_home")</string></dict>"
+    fi
+    mkdir -p "$launch_agents"
+    temporary="$(mktemp "$launch_agents/.${label}.XXXXXX")"
+    cat > "$temporary" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>$label</string>
+  <key>ProgramArguments</key><array><string>$(plist_escape "$node_path")</string><string>--experimental-strip-types</string><string>$(plist_escape "$runtime_root/state-cli.ts")</string><string>purge</string></array>
+  $state_environment_xml
+  <key>RunAtLoad</key><true/>
+  <key>StartInterval</key><integer>86400</integer>
+</dict></plist>
+EOF
+    chmod 600 "$temporary"
+    mv "$temporary" "$plist"
+    launchctl bootout "gui/$(id -u)/$label" >/dev/null 2>&1 || true
+    if launchctl bootstrap "gui/$(id -u)" "$plist"; then
+        ok "registered daily proposal-learning maintenance"
+    else
+        rm -f "$plist"
+        err "proposal-learning maintenance registration failed"
+        return 1
+    fi
+    ;;
+    Linux)
+    local systemd_dir="$HOME/.config/systemd/user"
+    local service="$systemd_dir/settings-opencode-proposal-learning-purge.service"
+    local timer="$systemd_dir/settings-opencode-proposal-learning-purge.timer"
+    if command -v systemctl >/dev/null 2>&1; then
+        mkdir -p "$systemd_dir"
+        validate_linux_maintenance_path() {
+            if [[ "$1" =~ [\;\&\|\`\$\<\>] ]] || [[ "$1" == *$'\n'* || "$1" == *$'\r'* || "$1" == *$'\t'* || "$1" == *' '* || "$1" == *'..'* || "$1" == *//* ]]; then
+                err "proposal-learning maintenance rejected shell metacharacters or unsafe path"
+                return 1
+            fi
+        }
+        validate_linux_maintenance_path "$runtime_root" || return 1
+        validate_linux_maintenance_path "$node_path" || return 1
+        [ -z "$state_home" ] || validate_linux_maintenance_path "$state_home" || return 1
+        local state_environment=""
+        [ -z "$state_home" ] || state_environment="Environment=XDG_STATE_HOME=$state_home"
+        cat > "$service" <<EOF
+[Service]
+Type=oneshot
+$state_environment
+ExecStart=$node_path --experimental-strip-types $runtime_root/state-cli.ts purge
+EOF
+        cat > "$timer" <<EOF
+[Unit]
+Description=Daily proposal-learning purge
+[Timer]
+OnCalendar=daily
+Persistent=true
+[Install]
+WantedBy=timers.target
+EOF
+        if systemctl --user daemon-reload && systemctl --user enable --now "$(basename "$timer")"; then
+            ok "registered daily proposal-learning maintenance"
+            return 0
+        fi
+        rm -f "$service" "$timer"
+    fi
+    err "proposal-learning maintenance requires a working systemd user timer"
+    return 1
+    ;;
+    MINGW*|MSYS*|CYGWIN*)
+    if command -v schtasks.exe >/dev/null 2>&1 && schtasks.exe /Create /F /SC DAILY /TN "settings-opencode-proposal-learning-purge" /TR "\"$node_path\" --experimental-strip-types \"$runtime_root/state-cli.ts\" purge" >/dev/null; then
+        ok "registered daily proposal-learning maintenance"
+        return 0
+    fi
+    err "proposal-learning maintenance requires schtasks.exe"
+    return 1
+    ;;
+    *)
+    err "proposal-learning maintenance is unsupported on this platform"
+    return 1
+    ;;
+    esac
+}
+
 # ------------------------------ env-var block --------------------------------
 
+# Resolve the launcher path the installer actually deployed to $TARGET_OPENCODE.
+# Uniform across all install modes (global, --local, WSL) — no special-casing.
+opencode_launcher_path() { printf '%s\n' "$TARGET_OPENCODE/bin/opencode-pick"; }
+
+# $1 = absolute path to the deployed opencode-pick launcher.
 env_block_content() {
+    local launcher_path="${1:?env_block_content: launcher_path argument required}"
     cat <<'EOF'
 # Added by settings-opencode installer. Edit values to match your provider.
 # To remove this block, run: ~/.local/share/settings-opencode/install.sh --uninstall
@@ -413,8 +614,8 @@ export OPENCODE_REASONING_CONDUCTOR="high"
 export OPENCODE_REASONING_PRIMARY="high"
 export OPENCODE_REASONING_SECONDARY="medium"
 export OPENCODE_REASONING_TERTIARY="low"
-alias ocp="$HOME/.config/opencode/bin/opencode-pick"
 EOF
+    printf 'alias ocp="%s"\n' "$launcher_path"
 }
 
 # Insert or replace the marker-fenced block in $1 (rc file).
@@ -439,10 +640,52 @@ write_env_block() {
 
     {
         printf "\n%s\n" "$MARKER_START"
-        env_block_content
+        env_block_content "$(opencode_launcher_path)"
         printf "%s\n" "$MARKER_END"
     } >> "$rc"
     ok "wrote env block to $rc"
+
+    reconcile_legacy_ocp_alias "$rc"
+}
+
+# Warn about (and, only on explicit interactive confirmation, comment out)
+# any `alias ocp=` line living outside the managed marker block in $1 — it
+# would otherwise shadow the alias we just wrote. Never deletes anything.
+reconcile_legacy_ocp_alias() {
+    local rc="$1"
+    local hits
+    hits="$(mktemp)"
+
+    awk -v s="$MARKER_START" -v e="$MARKER_END" '
+        $0 == s { in_block = 1 }
+        $0 == e { in_block = 0; next }
+        !in_block && $0 ~ /^[[:space:]]*alias[[:space:]]+ocp=/ { print NR }
+    ' "$rc" > "$hits"
+
+    if [ ! -s "$hits" ]; then
+        rm -f "$hits"
+        return 0
+    fi
+
+    warn "found legacy 'alias ocp=' line(s) outside the managed block in $rc (line $(paste -sd, "$hits")) — may shadow the alias just written"
+    rm -f "$hits"
+
+    if [ "$ASSUME_YES" != "1" ] && [ -t 0 ]; then
+        if ask "comment out the legacy 'alias ocp=' line(s) in $rc?" N; then
+            local tmp
+            tmp="$(mktemp)"
+            awk -v s="$MARKER_START" -v e="$MARKER_END" '
+                $0 == s { in_block = 1 }
+                $0 == e { in_block = 0 }
+                !in_block && $0 ~ /^[[:space:]]*alias[[:space:]]+ocp=/ { print "# " $0; next }
+                { print }
+            ' "$rc" > "$tmp"
+            mv "$tmp" "$rc"
+            ok "commented out legacy alias ocp= line(s) in $rc"
+        fi
+    else
+        info "non-interactive: leaving legacy alias ocp= line(s) in $rc untouched (warn only)"
+    fi
 }
 
 remove_env_block() {
@@ -550,6 +793,23 @@ check_prereqs() {
     [ "$missing" = "0" ] || { err "missing required tools"; exit 1; }
 }
 
+check_node_version() {
+    local version major minor
+    if ! command -v node >/dev/null 2>&1; then
+        err "Node minimum required version is 22.6 before installer writes, synchronizes, or registers anything"
+        exit 1
+    fi
+    version="$(node -p 'process.versions.node' 2>/dev/null || true)"
+    major="${version%%.*}"
+    minor="${version#*.}"
+    minor="${minor%%.*}"
+    if ! [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]] || [ "$major" -lt 22 ] || { [ "$major" -eq 22 ] && [ "$minor" -lt 6 ]; }; then
+        err "Node minimum required version is 22.6 before installer writes, synchronizes, or registers anything (found ${version:-unavailable})"
+        exit 1
+    fi
+    ok "Node $version"
+}
+
 check_environment() {
     step "Checking environment"
 
@@ -648,6 +908,7 @@ install_repo_link() {
         copy_tree "$REPO_DIR" "$TARGET_OPENCODE"
         ensure_opencode_runtime_dirs
         [ -f "$TARGET_OPENCODE/bin/opencode-pick" ] && chmod +x "$TARGET_OPENCODE/bin/opencode-pick"
+        [ -f "$TARGET_OPENCODE/bin/proposal-learning" ] && chmod +x "$TARGET_OPENCODE/bin/proposal-learning"
         ok "copied $REPO_DIR -> $TARGET_OPENCODE (node_modules excluded)"
         OPENCODE_TARGET_READY=1
         return 0
@@ -693,6 +954,7 @@ install_repo_link() {
     copy_tree "$REPO_DIR" "$TARGET_OPENCODE"
     ensure_opencode_runtime_dirs
     [ -f "$TARGET_OPENCODE/bin/opencode-pick" ] && chmod +x "$TARGET_OPENCODE/bin/opencode-pick"
+    [ -f "$TARGET_OPENCODE/bin/proposal-learning" ] && chmod +x "$TARGET_OPENCODE/bin/proposal-learning"
     ok "copied $REPO_DIR -> $TARGET_OPENCODE (node_modules excluded)"
     OPENCODE_TARGET_READY=1
 }
@@ -753,8 +1015,42 @@ install_deps() {
     ok "deps installed"
 }
 
+# Warn about a legacy standalone opencode-pick binary. The managed 'ocp' alias
+# is now written as an absolute path, so PATH shadowing no longer breaks it —
+# but a stray script left over from an old install may still confuse `command
+# -v opencode-pick` or direct invocations. Never deletes anything.
+warn_legacy_opencode_pick_binary() {
+    local target="$1" legacy candidate
+
+    legacy="$HOME/.local/bin/opencode-pick"
+    if [ -e "$legacy" ] && [ "$legacy" != "$target" ]; then
+        warn "legacy launcher found at $legacy (differs from $target)"
+        info "the managed 'ocp' alias is an absolute path now, so this won't shadow it; remove or repoint it manually if unused:"
+        info "  rm \"$legacy\"   # or: ln -sf \"$target\" \"$legacy\""
+    fi
+
+    candidate="$(command -v opencode-pick 2>/dev/null || true)"
+    if [ -n "$candidate" ] && [ "$candidate" != "$target" ] && [ "$candidate" != "$legacy" ]; then
+        warn "an 'opencode-pick' binary on PATH ($candidate) differs from the installed launcher ($target)"
+        info "the managed 'ocp' alias already points at the absolute path above, so PATH shadowing is neutralized for 'ocp'; repoint or remove the stray binary manually if unused:"
+        info "  rm \"$candidate\"   # or: ln -sf \"$target\" \"$candidate\""
+    fi
+}
+
 install_env_vars() {
     step "Configuring shell environment variables"
+
+    local launcher
+    launcher="$(opencode_launcher_path)"
+    if [ ! -x "$launcher" ]; then
+        warn "launcher missing or not executable: $launcher — the 'ocp' alias will be written but won't work until this exists"
+    fi
+    local profile_file
+    profile_file="$(dirname "$launcher")/opencode-models.zsh"
+    if [ ! -f "$profile_file" ]; then
+        warn "opencode-models.zsh not found next to the launcher: $profile_file — opencode-pick profile resolution will fail"
+    fi
+    warn_legacy_opencode_pick_binary "$launcher"
 
     local rc
     rc="$(detect_shell_rc)"
@@ -762,7 +1058,7 @@ install_env_vars() {
         warn "couldn't detect a known shell rc for SHELL=${SHELL:-unset}"
         info "add the following to your shell profile manually:"
         printf "\n"
-        env_block_content | sed 's/^/        /'
+        env_block_content "$launcher" | sed 's/^/        /'
         printf "\n"
         return 0
     fi
@@ -774,7 +1070,7 @@ install_env_vars() {
     else
         info "skipped. Here's the block to paste manually:"
         printf "\n"
-        env_block_content | sed 's/^/        /'
+        env_block_content "$launcher" | sed 's/^/        /'
         printf "\n"
     fi
 }
@@ -794,6 +1090,8 @@ install_claude_mirror() {
     fi
 
     local source_claude="$REPO_DIR/.claude"
+    # Seed settings.json on fresh installs; the fixed runtime merger preserves
+    # unrelated entries and replaces only its managed hook.
     if [ ! -d "$source_claude" ]; then
         warn ".claude/ not found in repo, skipping"
         return 0
@@ -814,8 +1112,8 @@ install_claude_mirror() {
             warn "$TARGET_CLAUDE exists and is not a directory; leaving it untouched and skipping Claude copy"
             return 0
         fi
-        copy_tree_with_seed "$source_claude" "$TARGET_CLAUDE"
-        ok "copied $source_claude -> $TARGET_CLAUDE (personal config files seeded, not overwritten)"
+        copy_claude_allowlist "$source_claude" "$TARGET_CLAUDE"
+        ok "copied managed Claude assets without private runtime data"
         CLAUDE_TARGET_READY=1
         if [ "$LOCAL_MODE" = "1" ] && [ -f "$TARGET_CLAUDE/settings.json" ]; then
             localize_claude_settings_hooks "$TARGET_CLAUDE/settings.json"
@@ -841,8 +1139,8 @@ install_claude_mirror() {
         return 0
     fi
 
-    copy_tree_with_seed "$source_claude" "$TARGET_CLAUDE"
-    ok "copied $source_claude -> $TARGET_CLAUDE (personal config files seeded, not overwritten)"
+    copy_claude_allowlist "$source_claude" "$TARGET_CLAUDE"
+    ok "copied managed Claude assets without private runtime data"
     CLAUDE_TARGET_READY=1
     if [ "$LOCAL_MODE" = "1" ] && [ -f "$TARGET_CLAUDE/settings.json" ]; then
         localize_claude_settings_hooks "$TARGET_CLAUDE/settings.json"
@@ -1106,6 +1404,7 @@ info "mode:    $([ "$ASSUME_YES" = "1" ] && echo "non-interactive" || echo "inte
 
 configure_wsl_targets
 check_prereqs
+check_node_version
 check_environment
 
 info "target:  $([ "$SKIP_OPENCODE" = "1" ] && echo "skipped" || echo "$TARGET_OPENCODE")"
@@ -1119,7 +1418,7 @@ if [ "$SKIP_OPENCODE" != "1" ]; then
             step "Shell environment variables — skipped (--local does not modify global rc)"
             info "To use per-project env vars, add the following to a .envrc or source it manually:"
             printf "\n"
-            env_block_content | sed 's/^/        /'
+            env_block_content "$(opencode_launcher_path)" | sed 's/^/        /'
             printf "\n"
         else
             install_env_vars
@@ -1130,4 +1429,14 @@ if [ "$SKIP_OPENCODE" != "1" ]; then
 fi
 install_claude_mirror
 sync_skills
+if [ "$SKIP_OPENCODE" != "1" ] && [ "$OPENCODE_TARGET_READY" != "1" ]; then
+    err "OpenCode target runtime is absent; refusing a successful install"
+    exit 1
+fi
+if [ "$SKIP_CLAUDE" != "1" ] && [ "$CLAUDE_TARGET_READY" != "1" ]; then
+    err "Claude target hook is absent; refusing a successful install"
+    exit 1
+fi
+sync_learning_runtime || exit 1
+install_learning_maintenance || { err "learning activation remains unavailable because automatic purge registration failed"; exit 1; }
 print_next_steps

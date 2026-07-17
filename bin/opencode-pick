@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # opencode-pick — launch opencode with a profile selected from
-# ~/.config/zsh/60-opencode-models.zsh without touching global env.
+# $SCRIPT_DIR/opencode-models.zsh (override via OPENCODE_PROFILE_FILE)
+# without touching global env.
 #
 # Profile format in that file: blocks separated by blank lines, each starting
 # with `# <Name>` header followed by `export ...` or `# export ...` lines.
@@ -156,6 +157,7 @@ _RM_AGENTS=(
   api-spec-architect
   git-specialist
   learning-reviewer
+  ecosystem-auditor
 )
 _RM_VARS=(
   OPENCODE_REASONING_CONDUCTOR
@@ -175,6 +177,7 @@ _RM_VARS=(
   OPENCODE_REASONING_PRIMARY
   OPENCODE_REASONING_TERTIARY
   OPENCODE_REASONING_TERTIARY
+  OPENCODE_REASONING_SECONDARY
 )
 
 _OVERLAY_ENTRIES=""   # comma-separated JSON agent entries

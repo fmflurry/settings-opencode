@@ -27,13 +27,13 @@
 
 ## What's inside
 
-A hardened primary `conductor` agent backed by **18 specialist sub-agents** (planner, architect, coder, writer, code-reviewer, angular-cop, dotnet-cop, gdpr-specialist, security-reviewer, tdd-guide, build-error-resolver, e2e-runner, doc-updater, refactor-cleaner, database-reviewer, api-spec-architect, git-specialist, learning-reviewer), wired together by:
+A hardened primary `conductor` agent backed by **17 specialist sub-agents** (planner, architect, coder, writer, code-reviewer, angular-cop, dotnet-cop, gdpr-specialist, security-reviewer, tdd-guide, build-error-resolver, e2e-runner, doc-updater, refactor-cleaner, database-reviewer, api-spec-architect, git-specialist), wired together by:
 
 - **Mandatory sub-agent delegation** from `conductor`: the primary has `write` and `edit` denied at the permission layer, plus a `tool.execute.before` hook that blocks bash redirects to source files (`> file.ts`, `tee`, `sed -i`, heredocs, `python -c open().write`). The orchestrator cannot patch files — every change MUST go through `coder` (source code), `writer` (docs/markdown/HTML), `tdd-guide` (tests), or `git-specialist` (commits/PRs). This makes routing **model-agnostic**: even open-weight models that ignore prose rules are mechanically forced to delegate.
 - **Front-loaded first-tool gate** in `prompts/agents/conductor.txt`: hard rules at the top, routing table second, six few-shot User → `task` examples (with explicit wrong-way contrasts) so literal models copy the right pattern.
 - **Slash commands** that force routing to the right specialist (`/plan`, `/tdd`, `/security`, `/cop-review`, …).
 - **Always-on skills** loaded at session start — Socratic design, security review, coding standards, git workflow, [CodeMemory-first](https://github.com/fmflurry/code-memory) repo orientation.
-- **OpenCode plugins** — ECC hooks (Prettier + `tsc` on save), auto-compact, caveman ultra mode, desktop notifications with optional Bark/iPhone push, learning loop (per-turn background learning extraction).
+- **OpenCode plugins** — ECC hooks (Prettier + `tsc` on save), auto-compact, caveman ultra mode, desktop notifications with optional Bark/iPhone push, and proposal-only local learning.
 - **Custom tools** — `run-tests`, `check-coverage`, `security-audit`, plus a codemap generator.
 - **A `.claude/` mirror** — hooks, rule packs, and skills, so Claude Code benefits from the same guardrails.
 
@@ -50,7 +50,8 @@ The two halves stand alone. Use the OpenCode side, the Claude Code mirror, or bo
   - [Slash commands](#commands-en)
   - [Skills](#skills-en)
   - [Plugins & hooks](#plugins-en)
-  - [Custom tools](#tools-en)
+- [Custom tools](#tools-en)
+- [Local learning operations](#learning-en)
   - [TUI plugins](#tui-en)
   - [Claude Code mirror](#claude-en)
   - [How it fits together](#flow-en)
@@ -117,7 +118,7 @@ Merges into `%USERPROFILE%\.config\opencode` and `\.claude`, runs `npm install` 
 - macOS, Linux, WSL, or native Windows (notifications use desktop delivery plus optional Bark/iPhone pushes).
 - [OpenCode CLI](https://opencode.ai) installed and on your `PATH` (unless installing Claude Code only via `--no-opencode`).
 - [Claude Code](https://claude.com/claude-code) installed if you want the `.claude/` mirror (unless skipped via `--no-claude`).
-- Either [Bun](https://bun.sh) (recommended — `bun.lock` is what's checked in) or Node.js 20+ with `npm`.
+- Either [Bun](https://bun.sh) (recommended — `bun.lock` is what's checked in) or Node.js **>=22.6** with `npm`.
 - `git`.
 
 ### Secrets
@@ -399,7 +400,6 @@ Defined in `opencode.jsonc` under `agent`:
 | `database-reviewer`    | subagent | PostgreSQL / Supabase schema, perf, security.                                                                                                                                     |
 | `api-spec-architect`   | subagent | OpenAPI / API specification design.                                                                                                                                               |
 | `git-specialist`       | subagent | Branches, commits, pushes, PRs (mini model).                                                                                                                                      |
-| `learning-reviewer`    | subagent | Idle-window background learning reviewer. Extracts project memories + skill proposals non-interactively, once per idle window per session.                                         |
 
 ### Hardened sub-agent orchestration
 
@@ -482,7 +482,7 @@ All TypeScript plugins use `@opencode-ai/plugin@1.4.6`.
 - `plugins/notification.js` — desktop notifications on conductor `message.updated` completions and question/permission events; permission events and top-level completions can also push to iPhone via Bark.
 - `plugins/caveman-server.ts` + `tui-plugins/caveman.tsx` — injects caveman instructions into the system prompt + TUI sidebar showing active mode.
 - `plugins/kdco-primitives/` — shared utilities (mutex, shell, terminal-detect, project-id resolver, types).
-- `plugins/learning-loop.ts` — idle-window background learning extraction. When a session goes idle, a debounced timer fires after `LEARNING_LOOP_IDLE_MS` (default 300s); if the session becomes active again before it fires, the timer resets. Exactly one `learning-reviewer` subagent dispatches per idle window per session, extracting durable learnings (project memories via `codememory_assert_claim`, skill proposals as pending files). Guarded by daily cap `LEARNING_LOOP_DAILY_CAP` (default 50) and per-window budget `LEARNING_LOOP_BUDGET` (default 1); circuit breaker disables further dispatches on any auth/quota error.
+- `plugins/learning-runtime.ts` + `plugins/learning/` — proposal-only local learning for one local OS profile's own conversations. It starts disabled and requires explicit profile acknowledgement. Allowlisted, sanitized high-signal descriptors reach a locally launched reviewer only through the supported POSIX (macOS/Linux) artifact-validation path; native Windows fails closed. The runtime validates the executable and separately verified model artifact and supplies the latter through a fixed `--model-artifact` argument; raw prompts, transcripts, tool output, and PII do not reach the reviewer. Artifact validation does not by itself prove that a reviewer cannot log or forward descriptors. It is capped at two proposals per session and ten per day, supports retention/purge/deletion/export/audit, and has immediate cross-process revoke. Accept/reject only changes proposal state: no claim assertion or automatic materialization. Canonical OpenCode/Claude sync, organizational governance, machine-readable CLI output, and the complete boundary are in [`LEARNING.md`](LEARNING.md).
 - `@tarquinen/opencode-dcp@latest` _(external, declared in `opencode.jsonc › plugin`)_ — Dynamic Context Pruning. Trims stale tool results and large files from the live context window so long sessions don't blow past the model's limit. Configured via `dcp.jsonc` at the repo root.
 
 <a id="tools-en"></a>
@@ -494,6 +494,18 @@ Reusable OpenCode tools exposed via `tools/index.ts`:
 - `tools/run-tests.ts` — detects package manager + framework and builds the test command.
 - `tools/check-coverage.ts` — reads coverage reports and compares against a threshold.
 - `tools/security-audit.ts` — scans deps + secrets + risky patterns.
+
+<a id="learning-en"></a>
+
+### Local learning operations
+
+Local learning is advisory and proposal-only. The local `bin/proposal-learning` wrapper is the
+only queue control plane for both OpenCode and Claude; neither exposes learning slash commands,
+a learning agent, state tool, or proposal content to an LLM. It starts disabled and requires the
+versioned acknowledgement and profile metadata documented in [`LEARNING.md`](LEARNING.md).
+Accept/reject changes state only: an accepted proposal still requires normal human-authored,
+reviewed PR/change material. The full privacy, local-model, retention, scheduler, deployment,
+and CLI contract is in [`LEARNING.md`](LEARNING.md).
 
 <a id="tui-en"></a>
 
@@ -528,7 +540,7 @@ Reusable OpenCode tools exposed via `tools/index.ts`:
 
 ## Français
 
-Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), **dix-huit sous-agents specialises**, des skills toujours actives, des commandes slash, des plugins (hooks, auto-compact, caveman, notifications, learning loop), des outils custom et un mirror Claude Code.
+Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), **dix-sept sous-agents specialises**, des skills toujours actives, des commandes slash, des plugins (hooks, auto-compact, caveman, notifications, apprentissage local par propositions), des outils custom et un mirror Claude Code.
 
 <a id="objectif-fr"></a>
 
@@ -599,7 +611,6 @@ Definis dans `opencode.jsonc` (champ `agent`):
 | `database-reviewer`    | subagent | PostgreSQL / Supabase: schema, perfs, securite.                                                                                                                                  |
 | `api-spec-architect`   | subagent | Design OpenAPI / specification API.                                                                                                                                              |
 | `git-specialist`       | subagent | Branches, commits, push, PRs (modele mini).                                                                                                                                      |
-| `learning-reviewer`    | subagent | Revue d'apprentissage en arriere-plan par fenetre d'inactivite. Extrait les memoires projet + les propositions de skill de maniere non-interactive, une fois par fenetre inactif par session.                |
 
 ### Orchestration durcie des sous-agents
 
@@ -680,7 +691,17 @@ Tous les plugins TypeScript utilisent `@opencode-ai/plugin@1.4.6`.
 - `plugins/ecc-hooks.ts` — Prettier sur fichiers JS/TS edites, detection `console.log`, rappels sur commandes sensibles (`git push` etc.), et le **hard-stop conductor**: avorte les redirections bash (`>`, `>>`, `tee`, `sed -i`, heredocs, `python -c open().write`) qui visent du code source, pour que la delegation ne puisse pas etre contournee via le shell.
 - `plugins/auto-compact.js` — auto-compaction quand `OC_COMPACT_THRESHOLD` est atteint, en idle uniquement.
 - `plugins/notification.js` — notifications desktop sur fins de message `message.updated` et evenements question/permission; support optionnel Bark/iPhone.
-- `plugins/learning-loop.ts` — extraction d'apprentissage en arriere-plan par fenetre d'inactivite. Quand une session devient inactive, un timer debounce se declenche apres `LEARNING_LOOP_IDLE_MS` (defaut 300s); si la session se reactve avant, le timer se remet a zero. Un seul sous-agent `learning-reviewer` se dispatche par fenetre inactif par session, extrayant les connaissances durables (memoires projet via `codememory_assert_claim`, propositions de skill dans `pending/`). Protege par cap journalier `LEARNING_LOOP_DAILY_CAP` (defaut 50) et budget par fenetre `LEARNING_LOOP_BUDGET` (defaut 1); circuit breaker desactive les futurs dispatchs sur erreur auth/quota.
+- `plugins/learning-runtime.ts` + `plugins/learning/` — apprentissage local par propositions limite aux conversations propres a un profil OS local. Desactive par defaut, il exige un acquittement explicite. Seuls des descripteurs structures, nettoyes et a fort signal atteignent un executable offline de revue verifie, controle par le proprietaire, avec un artefact de modele verifie separement et passe par l'argument fixe `--model-artifact` ; jamais prompts bruts, transcripts, sorties d'outils ou PII. Limites : deux propositions par session et dix par jour ; retention/purge/suppression/export/audit et revocation inter-processus immediate. Accept/reject ne change que l'etat : aucune assertion de claim ni materialisation automatique. Voir [`LEARNING.md`](LEARNING.md).
+
+### Operations d'apprentissage local
+
+L'apprentissage est consultatif et limite aux propositions. Le wrapper local
+`bin/proposal-learning` est l'unique plan de controle pour OpenCode et Claude : aucune commande
+slash, aucun agent/outillage d'etat, ni contenu de proposition n'est expose a un LLM. Il est
+desactive par defaut et exige l'acquittement versionne et les metadonnees de profil decrits dans
+[`LEARNING.md`](LEARNING.md). Accepter ou rejeter ne change que l'etat ; une proposition acceptee
+exige toujours une modification/PR normale revue par un humain. Voir `LEARNING.md` pour le
+contrat complet de confidentialite, modele local, retention, scheduler, deploiement et CLI.
 - `plugins/caveman-server.ts` + `tui-plugins/caveman.tsx` — injecte les instructions caveman dans le system prompt + sidebar TUI qui affiche le mode actif.
 - `plugins/kdco-primitives/` — utilities partages (mutex, shell, terminal-detect, project-id resolver, types).
 - `@tarquinen/opencode-dcp@latest` _(externe, declare dans `opencode.jsonc › plugin`)_ — Dynamic Context Pruning. Coupe les tool results stagnants et les gros fichiers dans la fenetre de contexte pour que les sessions longues ne depassent pas la limite modele. Configure via `dcp.jsonc` a la racine du repo.

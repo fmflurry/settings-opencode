@@ -16,7 +16,6 @@
       "prompt": "{file:prompts/agents/conductor.txt}",
       "temperature": 0.3,
       "topP": 0.9,
-      "reasoningEffort": "{env:OPENCODE_REASONING_CONDUCTOR}",
       "tools": {
         "*": false,
         "write": false,
@@ -143,7 +142,6 @@
       "description": "MUST delegate for /ecosystem-audit or explicit audits of the repository-controlled OpenCode/Claude Code ecosystem, skill/agent parity, or harness coherence. Read-only — produces one evidence-first report and makes no changes.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
-      "reasoningEffort": "{env:OPENCODE_REASONING_SECONDARY}",
       "prompt": "{file:prompts/agents/ecosystem-auditor.txt}",
       "temperature": 0.3,
       "topP": 0.9,
@@ -384,51 +382,6 @@
         "glob": false,
       },
     },
-    "learning-reviewer": {
-      "description": "Background reviewer that analyzes conversation turns and extracts durable learnings (memories, skills). Runs per-turn, non-blocking. Project memories auto-apply; self-improvement changes are staged for approval.",
-      "mode": "subagent",
-      "model": "{env:OPENCODE_MODEL_SUBAGENT_MINI}",
-      "prompt": "{file:prompts/agents/learning-reviewer.txt}",
-      "temperature": 0.3,
-      "topP": 0.9,
-      "tools": {
-        "*": false,
-        "read": true,
-        "grep": true,
-        "glob": true,
-        "apply_patch": true,
-        "code-memory_*": true,
-      },
-      "permission": {
-        "*": "deny",
-        "read": {
-          "*": "deny",
-          "~/.config/opencode/skills/*": "allow",
-          "~/.config/opencode/pending/skills/*": "allow",
-        },
-        "grep": {
-          "*": "deny",
-          "~/.config/opencode/skills/*": "allow",
-        },
-        "glob": {
-          "*": "deny",
-          "~/.config/opencode/skills/*": "allow",
-          "~/.config/opencode/pending/skills/*": "allow",
-        },
-        "apply_patch": {
-          "*": "deny",
-          "~/.config/opencode/pending/skills/*.json": "allow",
-        },
-        "bash": "deny",
-        "task": "deny",
-        "code-memory_*": "allow",
-        "external_directory": {
-          "*": "deny",
-          "~/.config/opencode/skills/*": "allow",
-          "~/.config/opencode/pending/skills/*": "allow",
-        },
-      },
-    },
     "build": {
       "disable": true,
     },
@@ -541,30 +494,6 @@
       "description": "Generate skills from git history",
       "template": "{file:commands/skill-create.md}\n\n$ARGUMENTS",
     },
-    "learn-pending": {
-      "description": "List all staged learning changes awaiting approval (skills + memories)",
-      "template": "{file:commands/learn-pending.md}\n\n$ARGUMENTS",
-      "agent": "conductor",
-      "subtask": true
-    },
-    "learn-approve": {
-      "description": "Approve a staged learning change by ID",
-      "template": "{file:commands/learn-approve.md}\n\n$ARGUMENTS",
-      "agent": "conductor",
-      "subtask": true
-    },
-    "learn-reject": {
-      "description": "Reject a staged learning change by ID",
-      "template": "{file:commands/learn-reject.md}\n\n$ARGUMENTS",
-      "agent": "conductor",
-      "subtask": true
-    },
-    "learn-review": {
-      "description": "Manually trigger a learning review of the current session",
-      "template": "{file:commands/learn-review.md}\n\n$ARGUMENTS",
-      "agent": "conductor",
-      "subtask": true
-    },
   },
   "mcp": {
     "context7": {
@@ -600,11 +529,10 @@
       "enabled": true,
       "environment": {
         "CODE_MEMORY_PROJECT": "auto",
-        "CLAIMS_EXTRACTION": "true",
       },
     },
   },
-  "plugin": ["opencode-skill-creator", "./plugins/notification.js", "./plugins/mistral-affinity.js", "./plugins/learning-loop.ts"],
+  "plugin": ["opencode-skill-creator", "./plugins/mistral-affinity.js", "./plugins/learning-runtime.ts"],
   "provider": {
     "llama.cpp": {
       "npm": "@ai-sdk/anthropic",

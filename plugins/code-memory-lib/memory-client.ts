@@ -67,10 +67,6 @@ export interface MemoryClient {
   resolve(): Promise<void>;
   ingest(opts?: { full?: boolean }): Promise<void>;
   record(input: { prompt: string; plan?: string; patch?: string; verdict?: string }): Promise<void>;
-  extractClaimsDetached(input: {
-    prompts: readonly string[];
-    sessionId?: string;
-  }): boolean;
   autostartInstallDetached(): boolean;
   recordRead(tool: string, path: string, chars?: number): Promise<void>;
 }
@@ -218,40 +214,6 @@ export async function createMemoryClient(
         );
       } catch {
         // silent — metrics are best-effort
-      }
-    },
-
-    /**
-     * Fire-and-forget claim extraction. The CLI honors CLAIMS_EXTRACTION
-     * — when the env knob is off it exits 0 with a "disabled" payload —
-     * so this is cheap to call unconditionally on every session.idle.
-     *
-     * Returns true if we spawned the child, false if the binary is
-     * missing or the prompt list is empty after filtering.
-     */
-    extractClaimsDetached({ prompts, sessionId }) {
-      if (!available) return false;
-      const list = (prompts ?? []).filter(
-        (p): p is string => typeof p === "string" && p.trim().length > 0,
-      );
-      if (!list.length) return false;
-      const args = ["extract-claims", "--json", ...baseArgs()];
-      for (const p of list) {
-        args.push("--prompt", p);
-      }
-      if (sessionId) args.push("--session-id", sessionId);
-      try {
-        const child = spawn(binary, args, {
-          cwd,
-          detached: true,
-          stdio: "ignore",
-        });
-        child.unref();
-        return true;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        log("warn", `extractClaims spawn failed: ${msg}`);
-        return false;
       }
     },
 

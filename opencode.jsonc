@@ -653,5 +653,29 @@
         },
       },
     },
+    "alibabacloud": {
+      "name": "AlibabaCloud",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+        "apiKey": "{env:ALIBABACLOUD_API_KEY}",
+      },
+      "models": {
+        "qwen3.8-max-preview": {
+          "name": "Qwen3.8 Max Preview",
+          "contextWindow": 983616,
+          "maxOutputTokens": 131072,
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 99072,
+            },
+            "temperature": 0.6,
+            "reasoning": true,
+            "reasoning_effort": "xhigh",
+          },
+        },
+      },
+    },
   },
 }

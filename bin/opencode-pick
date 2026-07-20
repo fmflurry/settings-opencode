@@ -180,14 +180,60 @@ _RM_VARS=(
   OPENCODE_REASONING_SECONDARY
 )
 
+# Which OPENCODE_MODEL_* var each agent actually resolves to in opencode.jsonc.
+# NOT the same partition as _RM_VARS above (e.g. PRIMARY-tier agents resolve
+# via OPENCODE_MODEL_SUBAGENT_PLANNER, not OPENCODE_MODEL_PRIMARY) — mirrors
+# each agent's "model" field in opencode.jsonc 1:1. Empty entry ("") means the
+# agent has no corresponding opencode.jsonc entry (e.g. learning-reviewer), so
+# its model can't be resolved here and the medium-clamp below never fires for it.
+_RM_MODEL_VARS=(
+  OPENCODE_MODEL_CONDUCTOR
+  OPENCODE_MODEL_SUBAGENT_PLANNER
+  OPENCODE_MODEL_SUBAGENT_WORKER
+  OPENCODE_MODEL_SUBAGENT_WORKER
+  OPENCODE_MODEL_SUBAGENT_WORKER
+  OPENCODE_MODEL_SUBAGENT_WORKER
+  OPENCODE_MODEL_SUBAGENT_WORKER
+  OPENCODE_MODEL_SUBAGENT_WORKER
+  OPENCODE_MODEL_SUBAGENT_WORKER
+  OPENCODE_MODEL_SUBAGENT_WORKER
+  OPENCODE_MODEL_SUBAGENT_WORKER
+  OPENCODE_MODEL_SUBAGENT_WORKER
+  OPENCODE_MODEL_SUBAGENT_WORKER
+  OPENCODE_MODEL_SUBAGENT_WORKER
+  OPENCODE_MODEL_SUBAGENT_PLANNER
+  OPENCODE_MODEL_SUBAGENT_MINI
+  ""
+  OPENCODE_MODEL_SUBAGENT_WORKER
+)
+
+# Models whose API rejects reasoning_effort:"medium" (only xhigh/high/low are
+# valid) — sending "medium" gets the request rejected, same failure class as
+# the kimi empty-string bug. Clamp to "high" for these instead of omitting.
+_RM_NO_MEDIUM_MODELS=(
+  alibabacloud/qwen3.8-max-preview
+)
+
+_model_rejects_medium() {
+  local _needle="$1" _candidate
+  for _candidate in "${_RM_NO_MEDIUM_MODELS[@]}"; do
+    [[ "$_needle" == "$_candidate" ]] && return 0
+  done
+  return 1
+}
+
 _OVERLAY_ENTRIES=""   # comma-separated JSON agent entries
 _OVERLAY_LOG=""       # log for stderr
 
 for _i in "${!_RM_AGENTS[@]}"; do
   _agent="${_RM_AGENTS[$_i]}"
   _tier_var="${_RM_VARS[$_i]}"
+  _model_var="${_RM_MODEL_VARS[$_i]}"
   _val="${!_tier_var:-}"
   if [[ -n "$_val" ]]; then
+    if [[ "$_val" == "medium" && -n "$_model_var" ]] && _model_rejects_medium "${!_model_var:-}"; then
+      _val="high"
+    fi
     # Collect raw JSON fragments; values are simple tokens (high/xhigh/low/max/medium)
     # — no escaping hazards. If jq is present we re-encode the full object at the end.
     _OVERLAY_ENTRIES="${_OVERLAY_ENTRIES}${_OVERLAY_ENTRIES:+,}\"${_agent}\":{\"reasoningEffort\":\"${_val}\"}"
@@ -207,6 +253,7 @@ if [[ -n "${_OVERLAY_ENTRIES:-}" ]]; then
   printf '%s' "${_OVERLAY_LOG}" >&2
 fi
 
-unset _i _agent _tier_var _val _OVERLAY_ENTRIES _OVERLAY_LOG _AGENT_OBJ _RM_AGENTS _RM_VARS
+unset _i _agent _tier_var _model_var _val _OVERLAY_ENTRIES _OVERLAY_LOG _AGENT_OBJ _RM_AGENTS _RM_VARS _RM_MODEL_VARS _RM_NO_MEDIUM_MODELS
+unset -f _model_rejects_medium
 
 exec opencode "${FORWARD[@]+"${FORWARD[@]}"}"

@@ -6,7 +6,7 @@ Proposal learning is optional, local, advisory, and proposal-only. The fixed
 `bin/proposal-learning` wrapper is the **only** proposal-queue control plane for both
 harnesses. There are no `/learn-*` commands, learning agent, state tool, or conductor/agent
 route. Proposal content is never put in an OpenCode or Claude conversation, agent task, tool
-call, or context. Its boundary is one **single-user local profile**, not identity verification.
+call, or context. Its boundary is one **single-user local profile** on the owner's personal macOS harness account, not identity verification.
 
 ## Notice, profiles, and activation
 
@@ -25,21 +25,34 @@ run `enable` with `--acknowledge-notice` set to that notice's calculated digest.
 the validated notice before it accepts the acknowledgement, but the digest is evidence of an
 explicit operator acknowledgement, not proof that a particular person read it.
 
-### Personal or household activation
+### Personal harness activation (v1)
 
-Use this profile only for a person's own personal or household activity. The required
-`--lawful-basis "household activity"` value is a local profile-classification token enforced by
-the CLI; it is **not** an Article 6 lawful basis and is not a legal determination. It records
-the household context, not the identity of a user. Anyone able to run a harness as the same OS
-user can access its local state. Personal-household activation is distinct from organizational
-activation, which requires the organization's controller and documented Article 6 lawful basis.
+Use `--profile personal-harness` only for the owner's personal macOS harness account. The
+required `--lawful-basis "household activity"` value is a local profile-classification token
+enforced by the CLI; it is **not** an Article 6 lawful basis and is not a legal determination.
+It records the household context, not the identity of a user. The `personal-harness` profile
+accepts the legacy aliases `personal-household` and `local-owner` for compatibility, but the
+semantics remain the same personal-use scope. The personal-harness profile is for personal or
+household activity only; it is distinct from organizational activation, which requires the
+organization's controller and documented Article 6 lawful basis. v1 is not suitable for
+organizational, shared, or multi-user deployment; such deployment is prohibited.
+
+v1 runs as the same OS user as the harness and its CLI. There is no OS sandbox and no strong
+process isolation, so any model-facing agent, hook, or CLI process that runs as the same UID
+can access the proposal queue and its local state. This same-UID residual access risk is
+accepted for personal use; it is why organizational or multi-user deployment is prohibited.
+
+The reviewer is a local-only, owner-controlled, verified offline executable and model artifact.
+There is no guarantee against external network egress beyond what the chosen reviewer
+executable itself provides; operators must verify the reviewer's offline behavior
+independently.
 
 ```sh
 bin/proposal-learning enable \
-  --profile personal-household \
+  --profile personal-harness \
   --controller "Local profile owner" \
   --lawful-basis "household activity" \
-  --household-context "personal household use" \
+  --household-context "personal harness on the owner's macOS account" \
   --notice-version 2026-07-17 \
   --notice-hash sha256:<digest-of-personal-notice-json> \
   --acknowledge-notice sha256:<digest-of-personal-notice-json>
@@ -52,8 +65,12 @@ compared with the computed digest, never trusted by itself.
 
 ### Organizational activation
 
-An organization must complete and approve its governance record **and its separate Article 13
-notice** before activation. Supply:
+v1 does not support organizational activation; organizational or multi-user deployment is
+prohibited. The CLI fails closed: organizational activation remains disabled when any required
+controller, Article 6 reference, notice, or governance-record field is missing or malformed.
+For reference only, an organization deploying a future supported version would need to complete
+and approve its governance record **and its separate Article 13 notice** before activation.
+Supply:
 
 - the responsible controller's legal name;
 - the documented applicable lawful basis and its exact `GDPR Article 6(1)(a)` through
@@ -116,11 +133,11 @@ non-reversible structured descriptor, then discarded. It is never stored, queued
 audited, or sent to the reviewer. Transcripts, assistant messages, tool output, paths, secrets,
 PII, and uncertain or sensitive input are excluded rather than redacted and retained.
 
-Only these deterministic descriptors can reach the reviewer: an explicit correction, a repeated
-preference (at least two occurrences), or verified recurring friction (at least three
-occurrences). The reviewer receives only descriptor `kind` and allowlisted `summary`; it does
-not receive proposal state, raw input, session IDs, or harness context. Session identifiers are
-salted and hashed locally only for quotas and are not exported.
+Only these deterministic descriptors can reach the reviewer: an explicit correction or a
+repeated preference (at least two occurrences). The reviewer receives only descriptor `kind`
+and allowlisted `summary`; it does not receive proposal state, raw input, session IDs, or
+harness context. Session identifiers are salted and hashed locally only for quotas and are not
+exported.
 
 The reviewer is only a configured, owner-controlled **offline executable** and a separately
 configured **model-artifact** file on supported POSIX platforms (macOS and Linux). “Offline”
@@ -179,7 +196,7 @@ output; use `notice` to render the human notice before the explicit acknowledgem
 
 ```sh
 bin/proposal-learning status
-bin/proposal-learning notice --profile personal-household
+bin/proposal-learning notice --profile personal-harness
 bin/proposal-learning list
 bin/proposal-learning show <uuid>
 bin/proposal-learning accept <uuid>       # approve is an alias

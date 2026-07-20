@@ -24,8 +24,25 @@ if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
   fi
 fi
 
+# Guard against duplicate fires within the same turn (see anthropics/claude-code#54360:
+# Stop can re-invoke with stop_hook_active=true when a prior Stop hook caused continuation).
+STOP_HOOK_ACTIVE=$(echo "$INPUT" | jq -r '.stop_hook_active // false' 2>/dev/null)
+if [ "$STOP_HOOK_ACTIVE" = "true" ]; then
+  exit 0
+fi
+
 # macOS notification when attention is required
 osascript -e 'display notification "Your attention is required" with title "Claude Code" sound name "Glass"' 2>/dev/null &
+# Push to iPhone via Bark (shared OpenCode sender)
+NOTIFY_IPHONE="$HOME/Workspace/settings-opencode/scripts/notify-iphone.sh"
+if [ -x "$NOTIFY_IPHONE" ]; then
+  if [ -z "$BARK_DEVICE_KEY" ] && [ -f "$HOME/.config/zsh/50-env-secrets.zsh" ]; then
+    # shellcheck disable=SC1090
+    source "$HOME/.config/zsh/50-env-secrets.zsh" 2>/dev/null
+    export BARK_DEVICE_KEY
+  fi
+  "$NOTIFY_IPHONE" "Claude Code" "Task done — your attention is required" >/dev/null 2>&1 &
+fi
 
 # Check for uncommitted secrets (warn only)
 if git rev-parse --git-dir > /dev/null 2>&1; then

@@ -478,13 +478,6 @@ if ($skillDests.Count -gt 0) {
     Sync-Skills $SrcDir $skillDests
 }
 
-Sync-LearningRuntime $SrcDir $OpencodeDir $ClaudeDir $opencodeTargetReady $claudeTargetReady
-if ($opencodeTargetReady) {
-    Install-LearningMaintenance (Join-Path $OpencodeDir 'plugins\learning')
-} elseif ($claudeTargetReady) {
-    Install-LearningMaintenance (Join-Path $ClaudeDir 'hooks\learning')
-}
-
 # ------------------------------ next steps -----------------------------------
 
 Step 'Done'

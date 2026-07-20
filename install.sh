@@ -1513,6 +1513,4 @@ if [ "$SKIP_CLAUDE" != "1" ] && [ "$CLAUDE_TARGET_READY" != "1" ]; then
     err "Claude target hook is absent; refusing a successful install"
     exit 1
 fi
-sync_learning_runtime || exit 1
-install_learning_maintenance || { err "learning activation remains unavailable because automatic purge registration failed"; exit 1; }
 print_next_steps

@@ -33,7 +33,7 @@ A hardened primary `conductor` agent backed by **17 specialist sub-agents** (pla
 - **Front-loaded first-tool gate** in `prompts/agents/conductor.txt`: hard rules at the top, routing table second, six few-shot User → `task` examples (with explicit wrong-way contrasts) so literal models copy the right pattern.
 - **Slash commands** that force routing to the right specialist (`/plan`, `/tdd`, `/security`, `/cop-review`, …).
 - **Always-on skills** loaded at session start — Socratic design, security review, coding standards, git workflow, [CodeMemory-first](https://github.com/fmflurry/code-memory) repo orientation.
-- **OpenCode plugins** — ECC hooks (Prettier + `tsc` on save), auto-compact, caveman ultra mode, desktop notifications with optional Bark/iPhone push, and proposal-only local learning.
+- **OpenCode plugins** — ECC hooks (Prettier + `tsc` on save), auto-compact, caveman ultra mode, and proposal-only local learning.
 - **Custom tools** — `run-tests`, `check-coverage`, `security-audit`, plus a codemap generator.
 - **A `.claude/` mirror** — hooks, rule packs, and skills, so Claude Code benefits from the same guardrails.
 
@@ -115,7 +115,7 @@ Merges into `%USERPROFILE%\.config\opencode` and `\.claude`, runs `npm install` 
 
 ### Prerequisites
 
-- macOS, Linux, WSL, or native Windows (notifications use desktop delivery plus optional Bark/iPhone pushes).
+- macOS, Linux, WSL, or native Windows.
 - [OpenCode CLI](https://opencode.ai) installed and on your `PATH` (unless installing Claude Code only via `--no-opencode`).
 - [Claude Code](https://claude.com/claude-code) installed if you want the `.claude/` mirror (unless skipped via `--no-claude`).
 - Either [Bun](https://bun.sh) (recommended — `bun.lock` is what's checked in) or Node.js **>=22.6** with `npm`.
@@ -325,7 +325,7 @@ If a new plugin shows up, OpenCode picks it up on the next restart. If an env va
 
 ## English
 
-Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primary `conductor` agent (no write/edit perms — must delegate), **18 specialist sub-agents**, always-on skills, slash commands, OpenCode plugins (hooks, auto-compact, caveman, notifications), custom tools, and a Claude Code mirror.
+Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primary `conductor` agent (no write/edit perms — must delegate), **18 specialist sub-agents**, always-on skills, slash commands, OpenCode plugins (hooks, auto-compact, caveman), custom tools, and a Claude Code mirror.
 
 <a id="goals-en"></a>
 
@@ -479,7 +479,6 @@ All TypeScript plugins use `@opencode-ai/plugin@1.4.6`.
 
 - `plugins/ecc-hooks.ts` — Prettier on edited JS/TS, `console.log` detection, sensitive-command reminders (`git push` etc.), and the **conductor hard-stop**: aborts bash redirects (`>`, `>>`, `tee`, `sed -i`, heredocs, `python -c open().write`) targeting source files so delegation cannot be bypassed via shell.
 - `plugins/auto-compact.js` — auto-compacts once `OC_COMPACT_THRESHOLD` tool calls are reached, only while idle.
-- `plugins/notification.js` — desktop notifications on conductor `message.updated` completions and question/permission events; permission events and top-level completions can also push to iPhone via Bark.
 - `plugins/caveman-server.ts` + `tui-plugins/caveman.tsx` — injects caveman instructions into the system prompt + TUI sidebar showing active mode.
 - `plugins/kdco-primitives/` — shared utilities (mutex, shell, terminal-detect, project-id resolver, types).
 - `plugins/learning-runtime.ts` + `plugins/learning/` — proposal-only local learning for one local OS profile's own conversations. It starts disabled and requires explicit profile acknowledgement. Allowlisted, sanitized high-signal descriptors reach a locally launched reviewer only through the supported POSIX (macOS/Linux) artifact-validation path; native Windows fails closed. The runtime validates the executable and separately verified model artifact and supplies the latter through a fixed `--model-artifact` argument; raw prompts, transcripts, tool output, and PII do not reach the reviewer. Artifact validation does not by itself prove that a reviewer cannot log or forward descriptors. It is capped at two proposals per session and ten per day, supports retention/purge/deletion/export/audit, and has immediate cross-process revoke. Accept/reject only changes proposal state: no claim assertion or automatic materialization. Canonical OpenCode/Claude sync, organizational governance, machine-readable CLI output, and the complete boundary are in [`LEARNING.md`](LEARNING.md).
@@ -532,7 +531,7 @@ and CLI contract is in [`LEARNING.md`](LEARNING.md).
 1. Startup: OpenCode loads `opencode.jsonc` -> always-on instructions -> `caveman-server` adds caveman preamble if active.
 2. Dev: `conductor` executes — it cannot write files; it dispatches Task calls to specialists. `ecc-hooks` formats / flags `console.log` / blocks bash-write bypasses.
 3. Workflow: `conductor` routes to specialists through Task (perm-enforced); `/plan`, `/tdd`, `/security`, etc. force the same routing explicitly.
-4. Idle/completion: `auto-compact` triggers when the tool-call threshold is reached; `notification` sends desktop alerts for `message.updated` completions plus question/permission events, with optional Bark/iPhone pushes.
+4. Idle/completion: `auto-compact` compacts when `OC_COMPACT_THRESHOLD` tool calls are reached (idle only).
 
 ---
 
@@ -540,7 +539,7 @@ and CLI contract is in [`LEARNING.md`](LEARNING.md).
 
 ## Français
 
-Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), **dix-sept sous-agents specialises**, des skills toujours actives, des commandes slash, des plugins (hooks, auto-compact, caveman, notifications, apprentissage local par propositions), des outils custom et un mirror Claude Code.
+Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), **dix-sept sous-agents specialises**, des skills toujours actives, des commandes slash, des plugins (hooks, auto-compact, caveman, apprentissage local par propositions), des outils custom et un mirror Claude Code.
 
 <a id="objectif-fr"></a>
 
@@ -690,7 +689,6 @@ Tous les plugins TypeScript utilisent `@opencode-ai/plugin@1.4.6`.
 
 - `plugins/ecc-hooks.ts` — Prettier sur fichiers JS/TS edites, detection `console.log`, rappels sur commandes sensibles (`git push` etc.), et le **hard-stop conductor**: avorte les redirections bash (`>`, `>>`, `tee`, `sed -i`, heredocs, `python -c open().write`) qui visent du code source, pour que la delegation ne puisse pas etre contournee via le shell.
 - `plugins/auto-compact.js` — auto-compaction quand `OC_COMPACT_THRESHOLD` est atteint, en idle uniquement.
-- `plugins/notification.js` — notifications desktop sur fins de message `message.updated` et evenements question/permission; support optionnel Bark/iPhone.
 - `plugins/learning-runtime.ts` + `plugins/learning/` — apprentissage local par propositions limite aux conversations propres a un profil OS local. Desactive par defaut, il exige un acquittement explicite. Seuls des descripteurs structures, nettoyes et a fort signal atteignent un executable offline de revue verifie, controle par le proprietaire, avec un artefact de modele verifie separement et passe par l'argument fixe `--model-artifact` ; jamais prompts bruts, transcripts, sorties d'outils ou PII. Limites : deux propositions par session et dix par jour ; retention/purge/suppression/export/audit et revocation inter-processus immediate. Accept/reject ne change que l'etat : aucune assertion de claim ni materialisation automatique. Voir [`LEARNING.md`](LEARNING.md).
 
 ### Operations d'apprentissage local
@@ -741,4 +739,4 @@ Outils OpenCode reutilisables exposes via `tools/index.ts`:
 1. Demarrage: OpenCode charge `opencode.jsonc` -> instructions globales -> `caveman-server` ajoute le preamble si actif.
 2. Dev: `conductor` execute — il n'a pas le droit d'ecrire; il dispatche des Task vers les specialistes. `ecc-hooks` formate / flag les `console.log` / bloque les bypasses bash-write.
 3. Workflow: `conductor` route via Task (impose par permissions); `/plan`, `/tdd`, `/security`, etc. forcent explicitement le meme routage.
-4. Idle/completion: `auto-compact` declenche un compact quand le seuil de tool calls est atteint. `notification` envoie des alertes desktop sur fins de message `message.updated` et evenements question/permission, avec push Bark/iPhone optionnel.
+4. Idle/completion: `auto-compact` se declenche et compacte quand `OC_COMPACT_THRESHOLD` tool calls est atteint (en idle uniquement).

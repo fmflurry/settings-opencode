@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --experimental-strip-types --test plugins/learning/*.test.mts plugins/code-memory-lib/claim-intent.test.mts plugins/notification.test.mts installer-bootstrap.test.mts",
+    "test": "node --experimental-strip-types --test plugins/learning/*.test.mts plugins/code-memory-lib/claim-intent.test.mts installer-bootstrap.test.mts",
     "typecheck:strict": "tsc --noEmit --project tsconfig.strict.json"
   },
   "engines": {

@@ -307,6 +307,10 @@ copy_tree() {
         --exclude='install-cursor.sh' \
         --exclude='bootstrap.sh' \
         --exclude='bootstrap.ps1' \
+        --exclude='*.test.*' \
+        --exclude='*.spec.*' \
+        --exclude='__tests__' \
+        --exclude='__mocks__' \
         "$src/" "$dst/"
 }
 
@@ -345,6 +349,10 @@ copy_tree_with_seed() {
         --exclude='settings.local.json' \
         --exclude='policy-limits.json' \
         --exclude='*.local.json' \
+        --exclude='*.test.*' \
+        --exclude='*.spec.*' \
+        --exclude='__tests__' \
+        --exclude='__mocks__' \
         "$src/" "$dst/"
 
     # Pass 2: seed personal config files on first install only (--ignore-existing
@@ -388,6 +396,10 @@ copy_claude_allowlist() {
             --exclude='data' \
             --exclude='*.log' \
             --exclude='*.bak' \
+            --exclude='*.test.*' \
+            --exclude='*.spec.*' \
+            --exclude='__tests__' \
+            --exclude='__mocks__' \
             "$src/$managed" "$dst/$(dirname "$managed")/"
     done
     # Fresh and Claude-only installs need the canonical baseline before the
@@ -604,7 +616,7 @@ env_block_content() {
     local launcher_path="${1:?env_block_content: launcher_path argument required}"
     cat <<'EOF'
 # Added by settings-opencode installer. Edit values to match your provider.
-# To remove this block, run: ~/.local/share/settings-opencode/install.sh --uninstall
+# To remove this block, run: settings-sync --uninstall
 # Defaults target the myMistral provider configured in opencode.jsonc.
 export OPENCODE_MODEL_CONDUCTOR="myMistral/mistral-medium-2604"
 export OPENCODE_MODEL_SUBAGENT_PLANNER="myMistral/mistral-large-latest"
@@ -615,6 +627,7 @@ export OPENCODE_REASONING_PRIMARY="high"
 export OPENCODE_REASONING_SECONDARY="medium"
 export OPENCODE_REASONING_TERTIARY="low"
 EOF
+    printf 'export SETTINGS_OPENCODE_REPO="%s"\n' "$REPO_DIR"
     printf 'alias ocp="%s"\n' "$launcher_path"
 }
 
@@ -1075,6 +1088,53 @@ install_env_vars() {
     fi
 }
 
+# Symlink scripts/settings-sync.sh into ~/.local/bin so `settings-sync` works
+# from any directory, independent of harness choice. Idempotent (ln -sf).
+install_global_command() {
+    [ "$LOCAL_MODE" = "1" ] && return 0
+
+    step "Installing global settings-sync command"
+
+    local source_script="$REPO_DIR/scripts/settings-sync.sh"
+    if [ ! -x "$source_script" ]; then
+        warn "scripts/settings-sync.sh not found or not executable — skipping global command"
+        return 0
+    fi
+
+    local bin_dir="$HOME/.local/bin"
+    local target="$bin_dir/settings-sync"
+    mkdir -p "$bin_dir"
+    ln -sf "$source_script" "$target"
+    ok "linked $target -> $source_script"
+
+    case ":$PATH:" in
+        *":$bin_dir:"*) ;;
+        *) warn "$bin_dir is not on PATH — add it to your shell rc to use 'settings-sync' directly" ;;
+    esac
+}
+
+# Warn about (and, only on explicit interactive confirmation, replace) a real
+# directory at the legacy clone location that differs from the canonical
+# repo. Never touches an existing symlink and never runs under --yes.
+reconcile_legacy_clone() {
+    local legacy="$HOME/.local/share/settings-opencode"
+
+    [ -e "$legacy" ] || return 0
+    [ -L "$legacy" ] && return 0
+    [ -d "$legacy" ] || return 0
+    [ "$legacy" = "$REPO_DIR" ] && return 0
+
+    warn "legacy settings-opencode clone found at $legacy (a real directory, not a symlink to $REPO_DIR)"
+
+    if ask "replace $legacy with a symlink to $REPO_DIR?" N; then
+        rm -rf "$legacy"
+        ln -s "$REPO_DIR" "$legacy"
+        ok "replaced $legacy with a symlink to $REPO_DIR"
+    else
+        info "left legacy clone at $legacy untouched"
+    fi
+}
+
 install_claude_mirror() {
     CLAUDE_TARGET_READY=0
 
@@ -1257,12 +1317,20 @@ run_uninstall() {
         return 0
     fi
 
+    # The env block (repo-path export, model/reasoning defaults, settings-sync
+    # command) is harness-independent — remove it regardless of --no-opencode.
     local rc
     rc="$(detect_shell_rc)"
-    if [ "$SKIP_OPENCODE" != "1" ]; then
-        [ -n "$rc" ] && remove_env_block "$rc" || warn "no known shell rc detected, skipping env block"
-    else
-        info "env block removal skipped (--no-opencode)"
+    [ -n "$rc" ] && remove_env_block "$rc" || warn "no known shell rc detected, skipping env block"
+
+    local settings_sync_link="$HOME/.local/bin/settings-sync"
+    if [ -e "$settings_sync_link" ] || [ -L "$settings_sync_link" ]; then
+        if [ -L "$settings_sync_link" ] && [ "$(readlink "$settings_sync_link")" = "$REPO_DIR/scripts/settings-sync.sh" ]; then
+            rm "$settings_sync_link"
+            ok "removed $settings_sync_link"
+        else
+            warn "$settings_sync_link exists but is not our symlink; leaving it in place"
+        fi
     fi
 
     if [ "$WSL_MODE" = "1" ]; then
@@ -1420,14 +1488,22 @@ if [ "$SKIP_OPENCODE" != "1" ]; then
             printf "\n"
             env_block_content "$(opencode_launcher_path)" | sed 's/^/        /'
             printf "\n"
-        else
-            install_env_vars
         fi
     else
-        warn "OpenCode target was not modified; skipping dependencies, env vars, and OpenCode skill sync"
+        warn "OpenCode target was not modified; skipping dependencies and OpenCode skill sync"
     fi
 fi
 install_claude_mirror
+
+# The repo-path export, model/reasoning defaults, and the global settings-sync
+# command are harness-independent — install them in global mode regardless of
+# --no-opencode/--no-claude. Never touches global rc in --local mode.
+if [ "$LOCAL_MODE" != "1" ]; then
+    install_env_vars
+    install_global_command
+    reconcile_legacy_clone
+fi
+
 sync_skills
 if [ "$SKIP_OPENCODE" != "1" ] && [ "$OPENCODE_TARGET_READY" != "1" ]; then
     err "OpenCode target runtime is absent; refusing a successful install"

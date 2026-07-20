@@ -81,6 +81,10 @@ copy_skill_source() {
             --exclude='.DS_Store' \
             --exclude='node_modules' \
             --exclude='.git' \
+            --exclude='*.test.*' \
+            --exclude='*.spec.*' \
+            --exclude='__tests__' \
+            --exclude='__mocks__' \
             "$src/" "$dst/"
     else
         ( cd "$src" && tar -h -cf - \
@@ -88,6 +92,10 @@ copy_skill_source() {
             --exclude='.DS_Store' \
             --exclude='node_modules' \
             --exclude='.git' \
+            --exclude='*.test.*' \
+            --exclude='*.spec.*' \
+            --exclude='./__tests__' \
+            --exclude='./__mocks__' \
             . ) | ( cd "$dst" && tar xf - )
     fi
 }

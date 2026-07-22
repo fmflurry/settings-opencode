@@ -344,12 +344,12 @@ Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primar
 - Skills: `skills/*/SKILL.md` (plus auxiliary docs) — **canonical set, shared with Claude Code via** `sync-skills.sh`.
 - Agent prompts: `prompts/agents/*.txt`.
 - Slash commands: `commands/*.md`.
-- OpenCode plugins: `plugins/*.{ts,js}` + `plugins/kdco-primitives/`.
+- OpenCode plugins: `plugins/*.{ts,js}` + `plugins/kdco-primitives/` + `plugins/llm-metrics-lib/`.
 - TUI plugins: `tui-plugins/*.tsx`.
 - Custom tools: `tools/*.ts`.
 - Mode notes: `contexts/*.md`.
 - Global instructions: `instructions/subagent-routing.md`, `instructions/codememory-first.md`, `instructions/caveman-ultra.md`.
-- Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`, `scripts/sync-skills.sh` (sync canonical skill set to both harnesses).
+- Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`, `scripts/llm-metrics-dashboard.ts` (live llm-metrics dashboard), `scripts/sync-skills.sh` (sync canonical skill set to both harnesses).
 - Claude mirror: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/skills/` (full parity copy), `.claude/commands/`.
 - Intentional exclusions (`.gitignore`): `node_modules/`, `antigravity-*`, `.DS_Store`, local `.env*` files except `.env.example`, runtime dir `skills/skill-creator/` (not synced).
 
@@ -480,6 +480,7 @@ All TypeScript plugins use `@opencode-ai/plugin@1.4.6`.
 - `plugins/ecc-hooks.ts` — Prettier on edited JS/TS, `console.log` detection, sensitive-command reminders (`git push` etc.), and the **conductor hard-stop**: aborts bash redirects (`>`, `>>`, `tee`, `sed -i`, heredocs, `python -c open().write`) targeting source files so delegation cannot be bypassed via shell.
 - `plugins/auto-compact.js` — auto-compacts once `OC_COMPACT_THRESHOLD` tool calls are reached, only while idle.
 - `plugins/caveman-server.ts` + `tui-plugins/caveman.tsx` — injects caveman instructions into the system prompt + TUI sidebar showing active mode.
+- `plugins/llm-metrics.ts` + `plugins/llm-metrics-lib/` — real-time LLM-behavior monitor: hooks bus events into per-call metrics (tokens, TTFT, duration, cost, model, finish reason, end-to-end + generation tok/s) appended as NDJSONL to `~/data/llm-metrics.jsonl`, backed by a shared pure core (110 unit tests). Local-only, no egress; response-text capture is bounded and opt-out. Full architecture, env knobs, tok/s definitions, subagent aggregation, and privacy boundary in [`LLM_METRICS.md`](LLM_METRICS.md).
 - `plugins/kdco-primitives/` — shared utilities (mutex, shell, terminal-detect, project-id resolver, types).
 - `plugins/learning-runtime.ts` + `plugins/learning/` — proposal-only local learning for one local OS profile's own conversations. It starts disabled and requires explicit profile acknowledgement. Allowlisted, sanitized high-signal descriptors reach a locally launched reviewer only through the supported POSIX (macOS/Linux) artifact-validation path; native Windows fails closed. The runtime validates the executable and separately verified model artifact and supplies the latter through a fixed `--model-artifact` argument; raw prompts, transcripts, tool output, and PII do not reach the reviewer. Artifact validation does not by itself prove that a reviewer cannot log or forward descriptors. It is capped at two proposals per session and ten per day, supports retention/purge/deletion/export/audit, and has immediate cross-process revoke. Accept/reject only changes proposal state: no claim assertion or automatic materialization. Canonical OpenCode/Claude sync, organizational governance, machine-readable CLI output, and the complete boundary are in [`LEARNING.md`](LEARNING.md).
 - `@tarquinen/opencode-dcp@latest` _(external, declared in `opencode.jsonc › plugin`)_ — Dynamic Context Pruning. Trims stale tool results and large files from the live context window so long sessions don't blow past the model's limit. Configured via `dcp.jsonc` at the repo root.
@@ -510,7 +511,8 @@ and CLI contract is in [`LEARNING.md`](LEARNING.md).
 
 ### TUI plugins
 
-`tui-plugins/caveman.tsx` — React sidebar that shows a "CAVEMAN ULTRA" badge when the mode is active (flag file written by `caveman-server.ts`).
+- `tui-plugins/caveman.tsx` — React sidebar that shows a "CAVEMAN ULTRA" badge when the mode is active (flag file written by `caveman-server.ts`).
+- `tui-plugins/llm-metrics.tsx` — SolidJS sidebar (in the `sidebar_content` slot) showing live per-session LLM metrics: a streaming `~tok/s (est)`, latest-call generation/e2e tok/s, tokens in/out, model, cost, finish reason, TTFT, and a rolling-average tok/s. Aggregates the whole subagent subtree. See [`LLM_METRICS.md`](LLM_METRICS.md).
 
 <a id="claude-en"></a>
 
@@ -554,12 +556,12 @@ Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un ag
 - Skills: `skills/*/SKILL.md` (+ ressources auxiliaires) — **ensemble canonical, partage avec Claude Code via `sync-skills.sh`**.
 - Prompts agents: `prompts/agents/*.txt`.
 - Commandes slash: `commands/*.md`.
-- Plugins OpenCode: `plugins/*.{ts,js}` (+ `plugins/kdco-primitives/`).
+- Plugins OpenCode: `plugins/*.{ts,js}` (+ `plugins/kdco-primitives/` + `plugins/llm-metrics-lib/`).
 - TUI plugins: `tui-plugins/*.tsx` (sidebar React rendue par OpenCode).
 - Outils custom: `tools/*.ts`.
 - Contextes (memos de mode): `contexts/*.md`.
 - Instructions globales: `instructions/subagent-routing.md`, `instructions/codememory-first.md`, `instructions/caveman-ultra.md`.
-- Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`, `scripts/sync-skills.sh` (synchronise l'ensemble canonical des skills aux deux harnesses).
+- Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`, `scripts/llm-metrics-dashboard.ts` (dashboard llm-metrics live), `scripts/sync-skills.sh` (synchronise l'ensemble canonical des skills aux deux harnesses).
 - Mirror Claude Code: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/skills/` (copie en parité complète), `.claude/commands/`.
 - Exclusions volontaires (`.gitignore`): `node_modules/`, `antigravity-*`, `.DS_Store`, fichiers locaux `.env*` sauf `.env.example`, répertoire runtime `skills/skill-creator/` (non synchronisé).
 
@@ -690,6 +692,7 @@ Tous les plugins TypeScript utilisent `@opencode-ai/plugin@1.4.6`.
 - `plugins/ecc-hooks.ts` — Prettier sur fichiers JS/TS edites, detection `console.log`, rappels sur commandes sensibles (`git push` etc.), et le **hard-stop conductor**: avorte les redirections bash (`>`, `>>`, `tee`, `sed -i`, heredocs, `python -c open().write`) qui visent du code source, pour que la delegation ne puisse pas etre contournee via le shell.
 - `plugins/auto-compact.js` — auto-compaction quand `OC_COMPACT_THRESHOLD` est atteint, en idle uniquement.
 - `plugins/learning-runtime.ts` + `plugins/learning/` — apprentissage local par propositions limite aux conversations propres a un profil OS local. Desactive par defaut, il exige un acquittement explicite. Seuls des descripteurs structures, nettoyes et a fort signal atteignent un executable offline de revue verifie, controle par le proprietaire, avec un artefact de modele verifie separement et passe par l'argument fixe `--model-artifact` ; jamais prompts bruts, transcripts, sorties d'outils ou PII. Limites : deux propositions par session et dix par jour ; retention/purge/suppression/export/audit et revocation inter-processus immediate. Accept/reject ne change que l'etat : aucune assertion de claim ni materialisation automatique. Voir [`LEARNING.md`](LEARNING.md).
+- `plugins/llm-metrics.ts` + `plugins/llm-metrics-lib/` — moniteur temps reel du comportement LLM : accroche les evenements du bus en metriques par appel (tokens, TTFT, duree, cout, modele, finish reason, tok/s end-to-end + generation) ajoutees en NDJSONL dans `~/data/llm-metrics.jsonl`, adosse a un coeur pur partage (110 tests unitaires). Local uniquement, aucun egress ; la capture du texte de reponse est bornee et desactivable. Architecture complete, variables d'environnement, definitions des tok/s, aggregation des sous-agents et limite de confidentialite dans [`LLM_METRICS.md`](LLM_METRICS.md).
 
 ### Operations d'apprentissage local
 
@@ -718,7 +721,8 @@ Outils OpenCode reutilisables exposes via `tools/index.ts`:
 
 ### TUI plugins
 
-`tui-plugins/caveman.tsx` — sidebar React qui affiche un badge "CAVEMAN ULTRA" quand le mode est actif (drapeau ecrit par `caveman-server.ts`).
+- `tui-plugins/caveman.tsx` — sidebar React qui affiche un badge "CAVEMAN ULTRA" quand le mode est actif (drapeau ecrit par `caveman-server.ts`).
+- `tui-plugins/llm-metrics.tsx` — sidebar SolidJS (slot `sidebar_content`) affichant les metriques LLM par session en temps reel : un `~tok/s (est)` en streaming, le tok/s generation/e2e du dernier appel, tokens in/out, modele, cout, finish reason, TTFT et un tok/s moyen glissant. Agrege tout le sous-arbre des sous-agents. Voir [`LLM_METRICS.md`](LLM_METRICS.md).
 
 <a id="claude-fr"></a>
 

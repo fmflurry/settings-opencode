@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "test": "node --experimental-strip-types --test plugins/learning/*.test.mts plugins/code-memory-lib/claim-intent.test.mts installer-bootstrap.test.mts",
-    "typecheck:strict": "tsc --noEmit --project tsconfig.strict.json"
+    "typecheck:strict": "tsc --noEmit --project tsconfig.strict.json",
+    "metrics": "bun scripts/llm-metrics-dashboard.ts",
+    "test:metrics": "bun test plugins/llm-metrics-lib"
   },
   "engines": {
     "node": ">=22.6"

@@ -602,7 +602,12 @@
       },
     },
   },
-  "plugin": ["opencode-skill-creator", "./plugins/mistral-affinity.js", "./plugins/learning-loop.ts"],
+  "plugin": [
+    "opencode-skill-creator",
+    "./plugins/mistral-affinity.js",
+    "./plugins/learning-loop.ts",
+    "./plugins/llm-metrics.ts",
+  ],
   "provider": {
     "llama.cpp": {
       "npm": "@ai-sdk/anthropic",

@@ -6,12 +6,13 @@
     "allow_quick_web_setup": {
       "allowed": false
     },
-    "allow_cobalt_plinth": {
-      "allowed": false
-    },
     "enforce_web_search_mcp_isolation": {
       "allowed": false
     }
   },
-  "compliance_taints": []
+  "compliance_taints": [],
+  "monitoring_notice": null,
+  "defaults": {
+    "remote_control_at_startup": false
+  }
 }

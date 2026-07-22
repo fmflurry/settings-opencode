@@ -31,6 +31,39 @@
 # export OPENCODE_REASONING_SECONDARY="high"
 # export OPENCODE_REASONING_TERTIARY="low"
 
+# OpenAI -> GPT-5.6 Sol
+# export OPENCODE_MODEL_PRIMARY="openai/gpt-5.6-sol"
+# export OPENCODE_MODEL_CONDUCTOR="openai/gpt-5.6-sol"
+# export OPENCODE_MODEL_SUBAGENT_WORKER="openai/gpt-5.6-sol"
+# export OPENCODE_MODEL_SUBAGENT_PLANNER="openai/gpt-5.6-sol"
+# export OPENCODE_MODEL_SUBAGENT_MINI="openai/gpt-5.4-mini"
+# export OPENCODE_REASONING_PRIMARY="xhigh"
+# export OPENCODE_REASONING_CONDUCTOR="high"
+# export OPENCODE_REASONING_SECONDARY="high"
+# export OPENCODE_REASONING_TERTIARY="low"
+
+# OpenAI -> GPT-5.6 Terra
+# export OPENCODE_MODEL_PRIMARY="openai/gpt-5.6-terra"
+# export OPENCODE_MODEL_CONDUCTOR="openai/gpt-5.6-terra"
+# export OPENCODE_MODEL_SUBAGENT_WORKER="openai/gpt-5.6-terra"
+# export OPENCODE_MODEL_SUBAGENT_PLANNER="openai/gpt-5.6-terra"
+# export OPENCODE_MODEL_SUBAGENT_MINI="openai/gpt-5.4-mini"
+# export OPENCODE_REASONING_PRIMARY="xhigh"
+# export OPENCODE_REASONING_CONDUCTOR="high"
+# export OPENCODE_REASONING_SECONDARY="high"
+# export OPENCODE_REASONING_TERTIARY="low"
+
+# OpenAI -> GPT-5.6 Luna
+# export OPENCODE_MODEL_PRIMARY="openai/gpt-5.6-luna"
+# export OPENCODE_MODEL_CONDUCTOR="openai/gpt-5.6-luna"
+# export OPENCODE_MODEL_SUBAGENT_WORKER="openai/gpt-5.6-luna"
+# export OPENCODE_MODEL_SUBAGENT_PLANNER="openai/gpt-5.6-luna"
+# export OPENCODE_MODEL_SUBAGENT_MINI="openai/gpt-5.4-mini"
+# export OPENCODE_REASONING_PRIMARY="xhigh"
+# export OPENCODE_REASONING_CONDUCTOR="high"
+# export OPENCODE_REASONING_SECONDARY="high"
+# export OPENCODE_REASONING_TERTIARY="low"
+
 # GitHub Copilot -> GPT-5.4
 # export OPENCODE_MODEL_PRIMARY="github-copilot/gpt-5.4"
 # export OPENCODE_MODEL_CONDUCTOR="github-copilot/gpt-5.4"
@@ -130,12 +163,23 @@
 # export OPENCODE_REASONING_SECONDARY="high"
 # export OPENCODE_REASONING_TERTIARY="low"
 
-# OpenCode GO -> DeepSeek V4
+# OpenCode GO -> DeepSeek V4 (OpenCode Go)
 # export OPENCODE_MODEL_PRIMARY="opencode-go/deepseek-v4-pro"
 # export OPENCODE_MODEL_CONDUCTOR="opencode-go/deepseek-v4-pro"
 # export OPENCODE_MODEL_SUBAGENT_WORKER="opencode-go/deepseek-v4-flash"
 # export OPENCODE_MODEL_SUBAGENT_PLANNER="opencode-go/deepseek-v4-pro"
 # export OPENCODE_MODEL_SUBAGENT_MINI="opencode-go/deepseek-v4-flash"
+# export OPENCODE_REASONING_PRIMARY="max"
+# export OPENCODE_REASONING_CONDUCTOR="max"
+# export OPENCODE_REASONING_SECONDARY="max"
+# export OPENCODE_REASONING_TERTIARY="low"
+
+# DeepSeek API -> DeepSeek V4 (DeepSeek API)
+# export OPENCODE_MODEL_PRIMARY="deepseek/deepseek-v4-pro"
+# export OPENCODE_MODEL_CONDUCTOR="deepseek/deepseek-v4-pro"
+# export OPENCODE_MODEL_SUBAGENT_WORKER="deepseek/deepseek-v4-flash"
+# export OPENCODE_MODEL_SUBAGENT_PLANNER="deepseek/deepseek-v4-pro"
+# export OPENCODE_MODEL_SUBAGENT_MINI="deepseek/deepseek-v4-flash"
 # export OPENCODE_REASONING_PRIMARY="max"
 # export OPENCODE_REASONING_CONDUCTOR="max"
 # export OPENCODE_REASONING_SECONDARY="max"
@@ -177,6 +221,17 @@
 # export OPENCODE_REASONING_PRIMARY="high"
 # export OPENCODE_REASONING_SECONDARY="high"
 # export OPENCODE_REASONING_TERTIARY="high"
+
+# Qwen3.8-max (Alibaba TokenPlan)
+# export OPENCODE_MODEL_PRIMARY="alibabacloud/qwen3.8-max-preview"
+# export OPENCODE_MODEL_CONDUCTOR="alibabacloud/qwen3.8-max-preview"
+# export OPENCODE_MODEL_SUBAGENT_WORKER="alibabacloud/qwen3.8-max-preview"
+# export OPENCODE_MODEL_SUBAGENT_PLANNER="alibabacloud/qwen3.8-max-preview"
+# export OPENCODE_MODEL_SUBAGENT_MINI="alibabacloud/qwen3.8-max-preview"
+# export OPENCODE_REASONING_PRIMARY="xhigh"
+# export OPENCODE_REASONING_CONDUCTOR="high"
+# export OPENCODE_REASONING_SECONDARY="high"
+# export OPENCODE_REASONING_TERTIARY="low"
 
 # myMistral -> Medium 2604
 export OPENCODE_MODEL_PRIMARY="myMistral/mistral-medium-2604"

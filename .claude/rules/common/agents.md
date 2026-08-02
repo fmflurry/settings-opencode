@@ -2,7 +2,7 @@
 
 ## Available Agents
 
-Located in `~/.claude/agents/`:
+Located in `~/.claude/agents/` (project scope: `<project>/.claude/agents/`):
 
 | Agent | Purpose | When to Use |
 |-------|---------|-------------|
@@ -10,11 +10,19 @@ Located in `~/.claude/agents/`:
 | architect | System design | Architectural decisions |
 | tdd-guide | Test-driven development | New features, bug fixes |
 | code-reviewer | Code review | After writing code |
+| coder | Implementation | Non-test code writing and edits |
+| conductor | Primary orchestrator | Routing and delegation |
+| writer | Documentation | Writing markdown, docs, README, ADRs |
 | security-reviewer | Security analysis | Before commits |
 | build-error-resolver | Fix build errors | When build fails |
 | e2e-runner | E2E testing | Critical user flows |
 | refactor-cleaner | Dead code cleanup | Code maintenance |
-| doc-updater | Documentation | Updating docs |
+| doc-updater | Generated docs | Codemaps, doc generation |
+| database-reviewer | SQL/database | Postgres, migrations, RLS |
+| angular-cop | Angular code review | Pre-merge Angular + TS |
+| dotnet-cop | .NET code review | Pre-merge .NET Minimal API |
+| git-specialist | Git operations | Commits, branches, PRs |
+| gdpr-specialist | GDPR compliance | Data protection review |
 
 ## Immediate Agent Usage
 

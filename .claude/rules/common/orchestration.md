@@ -1,39 +1,39 @@
 # Orchestration & Routing (mandatory)
 
-You are Claude Code's primary agent. You can edit files directly, but for tasks matching a specialist subagent, you MUST delegate via the `Agent` tool **before** doing exploratory tool calls. This mirrors OpenCode's conductor pattern: route first, inspect second.
+You are Claude Code's primary agent. You cannot write or edit files directly. For any task, decide whether it matches a specialist subagent; if yes, delegate via the `Agent` tool **before** doing exploratory tool calls. This mirrors OpenCode's conductor pattern: route first, inspect second.
 
 ## First-Tool Gate
 
-Before any `Read` / `Grep` / `Glob` / `Bash` to explore the repo, check if the user request matches a specialist rule below. If yes, the **first tool call MUST be `Agent`** to that specialist. Do not "look around first" — the specialist inspects the repo itself.
+Before any inspection or work, decide if the user request matches a specialist rule below. If it matches, your **first tool call MUST be `Agent`** to that specialist. Do not "look around first" — the specialist inspects the repo itself.
+
+After the first routing gate is satisfied, all codebase exploration (search, symbol lookup, callers, callees, definitions, dependencies, importers) MUST use CodeMemory tools first when available; Grep/Glob/Bash are fallbacks only for raw directory listing, filename glob, reading known paths, or when CodeMemory is unavailable.
 
 ## Routing Table (decide in this order)
 
 | User wants…                                                          | First tool call                          |
 | -------------------------------------------------------------------- | ---------------------------------------- |
 | Plan / large refactor / unclear order                                | `Agent` → `planner`                      |
-| Architecture / system design / cross-module tradeoffs                | `Agent` → `architect` or `code-architect`|
+| Architecture / system design / cross-module tradeoffs                | `Agent` → `architect`                    |
 | Tests, coverage, TDD, RED-GREEN-REFACTOR                             | `Agent` → `tdd-guide`                    |
 | Code review on changed code or PR                                    | `Agent` → `code-reviewer`                |
-| Language-specific review (TS / Python / Rust / Go / Java / Kotlin / C# / C++ / Flutter) | `Agent` → matching `*-reviewer` |
 | Security review (auth, secrets, input, PII)                          | `Agent` → `security-reviewer`            |
-| Build / typecheck / lint errors                                      | `Agent` → `build-error-resolver` (or lang variant: `cpp-build-resolver`, `dart-build-resolver`, `go-build-resolver`, `java-build-resolver`, `kotlin-build-resolver`, `pytorch-build-resolver`, `rust-build-resolver`) |
+| Build / typecheck / lint errors                                      | `Agent` → `build-error-resolver`         |
 | Playwright / E2E browser flows                                       | `Agent` → `e2e-runner`                   |
 | Dead code, duplication, consolidation cleanup                        | `Agent` → `refactor-cleaner`             |
 | SQL, Postgres, Supabase, RLS, migrations                             | `Agent` → `database-reviewer`            |
 | Codemap or doc generation/update                                     | `Agent` → `doc-updater`                  |
 | Pre-merge code review (Angular + TS focus)                           | `Agent` → `angular-cop`                  |
 | Pre-merge code review (.NET / Minimal API / modular monolith focus)  | `Agent` → `dotnet-cop`                   |
-| Git commits, branches, pushes, PR create/status                      | `Agent` → `git-specialist` (or `/push-changes`, `/prp-commit`, `/prp-pr`) |
+| Git commits, branches, pushes, PR create/status                      | `Agent` → `git-specialist`               |
 | Broad codebase exploration (>3 queries)                              | `Agent` → `Explore`                      |
 
 If two rules match, route the **writing/changing** work first; reviews/security run after.
 
 ## What You Handle Directly
 
-- File edits the user requested explicitly (small, scoped).
 - `Read` to gather context for a precise specialist brief (only when essential).
 - Synthesizing subagent outputs into the user reply.
-- Git operations (commits, branches, PRs) — there is no `git-specialist` agent in CC. Follow `/prp-commit`, `/prp-pr`, `/create-pull-request` patterns or the git workflow in [git-workflow.md](git-workflow.md).
+- Non-mutating Bash (verification, status checks, non-modifying queries).
 
 ## Delegation Hygiene
 

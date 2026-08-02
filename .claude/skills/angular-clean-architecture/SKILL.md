@@ -1,6 +1,6 @@
 ---
 name: angular-clean-architecture
-description: Scaffolds and extends Angular 18+ standalone features using Clean Architecture with DDD layering (presentation/application/domain/infrastructure), custom signal-based stores, facade pattern, and ports/adapters dependency inversion. Use when creating new Angular features/domains, adding use cases/facades/stores/ports/adapters, refactoring legacy NgModule/NgRx code toward clean architecture, or working with cross-domain communication via context registry.
+description: Scaffolds and extends Angular 22 standalone features using Clean Architecture with DDD layering (presentation/application/domain/infrastructure), custom signal-based stores, facade pattern, and ports/adapters dependency inversion. Use when creating new Angular features/domains, adding use cases/facades/stores/ports/adapters, refactoring legacy NgModule/NgRx code toward clean architecture, or working with cross-domain communication via context registry.
 ---
 
 # Angular Clean Architecture + DDD

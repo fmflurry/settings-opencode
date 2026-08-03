@@ -1,129 +1,137 @@
 ---
 name: angular-clean-architecture
-description: Scaffolds and extends Angular 22 standalone features using Clean Architecture with DDD layering (presentation/application/domain/infrastructure), custom signal-based stores, facade pattern, and ports/adapters dependency inversion. Use when creating new Angular features/domains, adding use cases/facades/stores/ports/adapters, refactoring legacy NgModule/NgRx code toward clean architecture, or working with cross-domain communication via context registry.
+description: Scaffolds and extends Angular standalone feature MODULES under src/app/modules/{name} using Clean Architecture layering (presentation/application/core/infrastructure), a self-registering module providers function, route-level lazy loading, cross-navigation state caching, the facade pattern, and ports/adapters dependency inversion. Use when creating a new Angular module, adding use cases/facades/stores/ports/adapters, wiring lazy routes + cached state, replacing session proxies, refactoring legacy NgModule/NgRx code, or cross-module communication via the context registry. Domain-modeling rules: see angular-ddd. State/replay mechanics: see flurryx.
 ---
 
-# Angular Clean Architecture + DDD
+# Angular Clean Architecture — Module System
 
 ## When To Activate
 
-- Scaffolding a new Angular feature/domain following Clean Architecture
-- Adding a use case, facade, store, port, or adapter to an existing domain
+- Creating a module under `src/app/modules/`
+- Adding a use case, facade, store, port, or adapter to an existing module
+- Wiring lazy routes + cached state
+- Replacing session proxies with self-contained module adapters
 - Creating standalone components that consume store state via facades
 - Refactoring a legacy/mixed module (NgModule/NgRx) toward Clean Architecture
 - Moving business logic out of components into facades/use-cases
-- Adding or updating cross-domain communication via the context registry
-- Standardizing feature state management with BaseStore
-- Working with the custom BaseStore, ResourceState, or store operators/decorators
+- Adding or updating cross-module communication via the context registry
+
+## Relationship to Other Skills
+
+| Concern | Owner |
+|---------|-------|
+| Domain modeling (entity, VO, aggregate, invariants) | [[angular-ddd]] |
+| State/replay mechanics (Store API, channels, history) | [[flurryx]] |
+| Pre-merge enforcement / review checklist | [[angular-cop]] |
+| Module layout, DI, ports/adapters, lazy loading, caching wiring, facade, context registry, session-proxy replacement, naming | **this skill** |
 
 ## Architecture Anchors (Verify Before Coding)
 
-Before writing code, verify these anchors exist in the active branch:
-
 | Anchor | What to look for |
 |--------|-----------------|
-| Reference clean module | At least one domain following the full clean architecture structure (application/domain/infrastructure/presentation) |
-| Base store | A `BaseStore` class with signal-based state management and `ResourceState<T>` |
-| Store loading operator | An RxJS operator (e.g., `handleStoreLoading`) bridging Observables to store updates |
-| Context registry | A registry mapping cross-domain providers (e.g., `contextProvidersFor()`) |
+| Reference module | At least one module under `src/app/modules/` with full layer structure |
+| flurryx store | `Store.for<Config>().build()` in `application/store/` |
+| syncToStore usage | `syncToStore(this.store, KEY)` or `syncToKeyedStore(...)` in adapters/facades |
+| Context registry | `contextProvidersFor()` mapping cross-module providers |
 
-**If one or more anchors are missing:**
-- Do NOT invent imports or APIs
-- Continue with best-effort refactor using existing patterns
-- Report the mismatch explicitly in your final message
+**If anchors are missing:** do NOT invent imports. Continue best-effort, report mismatch.
+
+## Architecture Overview
+
+```text
+src/app/modules/{moduleName}/
+├── presentation/            # list/ details/ create/ edit/ container pages, forms/, components/
+├── application/
+│   ├── facades/{moduleName}.facade.ts
+│   ├── use-cases/{verb-noun}.use-case.ts
+│   └── store/{moduleName}.store.ts      # flurryx Store.for<Config>().build()
+├── core/                    # domain hexagon — ZERO infra/framework imports
+│   ├── models/  ports/  rules/  mappers/  events/
+├── infrastructure/
+│   ├── adapters/{verb-noun}.adapter.ts
+│   └── api/{endpoints/, request/, response/}
+├── routes.ts                # lazy loadComponent + route-level providers
+├── routes.constants.ts
+├── {moduleName}-service.providers.ts    # SELF-REGISTRATION entrypoint
+├── public-api.ts            # SYNC contract: models, ports, providers fn
+└── integration-api.ts       # REACTIVE contract: exports store for cross-module mirroring
+```
+
+Full layout with worked example: [module-template.md](module-template.md).
+
+## Dependency Rules (CRITICAL)
+
+```
+Component --> Facade --> UseCase --> [Port] <-- Adapter --> Endpoint --> HttpClient
+    |            |           |          ^           |
+Presentation  Application  Application   Core     Infrastructure
+```
+
+- **Core has ZERO infrastructure or framework dependencies** — no Angular, no HttpClient, no flurryx. Only models (types), ports (abstract classes), rules (pure functions), mappers.
+- **Application depends on Core only** — facades orchestrate use cases + store; use cases call ports.
+- **Infrastructure depends on Core only** — adapters implement ports using HTTP clients.
+- **Components NEVER inject use cases or stores directly** — always inject facades.
+- **Cross-module communication uses the Context Registry or integration-api store exports** — never import another module's internals.
+
+### Root Store vs Route Providers (Caching Mechanism)
+
+- Store is `providedIn: 'root'` (flurryx default) → survives navigation = the cache.
+- Facades, use cases, adapters are route-scoped → disposed on leave.
+- `@SkipIfCached` prevents re-fetch when returning to a cached route.
+- Optional `sessionStorage`/`localStorage` channels for reload/tab survival.
+- `clearAllStores()` on logout/tenant switch.
+
+## Store System
+
+flurryx provides event-sourced, replayable signal state. This skill does NOT restate its API.
+
+- **API reference** (Store builder, syncToStore, decorators, channels, history): [[flurryx]]
+- **Wiring cheat-sheet** (how stores plug into modules): [store-system.md](store-system.md)
+- **Conceptual ES/CQRS → Angular mapping**: [[angular-ddd]] event-sourcing-mapping
+
+## Session-Proxy Replacement
+
+Legacy `*Proxy` classes + shared god-stores are replaced by self-contained module adapters with `@SkipIfCached(CACHE_NO_TIMEOUT)` + optional session-storage channel, consumed by PORT via context registry.
+
+Full before/after migration: [session-proxy-migration.md](session-proxy-migration.md).
 
 ## Hard Rules
 
 - **Never** use `any` — use `unknown` if the type is truly unknown
 - **Never** inject `UseCase` classes directly into components — always go through a Facade
 - **Never** inject stores directly into components — facades expose store signals
+- **Never** import flurryx, Angular, or HttpClient in `core/`
+- **Never** re-fetch reference data without `@SkipIfCached`
+- **Never** inject a concrete adapter/proxy across modules — inject the port
 - Components must depend on facades for ALL domain interactions
-- Keep domain and application logic independent from Angular UI details
-- Use typed models for state, DTOs, and context payloads — no untyped objects
-- Domain layer has ZERO infrastructure or framework dependencies
 - Use `inject()` for all dependencies, never constructor params
-
-## Architecture Overview
-
-```text
-src/app/<feature-area>/
-├── <domain>/
-│   ├── application/                    # Application layer (orchestration)
-│   │   ├── facades/                    # Public API for components
-│   │   ├── use-cases/                  # Single-responsibility business operations
-│   │   └── store/                      # Signal-based state management
-│   │
-│   ├── domain/                         # Domain layer (pure business logic, ZERO infra deps)
-│   │   ├── models/                     # Immutable TypeScript types
-│   │   ├── ports/                      # Abstract classes (dependency inversion)
-│   │   ├── rules/                      # Pure validation functions & constants
-│   │   └── mappers/                    # Pure data transformation functions
-│   │
-│   ├── infrastructure/                 # Infrastructure layer (external concerns)
-│   │   ├── adapter/                    # Port implementations
-│   │   ├── api/
-│   │   │   ├── endpoints/              # HTTP client wrappers
-│   │   │   ├── request/                # API request DTOs
-│   │   │   └── response/              # API response DTOs
-│   │   └── <domain>-infrastructure.providers.ts
-│   │
-│   ├── presentation/                   # Presentation layer (UI)
-│   │   ├── list/                       # Feature pages
-│   │   ├── details/
-│   │   ├── create/
-│   │   ├── edit/
-│   │   └── forms/                      # Reusable form components
-│   │
-│   ├── routes.ts                       # Lazy-loaded route definitions
-│   ├── routes.constants.ts             # Route path constants
-│   ├── <domain>-service.providers.ts   # All DI bindings for this domain
-│   └── public-api.ts                   # Barrel exports for cross-domain use
-```
-
-## Dependency Rules (CRITICAL)
-
-```
-Component --> Facade --> UseCase --> [Port] <-- Adapter --> Endpoint --> HttpClient
-   |            |           |          ^           |
-Presentation  Application  Application  Domain    Infrastructure
-```
-
-- **Domain has ZERO infrastructure dependencies** — only defines ports (abstract classes), models (types), rules (pure functions), and mappers.
-- **Application depends on Domain only** — facades orchestrate use cases and stores; use cases call ports.
-- **Infrastructure depends on Domain only** — adapters implement ports using HTTP clients and API services.
-- **Components NEVER inject use cases directly** — always inject facades.
-- **Components NEVER inject stores directly** — facades expose store signals.
-- **Cross-domain communication uses the Context Registry** — never import another domain's internals.
-
-## Store System
-
-The store uses a custom `BaseStore` with signal-based state and `ResourceState<T>` wrapping.
-
-**For full store details**: See [store-system.md](store-system.md) — covers `ResourceState<T>`, `BaseStore` API, `KeyedResourceData`, `handleStoreLoading`/`handleKeyedStoreLoading` operators, `@AutoStartLoading` and `@AppCache` decorators.
+- Domain modeling patterns (entity, VO, aggregate) → [[angular-ddd]], not here
 
 ## Layer Implementation Templates
 
-Condensed patterns for each layer. **For full templates with code**: See [layer-templates.md](layer-templates.md).
+**For full templates with code**: See [layer-templates.md](layer-templates.md).
 
 | Layer | Key Conventions |
 |-------|----------------|
-| Domain Model | Use `type` (not interface/class), optional `?:` props, group by entity |
-| Domain Port | `abstract class` with `abstract` methods returning `Observable<T>`, `Port` suffix, one per operation (ISP) |
-| Domain Rules | Pure functions, `as const` constants, zero framework deps |
-| Domain Mappers | Pure `mapXToY` functions, `Partial<T>` returns, null-safe |
+| Core Model | `type` or `interface`, optional `?:` props, group by entity |
+| Core Port | `abstract class`, `Observable<T>` returns, `Port` suffix, one per operation (ISP) |
+| Core Rules | Pure functions, `as const` constants, zero framework deps |
+| Core Mappers | Pure `mapXToY` functions, `Partial<T>` returns, null-safe |
 | Use Case | `@Injectable()` (no `providedIn`), inject ports via `inject()`, single responsibility |
-| Facade | `@Injectable()` (no `providedIn`), inject store + use cases, expose signals via getters, `@AppCache` + `@AutoStartLoading` + `handleStoreLoading` for actions |
-| Adapter | `implements` port, inject endpoint, transform DTOs to domain models |
+| Facade | `@Injectable()` (no `providedIn`), inject store + use cases, `@SkipIfCached` + `@Loading` + `syncToStore` |
+| Store | `Store.for<Config>().build()` — `providedIn: 'root'` by default |
+| Adapter | `implements` port, inject endpoint, DTO↔domain mapping (ACL) |
 | Endpoint | `HttpClient` + `UrlBuilder` + `PaginatedRequestBuilder` |
 | Infra Providers | Function returning `Provider[]`, bind ports to adapters |
 | Service Providers | Aggregates facades + use cases + infra + `contextProvidersFor()` |
-| Routes | `loadComponent` lazy loading, route-level providers, functional guards |
-| Public API | Barrel exports: models, ports, adapters, store, provider functions |
-| Component | Standalone, `OnPush`, `inject()` only, facade-only injection, `signal()`/`computed()`/`effect()`, `input()`/`output()` signals, SCSS, project selector prefix |
+| Routes | `loadComponent` lazy loading, route-level providers |
+| Public API | SYNC contract: models, ports, providers fn |
+| Integration API | REACTIVE contract: store export for cross-module mirroring |
+| Component | Standalone, `OnPush`, `inject()` only, facade-only, signals |
 
-## Cross-Domain Communication
+## Cross-Module Communication
 
-Uses a `ContextRegistry` with `contextProvidersFor()`. **For full patterns**: See [cross-domain.md](cross-domain.md).
+Two mechanisms: **sync** (context registry binding to ports) and **reactive** (integration-api store exports + flurryx mirroring). **For full patterns**: See [cross-domain.md](cross-domain.md).
 
 ## Testing Patterns
 
@@ -142,103 +150,98 @@ Target **80%+ coverage**.
 
 | Artifact | Pattern | Example |
 |----------|---------|---------|
-| Store class | `<Domain>Store` | `CustomersStore` |
-| Store enum | `<Domain>StoreEnum` | `CustomersStoreEnum` |
-| Store state type | `<Domain>State` | `CustomersState` |
-| Facade | `<Domain>Facade` | `CustomersFacade` |
-| Use case | `<VerbNoun>UseCase` | `GetCustomersUseCase` |
-| Port (abstract) | `<VerbNoun>Port` | `GetCustomersPort` |
-| Adapter | `<VerbNoun>Adapter` | `GetCustomersAdapter` |
-| Endpoint | `<Domain>Endpoint` | `CustomersEndpoint` |
-| Component | `<prefix>-<feature>-<name>` | `app-customers-list` |
-| Service providers fn | `<domain>ServicesProviders()` | `customersServicesProviders()` |
-| Infra providers fn | `<domain>InfrastructureProviders()` | `customersInfrastructureProviders()` |
-| Context providers | `<DOMAIN>_CONTEXT_PROVIDERS` | `CUSTOMERS_CONTEXT_PROVIDERS` |
-| Route constants | `routes.constants.ts` | N/A |
+| Store | `<Module>Store` (const from `Store.for`) | `CompaniesStore` |
+| Store config | `<Module>StoreConfig` | `CompaniesStoreConfig` |
+| Facade | `<Module>Facade` | `CompaniesFacade` |
+| Use case | `<VerbNoun>UseCase` | `GetCompaniesUseCase` |
+| Port (abstract) | `<VerbNoun>Port` | `GetCompaniesPort` |
+| Adapter | `<VerbNoun>Adapter` | `GetCompaniesAdapter` |
+| Endpoint | `<Module>Endpoint` | `CompaniesEndpoint` |
+| Component | `<prefix>-<module>-<name>` | `app-companies-list` |
+| Service providers fn | `<module>ServicesProviders()` | `companiesServicesProviders()` |
+| Infra providers fn | `<module>InfrastructureProviders()` | `companiesInfrastructureProviders()` |
+| Context providers | `<MODULE>_CONTEXT_PROVIDERS` | `COMPANIES_CONTEXT_PROVIDERS` |
 | Public API | `public-api.ts` | N/A |
-| Spec files | `<name>.spec.ts` | `customers.facade.spec.ts` |
-| Model types | `<Entity>` (PascalCase type) | `Customer`, `CustomerFilters` |
-| Business rules | `<domain>-<concern>.rule.ts` | `customer-fields.rule.ts` |
+| Integration API | `integration-api.ts` | N/A |
+| Model types | `<Entity>` (PascalCase) | `Company`, `CompanyFilters` |
+| Business rules | `<module>-<concern>.rule.ts` | `company-fields.rule.ts` |
 | Mappers | `<source>-mapper.ts` | `enterprise-mapper.ts` |
 
-## Implementation Playbook (Add a New Feature)
+**Legacy folder mapping:** `domain/` → `core/`; `adapter/` → `adapters/`; `src/app/<area>/` → `src/app/modules/{name}/`.
 
-Follow these steps **in order**. Full templates for each step in [layer-templates.md](layer-templates.md).
+## Implementation Playbook (Add a New Module)
 
-1. Define domain models in `domain/models/`
-2. Define domain ports in `domain/ports/` — `abstract class`, `Observable<T>` returns
-3. Add business rules in `domain/rules/` (if needed)
-4. Implement infrastructure adapter in `infrastructure/adapter/`
+Follow these steps **in order**. Full templates in [layer-templates.md](layer-templates.md) and [module-template.md](module-template.md).
+
+1. Create module folder `src/app/modules/{moduleName}/`
+2. Define core models in `core/models/`
+3. Define core ports in `core/ports/` — `abstract class`, `Observable<T>` returns
+4. Add business rules in `core/rules/` (if needed)
 5. Create API endpoint in `infrastructure/api/endpoints/`
-6. Register infrastructure providers — bind ports to adapters
-7. Create use case in `application/use-cases/`
-8. Define store in `application/store/` — extend `BaseStore`
-9. Create facade in `application/facades/` — wire store + use cases
-10. Create service providers — aggregate all DI bindings
-11. Create routes with lazy-loaded components and route-level providers
-12. Create standalone components — facade-only injection, signals, OnPush
-13. Create public API barrel exports
-14. Write tests (see [testing-patterns.md](testing-patterns.md))
-15. Register context if cross-domain access needed (see [cross-domain.md](cross-domain.md))
-
-## Mixed-to-Clean Refactor Workflow
-
-**For full migration guide**: See [migration-guide.md](migration-guide.md).
-
-Summary: Analyze current module → Introduce facade boundary → Extract use cases/ports → Isolate infrastructure → Align store to BaseStore → Replace direct domain coupling with context registry → Validate.
+6. Implement adapter in `infrastructure/adapters/` — implements port, maps DTOs
+7. Register infrastructure providers — bind ports to adapters
+8. Define store in `application/store/` — `Store.for<Config>().build()`
+9. Create use case in `application/use-cases/`
+10. Create facade in `application/facades/` — wire store + use cases + `@SkipIfCached`/`@Loading`/`syncToStore`
+11. Create service providers — aggregate all DI bindings + `contextProvidersFor()`
+12. Create routes with lazy-loaded components and route-level providers
+13. Create standalone components — facade-only injection, signals, OnPush
+14. Create `public-api.ts` (sync contract) and `integration-api.ts` (reactive contract)
+15. Register in `app.routes.ts` via `loadChildren`
+16. Write tests (see [testing-patterns.md](testing-patterns.md))
+17. Register context if cross-module access needed (see [cross-domain.md](cross-domain.md))
 
 ## Legacy Patterns (What NOT to Replicate)
 
 | Legacy Pattern | New Pattern |
 |---------------|-------------|
-| NgRx actions/effects/reducers | Custom BaseStore + handleStoreLoading |
-| `StoreModule.forFeature()` | `BaseStore` with `providedIn: 'root'` |
+| NgRx actions/effects/reducers | flurryx `Store.for().build()` + `syncToStore` |
+| `extends BaseStore` | `Store.for<Config>().build()` |
+| `handleStoreLoading(store, key)` | `syncToStore(store, key)` |
+| `handleKeyedStoreLoading(store, key, id)` | `syncToKeyedStore(store, key, id)` |
+| `@AppCache(key, fn)` | `@SkipIfCached(key, fn)` |
+| `@AutoStartLoading(key, fn)` | `@Loading(key, fn)` |
+| `GetXProxy` class | Module adapter + `@SkipIfCached(CACHE_NO_TIMEOUT)` |
+| Shared `ReferenceSessionStore` | Per-module store + optional session-storage channel |
+| `src/app/<area>/` top-level feature | `src/app/modules/{name}/` |
+| `StoreModule.forFeature()` | `Store.for<Config>().build()` (root-provided) |
 | Direct `Store.dispatch()` in components | Facade methods |
 | Direct `Store.select()` in components | Facade getter returning store signal |
-| Services with BehaviorSubject state | BaseStore with ResourceState |
+| Services with BehaviorSubject state | flurryx store with `ResourceState<T>` |
 | Constructor injection | `inject()` function |
 | NgModules | Standalone components + route providers |
 | `@Input()` / `@Output()` decorators | `input()` / `output()` signal functions |
 
-## Checklist: Adding a New Feature
+## Checklist: Adding a New Module
 
-- [ ] Domain models defined as `type` (not interface/class)
-- [ ] Ports defined as `abstract class` with `Observable` returns
-- [ ] Adapters implement ports, inject endpoints
-- [ ] Endpoints use `HttpClient` + `UrlBuilder`
+- [ ] Module folder created under `src/app/modules/{name}/`
+- [ ] Core models defined (`type` or `interface`, no `any`)
+- [ ] Ports defined as `abstract class` with `Observable` returns in `core/ports/`
+- [ ] Core has ZERO imports from Angular, HttpClient, or flurryx
+- [ ] Adapters implement ports, inject endpoints, map DTOs
 - [ ] Infrastructure providers bind ports to adapters
+- [ ] Store defined via `Store.for<Config>().build()` in `application/store/`
 - [ ] Use cases inject ports, single responsibility
-- [ ] Store extends `BaseStore` with enum + state type
 - [ ] Facade injects store + use cases, exposes signals
-- [ ] Facade uses `@AppCache` + `@AutoStartLoading` + `handleStoreLoading`
-- [ ] Service providers include all DI bindings
+- [ ] Facade uses `@SkipIfCached` + `@Loading` + `syncToStore`
+- [ ] Service providers aggregate all DI bindings
 - [ ] Routes lazy-load components with route-level providers
 - [ ] Components inject facades only, use signals + OnPush
-- [ ] Components use the project's selector prefix
-- [ ] Public API exports cross-domain essentials
+- [ ] `public-api.ts` exports models, ports, providers fn
+- [ ] `integration-api.ts` exports store for cross-module mirroring
+- [ ] Registered in `app.routes.ts` via `loadChildren`
 - [ ] Tests written (80%+ coverage)
 - [ ] No `any` type used anywhere
 - [ ] No constructor injection — `inject()` only
-- [ ] No if-else chains — guard clauses and early returns
-- [ ] Immutable updates throughout (spread operator, no mutation)
-- [ ] Context registry updated if cross-domain access needed
+- [ ] Context registry updated if cross-module access needed
 
 ## Review Checklist (Before Finalizing)
 
-- [ ] Components use facade only — no use case or store references in presentation layer
+- [ ] Components use facade only — no use case or store references in presentation
 - [ ] No `any` introduced anywhere
-- [ ] Use cases are not referenced from presentation layer
-- [ ] Store transitions are typed and consistent (ResourceState<T>)
-- [ ] Loading behavior uses shared operator patterns
-- [ ] Cross-domain communication uses registry contracts
+- [ ] Core layer has zero framework/infra imports
+- [ ] Store is root-provided (not in route providers)
+- [ ] `@SkipIfCached` outermost, `@Loading` beneath
+- [ ] Cross-module access via port (context registry) or store mirror (integration-api)
 - [ ] All event handlers are thin — logic delegated to facade
 - [ ] Immutable updates throughout — no object mutation
-
-## Expected Output Style for Agent Responses
-
-When completing work on this codebase, include in your final message:
-
-1. **What changed and why** — brief summary of modifications
-2. **Which layer boundaries were enforced** — e.g., "presentation depends only on facade, domain has zero infra deps"
-3. **Which files show facade/store/context integration** — key file paths demonstrating the patterns
-4. **Any unresolved architecture mismatches** — if anchor files were missing or legacy patterns couldn't be fully migrated, report explicitly

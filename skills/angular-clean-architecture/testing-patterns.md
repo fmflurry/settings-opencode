@@ -1,41 +1,72 @@
 # Testing Patterns
 
-Use the project's chosen test framework and testing utilities. The examples below show **what to test**, not the specific framework API.
+Use the project's chosen test framework. Examples show **what to test**, not framework API.
 
 ## Facade Test — Mock Store + Use Cases
 
 ```typescript
-describe('CustomersFacade', () => {
-  // Set up the facade with mocked store and use cases
-  // Mock store.get() to return a signal with ResourceState
-  // Mock use case methods
+describe('CompaniesFacade', () => {
+  // Mock the flurryx store token: provide a fake with get/update/clear
+  // Mock use case methods to return of(...)
 
-  it('should return customers signal from store', () => {
-    const result = facade.getAllCustomers();
-    expect(store.get).toHaveBeenCalledWith(CustomersStoreEnum.CUSTOMERS);
+  it('should return companies signal from store', () => {
+    const result = facade.getAll();
+    // store.get('COMPANIES') returns a signal with ResourceState
     expect(result().data).toHaveLength(1);
   });
 
-  it('should delegate loading to use case + store operator', () => {
-    facade.loadAllCustomers({ searchTerm: 'test' });
-    expect(searchUseCase.by).toHaveBeenCalledWith({ searchTerm: 'test' });
+  it('should delegate loading to use case + syncToStore', () => {
+    facade.loadAll();
+    expect(getCompaniesUseCase.execute).toHaveBeenCalled();
+    // Verify store received update via syncToStore
   });
+
+  it('should skip fetch when cached (@SkipIfCached)', () => {
+    // Pre-populate store with status: 'Success'
+    facade.loadAll();
+    expect(getCompaniesUseCase.execute).not.toHaveBeenCalled();
+  });
+});
+```
+
+### Mocking the flurryx Store
+
+```typescript
+// Create a mock store matching the IStore interface
+const mockStore = {
+  get: jasmine.createSpy('get').and.returnValue(
+    signal({ data: [mockCompany], isLoading: false, status: 'Success' })
+  ),
+  update: jasmine.createSpy('update'),
+  clear: jasmine.createSpy('clear'),
+  clearAll: jasmine.createSpy('clearAll'),
+  startLoading: jasmine.createSpy('startLoading'),
+};
+
+// Provide via the store token
+TestBed.configureTestingModule({
+  providers: [
+    CompaniesFacade,
+    { provide: CompaniesStore, useValue: mockStore },
+    { provide: GetCompaniesUseCase, useValue: mockUseCase },
+  ],
 });
 ```
 
 ## Component Test — Mock Facade Only
 
 ```typescript
-describe('CustomersListComponent', () => {
+describe('CompaniesListComponent', () => {
   // Provide a mocked facade returning signals with ResourceState
-  // Components should ONLY depend on facade — no store or use case mocking needed
+  // Components should ONLY depend on facade — no store or use case mocking
 
-  it('should call facade to load customers', () => {
-    expect(mockFacade.loadAllCustomers).toHaveBeenCalled();
+  it('should call facade to load companies', () => {
+    expect(mockFacade.loadAll).toHaveBeenCalled();
   });
 
   it('should render data from facade signals', () => {
-    // Verify the component reads facade signals correctly
+    // facade.getAll() returns signal({ data: [...], isLoading: false })
+    // Verify rendered list matches
   });
 });
 ```
@@ -43,18 +74,33 @@ describe('CustomersListComponent', () => {
 ## Use Case Test — Mock Ports
 
 ```typescript
-describe('GetCustomersUseCase', () => {
+describe('GetCompaniesUseCase', () => {
   // Mock the port, inject into the use case
 
   it('should delegate to port', () => {
-    const filters: CustomerFilters = { searchTerm: 'test' };
-    mockPort.for.mockReturnValue(of([]));
+    mockPort.getAll.mockReturnValue(of([mockCompany]));
 
-    useCase.for(filters).subscribe((result) => {
-      expect(result).toEqual([]);
+    useCase.execute().subscribe((result) => {
+      expect(result).toEqual([mockCompany]);
     });
 
-    expect(mockPort.for).toHaveBeenCalledWith(filters);
+    expect(mockPort.getAll).toHaveBeenCalled();
+  });
+});
+```
+
+## Adapter Test — Mock Endpoints
+
+```typescript
+describe('GetCompaniesAdapter', () => {
+  // Mock the endpoint, verify DTO→domain mapping
+
+  it('should map response DTOs to domain models', () => {
+    mockEndpoint.getAll.mockReturnValue(of([mockResponse]));
+
+    adapter.getAll().subscribe((result) => {
+      expect(result[0].code).toBe(mockResponse.companyCode);
+    });
   });
 });
 ```
@@ -63,9 +109,12 @@ describe('GetCustomersUseCase', () => {
 
 | Test Target | Mock | Verify |
 |-------------|------|--------|
-| Facade | Store + use cases | Orchestration logic |
+| Facade | Store (flurryx token) + use cases | Orchestration, caching behavior |
 | Component | Facade only | Rendering + event delegation |
-| Use case | Ports | Delegation + business logic composition |
-| Adapter | Endpoints | DTO-to-model mapping |
+| Use case | Ports | Delegation + business logic |
+| Adapter | Endpoints | DTO-to-model mapping (ACL) |
 
-Target **80%+ coverage**.
+- Target **80%+ coverage**
+- Never mock flurryx internals (`syncToStore`, decorators) — test their observable effect on the store mock
+- Store is `providedIn: 'root'` — in tests, override with `{ provide: XStore, useValue: mockStore }`
+- `@SkipIfCached` tests: pre-populate store mock with `status: 'Success'` to verify skip behavior

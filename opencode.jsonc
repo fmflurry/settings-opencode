@@ -7,6 +7,7 @@
     "{file:instructions/question-handling.md}",
     "{file:instructions/codememory-first.md}",
     "{file:instructions/verification-gate.md}",
+    "{file:instructions/harness-parity.md}",
   ],
   "agent": {
     "conductor": {

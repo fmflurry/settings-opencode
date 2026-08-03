@@ -710,5 +710,5 @@ Concrete, verifiable rules. Each item includes a checkbox, one-line rule, and YA
 **Checklist use**:
 1. ✓ Run through each section for your API spec.
 2. ✓ Use YAML snippets as templates.
-3. ✓ Validate with Spectral or Redocly (see [validation.md](../validation.md)).
+3. ✓ Validate with Spectral or Redocly (see [validation.md](./validation.md)).
 4. ✓ Re-check before publishing to SwaggerHub.

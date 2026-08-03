@@ -24,7 +24,7 @@ Pre-merge review. Compares HEAD vs `origin/<target>`. Angular-aware. Project-awa
 |---|---|---|---|
 | `<target>` | yes | — | Target branch (e.g. `main`, `develop`, `release/x`) |
 | `--level` | no | auto | `junior` (verbose teaching) or `senior` (terse). Auto = senior. |
-| `--scope` | no | all | Comma list: `signals,rxjs,arch,flurryx,ts,a11y` |
+| `--scope` | no | all | Comma list: `signals,rxjs,arch,flurryx,ts,a11y,ddd` |
 | `--no-tools` | no | false | Skip lint + tsc (static review only) |
 
 ## Hard Rules
@@ -51,6 +51,7 @@ Pre-merge review. Compares HEAD vs `origin/<target>`. Angular-aware. Project-awa
          *.facade.ts / *.store.ts -> flurryx.md, clean-architecture.md
          *.adapter.ts / *.port.ts -> clean-architecture.md
          *.ts                     -> typescript-strict.md
+     - If --scope includes ddd && domain/ code changed: load [[angular-ddd]] (review-checklist.md) for tactical/strategic DDD checks
 7. If !--no-tools:
      - npm run lint -- --quiet (or eslint --quiet) on changed files
      - npx tsc --noEmit (full project; abort early on first 50 errors)
@@ -77,6 +78,7 @@ Promote to BLOCK if AGENTS.md flags the category as mandatory.
 - [[angular-cop-signals]] — Angular signals, change detection, OnPush, computed, no-method-in-template
 - [[angular-cop-rxjs]] — RxJS hygiene, takeUntilDestroyed, async pipe, leak patterns
 - [[angular-cop-clean-architecture]] — facade / use-case / port / adapter / store boundaries
+- [[angular-ddd]] (ddd scope) — DDD tactical patterns (entities, value objects, aggregates, repositories) and strategic design (bounded contexts, ubiquitous language, ACL) for domain-layer code. Complements [[angular-cop-clean-architecture]] layering.
 - [[angular-cop-flurryx]] — flurryx-specific rules (decorator order, keyed stores, no manual Record updates)
 - [[angular-cop-typescript-strict]] — no `any`, immutability, narrowing, no `!`, readonly
 - [[angular-cop-output-format]] — junior vs senior render templates

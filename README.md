@@ -173,6 +173,7 @@ export OPENCODE_MODEL_PRIMARY="anthropic/claude-sonnet-4-6"
 export OPENCODE_MODEL_SUBAGENT_PLANNER="anthropic/claude-opus-4-7"
 export OPENCODE_MODEL_SUBAGENT_WORKER="anthropic/claude-sonnet-4-6"
 export OPENCODE_MODEL_SUBAGENT_MINI="anthropic/claude-haiku-4-5"
+export OPENCODE_MODEL_LEARNING="ollama/qwen2.5-coder:7b-instruct"
 export OPENCODE_REASONING_PRIMARY="high"
 export OPENCODE_REASONING_SECONDARY="medium"
 export OPENCODE_REASONING_TERTIARY="low"
@@ -218,6 +219,7 @@ export OPENCODE_MODEL_PRIMARY="anthropic/claude-sonnet-4-6"
 export OPENCODE_MODEL_SUBAGENT_PLANNER="anthropic/claude-opus-4-7"
 export OPENCODE_MODEL_SUBAGENT_WORKER="anthropic/claude-sonnet-4-6"
 export OPENCODE_MODEL_SUBAGENT_MINI="anthropic/claude-haiku-4-5"
+export OPENCODE_MODEL_LEARNING="ollama/qwen2.5-coder:7b-instruct"
 
 # Reasoning effort tiers
 export OPENCODE_REASONING_PRIMARY="high"
@@ -280,7 +282,7 @@ It should route to the `planner` sub-agent and return a structured plan without 
 
 ### Model profile picker (`ocp`)
 
-`ocp` (alias for `opencode-pick`) launches OpenCode with a chosen model/reasoning profile. Profiles live in `~/.config/opencode/bin/opencode-models.zsh` — edit that file to add or adjust profiles (blocks of `OPENCODE_MODEL_*` / `OPENCODE_REASONING_*` exports).
+`ocp` (alias for `opencode-pick`) launches OpenCode with a chosen model/reasoning profile. Edit `~/.config/zsh/60-opencode-models.zsh` (sourced from `~/.zshrc`) to add or adjust profiles; the launcher then reads the profiles at `~/.config/opencode/bin/opencode-models.zsh` (blocks of `OPENCODE_MODEL_*` / `OPENCODE_REASONING_*` exports).
 
 **Usage:**
 

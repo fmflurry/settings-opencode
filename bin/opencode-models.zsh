@@ -71,7 +71,7 @@
 # export OPENCODE_MODEL_SUBAGENT_PLANNER="github-copilot/gpt-5.4"
 # export OPENCODE_MODEL_SUBAGENT_MINI="github-copilot/gpt-5.4-mini"
 # export OPENCODE_REASONING_PRIMARY="xhigh"
-# export OPENCODE_REASONING_CONDUCTOR="high"
+# export OPENCODE_REASONING_CONDUCTOR="xhigh"
 # export OPENCODE_REASONING_SECONDARY="high"
 # export OPENCODE_REASONING_TERTIARY="low"
 
@@ -223,26 +223,15 @@
 # export OPENCODE_REASONING_TERTIARY="high"
 
 # Qwen3.8-max (Alibaba TokenPlan)
-# export OPENCODE_MODEL_PRIMARY="alibabacloud/qwen3.8-max-preview"
-# export OPENCODE_MODEL_CONDUCTOR="alibabacloud/qwen3.8-max-preview"
-# export OPENCODE_MODEL_SUBAGENT_WORKER="alibabacloud/qwen3.8-max-preview"
-# export OPENCODE_MODEL_SUBAGENT_PLANNER="alibabacloud/qwen3.8-max-preview"
-# export OPENCODE_MODEL_SUBAGENT_MINI="alibabacloud/qwen3.8-max-preview"
+# export OPENCODE_MODEL_PRIMARY="alibaba-token-plan/qwen3.8-max"
+# export OPENCODE_MODEL_CONDUCTOR="alibaba-token-plan/qwen3.8-max"
+# export OPENCODE_MODEL_SUBAGENT_WORKER="alibaba-token-plan/qwen3.8-max"
+# export OPENCODE_MODEL_SUBAGENT_PLANNER="alibaba-token-plan/qwen3.8-max"
+# export OPENCODE_MODEL_SUBAGENT_MINI="alibaba-token-plan/qwen3.8-max"
 # export OPENCODE_REASONING_PRIMARY="xhigh"
 # export OPENCODE_REASONING_CONDUCTOR="high"
 # export OPENCODE_REASONING_SECONDARY="high"
 # export OPENCODE_REASONING_TERTIARY="low"
-
-# Ollama (local) -> Qwen2.5 Coder 7B Instruct
-# export OPENCODE_MODEL_PRIMARY="ollama/qwen2.5-coder:7b-instruct"
-# export OPENCODE_MODEL_CONDUCTOR="ollama/qwen2.5-coder:7b-instruct"
-# export OPENCODE_MODEL_SUBAGENT_WORKER="ollama/qwen2.5-coder:7b-instruct"
-# export OPENCODE_MODEL_SUBAGENT_PLANNER="ollama/qwen2.5-coder:7b-instruct"
-# export OPENCODE_MODEL_SUBAGENT_MINI="ollama/qwen2.5-coder:7b-instruct"
-#export OPENCODE_REASONING_PRIMARY=""
-#export OPENCODE_REASONING_CONDUCTOR=""
-#export OPENCODE_REASONING_SECONDARY=""
-#export OPENCODE_REASONING_TERTIARY=""
 
 # myMistral -> Medium 2604
 export OPENCODE_MODEL_PRIMARY="myMistral/mistral-medium-2604"
@@ -250,6 +239,9 @@ export OPENCODE_MODEL_CONDUCTOR="myMistral/mistral-medium-2604"
 export OPENCODE_MODEL_SUBAGENT_WORKER="myMistral/mistral-medium-2604"
 export OPENCODE_MODEL_SUBAGENT_PLANNER="myMistral/mistral-medium-2604"
 export OPENCODE_MODEL_SUBAGENT_MINI="myMistral/mistral-small-latest"
+# learning-reviewer runs in the background, per-idle turn, non-interactively —
+# no reason to bill cloud tokens for it, so pin it to local ollama.
+export OPENCODE_MODEL_LEARNING="ollama/qwen2.5-coder:7b-instruct"
 export OPENCODE_REASONING_PRIMARY="high"
 export OPENCODE_REASONING_CONDUCTOR="high"
 export OPENCODE_REASONING_SECONDARY="high"

@@ -100,6 +100,7 @@
         "bash": true,
         "grep": true,
         "glob": true,
+        "skill": true,
         "code-memory_*": true,
       },
     },
@@ -117,6 +118,7 @@
         "bash": true,
         "grep": true,
         "glob": true,
+        "skill": true,
         "code-memory_*": true,
       },
     },
@@ -386,7 +388,7 @@
     "learning-reviewer": {
       "description": "Background reviewer that analyzes conversation turns and extracts durable learnings (memories, skills). Runs per-turn, non-blocking. Project memories auto-apply; self-improvement changes are staged for approval.",
       "mode": "subagent",
-      "model": "ollama/qwen2.5-coder:7b-instruct",
+      "model": "{env:OPENCODE_MODEL_LEARNING}",
       "prompt": "{file:prompts/agents/learning-reviewer.txt}",
       "temperature": 0.3,
       "topP": 0.9,
@@ -590,10 +592,13 @@
     },
     "code-memory": {
       "type": "local",
+      // Tracks the newest PyPI release. The @latest suffix is required:
+      // without it uvx reuses a cached env and stays on the old version
+      // indefinitely (--refresh does not help).
       "command": [
         "uvx",
         "--from",
-        "git+https://github.com/fmflurry/code-memory",
+        "flurryx-code-memory@latest",
         "code-memory-mcp",
       ],
       "enabled": true,
@@ -605,9 +610,11 @@
   },
   "plugin": [
     "opencode-skill-creator",
+    "./plugins/notification.ts",
     "./plugins/mistral-affinity.js",
     "./plugins/learning-loop.ts",
     "./plugins/llm-metrics.ts",
+    "./plugins/secret-file-guard.ts",
   ],
   "provider": {
     "llama.cpp": {
@@ -726,30 +733,6 @@
           "name": "Pixtral Large (latest)",
           "tool_call": true,
           "reasoning": false,
-        },
-      },
-    },
-    "alibabacloud": {
-      "name": "AlibabaCloud",
-      "npm": "@ai-sdk/openai-compatible",
-      "options": {
-        "baseURL": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
-        "apiKey": "{env:ALIBABACLOUD_API_KEY}",
-      },
-      "models": {
-        "qwen3.8-max-preview": {
-          "name": "Qwen3.8 Max Preview",
-          "contextWindow": 983616,
-          "maxOutputTokens": 131072,
-          "options": {
-            "thinking": {
-              "type": "enabled",
-              "budgetTokens": 99072,
-            },
-            "temperature": 0.6,
-            "reasoning": true,
-            "reasoning_effort": "xhigh",
-          },
         },
       },
     },

@@ -105,6 +105,10 @@ When reviewing Angular code, you MUST load `skills/angular-cop/enforcement.md` a
 
 Also check:
 
+- **Relative-import climbing (BLOCK per angular-cop enforcement)**
+  - Cross-directory imports inside the Angular app root (e.g. `src/app/**`) must use the project's tsconfig path aliases (`compilerOptions.paths`; e.g. gc.platform defines `"@/*": ["./src/app/*"]` in `frontend/tsconfig.json`); deep relative climbing (`../../...`) is a BLOCK finding.
+  - BAD: `import { Company } from '../../../core/models'` → GOOD: `import { Company } from '@/modules/companies/core/models'`.
+  - Do NOT flag same-directory `./sibling` imports or targets the alias cannot express (outside the aliased root, e.g. `src/environments/`). Flag only lines touched by the diff.
 - **Missing unsubscribe / cleanup**
   - Subscriptions in ngOnInit (or services) without takeUntilDestroyed(), async pipe, or proper teardown → memory leaks & duplicate work.
   - Also watch fromEvent, interval, router.events, custom Subjects.

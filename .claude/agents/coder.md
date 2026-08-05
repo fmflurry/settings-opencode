@@ -18,6 +18,14 @@ When the `mcp__code-memory__*` tools are connected, use them FIRST for any code 
 - Apply the project's coding standards and guidelines (see auto-loaded `coding-standards` skill and any project `AGENTS.md` / rules).
 - **Before writing any C#** (`*.csproj`/`*.sln`/`*.slnx` in scope), you MUST load the `dotnet-clean-architecture` skill AND `skills/dotnet-cop/enforcement.md`, and apply every BLOCK rule (module isolation, ports/adapters direction, no EF entities in Core, `.AsNoTracking()` on reads, ProblemDetails, no `FromSqlRaw` interpolation, CancellationToken propagation).
 - **Before writing any Angular/TS** (`angular.json` in scope), you MUST load `angular-clean-architecture` AND `skills/angular-cop/enforcement.md`, and apply every BLOCK rule (no `any`, facade-not-UseCase in components, no RxJS leaks, immutability, clean-arch boundaries).
+- **Angular/TS imports — path alias mandatory.** For every cross-directory import inside the Angular app root (e.g. `src/app/`), use the project's tsconfig path aliases (`compilerOptions.paths` in the repo's tsconfig; e.g. gc.platform defines `@/` as `"@/*": ["./src/app/*"]` in `frontend/tsconfig.json`). Deep relative climbing (`../../...`) is forbidden and is a BLOCK finding per `skills/angular-cop/enforcement.md`.
+  ```typescript
+  // BAD — deep relative climbing
+  import { Company } from '../../../core/models';
+  // GOOD — path alias
+  import { Company } from '@/modules/companies/core/models';
+  ```
+  Same-directory `./sibling` imports and targets outside the aliased root (e.g. `src/environments/`) stay relative.
 - Self-verify before reporting done.
 
 Out of scope:

@@ -2,6 +2,25 @@
 
 Worked example: `companies` module (normalized to canonical layout).
 
+## Import Conventions (Path Aliases)
+
+Prefer the project's tsconfig path aliases over relative paths. Deep relative climbing is forbidden.
+
+```typescript
+// BAD — deep relative climbing, hard to read and breaks on file moves
+import { Company } from '../../../core/models';
+
+// GOOD — path alias, stable and readable
+import { Company } from '@/modules/companies/core/models';
+```
+
+Rules:
+- **Cross-module**: FORBIDDEN. From inside a module, `@/modules/<B>/...` is forbidden in ANY alias form — including `public-api`/`integration-api`. Aliasing does not legalize cross-module imports. Module contracts may be imported only by the composition root (`src/app/core/**`, `app.config.ts`, `app.routes.ts`); cross-module needs go through `core/` contracts or local ACL copies (see [cross-domain.md](cross-domain.md)).
+- **Intra-module across layers**: alias form preferred — `import { Company } from '@/modules/companies/core/models'`.
+- **Same-directory** `./sibling` remains acceptable — `import { x } from './company.model'`.
+- **Deep `../..` climbing is forbidden.**
+- If the repo mirrors tsconfig aliases in its test-runner config (e.g. gc.platform mirrors `frontend/tsconfig.json` in `frontend/vitest.config.ts`), adding any NEW alias requires updating BOTH files.
+
 ## 1. Core Model
 
 ```typescript

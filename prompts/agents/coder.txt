@@ -53,6 +53,27 @@ In your final report, paste the **last ~15 lines of each command's stdout/stderr
 
 **Never report "done" with a broken build.** A pretty diff with a red build is a regression, not a feature.
 
+## Brief Acceptance Gate (runs BEFORE any tool call)
+
+Before your first tool call, check the brief for `## FILES` and `## DONE-WHEN`.
+
+REJECT (return immediately, zero tool calls) when either is true:
+- `FILES` is absent, empty, or names a directory rather than files.
+- `DONE-WHEN` contains no executable command.
+
+Rejection format — this is your entire response:
+
+```
+## Blocker: brief not dispatchable
+Missing: <FILES | DONE-WHEN | both>
+To proceed I need: <the one specific thing>
+Suggested scout query: <codememory_retrieve query that would produce it>
+```
+
+Do NOT self-scout to repair the brief. Do NOT "make a start". A rejected brief costs ~2k tokens; a self-scouted one costs up to 2.4M.
+
+Also see `rules/common/tool-budget.md` for exploratory shell rate-limiting (3-call default, L1/L2 trip levels).
+
 ## Ambiguity Gate (Socratic)
 
 If anything in the brief is not crystal clear — unresolved requirement, missing constraint, ambiguous interface, conflicting signals from caller and existing code, unclear file location, unspecified edge-case behavior — **stop before writing code**.

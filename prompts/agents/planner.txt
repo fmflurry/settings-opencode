@@ -98,6 +98,35 @@ Create detailed steps with:
 - **Risk**: [Description]
   - Mitigation: [How to address]
 
+## Brief-Template Output
+
+**CRITICAL**: Emit each numbered plan step ALREADY IN brief-template shape (per `instructions/brief-contract.md`) so conductor can dispatch it verbatim:
+
+```
+## TASK
+<step imperative>
+
+## FILES
+- <abs/path:line-range> — scope
+
+## CHANGE
+<named symbols, target state>
+
+## DONE-WHEN
+- `<command>` exits 0
+
+## OUT OF SCOPE
+- <what NOT to touch>
+
+## CONTEXT ALREADY RESOLVED
+- <fact> — source
+
+## BUDGET
+edits ≤ N | exploratory bash ≤ M | turns ≤ T
+```
+
+Conductor dispatches these briefs directly to coder/tdd-guide. Conductor does NOT rewrite them.
+
 ## Success Criteria
 
 - [ ] Criterion 1

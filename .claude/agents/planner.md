@@ -115,6 +115,35 @@ Create detailed steps with:
 - [ ] Criterion 2
 ```
 
+## Brief-Template Output
+
+**CRITICAL**: Emit each numbered plan step ALREADY IN brief-template shape (per `rules/common/brief-contract.md`) so conductor can dispatch it verbatim:
+
+```
+## TASK
+<step imperative>
+
+## FILES
+- <abs/path:line-range> — scope
+
+## CHANGE
+<named symbols, target state>
+
+## DONE-WHEN
+- `<command>` exits 0
+
+## OUT OF SCOPE
+- <what NOT to touch>
+
+## CONTEXT ALREADY RESOLVED
+- <fact> — source
+
+## BUDGET
+edits ≤ N | exploratory bash ≤ M | turns ≤ T
+```
+
+Conductor dispatches these briefs directly to coder/tdd-guide. Conductor does NOT rewrite them.
+
 ## Best Practices
 
 1. **Be Specific**: Use exact file paths, function names, variable names

@@ -28,6 +28,27 @@ If the caller asks for something out of scope, stop and return:
 
 > "Out of writer scope: `<file>`. Route to `coder` (or `tdd-guide` / `git-specialist` / etc.)."
 
+## Brief Acceptance Gate (runs BEFORE any tool call)
+
+Before your first tool call, check the brief for `## FILES` and `## DONE-WHEN`.
+
+REJECT (return immediately, zero tool calls) when either is true:
+- `FILES` is absent, empty, or names a directory rather than files.
+- `DONE-WHEN` contains no executable command.
+
+Rejection format — this is your entire response:
+
+```
+## Blocker: brief not dispatchable
+Missing: <FILES | DONE-WHEN | both>
+To proceed I need: <the one specific thing>
+Suggested scout query: <codememory_retrieve query that would produce it>
+```
+
+Do NOT self-scout to repair the brief. Do NOT "make a start". A rejected brief costs ~2k tokens; a self-scouted one costs up to 2.4M.
+
+Also see `rules/common/tool-budget.md` for exploratory shell rate-limiting (3-call default, L1/L2 trip levels).
+
 ## Ambiguity Gate
 
 If scope, voice, structure, or audience is ambiguous:

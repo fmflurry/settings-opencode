@@ -8,6 +8,8 @@
     "{file:instructions/codememory-first.md}",
     "{file:instructions/verification-gate.md}",
     "{file:instructions/harness-parity.md}",
+    "{file:instructions/brief-contract.md}",
+    "{file:instructions/tool-budget.md}",
   ],
   "agent": {
     "conductor": {
@@ -53,6 +55,7 @@
           "dotnet-cop": "allow",
           "gdpr-specialist": "allow",
           "api-spec-architect": "allow",
+          "scout": "allow",
         },
       },
     },
@@ -385,6 +388,25 @@
         "glob": false,
       },
     },
+    "scout": {
+      "description": "MUST delegate to resolve unknown/broad file scope before dispatching coder/writer/tdd-guide with a brief. Read-only manifest lookups (code-memory topology, grep, glob) — no writes, no bash, no further delegation.",
+      "mode": "subagent",
+      "model": "{env:OPENCODE_MODEL_SUBAGENT_MINI}",
+      "prompt": "{file:prompts/agents/scout.txt}",
+      "temperature": 0.3,
+      "topP": 0.9,
+      "tools": {
+        "*": false,
+        "read": true,
+        "grep": true,
+        "glob": true,
+        "code-memory_*": true,
+        "write": false,
+        "edit": false,
+        "bash": false,
+        "task": false,
+      },
+    },
     "learning-reviewer": {
       "description": "Background reviewer that analyzes conversation turns and extracts durable learnings (memories, skills). Runs per-turn, non-blocking. Project memories auto-apply; self-improvement changes are staged for approval.",
       "mode": "subagent",
@@ -615,6 +637,7 @@
     "./plugins/learning-loop.ts",
     "./plugins/llm-metrics.ts",
     "./plugins/secret-file-guard.ts",
+    "./plugins/tool-budget.ts",
   ],
   "provider": {
     "llama.cpp": {

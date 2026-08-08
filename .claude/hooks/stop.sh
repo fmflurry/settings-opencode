@@ -5,6 +5,7 @@
 # Read hook input from stdin
 INPUT=$(cat)
 TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null)
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
 
 # Auto-compact: check if Claude is asking about compacting the conversation
 if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
@@ -56,6 +57,18 @@ if git rev-parse --git-dir > /dev/null 2>&1; then
   CONSOLE_LOGS=$(git diff --cached 2>/dev/null | grep -c "console\.log" || true)
   if [ "$CONSOLE_LOGS" -gt 0 ]; then
     echo "⚠️  Warning: $CONSOLE_LOGS console.log statements in staged changes" >&2
+  fi
+fi
+
+# Session tool-budget ratio summary (see tool-budget.sh / rules/common/tool-budget.md)
+if [ -n "$SESSION_ID" ]; then
+  BUDGET_FILE="${CLAUDE_SESSION_DIR:-$HOME/.claude/session-env/${SESSION_ID}}/toolbudget.tsv"
+  if [ -f "$BUDGET_FILE" ]; then
+    EXPLORATORY_COUNT=$(grep -c -- $'\texploratory$' "$BUDGET_FILE" 2>/dev/null || echo 0)
+    EDIT_COUNT=$(grep -c -- $'\tedit$' "$BUDGET_FILE" 2>/dev/null || echo 0)
+    RATIO="n/a"
+    [ "$EDIT_COUNT" -gt 0 ] 2>/dev/null && RATIO=$(awk -v e="$EXPLORATORY_COUNT" -v d="$EDIT_COUNT" 'BEGIN { printf "%.2f", e / d }')
+    echo "📊 Tool budget: ${EXPLORATORY_COUNT} exploratory / ${EDIT_COUNT} edits (ratio ${RATIO})" >&2
   fi
 fi
 

@@ -7,6 +7,18 @@ INPUT=$(cat)
 TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
 
+# Resolve the notify scripts dir: installed location first, repo-relative
+# fallback last (so running out of the repo checkout still works).
+NOTIFY_SCRIPTS_DIR="${NOTIFY_SCRIPTS_DIR:-}"
+for _d in "$HOME/.claude/scripts" "$HOME/.config/opencode/scripts" "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts" 2>/dev/null && pwd)"; do
+  [ -n "$NOTIFY_SCRIPTS_DIR" ] && break
+  [ -f "$_d/notify-gate.sh" ] && NOTIFY_SCRIPTS_DIR="$_d"
+done
+
+# Shared append-only trigger logger (log-only; never affects delivery).
+NOTIFY_LOG_SH="$NOTIFY_SCRIPTS_DIR/notify-log.sh"
+[ -f "$NOTIFY_LOG_SH" ] && source "$NOTIFY_LOG_SH"
+
 # Auto-compact: check if Claude is asking about compacting the conversation
 if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
   LAST_CONTENT=$(tail -c 8000 "$TRANSCRIPT_PATH" 2>/dev/null)
@@ -29,21 +41,14 @@ fi
 # Stop can re-invoke with stop_hook_active=true when a prior Stop hook caused continuation).
 STOP_HOOK_ACTIVE=$(echo "$INPUT" | jq -r '.stop_hook_active // false' 2>/dev/null)
 if [ "$STOP_HOOK_ACTIVE" = "true" ]; then
+  type notify_log >/dev/null 2>&1 && notify_log claude-code Stop "$SESSION_ID" turn-end SUPPRESSED:stop_hook_active "Task done"
   exit 0
 fi
 
-# macOS notification when attention is required
-osascript -e 'display notification "Your attention is required" with title "Claude Code" sound name "Glass"' 2>/dev/null &
-# Push to iPhone via Bark (shared OpenCode sender)
-NOTIFY_IPHONE="$HOME/Workspace/settings-opencode/scripts/notify-iphone.sh"
-if [ -x "$NOTIFY_IPHONE" ]; then
-  if [ -z "$BARK_DEVICE_KEY" ] && [ -f "$HOME/.config/zsh/50-env-secrets.zsh" ]; then
-    # shellcheck disable=SC1090
-    source "$HOME/.config/zsh/50-env-secrets.zsh" 2>/dev/null
-    export BARK_DEVICE_KEY
-  fi
-  "$NOTIFY_IPHONE" "Claude Code" "Task done — your attention is required" >/dev/null 2>&1 &
-fi
+# Route through the notify-gate: it suppresses delivery while subagents are
+# in flight and debounces bursts, then handles logging + delivery itself.
+NOTIFY_GATE_SH="$NOTIFY_SCRIPTS_DIR/notify-gate.sh"
+[ -f "$NOTIFY_GATE_SH" ] && NOTIFY_DESKTOP=1 "$NOTIFY_GATE_SH" claude-code Stop "$SESSION_ID" turn-end "Claude Code" "Task done — your attention is required"
 
 # Check for uncommitted secrets (warn only)
 if git rev-parse --git-dir > /dev/null 2>&1; then

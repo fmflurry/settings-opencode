@@ -37,6 +37,7 @@ WSL_WIN_HOME=""
 WSL_OPENCODE_WIN_PATH=""
 OPENCODE_TARGET_READY=0
 CLAUDE_TARGET_READY=0
+OPENCODE_TARGET_IS_SOURCE=0
 
 # Positive-flag allowlist trackers (0 = not explicitly requested)
 FLAG_OPENCODE=0
@@ -272,6 +273,14 @@ detect_shell_rc() {
     esac
 }
 
+same_directory() {
+    local left="$1" right="$2" left_physical right_physical
+    [ -d "$left" ] && [ -d "$right" ] || return 1
+    left_physical="$(cd "$left" && pwd -P)"
+    right_physical="$(cd "$right" && pwd -P)"
+    [ "$left_physical" = "$right_physical" ]
+}
+
 # Copy src/ contents into dst/ as a real copy (not a symlink).
 # Used for both the local install and the WSL -> Windows install (where symlinks
 # across /mnt/c don't work). Excludes node_modules (reinstalled in the target),
@@ -316,6 +325,45 @@ copy_tree() {
 
 ensure_opencode_runtime_dirs() {
     mkdir -p "$TARGET_OPENCODE/data/opencode"
+}
+
+prune_stale_opencode_plugin_helpers() {
+    local stale_helper="$TARGET_OPENCODE/plugins/notification-gate.ts"
+    local managed_helper="$TARGET_OPENCODE/plugins/lib/notification-gate.ts"
+    [ "$OPENCODE_TARGET_READY" = "1" ] || return 0
+    [ -e "$stale_helper" ] || [ -L "$stale_helper" ] || return 0
+
+    if [ ! -L "$stale_helper" ] && [ -f "$stale_helper" ] && [ -f "$managed_helper" ] && cmp -s "$stale_helper" "$managed_helper"; then
+        rm "$stale_helper"
+        ok "removed known managed legacy plugin helper $stale_helper"
+        return 0
+    fi
+
+    if [ -L "$stale_helper" ] || [ -f "$stale_helper" ]; then
+        local backup_root="$TARGET_OPENCODE/plugins/.settings-opencode-backups"
+        local backup_dir backup_path
+        mkdir -p "$backup_root"
+        chmod 700 "$backup_root"
+        if ! backup_dir="$(mktemp -d "$backup_root/notification-gate.XXXXXX")"; then
+            err "failed to create a safe backup location for $stale_helper"
+            return 1
+        fi
+        backup_path="$backup_dir/notification-gate.backup"
+        if ! mv "$stale_helper" "$backup_path"; then
+            rmdir "$backup_dir" 2>/dev/null || true
+            err "failed to preserve stale notification helper at $stale_helper"
+            return 1
+        fi
+        if [ -L "$backup_path" ]; then
+            warn "preserved symbolic notification helper outside plugin discovery at $backup_path"
+        else
+            warn "preserved modified notification helper outside plugin discovery at $backup_path"
+        fi
+        return 0
+    fi
+
+    err "stale notification helper is not a regular file or symbolic link: $stale_helper"
+    return 1
 }
 
 # Copy src/ into dst/ but protect personal config files from being overwritten
@@ -441,7 +489,7 @@ sync_skills() {
 
     step "Syncing canonical skill union"
     local dests=()
-    [ "$SKIP_OPENCODE" != "1" ] && [ "$OPENCODE_TARGET_READY" = "1" ] && dests+=("$TARGET_OPENCODE/skills")
+    [ "$SKIP_OPENCODE" != "1" ] && [ "$OPENCODE_TARGET_READY" = "1" ] && [ "$OPENCODE_TARGET_IS_SOURCE" != "1" ] && dests+=("$TARGET_OPENCODE/skills")
     [ "$SKIP_CLAUDE" != "1" ] && [ "$CLAUDE_TARGET_READY" = "1" ] && dests+=("$TARGET_CLAUDE/skills")
 
     if [ "${#dests[@]}" -gt 0 ]; then
@@ -896,6 +944,7 @@ check_environment() {
 
 install_repo_link() {
     OPENCODE_TARGET_READY=0
+    OPENCODE_TARGET_IS_SOURCE=0
 
     if [ "$WSL_MODE" = "1" ]; then
         step "Copying repo into $TARGET_OPENCODE (WSL -> Windows)"
@@ -930,10 +979,11 @@ install_repo_link() {
 
     step "Copying repo into $TARGET_OPENCODE"
 
-    if [ "$REPO_DIR" = "$TARGET_OPENCODE" ]; then
+    if same_directory "$REPO_DIR" "$TARGET_OPENCODE"; then
         handle_nested_opencode_claude
-        ok "repo already lives at $TARGET_OPENCODE"
+        ok "$TARGET_OPENCODE already resolves to the source repo"
         OPENCODE_TARGET_READY=1
+        OPENCODE_TARGET_IS_SOURCE=1
         return 0
     fi
 
@@ -1205,6 +1255,33 @@ install_claude_mirror() {
     CLAUDE_TARGET_READY=1
     if [ "$LOCAL_MODE" = "1" ] && [ -f "$TARGET_CLAUDE/settings.json" ]; then
         localize_claude_settings_hooks "$TARGET_CLAUDE/settings.json"
+    fi
+}
+
+# The notification hooks (.claude/hooks/{stop,notification,subagent-stop}.sh)
+# resolve their shared scripts at $HOME/.claude/scripts or
+# $HOME/.config/opencode/scripts. copy_claude_allowlist's allowlist doesn't
+# include top-level scripts/, and the OpenCode copy_tree already carries the
+# whole repo, so this installs the two notify scripts explicitly into every
+# ready target to guarantee both are present regardless of copy path.
+install_notify_scripts() {
+    local src_dir="$REPO_DIR/scripts"
+    [ -f "$src_dir/notify-log.sh" ] && [ -f "$src_dir/notify-gate.sh" ] || return 0
+
+    if [ "$CLAUDE_TARGET_READY" = "1" ]; then
+        mkdir -p "$TARGET_CLAUDE/scripts"
+        cp "$src_dir/notify-log.sh" "$TARGET_CLAUDE/scripts/notify-log.sh"
+        cp "$src_dir/notify-gate.sh" "$TARGET_CLAUDE/scripts/notify-gate.sh"
+        chmod +x "$TARGET_CLAUDE/scripts/notify-gate.sh" "$TARGET_CLAUDE/scripts/notify-log.sh"
+        ok "installed notify-log.sh/notify-gate.sh into $TARGET_CLAUDE/scripts"
+    fi
+
+    if [ "$OPENCODE_TARGET_READY" = "1" ] && [ "$OPENCODE_TARGET_IS_SOURCE" != "1" ]; then
+        mkdir -p "$TARGET_OPENCODE/scripts"
+        cp "$src_dir/notify-log.sh" "$TARGET_OPENCODE/scripts/notify-log.sh"
+        cp "$src_dir/notify-gate.sh" "$TARGET_OPENCODE/scripts/notify-gate.sh"
+        chmod +x "$TARGET_OPENCODE/scripts/notify-gate.sh" "$TARGET_OPENCODE/scripts/notify-log.sh"
+        ok "installed notify-log.sh/notify-gate.sh into $TARGET_OPENCODE/scripts"
     fi
 }
 
@@ -1481,8 +1558,13 @@ info "claude:  $([ "$SKIP_CLAUDE" = "1" ] && echo "skipped" || echo "$TARGET_CLA
 
 if [ "$SKIP_OPENCODE" != "1" ]; then
     install_repo_link
+    [ "$OPENCODE_TARGET_IS_SOURCE" = "1" ] || prune_stale_opencode_plugin_helpers
     if [ "$OPENCODE_TARGET_READY" = "1" ]; then
-        install_deps
+        if [ "$OPENCODE_TARGET_IS_SOURCE" = "1" ]; then
+            info "source repo is the OpenCode target; dependency installation skipped"
+        else
+            install_deps
+        fi
         if [ "$LOCAL_MODE" = "1" ]; then
             step "Shell environment variables — skipped (--local does not modify global rc)"
             info "To use per-project env vars, add the following to a .envrc or source it manually:"
@@ -1495,6 +1577,8 @@ if [ "$SKIP_OPENCODE" != "1" ]; then
     fi
 fi
 install_claude_mirror
+sync_learning_runtime || exit 1
+install_notify_scripts
 
 # The repo-path export, model/reasoning defaults, and the global settings-sync
 # command are harness-independent — install them in global mode regardless of

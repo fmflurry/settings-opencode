@@ -2,6 +2,13 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Plugin, PluginInput } from "@opencode-ai/plugin";
+import {
+  logNotification,
+  markSubagentEnd,
+  markSubagentStart,
+  shouldDeliver,
+  type NotificationLogEntry,
+} from "./lib/notification-gate.ts";
 
 const TITLE = "OpenCode";
 const MESSAGE = "Conductor stopped — input may be needed";
@@ -17,6 +24,14 @@ const REPO_IPHONE_SCRIPT = join(
   "notify-iphone.sh",
 );
 const GLOBAL_SESSION_KEY = "__global__";
+// Verified against node_modules/@opencode-ai/sdk/dist/{gen,v2/gen}/types.gen.d.ts:
+// the legacy client emits "permission.updated" (Permission), the v2 client emits
+// "permission.asked" (PermissionRequest). Neither SDK defines a "permission.v2.*"
+// event; those two entries are kept only as defensive aliases in case a future
+// server build uses that naming. Both real families can fire for the SAME prompt
+// with two independently-minted `id`s, so dedupe below keys on the underlying
+// tool invocation (messageID + callID) rather than on `id` — see
+// permissionDedupeKey.
 const PERMISSION_EVENTS = new Set([
   "permission.asked",
   "permission.updated",
@@ -110,6 +125,43 @@ function eventDedupeKey(event: unknown): string {
   return id
     ? `${sessionKeyFrom(event)}:${id}`
     : `${sessionKeyFrom(event)}:${(event as { type?: string })?.type ?? "unknown"}`;
+}
+
+// The legacy Permission shape (permission.updated) carries messageID/callID
+// at the top level; the v2 PermissionRequest shape (permission.asked) nests
+// them under an optional `tool` object. Reading both lets one identity
+// function recognize the invocation a permission prompt is gating,
+// regardless of which family reported it.
+function permissionToolIdentity(
+  properties: Record<string, unknown>,
+): { messageID: string; callID: string } | undefined {
+  const tool = (properties as { tool?: unknown }).tool;
+  const messageID =
+    stringProperty<{ messageID?: string }>(properties, "messageID") ??
+    stringProperty<{ messageID?: string }>(tool, "messageID");
+  const callID =
+    stringProperty<{ callID?: string }>(properties, "callID") ??
+    stringProperty<{ callID?: string }>(tool, "callID");
+
+  return messageID && callID ? { messageID, callID } : undefined;
+}
+
+/**
+ * Dedupe key for permission events. The legacy and v2 permission APIs mint
+ * independent `id`s for the same underlying prompt, so `eventDedupeKey`
+ * (which keys on `id`) lets one prompt fire twice — once per family. Keying
+ * on the gated tool invocation (session + messageID + callID) instead is
+ * invariant across both families and collapses them to one notification.
+ * Falls back to `eventDedupeKey` when that identity isn't present, so a
+ * permission event without a tool invocation still gets deduped by id.
+ */
+function permissionDedupeKey(event: unknown): string {
+  const properties = eventProperties(event);
+  const toolIdentity = permissionToolIdentity(properties);
+
+  return toolIdentity
+    ? `${sessionKeyFrom(event)}:${toolIdentity.messageID}:${toolIdentity.callID}`
+    : eventDedupeKey(event);
 }
 
 function isHumanInterventionEvent(event: { type?: string }): boolean {
@@ -229,8 +281,31 @@ async function notify(
   $: PluginInput["$"],
   title: string,
   message: string,
-  { iphone = false } = {},
+  {
+    iphone = false,
+    event,
+    notificationClass,
+    sessionID,
+  }: {
+    iphone?: boolean;
+    event?: string;
+    notificationClass?: string;
+    sessionID?: string;
+  } = {},
 ): Promise<void> {
+  const entry: NotificationLogEntry = {
+    harness: "opencode",
+    event: event ?? "notification",
+    sessionID,
+    notificationClass: notificationClass ?? "unknown",
+    decision: "SENT-phase1",
+    title,
+  };
+
+  logNotification(entry);
+
+  if (!shouldDeliver(entry)) return;
+
   const notifiers = buildDesktopNotifiers($, title, message);
 
   if (iphone) {
@@ -255,23 +330,26 @@ async function notify(
 
 export const NotificationPlugin = (async ({ $ }: PluginInput) => {
   const hasSubstantiveToolWorkBySession = new Map<SessionKey, boolean>();
-  const dispatchedTaskBySession = new Map<SessionKey, boolean>();
   const completedConductorMessages = new Set<string>();
   const notifiedHumanInterventionEvents = new Set<string>();
-  const rootConductorSessionIDs = new Set<SessionKey>();
+  // Root/child status per session, decided once from the first chat.message
+  // that carries an agent name and never flipped afterward. A session with
+  // no decision yet (or no agent-tagged message at all) defaults to root —
+  // losing root status must never happen, since that would silence the
+  // final completion notification entirely.
+  const sessionRootStatus = new Map<SessionKey, boolean>();
   const isRootConductorSession = (sessionID: string | undefined): boolean =>
-    sessionID !== undefined && rootConductorSessionIDs.has(sessionID);
+    sessionID !== undefined && (sessionRootStatus.get(sessionID) ?? true);
   // Sessions where a question is pending — set from question.asked/question.v2.asked
   // so that message.updated(finish:stop) can be suppressed (no spurious completion).
   const questionPendingBySession = new Set<SessionKey>();
 
   return {
     "chat.message": async ({ sessionID, agent }) => {
-      if (agent === "conductor") {
-        rootConductorSessionIDs.add(sessionID);
-      } else if (agent) {
-        rootConductorSessionIDs.delete(sessionID);
+      if (!agent || sessionRootStatus.has(sessionID)) {
+        return;
       }
+      sessionRootStatus.set(sessionID, agent === "conductor");
     },
 
     // "tool.execute.before" fires AFTER message.updated(finish:stop) for the same
@@ -285,6 +363,10 @@ export const NotificationPlugin = (async ({ $ }: PluginInput) => {
       input: { tool: string; sessionID: string; callID: string },
       _output: unknown,
     ) => {
+      if (input.tool === "task") {
+        markSubagentStart(input.sessionID, input.callID);
+      }
+
       if (input.tool !== "question") {
         return;
       }
@@ -313,18 +395,14 @@ export const NotificationPlugin = (async ({ $ }: PluginInput) => {
         return;
       }
 
-      hasSubstantiveToolWorkBySession.set(key, true);
-
       if (input.tool === "task") {
-        dispatchedTaskBySession.set(key, true);
+        markSubagentEnd(input.sessionID, input.callID);
       }
+
+      hasSubstantiveToolWorkBySession.set(key, true);
 
       if (hasSubstantiveToolWorkBySession.size > 1000) {
         hasSubstantiveToolWorkBySession.clear();
-      }
-
-      if (dispatchedTaskBySession.size > 1000) {
-        dispatchedTaskBySession.clear();
       }
     },
 
@@ -335,14 +413,18 @@ export const NotificationPlugin = (async ({ $ }: PluginInput) => {
 
       // ── Permission events ────────────────────────────────────────────────
       if (isHumanInterventionEvent(event as { type?: string })) {
-        const key = eventDedupeKey(event);
+        const key = permissionDedupeKey(event);
         if (notifiedHumanInterventionEvents.has(key)) return;
 
         notifiedHumanInterventionEvents.add(key);
 
         const { title, message } = extractPermissionContent(event);
+        const permissionSessionID = sessionIDFrom(event);
         void notify($, title, message, {
-          iphone: isRootConductorSession(sessionIDFrom(event)),
+          iphone: isRootConductorSession(permissionSessionID),
+          event: eventType,
+          notificationClass: "permission",
+          sessionID: permissionSessionID,
         }).catch(() => {});
 
         if (notifiedHumanInterventionEvents.size > 1000) notifiedHumanInterventionEvents.clear();
@@ -388,6 +470,9 @@ export const NotificationPlugin = (async ({ $ }: PluginInput) => {
 
         void notify($, title, message, {
           iphone: isRootConductorSession(sessionID),
+          event: eventType,
+          notificationClass: "question",
+          sessionID,
         }).catch(() => {});
 
         if (notifiedHumanInterventionEvents.size > 1000) notifiedHumanInterventionEvents.clear();
@@ -438,15 +523,22 @@ export const NotificationPlugin = (async ({ $ }: PluginInput) => {
         return;
       }
 
-      const dispatchedTask = dispatchedTaskBySession.get(sessionKey) ?? false;
-      dispatchedTaskBySession.set(sessionKey, false);
+      // Suppression now comes from the inflight subagent counter (see
+      // shouldDeliver / markSubagentStart / markSubagentEnd), not from a
+      // per-session "dispatched a task" heuristic — so reset unconditionally
+      // for every session, root or child.
+      hasSubstantiveToolWorkBySession.set(sessionKey, false);
 
-      if (!dispatchedTask) {
-        hasSubstantiveToolWorkBySession.set(sessionKey, false);
+      if (completedKey !== null) {
+        completedConductorMessages.add(completedKey);
+      }
 
-        if (completedKey !== null) {
-          completedConductorMessages.add(completedKey);
-        }
+      // Only the root conductor session's completion is user-facing. A
+      // non-root (subagent) session finishing must produce no notification
+      // of any kind — the top-level turn notifies once, after the last
+      // subagent, via the inflight gate.
+      if (!isRootConductorSession(sessionKey)) {
+        return;
       }
 
       const completionContent = extractCompletionContent(event);
@@ -454,7 +546,10 @@ export const NotificationPlugin = (async ({ $ }: PluginInput) => {
       const message = completionContent?.message ?? MESSAGE;
 
       void notify($, title, message, {
-        iphone: isRootConductorSession(sessionKey) && !dispatchedTask,
+        iphone: true,
+        event: eventType,
+        notificationClass: "completion",
+        sessionID: sessionKey,
       }).catch(() => {});
     },
   };

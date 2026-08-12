@@ -37,4 +37,17 @@ case "$TOOL_NAME" in
     ;;
 esac
 
+# Task-marker increment: track in-flight subagents so notify-gate.sh can
+# suppress notifications until the last dispatched subagent has stopped.
+TASK_MARKER_INPUT=$(cat 2>/dev/null)
+TASK_MARKER_TOOL_NAME=$(echo "$TASK_MARKER_INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
+if [ "$TASK_MARKER_TOOL_NAME" = "Task" ]; then
+  TASK_MARKER_SESSION_ID=$(echo "$TASK_MARKER_INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+  TASK_MARKER_USE_ID=$(echo "$TASK_MARKER_INPUT" | jq -r '.tool_use_id // empty' 2>/dev/null)
+  [ -n "$TASK_MARKER_USE_ID" ] || TASK_MARKER_USE_ID="$(date +%s%N)-$$"
+  TASK_MARKER_STATE="${NOTIFY_STATE_DIR:-$HOME/.claude/state/notify}/$TASK_MARKER_SESSION_ID"
+  mkdir -p "$TASK_MARKER_STATE/inflight" 2>/dev/null
+  touch "$TASK_MARKER_STATE/inflight/$TASK_MARKER_USE_ID" 2>/dev/null
+fi
+
 exit 0

@@ -1,8 +1,12 @@
 {
   "$schema": "https://opencode.ai/tui.json",
   "theme": "cursor",
-  "plugin": ["./tui-plugins/llm-metrics.tsx"],
+  "plugin": [
+    "./tui-plugins/llm-metrics.tsx",
+    "./tui-plugins/lion-banner.tsx"
+  ],
   "plugin_enabled": {
-    "llm-metrics": true
+    "llm-metrics": true,
+    "lion-banner": true
   }
 }

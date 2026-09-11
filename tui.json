@@ -3,10 +3,10 @@
   "theme": "cursor",
   "plugin": [
     "./tui-plugins/llm-metrics.tsx",
-    "./tui-plugins/lion-banner.tsx"
+    "./tui-plugins/panda-banner.tsx"
   ],
   "plugin_enabled": {
     "llm-metrics": true,
-    "lion-banner": true
+    "panda-banner": true
   }
 }

@@ -234,6 +234,6 @@ const tui: TuiPlugin = async (api) => {
 };
 
 export default {
-  id: "lion-banner",
+  id: "panda-banner",
   tui,
 };

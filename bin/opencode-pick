@@ -11,6 +11,20 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 PROFILE_FILE="${OPENCODE_PROFILE_FILE:-$SCRIPT_DIR/opencode-models.zsh}"
+_NODE_BIN="$(command -v node || true)"
+if [[ -z "$_NODE_BIN" ]]; then
+  for _node_candidate in \
+    "${NVM_BIN:-}/node" \
+    "${VOLTA_HOME:-}/bin/node" \
+    /opt/homebrew/bin/node \
+    /usr/local/bin/node \
+    /usr/bin/node; do
+    if [[ -x "$_node_candidate" ]]; then
+      _NODE_BIN="$_node_candidate"
+      break
+    fi
+  done
+fi
 
 if [[ ! -r "$PROFILE_FILE" ]]; then
   echo "opencode-pick: cannot read $PROFILE_FILE" >&2
@@ -120,14 +134,43 @@ fi
 
 # Apply exports in current shell and exec opencode.
 echo "→ profile: $CHOICE" >&2
+unset OPENCODE_MODEL_PRIMARY OPENCODE_MODEL_CONDUCTOR
+unset OPENCODE_MODEL_SUBAGENT_WORKER OPENCODE_MODEL_SUBAGENT_PLANNER OPENCODE_MODEL_SUBAGENT_MINI
+unset OPENCODE_REASONING_PRIMARY OPENCODE_REASONING_CONDUCTOR OPENCODE_REASONING_SECONDARY OPENCODE_REASONING_TERTIARY
+_PROFILE_VARS=()
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
+  if [[ "$line" =~ ^export[[:space:]]+(OPENCODE_[A-Z0-9_]+)= ]]; then
+    _PROFILE_VARS+=("${BASH_REMATCH[1]}")
+  fi
   # shellcheck disable=SC2086
   eval "$line"
 done <<< "$BLOCK"
 
-# Show what was applied (stderr) for transparency.
-env | grep -E '^OPENCODE_' | sort >&2
+# Show only non-secret model and reasoning settings.
+_DIAGNOSTIC_VARS=(
+  OPENCODE_MODEL_PRIMARY
+  OPENCODE_MODEL_CONDUCTOR
+  OPENCODE_MODEL_SUBAGENT_WORKER
+  OPENCODE_MODEL_SUBAGENT_PLANNER
+  OPENCODE_MODEL_SUBAGENT_MINI
+  OPENCODE_MODEL_LEARNING
+  OPENCODE_REASONING_PRIMARY
+  OPENCODE_REASONING_CONDUCTOR
+  OPENCODE_REASONING_SECONDARY
+  OPENCODE_REASONING_TERTIARY
+)
+for _diagnostic_var in "${_DIAGNOSTIC_VARS[@]}"; do
+  _diagnostic_is_profile_managed=0
+  for _profile_var in "${_PROFILE_VARS[@]}"; do
+    [[ "$_diagnostic_var" == "$_profile_var" ]] && _diagnostic_is_profile_managed=1
+  done
+  [[ "$_diagnostic_is_profile_managed" == 1 ]] || continue
+
+  _diagnostic_value="${!_diagnostic_var}"
+  [[ "$_diagnostic_value" =~ [[:cntrl:]] ]] && continue
+  printf '%s=%s\n' "$_diagnostic_var" "$_diagnostic_value" >&2
+done
 
 # ---------------------------------------------------------------------------
 # Reasoning overlay — inject reasoningEffort only for models that support it.
@@ -152,10 +195,13 @@ _RM_AGENTS=(
   security-reviewer
   tdd-guide
   build-error-resolver
+  e2e-runner
   doc-updater
   refactor-cleaner
+  database-reviewer
   api-spec-architect
   git-specialist
+  scout
   learning-reviewer
   ecosystem-auditor
 )
@@ -174,7 +220,10 @@ _RM_VARS=(
   OPENCODE_REASONING_SECONDARY
   OPENCODE_REASONING_SECONDARY
   OPENCODE_REASONING_SECONDARY
+  OPENCODE_REASONING_SECONDARY
+  OPENCODE_REASONING_SECONDARY
   OPENCODE_REASONING_PRIMARY
+  OPENCODE_REASONING_TERTIARY
   OPENCODE_REASONING_TERTIARY
   OPENCODE_REASONING_TERTIARY
   OPENCODE_REASONING_SECONDARY
@@ -183,9 +232,7 @@ _RM_VARS=(
 # Which OPENCODE_MODEL_* var each agent actually resolves to in opencode.jsonc.
 # NOT the same partition as _RM_VARS above (e.g. PRIMARY-tier agents resolve
 # via OPENCODE_MODEL_SUBAGENT_PLANNER, not OPENCODE_MODEL_PRIMARY) — mirrors
-# each agent's "model" field in opencode.jsonc 1:1. Empty entry ("") means the
-# agent has no corresponding opencode.jsonc entry (e.g. learning-reviewer), so
-# its model can't be resolved here and the medium-clamp below never fires for it.
+# each agent's "model" field in opencode.jsonc 1:1.
 _RM_MODEL_VARS=(
   OPENCODE_MODEL_CONDUCTOR
   OPENCODE_MODEL_SUBAGENT_PLANNER
@@ -201,9 +248,12 @@ _RM_MODEL_VARS=(
   OPENCODE_MODEL_SUBAGENT_WORKER
   OPENCODE_MODEL_SUBAGENT_WORKER
   OPENCODE_MODEL_SUBAGENT_WORKER
+  OPENCODE_MODEL_SUBAGENT_WORKER
+  OPENCODE_MODEL_SUBAGENT_WORKER
   OPENCODE_MODEL_SUBAGENT_PLANNER
   OPENCODE_MODEL_SUBAGENT_MINI
-  ""
+  OPENCODE_MODEL_SUBAGENT_MINI
+  OPENCODE_MODEL_LEARNING
   OPENCODE_MODEL_SUBAGENT_WORKER
 )
 
@@ -224,6 +274,7 @@ _model_rejects_medium() {
 
 _OVERLAY_ENTRIES=""   # comma-separated JSON agent entries
 _OVERLAY_LOG=""       # log for stderr
+_CONDUCTOR_VARIANT=""
 
 for _i in "${!_RM_AGENTS[@]}"; do
   _agent="${_RM_AGENTS[$_i]}"
@@ -234,26 +285,125 @@ for _i in "${!_RM_AGENTS[@]}"; do
     if [[ "$_val" == "medium" && -n "$_model_var" ]] && _model_rejects_medium "${!_model_var:-}"; then
       _val="high"
     fi
-    # Collect raw JSON fragments; values are simple tokens (high/xhigh/low/max/medium)
-    # — no escaping hazards. If jq is present we re-encode the full object at the end.
-    _OVERLAY_ENTRIES="${_OVERLAY_ENTRIES}${_OVERLAY_ENTRIES:+,}\"${_agent}\":{\"reasoningEffort\":\"${_val}\"}"
+    [[ "$_agent" == "conductor" ]] && _CONDUCTOR_VARIANT="$_val"
+    # Collect raw JSON fragments; values are simple tokens (high/xhigh/low/max/medium),
+    # so no JSON escaping is needed.
+    _OVERLAY_ENTRIES="${_OVERLAY_ENTRIES}${_OVERLAY_ENTRIES:+,}\"${_agent}\":{\"variant\":\"${_val}\",\"reasoningEffort\":\"${_val}\"}"
     _OVERLAY_LOG="${_OVERLAY_LOG}   ${_agent}=${_val}"$'\n'
   fi
 done
 
-if [[ -n "${_OVERLAY_ENTRIES:-}" ]]; then
-  if command -v jq >/dev/null 2>&1; then
-    # Re-encode through jq to guarantee valid JSON output
-    _AGENT_OBJ="$(printf '{%s}' "$_OVERLAY_ENTRIES" | jq -c '.')"
-  else
-    _AGENT_OBJ="{${_OVERLAY_ENTRIES}}"
+_AGENT_OBJ="{${_OVERLAY_ENTRIES}}"
+_HAS_AMBIENT_CONFIG=0
+[[ -n "${OPENCODE_CONFIG_CONTENT+x}" ]] && _HAS_AMBIENT_CONFIG=1
+
+if [[ "$_HAS_AMBIENT_CONFIG" == 1 || -n "${_OVERLAY_ENTRIES:-}" ]]; then
+  if [[ -z "$_NODE_BIN" ]] || ! _MERGED_CONFIG="$(printf '%s' "${OPENCODE_CONFIG_CONTENT-}" | "$_NODE_BIN" -e '
+    const { readFileSync } = require("node:fs");
+    const hasAmbientConfig = process.argv[1] === "1";
+    const overlay = JSON.parse(process.argv[2]);
+    const managedAgents = process.argv.slice(3);
+    const isObject = (value) =>
+      typeof value === "object" && value !== null && !Array.isArray(value);
+
+    try {
+      let config = {};
+      if (hasAmbientConfig) {
+        const parsed = JSON.parse(readFileSync(0, "utf8"));
+        if (!isObject(parsed)) throw new Error();
+        config = parsed;
+      }
+
+      const hadAgents = Object.hasOwn(config, "agent");
+      let agents = hadAgents ? config.agent : {};
+      if (!isObject(agents)) throw new Error();
+
+      for (const name of managedAgents) {
+        if (!Object.hasOwn(agents, name)) continue;
+        const current = agents[name];
+        if (!isObject(current)) throw new Error();
+        const { variant, reasoningEffort, ...preserved } = current;
+        agents = { ...agents, [name]: preserved };
+      }
+
+      for (const [name, effort] of Object.entries(overlay)) {
+        const current = agents[name] ?? {};
+        if (!isObject(current) || !isObject(effort)) throw new Error();
+        agents = { ...agents, [name]: { ...current, ...effort } };
+      }
+
+      if (hadAgents || Object.keys(overlay).length > 0) {
+        config = { ...config, agent: agents };
+      }
+      process.stdout.write(JSON.stringify(config));
+    } catch {
+      process.exit(1);
+    }
+  ' "$_HAS_AMBIENT_CONFIG" "$_AGENT_OBJ" "${_RM_AGENTS[@]}")"; then
+    echo "opencode-pick: OPENCODE_CONFIG_CONTENT must contain a JSON object" >&2
+    exit 1
   fi
-  export OPENCODE_CONFIG_CONTENT="{\"agent\":${_AGENT_OBJ}}"
+  export OPENCODE_CONFIG_CONTENT="$_MERGED_CONFIG"
+fi
+
+if [[ -n "${OPENCODE_MODEL_CONDUCTOR:-}" ]]; then
+  _STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/opencode"
+  _STATE_FILE="$_STATE_DIR/model.json"
+  if [[ -n "$_CONDUCTOR_VARIANT" || -e "$_STATE_FILE" ]]; then
+    mkdir -p "$_STATE_DIR"
+    _STATE_TMP="$(mktemp "$_STATE_DIR/.model.json.tmp.XXXXXX")"
+    trap 'rm -f -- "${_STATE_TMP:-}"' EXIT
+    if [[ -z "$_NODE_BIN" ]] || ! "$_NODE_BIN" -e '
+      const { existsSync, readFileSync, writeFileSync } = require("node:fs");
+      const [source, target, model, variant] = process.argv.slice(1);
+      const isObject = (value) =>
+        typeof value === "object" && value !== null && !Array.isArray(value);
+
+      try {
+        let state = {};
+        if (existsSync(source)) {
+          const parsed = JSON.parse(readFileSync(source, "utf8"));
+          if (!isObject(parsed)) throw new Error();
+          state = parsed;
+        }
+
+        const variants = Object.hasOwn(state, "variant") ? state.variant : {};
+        if (!isObject(variants)) throw new Error();
+        const updatedVariants = { ...variants };
+        if (variant === "") {
+          if (!Object.hasOwn(updatedVariants, model)) process.exit(0);
+          delete updatedVariants[model];
+        } else {
+          if (updatedVariants[model] === variant) process.exit(0);
+          updatedVariants[model] = variant;
+        }
+        writeFileSync(target, JSON.stringify({
+          ...state,
+          variant: updatedVariants,
+        }));
+      } catch {
+        process.exit(1);
+      }
+    ' "$_STATE_FILE" "$_STATE_TMP" "$OPENCODE_MODEL_CONDUCTOR" "$_CONDUCTOR_VARIANT"; then
+      echo "opencode-pick: refusing to replace malformed $_STATE_FILE" >&2
+      exit 1
+    fi
+    if [[ -s "$_STATE_TMP" ]]; then
+      mv -f "$_STATE_TMP" "$_STATE_FILE"
+    else
+      rm -f "$_STATE_TMP"
+    fi
+    _STATE_TMP=""
+    trap - EXIT
+  fi
+fi
+
+if [[ -n "${_OVERLAY_ENTRIES:-}" ]]; then
   echo "→ reasoning overlay:" >&2
   printf '%s' "${_OVERLAY_LOG}" >&2
 fi
 
-unset _i _agent _tier_var _model_var _val _OVERLAY_ENTRIES _OVERLAY_LOG _AGENT_OBJ _RM_AGENTS _RM_VARS _RM_MODEL_VARS _RM_NO_MEDIUM_MODELS
+unset _i _agent _tier_var _model_var _val _node_candidate _NODE_BIN _profile_var _PROFILE_VARS _diagnostic_var _diagnostic_value _diagnostic_is_profile_managed _DIAGNOSTIC_VARS _OVERLAY_ENTRIES _OVERLAY_LOG _AGENT_OBJ _HAS_AMBIENT_CONFIG _MERGED_CONFIG _CONDUCTOR_VARIANT _STATE_DIR _STATE_FILE _STATE_TMP _RM_AGENTS _RM_VARS _RM_MODEL_VARS _RM_NO_MEDIUM_MODELS
 unset -f _model_rejects_medium
 
 exec opencode "${FORWARD[@]+"${FORWARD[@]}"}"

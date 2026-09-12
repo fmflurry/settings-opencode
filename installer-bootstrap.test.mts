@@ -29,10 +29,48 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = dirname(fileURLToPath(import.meta.url));
 const bootstrapPath = join(repoRoot, "bootstrap.sh");
+const powerShellBootstrapPath = join(repoRoot, "bootstrap.ps1");
 const installerPath = join(repoRoot, "install.sh");
+const retiredInstallableLearningPaths = [
+  "commands/learn-approve.md",
+  "commands/learn-pending.md",
+  "commands/learn-reject.md",
+  "commands/learn-review.md",
+  "plugins/learning-loop.ts",
+] as const;
+const pwshAvailability = spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", "exit 0"], {
+  encoding: "utf8",
+});
+const pwshSkipReason = pwshAvailability.status === 0
+  ? false
+  : "pwsh is unavailable; executable PowerShell AST coverage requires PowerShell 7";
 
 function readRepoFile(path: string): string {
   return readFileSync(join(repoRoot, path), "utf8");
+}
+
+function runPowerShellAstAssertions(assertions: string): ReturnType<typeof spawnSync> {
+  const verifier = String.raw`
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $env:SETTINGS_OPENCODE_BOOTSTRAP_UNDER_TEST,
+    [ref]$tokens,
+    [ref]$parseErrors
+)
+if ($parseErrors.Count -ne 0) {
+    throw ('bootstrap.ps1 parse errors: ' + (($parseErrors | ForEach-Object Message) -join '; '))
+}
+${assertions}
+`;
+
+  return spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", verifier], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      SETTINGS_OPENCODE_BOOTSTRAP_UNDER_TEST: powerShellBootstrapPath,
+    },
+  });
 }
 
 function writeFakeNpm(binDir: string): void {
@@ -874,6 +912,398 @@ test("OpenCode local install syncs the repository config payload exactly", () =>
     rmSync(tmpRoot, { recursive: true, force: true });
   }
 });
+
+test("installable source payload excludes retired learning commands and plugin entrypoint", () => {
+  const presentRetiredPaths = retiredInstallableLearningPaths.filter((relativePath) =>
+    existsSync(join(repoRoot, relativePath)));
+
+  assert.deepEqual(
+    presentRetiredPaths,
+    [],
+    "retired learning assets must live only in non-installed test fixtures",
+  );
+});
+
+test("installer source-equals-target paths never mutate the source checkout", () => {
+  const failures: string[] = [];
+
+  for (const targetMode of ["directory", "symlink"] as const) {
+    const tmpRoot = mkdtempSync(join(tmpdir(), `settings-opencode-source-target-${targetMode}-`));
+    try {
+      const projectDir = join(tmpRoot, "project");
+      const homeDir = join(tmpRoot, "home");
+      const fakeBin = join(tmpRoot, "bin");
+      const targetRoot = join(homeDir, ".config", "opencode");
+      const sourceCheckout = targetMode === "directory" ? targetRoot : join(tmpRoot, "source-checkout");
+      mkdirSync(projectDir, { recursive: true });
+      mkdirSync(dirname(sourceCheckout), { recursive: true });
+      mkdirSync(fakeBin, { recursive: true });
+      cpSync(repoRoot, sourceCheckout, {
+        recursive: true,
+        filter: (source: string): boolean => {
+          const parts = relative(repoRoot, source).split("/");
+          return !parts.includes(".git") && !parts.includes("node_modules") && !parts.includes(".claude");
+        },
+      });
+      if (targetMode === "symlink") {
+        mkdirSync(dirname(targetRoot), { recursive: true });
+        symlinkSync(sourceCheckout, targetRoot, "dir");
+      }
+      writeFakeNpm(fakeBin);
+      const quotedNode = `'${process.execPath.replaceAll("'", `'"'"'`)}'`;
+      writeFileSync(join(fakeBin, "node"), `#!/usr/bin/env bash\nexec ${quotedNode} "$@"\n`);
+      chmodSync(join(fakeBin, "node"), 0o755);
+      const before = collectEntries(sourceCheckout);
+
+      const result = spawnSync(
+        "bash",
+        [join(sourceCheckout, "install.sh"), "--yes", "--no-claude"],
+        {
+          cwd: projectDir,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            HOME: homeDir,
+            PATH: `${fakeBin}:/usr/bin:/bin:/usr/sbin:/sbin`,
+            SHELL: "/bin/zsh",
+          },
+        },
+      );
+      const output = `${result.stdout}\n${result.stderr}`;
+      const after = collectEntries(sourceCheckout);
+
+      if (JSON.stringify(after) !== JSON.stringify(before)) {
+        failures.push(`${targetMode} target mutated the source checkout`);
+      }
+      if (result.status !== 0) {
+        failures.push(`${targetMode} target failed with status ${result.status}\n${output.slice(0, 1600)}`);
+      }
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  }
+
+  assert.deepEqual(failures, [], failures.join("\n\n"));
+});
+
+test("PowerShell bootstrap invokes learning synchronization after target preparation and propagates failure", {
+  skip: pwshSkipReason,
+}, () => {
+  const result = runPowerShellAstAssertions(String.raw`
+$syncFunctions = @($ast.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq 'Sync-LearningRuntime'
+}, $true))
+if ($syncFunctions.Count -ne 1) {
+    throw "expected exactly one Sync-LearningRuntime definition, found $($syncFunctions.Count)"
+}
+
+$syncInvocations = @($ast.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq 'Sync-LearningRuntime'
+}, $true))
+if ($syncInvocations.Count -ne 1) {
+    throw "expected exactly one Sync-LearningRuntime invocation, found $($syncInvocations.Count)"
+}
+
+$invocation = $syncInvocations[0]
+$actualArguments = @(($invocation.CommandElements | Select-Object -Skip 1) | ForEach-Object { $_.Extent.Text })
+$expectedArguments = @('$SrcDir', '$OpencodeDir', '$ClaudeDir', '$opencodeTargetReady', '$claudeTargetReady')
+if (($actualArguments -join [char]0) -ne ($expectedArguments -join [char]0)) {
+    throw "Sync-LearningRuntime must receive prepared roots and readiness flags; got: $($actualArguments -join ' ')"
+}
+
+$copyCommands = @($ast.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -in @('Copy-Tree', 'Copy-TreeWithSeed')
+}, $true))
+$lastCopyEnd = ($copyCommands | ForEach-Object { $_.Extent.EndOffset } | Measure-Object -Maximum).Maximum
+if ($null -eq $lastCopyEnd -or $invocation.Extent.StartOffset -le $lastCopyEnd) {
+    throw 'Sync-LearningRuntime must be invoked after OpenCode and Claude target preparation'
+}
+
+$syncFunctionText = $syncFunctions[0].Extent.Text
+if ($syncFunctionText -notmatch '\$LASTEXITCODE\s+-ne\s+0') {
+    throw 'Sync-LearningRuntime must inspect a non-zero native node exit status'
+}
+if ($syncFunctionText -notmatch 'Die\s+.*proposal-learning runtime synchronization failed') {
+    throw 'Sync-LearningRuntime must propagate synchronization failure through Die'
+}
+`);
+  const output = `${result.stdout}\n${result.stderr}`;
+
+  assert.equal(result.status, 0, `PowerShell runtime synchronization contract failed\n${output}`);
+});
+
+test("PowerShell bootstrap guards source-equivalent OpenCode and Claude targets from mutation", {
+  skip: pwshSkipReason,
+}, () => {
+  const result = runPowerShellAstAssertions(String.raw`
+$samePathCommands = @($ast.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq 'Test-SamePath'
+}, $true))
+
+function Find-SamePathCall($left, $right) {
+    return @($samePathCommands | Where-Object {
+        $arguments = @(($_.CommandElements | Select-Object -Skip 1) | ForEach-Object { $_.Extent.Text })
+        $arguments.Count -eq 2 -and
+            (($arguments[0] -eq $left -and $arguments[1] -eq $right) -or
+             ($arguments[0] -eq $right -and $arguments[1] -eq $left))
+    }) | Select-Object -First 1
+}
+
+function Find-ContainingIf($node) {
+    $current = $node.Parent
+    while ($null -ne $current -and $current -isnot [System.Management.Automation.Language.IfStatementAst]) {
+        $current = $current.Parent
+    }
+    return $current
+}
+
+$opencodeGuard = Find-SamePathCall '$OpencodeDir' '$SrcDir'
+if ($null -eq $opencodeGuard) {
+    throw 'missing source-equivalence guard for the OpenCode target'
+}
+$opencodeBranch = Find-ContainingIf $opencodeGuard
+if ($null -eq $opencodeBranch -or
+    $opencodeBranch.Extent.Text -notmatch '\$skipOpencodeCopy\s*=\s*\$true' -or
+    $opencodeBranch.Extent.Text -notmatch '\$opencodeTargetReady\s*=\s*\$true') {
+    throw 'OpenCode source equivalence must skip additive copy while keeping the target ready for no-op synchronization'
+}
+
+$claudeGuard = Find-SamePathCall '$ClaudeDir' '$sourceClaude'
+if ($null -eq $claudeGuard) {
+    throw 'missing source-equivalence guard for the Claude target'
+}
+$claudeBranch = Find-ContainingIf $claudeGuard
+if ($null -eq $claudeBranch -or
+    $claudeBranch.Extent.Text -notmatch '\$skipClaudeCopy\s*=\s*\$true' -or
+    $claudeBranch.Extent.Text -notmatch '\$claudeTargetReady\s*=\s*\$true') {
+    throw 'Claude source equivalence must skip additive copy while keeping the target ready for no-op synchronization'
+}
+`);
+  const output = `${result.stdout}\n${result.stderr}`;
+
+  assert.equal(result.status, 0, `PowerShell source-equivalence guards failed\n${output}`);
+});
+
+test("PowerShell bootstrap removes only an exact root notification helper and backs up modified files or symlinks", {
+  skip: pwshSkipReason,
+}, () => {
+  const result = runPowerShellAstAssertions(String.raw`
+$migrationFunctions = @($ast.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Extent.Text -match 'plugins[\\/]notification-gate\.ts' -and
+        $node.Extent.Text -match 'plugins[\\/]lib[\\/]notification-gate\.ts'
+}, $true))
+if ($migrationFunctions.Count -ne 1) {
+    throw "expected one root notification-helper migration function, found $($migrationFunctions.Count)"
+}
+
+$migration = $migrationFunctions[0]
+$body = $migration.Extent.Text
+if ($body -notmatch 'PathType\s+Leaf' -or $body -notmatch 'Get-FileHash|ReadAllBytes|Compare-Object') {
+    throw 'notification migration must identify an exact known regular-file payload before deletion'
+}
+if ($body -notmatch 'Remove-Item') {
+    throw 'notification migration must remove the exact known regular-file payload'
+}
+if ($body -notmatch 'Test-ReparsePoint|ReparsePoint|LinkType') {
+    throw 'notification migration must distinguish symlinks/reparse points without dereferencing them'
+}
+if ($body -notmatch '\.settings-opencode-backups' -or $body -notmatch 'Move-Item') {
+    throw 'notification migration must move modified files and symlinks into a safe backup location'
+}
+
+$migrationInvocations = @($ast.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq $migration.Name
+}, $true) | Where-Object {
+    $_.Extent.StartOffset -lt $migration.Extent.StartOffset -or
+        $_.Extent.StartOffset -gt $migration.Extent.EndOffset
+})
+if ($migrationInvocations.Count -ne 1) {
+    throw "expected one $($migration.Name) invocation, found $($migrationInvocations.Count)"
+}
+
+$opencodeCopies = @($ast.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq 'Copy-Tree'
+}, $true))
+$lastOpenCodeCopyEnd = ($opencodeCopies | ForEach-Object { $_.Extent.EndOffset } | Measure-Object -Maximum).Maximum
+if ($null -eq $lastOpenCodeCopyEnd -or $migrationInvocations[0].Extent.StartOffset -le $lastOpenCodeCopyEnd) {
+    throw 'root notification-helper migration must run after OpenCode target preparation'
+}
+`);
+  const output = `${result.stdout}\n${result.stderr}`;
+
+  assert.equal(result.status, 0, `PowerShell notification-helper migration contract failed\n${output}`);
+});
+
+test("OpenCode reinstall removes the known managed root notification helper copy", () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), "settings-opencode-notification-prune-"));
+  try {
+    const projectDir = join(tmpRoot, "project");
+    const homeDir = join(tmpRoot, "home");
+    const fakeBin = join(tmpRoot, "bin");
+    const pluginDir = join(homeDir, ".config", "opencode", "plugins");
+    const staleHelper = join(pluginDir, "notification-gate.ts");
+    mkdirSync(projectDir);
+    mkdirSync(fakeBin);
+    mkdirSync(pluginDir, { recursive: true });
+    writeFakeNpm(fakeBin);
+    writeFileSync(staleHelper, readRepoFile("plugins/lib/notification-gate.ts"));
+
+    const result = spawnSync("bash", [installerPath, "--yes", "--no-claude"], {
+      cwd: projectDir,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        HOME: homeDir,
+        PATH: `${fakeBin}:/usr/bin:/bin:/usr/sbin:/sbin`,
+        SHELL: "/bin/zsh",
+      },
+    });
+    const output = `${result.stdout}\n${result.stderr}`;
+
+    assert.equal(result.status, 0, `known managed legacy cleanup must succeed\n${output}`);
+    assert.equal(existsSync(staleHelper), false, "the exact managed legacy helper must be pruned");
+    assert.equal(
+      existsSync(join(pluginDir, "lib", "notification-gate.ts")),
+      true,
+      "the non-auto-discovered notification helper must remain installed",
+    );
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test("OpenCode reinstall never silently prunes a modified root notification helper", () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), "settings-opencode-notification-modified-"));
+  try {
+    const projectDir = join(tmpRoot, "project");
+    const homeDir = join(tmpRoot, "home");
+    const fakeBin = join(tmpRoot, "bin");
+    const pluginDir = join(homeDir, ".config", "opencode", "plugins");
+    const staleHelper = join(pluginDir, "notification-gate.ts");
+    const modifiedContent = `${readRepoFile("plugins/lib/notification-gate.ts")}\n// user-owned customization 🛡️\n`;
+    mkdirSync(projectDir);
+    mkdirSync(fakeBin);
+    mkdirSync(pluginDir, { recursive: true });
+    writeFakeNpm(fakeBin);
+    writeFileSync(staleHelper, modifiedContent);
+
+    const result = spawnSync("bash", [installerPath, "--yes", "--no-claude"], {
+      cwd: projectDir,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        HOME: homeDir,
+        PATH: `${fakeBin}:/usr/bin:/bin:/usr/sbin:/sbin`,
+        SHELL: "/bin/zsh",
+      },
+    });
+    const output = `${result.stdout}\n${result.stderr}`;
+    const preservedInPlace = existsSync(staleHelper) && readFileSync(staleHelper, "utf8") === modifiedContent;
+    const reportsModifiedHelper = /notification-gate/i.test(output) && /modified|custom|refus|manual|unchanged/i.test(output);
+    const migratedSafely =
+      !existsSync(staleHelper) &&
+      treeContainsRegularFile(pluginDir, modifiedContent) &&
+      /notification-gate/i.test(output) &&
+      /migrat|backup|preserv/i.test(output);
+    const failedClearly = result.status !== 0 && reportsModifiedHelper;
+
+    assert.ok(
+      (preservedInPlace && failedClearly) || migratedSafely,
+      `modified notification helper content must be preserved with a clear refusal or explicitly migrated; got status ${result.status}\n${output}`,
+    );
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test("OpenCode reinstall never silently prunes a root notification helper symlink", () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), "settings-opencode-notification-symlink-"));
+  try {
+    const projectDir = join(tmpRoot, "project");
+    const homeDir = join(tmpRoot, "home");
+    const fakeBin = join(tmpRoot, "bin");
+    const pluginDir = join(homeDir, ".config", "opencode", "plugins");
+    const staleHelper = join(pluginDir, "notification-gate.ts");
+    const userHelper = join(tmpRoot, "user-notification-gate.ts");
+    mkdirSync(projectDir);
+    mkdirSync(fakeBin);
+    mkdirSync(pluginDir, { recursive: true });
+    writeFakeNpm(fakeBin);
+    const userContent = "// user-owned symlink target 🔗\n";
+    writeFileSync(userHelper, userContent);
+    symlinkSync(userHelper, staleHelper);
+
+    const result = spawnSync("bash", [installerPath, "--yes", "--no-claude"], {
+      cwd: projectDir,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        HOME: homeDir,
+        PATH: `${fakeBin}:/usr/bin:/bin:/usr/sbin:/sbin`,
+        SHELL: "/bin/zsh",
+      },
+    });
+    const output = `${result.stdout}\n${result.stderr}`;
+    const preservedInPlace = existsSync(staleHelper) && lstatSync(staleHelper).isSymbolicLink() && readlinkSync(staleHelper) === userHelper;
+    const reportsSymlink = /notification-gate/i.test(output) && /symlink|symbolic|refus|manual|unchanged/i.test(output);
+    const migratedSafely =
+      !existsSync(staleHelper) &&
+      (treeContainsSymlink(pluginDir, userHelper) || treeContainsRegularFile(pluginDir, userContent)) &&
+      /notification-gate/i.test(output) &&
+      /migrat|backup|preserv/i.test(output) &&
+      /symlink|symbolic/i.test(output);
+    const failedClearly = result.status !== 0 && reportsSymlink;
+
+    assert.equal(readFileSync(userHelper, "utf8"), userContent);
+    assert.ok(
+      (preservedInPlace && failedClearly) || migratedSafely,
+      `notification helper symlink must be preserved with a clear refusal or explicitly migrated; got status ${result.status}\n${output}`,
+    );
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+function treeContainsRegularFile(root: string, expectedContent: string): boolean {
+  if (!existsSync(root)) {
+    return false;
+  }
+  const metadata = lstatSync(root);
+  if (metadata.isSymbolicLink()) {
+    return false;
+  }
+  if (metadata.isFile()) {
+    return readFileSync(root, "utf8") === expectedContent;
+  }
+  return metadata.isDirectory() && readdirSync(root).some((entry) =>
+    treeContainsRegularFile(join(root, entry), expectedContent));
+}
+
+function treeContainsSymlink(root: string, expectedTarget: string): boolean {
+  if (!existsSync(root)) {
+    return false;
+  }
+  const metadata = lstatSync(root);
+  if (metadata.isSymbolicLink()) {
+    return readlinkSync(root) === expectedTarget;
+  }
+  return metadata.isDirectory() && readdirSync(root).some((entry) =>
+    treeContainsSymlink(join(root, entry), expectedTarget));
+}
 
 function collectEntries(root: string): Record<string, string> {
   const entries: Record<string, string> = {};

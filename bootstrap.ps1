@@ -288,6 +288,42 @@ function Test-ReparsePointsTo($path, $expectedTarget) {
     return (Test-SamePath $target $expectedTarget)
 }
 
+function Move-LegacyNotificationHelper($opencodeDir) {
+    $legacyPath = Join-Path $opencodeDir 'plugins\notification-gate.ts'
+    $managedPath = Join-Path $opencodeDir 'plugins\lib\notification-gate.ts'
+    $legacyItem = Get-Item -LiteralPath $legacyPath -Force -ErrorAction SilentlyContinue
+    if ($null -eq $legacyItem) { return }
+
+    $isReparsePoint = (($legacyItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)
+    if (-not $isReparsePoint -and
+        (Test-Path -LiteralPath $legacyPath -PathType Leaf) -and
+        (Test-Path -LiteralPath $managedPath -PathType Leaf) -and
+        ((Get-FileHash -LiteralPath $legacyPath -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $managedPath -Algorithm SHA256).Hash)) {
+        Remove-Item -LiteralPath $legacyPath -Force
+        Ok "removed known managed legacy plugin helper $legacyPath"
+        return
+    }
+
+    $backupRoot = Join-Path $opencodeDir 'plugins\.settings-opencode-backups'
+    New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
+    do {
+        $backupDir = Join-Path $backupRoot ("notification-gate.{0}" -f [Guid]::NewGuid().ToString('N'))
+    } while (Test-Path -LiteralPath $backupDir)
+    New-Item -ItemType Directory -Path $backupDir | Out-Null
+    $backupPath = Join-Path $backupDir 'notification-gate.backup'
+    try {
+        Move-Item -LiteralPath $legacyPath -Destination $backupPath
+    } catch {
+        Remove-Item -LiteralPath $backupDir -Force -ErrorAction SilentlyContinue
+        throw
+    }
+    if ($isReparsePoint) {
+        Warn "preserved symbolic notification helper outside plugin discovery at $backupPath"
+    } else {
+        Warn "preserved modified notification helper outside plugin discovery at $backupPath"
+    }
+}
+
 # (empty-set guard is handled in the resolver block above)
 
 # ------------------------------ uninstall ------------------------------------
@@ -356,17 +392,24 @@ if ($Local -and ($InvokeDir -eq $SrcDir)) {
 # ------------------------------ opencode config ------------------------------
 
 $opencodeTargetReady = $false
+$opencodeTargetIsSource = $false
 if (-not $doOpencode) {
     Step 'OpenCode config — skipped'
 } else {
     Step "Installing OpenCode config into $OpencodeDir"
     $skipOpencodeCopy = $false
     if (Test-Path -LiteralPath $OpencodeDir) {
-        if (Test-ReparsePoint $OpencodeDir) {
+        if (Test-SamePath $OpencodeDir $SrcDir) {
+            Ok "$OpencodeDir already resolves to $SrcDir"
+            $skipOpencodeCopy = $true
+            $opencodeTargetReady = $true
+            $opencodeTargetIsSource = $true
+        } elseif (Test-ReparsePoint $OpencodeDir) {
             if (Test-ReparsePointsTo $OpencodeDir $SrcDir) {
                 Ok "$OpencodeDir already points at $SrcDir"
                 $skipOpencodeCopy = $true
                 $opencodeTargetReady = $true
+                $opencodeTargetIsSource = $true
             } else {
                 Warn "$OpencodeDir is a symlink/reparse point; leaving it untouched and skipping OpenCode copy"
                 $skipOpencodeCopy = $true
@@ -387,20 +430,24 @@ if (-not $doOpencode) {
     }
 
     if ($opencodeTargetReady) {
-        Step "Installing JS dependencies ($pkgManager)"
-        Push-Location $OpencodeDir
-        try {
-            if ($pkgManager -eq 'bun') {
-                bun install
-            } else {
-                npm ci
-                if ($LASTEXITCODE -ne 0) { npm install }
+        if ($opencodeTargetIsSource) {
+            Info 'source repo is the OpenCode target; dependency installation skipped'
+        } else {
+            Step "Installing JS dependencies ($pkgManager)"
+            Push-Location $OpencodeDir
+            try {
+                if ($pkgManager -eq 'bun') {
+                    bun install
+                } else {
+                    npm ci
+                    if ($LASTEXITCODE -ne 0) { npm install }
+                }
+                if ($LASTEXITCODE -ne 0) { Die 'dependency install failed' }
+            } finally {
+                Pop-Location
             }
-            if ($LASTEXITCODE -ne 0) { Die 'dependency install failed' }
-        } finally {
-            Pop-Location
+            Ok 'deps installed'
         }
-        Ok 'deps installed'
     } else {
         Warn 'OpenCode target was not modified; skipping dependencies, env vars, and OpenCode skill sync'
     }
@@ -409,6 +456,7 @@ if (-not $doOpencode) {
 # ------------------------------ claude mirror --------------------------------
 
 $claudeTargetReady = $false
+$claudeTargetIsSource = $false
 if (-not $doClaude) {
     Step 'Claude Code mirror — skipped'
 } else {
@@ -417,10 +465,17 @@ if (-not $doClaude) {
         Step "Installing Claude Code mirror into $ClaudeDir"
         $skipClaudeCopy = $false
         if (Test-Path -LiteralPath $ClaudeDir) {
-            if (Test-ReparsePoint $ClaudeDir) {
+            if (Test-SamePath $ClaudeDir $sourceClaude) {
+                Ok "$ClaudeDir already resolves to $sourceClaude"
+                $skipClaudeCopy = $true
+                $claudeTargetReady = $true
+                $claudeTargetIsSource = $true
+            } elseif (Test-ReparsePoint $ClaudeDir) {
                 if (Test-ReparsePointsTo $ClaudeDir $sourceClaude) {
                     Ok "$ClaudeDir already points at $sourceClaude"
                     $skipClaudeCopy = $true
+                    $claudeTargetReady = $true
+                    $claudeTargetIsSource = $true
                 } else {
                     Warn "$ClaudeDir is a symlink/reparse point; leaving it untouched and skipping Claude copy"
                     $skipClaudeCopy = $true
@@ -442,6 +497,12 @@ if (-not $doClaude) {
         Warn '.claude not found in repo, skipping mirror'
     }
 }
+
+if ($opencodeTargetReady -and -not $opencodeTargetIsSource) {
+    Move-LegacyNotificationHelper $OpencodeDir
+}
+
+Sync-LearningRuntime $SrcDir $OpencodeDir $ClaudeDir $opencodeTargetReady $claudeTargetReady
 
 # ------------------------------ env vars -------------------------------------
 
@@ -472,8 +533,8 @@ if (-not $doOpencode) {
 # ------------------------------ skill sync -----------------------------------
 
 $skillDests = @()
-if ($doOpencode -and $opencodeTargetReady) { $skillDests += (Join-Path $OpencodeDir 'skills') }
-if ($doClaude -and $claudeTargetReady)     { $skillDests += (Join-Path $ClaudeDir   'skills') }
+if ($doOpencode -and $opencodeTargetReady -and -not $opencodeTargetIsSource) { $skillDests += (Join-Path $OpencodeDir 'skills') }
+if ($doClaude -and $claudeTargetReady -and -not $claudeTargetIsSource)       { $skillDests += (Join-Path $ClaudeDir   'skills') }
 if ($skillDests.Count -gt 0) {
     Sync-Skills $SrcDir $skillDests
 }

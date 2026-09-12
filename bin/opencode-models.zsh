@@ -218,9 +218,10 @@
 # export OPENCODE_MODEL_SUBAGENT_WORKER="mistral/mistral-medium-2604"
 # export OPENCODE_MODEL_SUBAGENT_PLANNER="mistral/mistral-medium-2604"
 # export OPENCODE_MODEL_SUBAGENT_MINI="mistral/mistral-medium-2604"
-# export OPENCODE_REASONING_PRIMARY="high"
-# export OPENCODE_REASONING_SECONDARY="high"
-# export OPENCODE_REASONING_TERTIARY="high"
+# export OPENCODE_REASONING_PRIMARY=""
+# export OPENCODE_REASONING_CONDUCTOR=""
+# export OPENCODE_REASONING_SECONDARY=""
+# export OPENCODE_REASONING_TERTIARY=""
 
 # Qwen3.8-max (Alibaba TokenPlan)
 # export OPENCODE_MODEL_PRIMARY="alibaba-token-plan/qwen3.8-max"
@@ -246,5 +247,3 @@ export OPENCODE_REASONING_PRIMARY="high"
 export OPENCODE_REASONING_CONDUCTOR="high"
 export OPENCODE_REASONING_SECONDARY="high"
 export OPENCODE_REASONING_TERTIARY="high"
-
-

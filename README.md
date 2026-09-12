@@ -27,13 +27,13 @@
 
 ## What's inside
 
-A hardened primary `conductor` agent backed by **17 specialist sub-agents** (planner, architect, coder, writer, code-reviewer, angular-cop, dotnet-cop, gdpr-specialist, security-reviewer, tdd-guide, build-error-resolver, e2e-runner, doc-updater, refactor-cleaner, database-reviewer, api-spec-architect, git-specialist), wired together by:
+A hardened primary `conductor` agent backed by **20 specialist sub-agents** (planner, architect, coder, writer, code-reviewer, ecosystem-auditor, angular-cop, dotnet-cop, gdpr-specialist, security-reviewer, tdd-guide, build-error-resolver, e2e-runner, doc-updater, refactor-cleaner, database-reviewer, api-spec-architect, git-specialist, scout, learning-reviewer), wired together by:
 
-- **Mandatory sub-agent delegation** from `conductor`: the primary has `write` and `edit` denied at the permission layer, plus a `tool.execute.before` hook that blocks bash redirects to source files (`> file.ts`, `tee`, `sed -i`, heredocs, `python -c open().write`). The orchestrator cannot patch files — every change MUST go through `coder` (source code), `writer` (docs/markdown/HTML), `tdd-guide` (tests), or `git-specialist` (commits/PRs). This makes routing **model-agnostic**: even open-weight models that ignore prose rules are mechanically forced to delegate.
+- **Mandatory sub-agent delegation** from `conductor`: the primary has `write` and `edit` denied at the permission layer. The orchestrator cannot patch files — every change MUST go through `coder` (source code), `writer` (docs/markdown/HTML), `tdd-guide` (tests), or `git-specialist` (commits/PRs). This makes routing **model-agnostic**: even open-weight models that ignore prose rules are mechanically forced to delegate.
 - **Front-loaded first-tool gate** in `prompts/agents/conductor.txt`: hard rules at the top, routing table second, six few-shot User → `task` examples (with explicit wrong-way contrasts) so literal models copy the right pattern.
 - **Slash commands** that force routing to the right specialist (`/plan`, `/tdd`, `/security`, `/cop-review`, …).
-- **Always-on skills** loaded at session start — Socratic design, security review, coding standards, git workflow, [CodeMemory-first](https://github.com/fmflurry/code-memory) repo orientation.
-- **OpenCode plugins** — ECC hooks (Prettier + `tsc` on save), auto-compact, caveman ultra mode, and proposal-only local learning.
+- **Always-on docs** loaded at session start — subagent routing, question handling, [CodeMemory-first](https://github.com/fmflurry/code-memory) repo orientation, verification gate, harness parity, brief contract, and tool budget.
+- **OpenCode plugins** — `.env` secret-file guard, desktop notifications, LLM metrics, a tool-budget nudge, Mistral cache affinity, CodeMemory nudges, and proposal-only local learning.
 - **Custom tools** — `run-tests`, `check-coverage`, `security-audit`, plus a codemap generator.
 - **A `.claude/` mirror** — hooks, rule packs, and skills, so Claude Code benefits from the same guardrails.
 
@@ -231,14 +231,16 @@ If your provider doesn't support `reasoningEffort`, OpenCode silently ignores it
 
 #### 4. Install MCP server prerequisites
 
-`opencode.jsonc` declares three MCP servers, plus an externally-registered fourth one (`code-memory`). **CodeMemory is strongly recommended** — `instructions/codememory-first.md` routes repo orientation through it before falling back to `grep`/`read`. The others are optional but documented here so you know what you're opting into.
+`opencode.jsonc` declares six MCP servers: one enabled by default (`code-memory`) and five disabled (`context7`, `blender`, `wallaby`, `Figma`, `smartbear-swagger`). **CodeMemory is strongly recommended** — `instructions/codememory-first.md` routes repo orientation through it before falling back to `grep`/`read`. The others are optional but documented here so you know what you're opting into.
 
-| Server      | Install                                                                                                      | Status                                                                                                                                                   |
-| ----------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| code-memory | register externally (user-level MCP) — see [`fmflurry/code-memory`](https://github.com/fmflurry/code-memory) | **Recommended.** Semantic repo orientation; `code-memory_*` tools are pre-allowlisted for every subagent. Pairs with `instructions/codememory-first.md`. |
-| context7    | nothing — `npx -y @upstash/context7-mcp@latest` is auto-installed at session start                           | Live docs lookup. Auto-bootstraps on first use.                                                                                                          |
-| wallaby     | install [Wallaby.js](https://wallabyjs.com) and run `wallaby update-mcp`                                     | Optional. Runtime-test introspection.                                                                                                                    |
-| Figma       | `enabled: false` by default                                                                                  | Optional. Flip `enabled: true` and set up [Figma MCP](https://help.figma.com) for design-system tools.                                                   |
+| Server            | Install                                                                                        | Status                                                                                                                                                   |
+| ----------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| code-memory       | `uvx --from flurryx-code-memory@latest code-memory-mcp` (auto-installed on first use)          | **Recommended.** Enabled. Semantic repo orientation; `code-memory_*` tools are pre-allowlisted for every subagent. Pairs with `instructions/codememory-first.md`. |
+| context7          | nothing — `npx -y @upstash/context7-mcp@latest`                                                | Disabled by default. Live docs lookup.                                                                                                                    |
+| blender           | `uv --directory $HOME/dev/blender_mcp/mcp run blender-mcp`                                     | Disabled by default. Blender scene tooling.                                                                                                               |
+| wallaby           | install [Wallaby.js](https://wallabyjs.com) and run `wallaby update-mcp`                       | Disabled by default. Runtime-test introspection.                                                                                                          |
+| Figma             | remote — `https://mcp.figma.com/mcp`                                                           | Disabled by default. Flip `enabled: true` and set up [Figma MCP](https://help.figma.com) for design-system tools.                                          |
+| smartbear-swagger | remote — `https://swagger.mcp.smartbear.com/mcp`                                               | Disabled by default. OpenAPI/Swagger tooling for `api-spec-architect`.                                                                                    |
 
 #### 5. (Optional) Install the Claude Code mirror
 
@@ -270,7 +272,7 @@ opencode
 
 You should see:
 
-- The caveman ultra TUI sidebar plugin show up (or be silent if you're not in a caveman session).
+- The `llm-metrics` TUI sidebar and the panda banner show up.
 
 Then drop a slash command:
 
@@ -282,7 +284,7 @@ It should route to the `planner` sub-agent and return a structured plan without 
 
 ### Model profile picker (`ocp`)
 
-`ocp` (alias for `opencode-pick`) launches OpenCode with a chosen model/reasoning profile. Edit `~/.config/zsh/60-opencode-models.zsh` (sourced from `~/.zshrc`) to add or adjust profiles; the launcher then reads the profiles at `~/.config/opencode/bin/opencode-models.zsh` (blocks of `OPENCODE_MODEL_*` / `OPENCODE_REASONING_*` exports).
+`ocp` (alias for `opencode-pick`) launches OpenCode with a chosen model/reasoning profile. The canonical profiles are the `OPENCODE_MODEL_*` / `OPENCODE_REASONING_*` export blocks in `bin/opencode-models.zsh`, adjacent to `bin/opencode-pick`. By default, the installer deploys both files to `~/.config/opencode/bin/`. Local installs use `./.opencode/bin/`; WSL global installs target `/mnt/c/Users/<you>/.config/opencode/bin/` on the Windows side.
 
 **Usage:**
 
@@ -293,7 +295,17 @@ ocp --profile "<name>"       # Launch with a named profile
 ocp -- <args>                # Forward args to opencode
 ```
 
-The picker reads only `OPENCODE_*` env vars and injects per-agent reasoning as an `OPENCODE_CONFIG_CONTENT` overlay at launch — no secrets involved. **Bash-based, macOS/Linux/WSL only** (native Windows uses static `OPENCODE_*` env vars written by `bootstrap.ps1`).
+`reasoningEffort` controls the provider request option. `variant` is OpenCode's TUI-visible per-model reasoning state. A profile launch sets both to the same non-empty effort for each configured agent and synchronizes the conductor model's `variant` in `${XDG_STATE_HOME:-$HOME/.local/state}/opencode/model.json`.
+
+Verify a profile without making a billable model request:
+
+```bash
+ocp --profile "<name>" -- debug agent conductor
+```
+
+The conductor output should show matching `variant` and `reasoningEffort` values. Relaunch OpenCode through `ocp` after changing profiles so the selected profile resets the current TUI state.
+
+At launch, the picker preserves the ambient environment and injects per-agent settings through an `OPENCODE_CONFIG_CONTENT` overlay. Launcher diagnostics print only an explicit allowlist of model and reasoning variables; they never print `OPENCODE_CONFIG_CONTENT` or secret/token variables. **Bash-based, macOS/Linux/WSL only** (native Windows uses static `OPENCODE_*` env vars written by `bootstrap.ps1`).
 
 ### Updating
 
@@ -327,7 +339,7 @@ If a new plugin shows up, OpenCode picks it up on the next restart. If an env va
 
 ## English
 
-Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primary `conductor` agent (no write/edit perms — must delegate), **18 specialist sub-agents**, always-on skills, slash commands, OpenCode plugins (hooks, auto-compact, caveman), custom tools, and a Claude Code mirror.
+Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primary `conductor` agent (no write/edit perms — must delegate), **20 specialist sub-agents**, always-on skills, slash commands, OpenCode plugins (secret-file guard, notifications, llm-metrics, tool-budget), custom tools, and a Claude Code mirror.
 
 <a id="goals-en"></a>
 
@@ -335,7 +347,7 @@ Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primar
 
 - Reproducibility: same agent behavior across machines/sessions.
 - Quality: on-demand TDD, frequent verification, centralized conventions.
-- Security: `security-review` skill loaded by default + pre-tool-use hooks.
+- Security: `security-review` skill available on demand + pre-tool-use hooks.
 
 <a id="layout-en"></a>
 
@@ -361,20 +373,21 @@ Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primar
 
 Six concerns wired in one file:
 
-1. `instructions`: always-on skills loaded at session start. Currently:
+1. `instructions`: always-on docs loaded at session start. Currently:
    - `instructions/subagent-routing.md` — Task-first subagent delegation gate.
+   - `instructions/question-handling.md` — blocking vs non-blocking question protocol.
    - `instructions/codememory-first.md` — prefer [CodeMemory](https://github.com/fmflurry/code-memory) MCP (`code-memory_*` tools) for repo orientation before `grep`/`read`.
-   - `skills/socratic-design/SKILL.md` — evidence-first decision gating.
-   - `skills/security-review/SKILL.md` — OWASP checklist.
-   - `skills/coding-standards/SKILL.md` — code conventions.
-   - `skills/git-workflow/SKILL.md` — branches, commits, PRs.
+   - `instructions/verification-gate.md` — independent build/test verification before "done".
+   - `instructions/harness-parity.md` — keep `.claude/` and `.opencode/` in parity.
+   - `instructions/brief-contract.md` — subagent brief contract.
+   - `instructions/tool-budget.md` — verification-vs-exploration budget.
 2. `default_agent`: `conductor` (orchestrator-only — cannot write/edit).
 3. `agent`: sub-agent definitions (model + reasoning effort + prompt + tool allowlist). All models are env-driven (`OPENCODE_MODEL_*`, `OPENCODE_REASONING_*`) — see [Public install § 4](#public-install).
 4. `command`: maps `/<name>` -> template + sub-agent + `subtask`.
-5. `mcp`: context7, wallaby, Figma (disabled). Plus externally-registered [`code-memory`](https://github.com/fmflurry/code-memory) — tool perms `code-memory_*` are pre-allowlisted for every subagent.
-6. `plugin`: external marketplace plugins (`@tarquinen/opencode-dcp@latest`).
+5. `mcp`: six servers — `code-memory` enabled; `context7`, `blender`, `wallaby`, `Figma`, `smartbear-swagger` disabled by default. `code-memory_*` perms are pre-allowlisted for every subagent.
+6. `plugin`: npm + local plugins — `opencode-skill-creator` (npm) plus the `./plugins/*.{ts,js}` files (which OpenCode also auto-loads from the plugin directory).
 
-`dcp.jsonc` configures the Dynamic Context Pruning plugin.
+`dcp.jsonc` is the config stub for the optional external Dynamic Context Pruning plugin.
 
 <a id="agents-en"></a>
 
@@ -384,12 +397,13 @@ Defined in `opencode.jsonc` under `agent`:
 
 | Agent                  | Mode     | Role                                                                                                                                                                              |
 | ---------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `conductor`            | primary  | Orchestrator. `write` + `edit` **denied** at the permission layer. Routes every change to a specialist via Task. Bash redirects to source files blocked by the ECC pre-tool hook. |
+| `conductor`            | primary  | Orchestrator. `write` + `edit` **denied** at the permission layer. Routes every change to a specialist via Task. |
 | `planner`              | subagent | Plan + risks before large changes. Read+bash, no edit.                                                                                                                            |
 | `architect`            | subagent | System design / scalability decisions. Read+bash only.                                                                                                                            |
 | `coder`                | subagent | Pure non-test implementation. Mandatory build+lint+standards self-check before reporting done. Socratic ambiguity gate.                                                           |
 | `writer`               | subagent | Writes docs/markdown/HTML/text artifacts. Forbidden from touching source code — refuses out-of-scope files back to the conductor.                                                 |
 | `code-reviewer`        | subagent | Quality review over diffs and conventions. Read-only — findings only; fixes go to `coder`.                                                                                        |
+| `ecosystem-auditor`    | subagent | Read-only, evidence-first audit across OpenCode and Claude Code.                                                                                                                  |
 | `angular-cop`          | subagent | Pre-merge review for Angular + TypeScript PRs.                                                                                                                                     |
 | `dotnet-cop`           | subagent | Pre-merge review for .NET / Minimal API / modular-monolith PRs.                                                                                                                     |
 | `gdpr-specialist`      | subagent | GDPR/CNIL compliance review of code (France-focused).                                                                                                                              |
@@ -402,14 +416,15 @@ Defined in `opencode.jsonc` under `agent`:
 | `database-reviewer`    | subagent | PostgreSQL / Supabase schema, perf, security.                                                                                                                                     |
 | `api-spec-architect`   | subagent | OpenAPI / API specification design.                                                                                                                                               |
 | `git-specialist`       | subagent | Branches, commits, pushes, PRs (mini model).                                                                                                                                      |
+| `scout`                | subagent | Emits a file manifest for an unknown file set.                                                                                                                                    |
+| `learning-reviewer`    | subagent | Local proposal-only learning reviewer. Extracts durable learnings non-interactively.                                                                                              |
 
 ### Hardened sub-agent orchestration
 
-Delegation is enforced at **three layers**, so the same behavior holds whether the primary model is Claude, GPT, DeepSeek, or any open-weight runner that ignores prose hints:
+Delegation is enforced at **two layers**, so the same behavior holds whether the primary model is Claude, GPT, DeepSeek, or any open-weight runner that ignores prose hints:
 
 1. **Permissions** — `conductor` has `tools.write: false`, `tools.edit: false`, and `permission.edit/write: deny` in `opencode.jsonc`. The Task allowlist enumerates every legal specialist; `*: deny` blocks anything else. The orchestrator literally has no file-mutation tool.
-2. **Pre-tool hook (`plugins/ecc-hooks.ts`)** — defense in depth: blocks bash commands that would write to source files via shell redirect (`>`, `>>`), `tee`, `sed -i`, heredocs, or `python -c open().write`. Throws aborting the tool call with an explicit "delegate to coder/writer/tdd-guide" message. Applies globally — no subagent should be writing code through bash either.
-3. **Front-loaded prompt (`prompts/agents/conductor.txt`)** — hard rules in the first lines, routing table second, six worked few-shot examples showing User → `task` calls with explicit wrong-way contrasts. `instructions/subagent-routing.md` enforces a Task-first gate before direct inspection.
+2. **Guard plugins + front-loaded prompt** — `plugins/secret-file-guard.ts` aborts any `read`/`bash` access to a secret-bearing `.env` file; `plugins/tool-budget.ts` nudges verification over exploration (it never blocks a call). `prompts/agents/conductor.txt` puts hard rules in the first lines, the routing table second, and six worked few-shot examples showing User → `task` calls with explicit wrong-way contrasts; `instructions/subagent-routing.md` enforces a Task-first gate before direct inspection.
 
 Use these paths depending on how much control you want:
 
@@ -417,7 +432,7 @@ Use these paths depending on how much control you want:
 - `@agent` mention: manually invokes a specific subagent in the conversation.
 - Slash command: forces a subtask with a configured template, e.g. `/plan`, `/tdd`, `/security`.
 
-Why this exists: GPT/Claude often infer delegation from short descriptions, but open-source/open-weight models are more literal and tend to inspect or edit first. Permissions + the hook + the front-loaded gate make delegation **mechanically enforced** rather than instruction-dependent.
+Why this exists: GPT/Claude often infer delegation from short descriptions, but open-source/open-weight models are more literal and tend to inspect or edit first. Permissions + the front-loaded gate make delegation **mechanically enforced** rather than instruction-dependent.
 
 <a id="commands-en"></a>
 
@@ -450,7 +465,7 @@ Templates in `commands/`. Most run as `subtask: true` (delegated to a specialist
 
 **All skills are kept at full parity across OpenCode (`skills/`) and Claude Code (`.claude/skills/`) via the canonical union computed and synced by `scripts/sync-skills.sh`.** Both `skills/` (root, source of truth) and `.claude/skills/` (mirror) are self-contained; a raw `cp -R .claude ~/.claude` yields a complete skill set.
 
-Always-on (declared in `instructions`):
+Session-start context comes from `instructions/*.md` (see [Configuration](#config-en)); these skills load on demand:
 
 - `skills/socratic-design/SKILL.md` — evidence-first decision gating.
 - `skills/security-review/SKILL.md` — security checklist + scenarios.
@@ -477,15 +492,18 @@ On-demand (loaded by description / by command):
 
 ### Plugins & hooks
 
-All TypeScript plugins use `@opencode-ai/plugin@1.4.6`.
+All TypeScript plugins use `@opencode-ai/plugin@1.4.6`. OpenCode auto-loads every `.ts`/`.js` file in `plugins/`; the `plugin` array in `opencode.jsonc` additionally declares the npm plugin and re-references the local files.
 
-- `plugins/ecc-hooks.ts` — Prettier on edited JS/TS, `console.log` detection, sensitive-command reminders (`git push` etc.), and the **conductor hard-stop**: aborts bash redirects (`>`, `>>`, `tee`, `sed -i`, heredocs, `python -c open().write`) targeting source files so delegation cannot be bypassed via shell.
-- `plugins/auto-compact.js` — auto-compacts once `OC_COMPACT_THRESHOLD` tool calls are reached, only while idle.
-- `plugins/caveman-server.ts` + `tui-plugins/caveman.tsx` — injects caveman instructions into the system prompt + TUI sidebar showing active mode.
+- `plugins/secret-file-guard.ts` — hard-blocks `read`/`bash` access to secret-bearing `.env` files; `.env.example`/`.sample`/`.template` stay readable.
+- `plugins/notification.ts` — desktop notifications on session completion and question/permission events; optional Bark/iPhone push.
+- `plugins/mistral-affinity.js` — attaches a stable `x-affinity` header to Mistral / Mistral-compatible provider calls for cache affinity.
+- `plugins/tool-budget.ts` — nudges the model toward verification over exploration via the system prompt (never blocks a tool call).
+- `plugins/code-memory.ts` — CodeMemory auto-retrieve / auto-learn nudges (no-op when the `code-memory` CLI is absent).
 - `plugins/llm-metrics.ts` + `plugins/llm-metrics-lib/` — real-time LLM-behavior monitor: hooks bus events into per-call metrics (tokens, TTFT, duration, cost, model, finish reason, end-to-end + generation tok/s) appended as NDJSONL to `~/data/llm-metrics.jsonl`, backed by a shared pure core (110 unit tests). Local-only, no egress; response-text capture is bounded and opt-out. Full architecture, env knobs, tok/s definitions, subagent aggregation, and privacy boundary in [`LLM_METRICS.md`](LLM_METRICS.md).
 - `plugins/kdco-primitives/` — shared utilities (mutex, shell, terminal-detect, project-id resolver, types).
 - `plugins/learning-runtime.ts` + `plugins/learning/` — proposal-only local learning for one local OS profile's own conversations. It starts disabled and requires explicit profile acknowledgement. Allowlisted, sanitized high-signal descriptors reach a locally launched reviewer only through the supported POSIX (macOS/Linux) artifact-validation path; native Windows fails closed. The runtime validates the executable and separately verified model artifact and supplies the latter through a fixed `--model-artifact` argument; raw prompts, transcripts, tool output, and PII do not reach the reviewer. Artifact validation does not by itself prove that a reviewer cannot log or forward descriptors. It is capped at two proposals per session and ten per day, supports retention/purge/deletion/export/audit, and has immediate cross-process revoke. Accept/reject only changes proposal state: no claim assertion or automatic materialization. Canonical OpenCode/Claude sync, organizational governance, machine-readable CLI output, and the complete boundary are in [`LEARNING.md`](LEARNING.md).
-- `@tarquinen/opencode-dcp@latest` _(external, declared in `opencode.jsonc › plugin`)_ — Dynamic Context Pruning. Trims stale tool results and large files from the live context window so long sessions don't blow past the model's limit. Configured via `dcp.jsonc` at the repo root.
+- `opencode-skill-creator` _(external npm, declared in `opencode.jsonc › plugin`)_ — skill scaffolding and benchmarking.
+- _Not loaded:_ `plugins/ecc-hooks.ts.disabled` and `tui-plugins/caveman.tsx.disabled` ship disabled and are skipped by the loader.
 
 <a id="tools-en"></a>
 
@@ -513,8 +531,8 @@ and CLI contract is in [`LEARNING.md`](LEARNING.md).
 
 ### TUI plugins
 
-- `tui-plugins/caveman.tsx` — React sidebar that shows a "CAVEMAN ULTRA" badge when the mode is active (flag file written by `caveman-server.ts`).
 - `tui-plugins/llm-metrics.tsx` — SolidJS sidebar (in the `sidebar_content` slot) showing live per-session LLM metrics: a streaming `~tok/s (est)`, latest-call generation/e2e tok/s, tokens in/out, model, cost, finish reason, TTFT, and a rolling-average tok/s. Aggregates the whole subagent subtree. See [`LLM_METRICS.md`](LLM_METRICS.md).
+- `tui-plugins/panda-banner.tsx` — SolidJS banner that renders a panda ASCII/block-art header.
 
 <a id="claude-en"></a>
 
@@ -532,10 +550,10 @@ and CLI contract is in [`LEARNING.md`](LEARNING.md).
 
 ### How it fits together
 
-1. Startup: OpenCode loads `opencode.jsonc` -> always-on instructions -> `caveman-server` adds caveman preamble if active.
-2. Dev: `conductor` executes — it cannot write files; it dispatches Task calls to specialists. `ecc-hooks` formats / flags `console.log` / blocks bash-write bypasses.
+1. Startup: OpenCode loads `opencode.jsonc` -> always-on instructions -> auto-loads every plugin in `plugins/` plus the TUI plugins registered in `tui.json`.
+2. Dev: `conductor` executes — it cannot write files; it dispatches Task calls to specialists. `secret-file-guard` blocks `.env` access; `tool-budget` nudges verification over exploration.
 3. Workflow: `conductor` routes to specialists through Task (perm-enforced); `/plan`, `/tdd`, `/security`, etc. force the same routing explicitly.
-4. Idle/completion: `auto-compact` compacts when `OC_COMPACT_THRESHOLD` tool calls are reached (idle only).
+4. Idle/completion: `llm-metrics` persists per-call metrics; `notification` sends completion/question/permission alerts; `learning-runtime` reviews high-signal sessions when enabled.
 
 ---
 
@@ -543,7 +561,7 @@ and CLI contract is in [`LEARNING.md`](LEARNING.md).
 
 ## Français
 
-Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), **dix-sept sous-agents specialises**, des skills toujours actives, des commandes slash, des plugins (hooks, auto-compact, caveman, apprentissage local par propositions), des outils custom et un mirror Claude Code.
+Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), **vingt sous-agents specialises**, des instructions toujours actives, des commandes slash, des plugins (secret-file guard, notifications, llm-metrics, tool-budget, apprentissage local par propositions), des outils custom et un mirror Claude Code.
 
 <a id="objectif-fr"></a>
 
@@ -551,7 +569,7 @@ Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un ag
 
 - Reproductibilite: meme comportement entre machines/sessions.
 - Qualite: TDD a la demande, verification reguliere, conventions centralisees.
-- Securite: skill `security-review` chargee par defaut + hooks pre-tool-use (security warnings).
+- Securite: skill `security-review` disponible à la demande + hooks pre-tool-use (security warnings).
 
 - Configs: `opencode.jsonc`, `dcp.jsonc` (dynamic context pruning), `tui.json` (theme TUI).
 - Profils: `profiles/<name>/` (override `opencode.jsonc` + `AGENTS.md` par profil).
@@ -573,20 +591,21 @@ Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un ag
 
 Le fichier orchestre six choses:
 
-1. `instructions`: skills toujours chargees au demarrage. Aujourd'hui:
+1. `instructions`: docs toujours chargees au demarrage. Aujourd'hui:
    - `instructions/subagent-routing.md` -> gate Task-first pour delegation sous-agent.
+   - `instructions/question-handling.md` -> protocole questions bloquantes / non bloquantes.
    - `instructions/codememory-first.md` -> prefere [CodeMemory](https://github.com/fmflurry/code-memory) MCP (outils `code-memory_*`) pour l'orientation repo avant `grep`/`read`.
-   - `skills/socratic-design/SKILL.md` -> gating evidence-first sur les decisions design.
-   - `skills/security-review/SKILL.md` -> checklist OWASP.
-   - `skills/coding-standards/SKILL.md` -> conventions code.
-   - `skills/git-workflow/SKILL.md` -> branches, commits, PRs.
+   - `instructions/verification-gate.md` -> verification build/test independante avant "done".
+   - `instructions/harness-parity.md` -> garder `.claude/` et `.opencode/` en parité.
+   - `instructions/brief-contract.md` -> contrat de brief des sous-agents.
+   - `instructions/tool-budget.md` -> budget verification-vs-exploration.
 2. `default_agent`: `conductor` (orchestrateur sans droit d'ecriture).
 3. `agent`: definitions des sous-agents (modele + reasoning effort + prompt + outils autorises). Tous les modeles passent par variables d'environnement (`OPENCODE_MODEL_*`, `OPENCODE_REASONING_*`).
 4. `command`: mappe `/<name>` -> template + sous-agent + `subtask` (delegation).
-5. `mcp`: context7, wallaby, Figma (desactive par defaut). Plus [`code-memory`](https://github.com/fmflurry/code-memory) enregistre en externe — perms `code-memory_*` pre-allowlistees pour chaque sous-agent.
-6. `plugin`: marketplace plugins externes (`@tarquinen/opencode-dcp@latest`).
+5. `mcp`: six serveurs — `code-memory` actif; `context7`, `blender`, `wallaby`, `Figma`, `smartbear-swagger` desactives par defaut. Perms `code-memory_*` pre-allowlistees pour chaque sous-agent.
+6. `plugin`: plugins npm + locaux — `opencode-skill-creator` (npm) plus les fichiers `./plugins/*.{ts,js}` (qu'OpenCode auto-charge aussi depuis le repertoire de plugins).
 
-`dcp.jsonc` configure le plugin Dynamic Context Pruning.
+`dcp.jsonc` est le stub de config du plugin externe optionnel Dynamic Context Pruning.
 
 <a id="agents-fr"></a>
 
@@ -596,12 +615,13 @@ Definis dans `opencode.jsonc` (champ `agent`):
 
 | Agent                  | Mode     | Role                                                                                                                                                                             |
 | ---------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `conductor`            | primary  | Orchestrateur. `write` + `edit` **interdits** par permission. Route chaque modif via Task vers un specialiste. Les redirections bash vers du code sont bloquees par le hook ECC. |
+| `conductor`            | primary  | Orchestrateur. `write` + `edit` **interdits** par permission. Route chaque modif via Task vers un specialiste. |
 | `planner`              | subagent | Plan + risques avant grosse modif. Read+bash, pas d'edit.                                                                                                                        |
 | `architect`            | subagent | Decisions de design / scalabilite. Read+bash uniquement.                                                                                                                         |
 | `coder`                | subagent | Implementation pure (hors tests). Verification build+lint+standards obligatoire avant de rendre. Gate socratique en cas d'ambiguite.                                             |
 | `writer`               | subagent | Ecrit docs/markdown/HTML/texte. Interdit de toucher au code source — refuse les fichiers hors scope au conductor.                                                                |
 | `code-reviewer`        | subagent | Revue qualite (diff, conventions, tests). Read-only — findings seulement; les fixes passent par `coder`.                                                                         |
+| `ecosystem-auditor`    | subagent | Audit read-only, evidence-first sur OpenCode et Claude Code.                                                                                                                     |
 | `angular-cop`          | subagent | Revue pre-merge pour Angular + TypeScript PRs.                                                                                                                                   |
 | `dotnet-cop`           | subagent | Revue pre-merge pour .NET / Minimal API / modular-monolith PRs.                                                                                                                   |
 | `gdpr-specialist`      | subagent | Revue conformite GDPR/CNIL du code (focus France).                                                                                                                               |
@@ -614,14 +634,15 @@ Definis dans `opencode.jsonc` (champ `agent`):
 | `database-reviewer`    | subagent | PostgreSQL / Supabase: schema, perfs, securite.                                                                                                                                  |
 | `api-spec-architect`   | subagent | Design OpenAPI / specification API.                                                                                                                                              |
 | `git-specialist`       | subagent | Branches, commits, push, PRs (modele mini).                                                                                                                                      |
+| `scout`                | subagent | Emet un manifeste de fichiers pour un ensemble inconnu.                                                                                                                          |
+| `learning-reviewer`    | subagent | Revue d'apprentissage locale par propositions. Extrait les connaissances durables de maniere non-interactive.                                                                     |
 
 ### Orchestration durcie des sous-agents
 
-La delegation est imposee sur **trois couches**, donc le comportement reste identique que le primary soit Claude, GPT, DeepSeek ou un modele open-weight qui ignore les instructions en prose:
+La delegation est imposee sur **deux couches**, donc le comportement reste identique que le primary soit Claude, GPT, DeepSeek ou un modele open-weight qui ignore les instructions en prose:
 
 1. **Permissions** — `conductor` a `tools.write: false`, `tools.edit: false`, et `permission.edit/write: deny` dans `opencode.jsonc`. L'allowlist Task enumere chaque specialiste legal; `*: deny` bloque le reste. L'orchestrateur n'a litteralement aucun outil pour modifier des fichiers.
-2. **Hook pre-tool (`plugins/ecc-hooks.ts`)** — defense en profondeur: bloque les commandes bash qui ecriraient sur du code source via redirection (`>`, `>>`), `tee`, `sed -i`, heredocs ou `python -c open().write`. Le hook leve une erreur explicite "delegate to coder/writer/tdd-guide" et avorte l'appel d'outil. S'applique globalement — aucun sous-agent ne devrait ecrire du code via bash non plus.
-3. **Prompt front-loaded (`prompts/agents/conductor.txt`)** — regles dures dans les premieres lignes, table de routage en second, six exemples few-shot User -> `task` avec contre-exemples explicites. `instructions/subagent-routing.md` impose un Task-first gate avant inspection directe.
+2. **Guard plugins + prompt front-loaded** — `plugins/secret-file-guard.ts` avorte tout acces `read`/`bash` a un fichier `.env` porteur de secret; `plugins/tool-budget.ts` pousse la verification plutot que l'exploration (ne bloque jamais un appel). `prompts/agents/conductor.txt` place les regles dures dans les premieres lignes, la table de routage en second, et six exemples few-shot User -> `task` avec contre-exemples explicites; `instructions/subagent-routing.md` impose un Task-first gate avant inspection directe.
 
 Chemins possibles:
 
@@ -629,7 +650,7 @@ Chemins possibles:
 - Mention `@agent`: invoque manuellement un sous-agent precis.
 - Commande slash: force un subtask avec template configure, par ex. `/plan`, `/tdd`, `/security`.
 
-Pourquoi: GPT/Claude inferent souvent la delegation depuis des descriptions courtes, mais les modeles open-source/open-weight sont plus litteraux et inspectent ou editent souvent avant de deleguer. Permissions + hook + gate front-loaded rendent la delegation **mecaniquement imposee** plutot que dependante de l'instruction.
+Pourquoi: GPT/Claude inferent souvent la delegation depuis des descriptions courtes, mais les modeles open-source/open-weight sont plus litteraux et inspectent ou editent souvent avant de deleguer. Permissions + gate front-loaded rendent la delegation **mecaniquement imposee** plutot que dependante de l'instruction.
 
 <a id="commands-fr"></a>
 
@@ -662,7 +683,7 @@ Templates dans `commands/`. La plupart sont `subtask: true` -> elles s'executent
 
 **Tous les skills sont en parité complète entre OpenCode (`skills/`) et Claude Code (`.claude/skills/`) via l'union canonique calculée et synchronisée par `scripts/sync-skills.sh`.** Les deux `skills/` (root, source de vérité) et `.claude/skills/` (miroir) sont auto-contenus; une simple `cp -R .claude ~/.claude` donne l'ensemble complet des skills.
 
-Skills toujours actifs (déclarés dans `instructions`):
+Le contexte de démarrage vient de `instructions/*.md` (voir [Configuration](#config-fr)); ces skills se chargent à la demande:
 
 - `skills/socratic-design/SKILL.md` — decision-gating "evidence-first".
 - `skills/security-review/SKILL.md` — checklist sécurité + scenarios.
@@ -689,12 +710,18 @@ Skills sur demande (chargés par description / par commande):
 
 ### Plugins & hooks
 
-Tous les plugins TypeScript utilisent `@opencode-ai/plugin@1.4.6`.
+Tous les plugins TypeScript utilisent `@opencode-ai/plugin@1.4.6`. OpenCode auto-charge chaque fichier `.ts`/`.js` de `plugins/`; le tableau `plugin` de `opencode.jsonc` declare en plus le plugin npm et re-reference les fichiers locaux.
 
-- `plugins/ecc-hooks.ts` — Prettier sur fichiers JS/TS edites, detection `console.log`, rappels sur commandes sensibles (`git push` etc.), et le **hard-stop conductor**: avorte les redirections bash (`>`, `>>`, `tee`, `sed -i`, heredocs, `python -c open().write`) qui visent du code source, pour que la delegation ne puisse pas etre contournee via le shell.
-- `plugins/auto-compact.js` — auto-compaction quand `OC_COMPACT_THRESHOLD` est atteint, en idle uniquement.
+- `plugins/secret-file-guard.ts` — bloque en dur l'acces `read`/`bash` aux fichiers `.env` porteurs de secret; `.env.example`/`.sample`/`.template` restent lisibles.
+- `plugins/notification.ts` — notifications desktop sur fin de session et evenements question/permission; push Bark/iPhone optionnel.
+- `plugins/mistral-affinity.js` — ajoute un header `x-affinity` stable aux appels Mistral / compatibles Mistral pour l'affinite de cache.
+- `plugins/tool-budget.ts` — pousse le modele vers la verification plutot que l'exploration via le system prompt (ne bloque jamais un appel d'outil).
+- `plugins/code-memory.ts` — nudges auto-retrieve / auto-learn CodeMemory (no-op si le CLI `code-memory` est absent).
 - `plugins/learning-runtime.ts` + `plugins/learning/` — apprentissage local par propositions limite aux conversations propres a un profil OS local. Desactive par defaut, il exige un acquittement explicite. Seuls des descripteurs structures, nettoyes et a fort signal atteignent un executable offline de revue verifie, controle par le proprietaire, avec un artefact de modele verifie separement et passe par l'argument fixe `--model-artifact` ; jamais prompts bruts, transcripts, sorties d'outils ou PII. Limites : deux propositions par session et dix par jour ; retention/purge/suppression/export/audit et revocation inter-processus immediate. Accept/reject ne change que l'etat : aucune assertion de claim ni materialisation automatique. Voir [`LEARNING.md`](LEARNING.md).
 - `plugins/llm-metrics.ts` + `plugins/llm-metrics-lib/` — moniteur temps reel du comportement LLM : accroche les evenements du bus en metriques par appel (tokens, TTFT, duree, cout, modele, finish reason, tok/s end-to-end + generation) ajoutees en NDJSONL dans `~/data/llm-metrics.jsonl`, adosse a un coeur pur partage (110 tests unitaires). Local uniquement, aucun egress ; la capture du texte de reponse est bornee et desactivable. Architecture complete, variables d'environnement, definitions des tok/s, aggregation des sous-agents et limite de confidentialite dans [`LLM_METRICS.md`](LLM_METRICS.md).
+- `plugins/kdco-primitives/` — utilities partages (mutex, shell, terminal-detect, project-id resolver, types).
+- `opencode-skill-creator` _(npm externe, declare dans `opencode.jsonc › plugin`)_ — scaffolding et benchmark de skills.
+- _Non charges:_ `plugins/ecc-hooks.ts.disabled` et `tui-plugins/caveman.tsx.disabled` sont livres desactives et ignores par le loader.
 
 ### Operations d'apprentissage local
 
@@ -705,9 +732,6 @@ desactive par defaut et exige l'acquittement versionne et les metadonnees de pro
 [`LEARNING.md`](LEARNING.md). Accepter ou rejeter ne change que l'etat ; une proposition acceptee
 exige toujours une modification/PR normale revue par un humain. Voir `LEARNING.md` pour le
 contrat complet de confidentialite, modele local, retention, scheduler, deploiement et CLI.
-- `plugins/caveman-server.ts` + `tui-plugins/caveman.tsx` — injecte les instructions caveman dans le system prompt + sidebar TUI qui affiche le mode actif.
-- `plugins/kdco-primitives/` — utilities partages (mutex, shell, terminal-detect, project-id resolver, types).
-- `@tarquinen/opencode-dcp@latest` _(externe, declare dans `opencode.jsonc › plugin`)_ — Dynamic Context Pruning. Coupe les tool results stagnants et les gros fichiers dans la fenetre de contexte pour que les sessions longues ne depassent pas la limite modele. Configure via `dcp.jsonc` a la racine du repo.
 
 <a id="tools-fr"></a>
 
@@ -723,8 +747,8 @@ Outils OpenCode reutilisables exposes via `tools/index.ts`:
 
 ### TUI plugins
 
-- `tui-plugins/caveman.tsx` — sidebar React qui affiche un badge "CAVEMAN ULTRA" quand le mode est actif (drapeau ecrit par `caveman-server.ts`).
 - `tui-plugins/llm-metrics.tsx` — sidebar SolidJS (slot `sidebar_content`) affichant les metriques LLM par session en temps reel : un `~tok/s (est)` en streaming, le tok/s generation/e2e du dernier appel, tokens in/out, modele, cout, finish reason, TTFT et un tok/s moyen glissant. Agrege tout le sous-arbre des sous-agents. Voir [`LLM_METRICS.md`](LLM_METRICS.md).
+- `tui-plugins/panda-banner.tsx` — banniere SolidJS affichant un en-tete panda en art ASCII/blocs.
 
 <a id="claude-fr"></a>
 
@@ -742,7 +766,7 @@ Outils OpenCode reutilisables exposes via `tools/index.ts`:
 
 ### Comment tout s'emboite
 
-1. Demarrage: OpenCode charge `opencode.jsonc` -> instructions globales -> `caveman-server` ajoute le preamble si actif.
-2. Dev: `conductor` execute — il n'a pas le droit d'ecrire; il dispatche des Task vers les specialistes. `ecc-hooks` formate / flag les `console.log` / bloque les bypasses bash-write.
+1. Demarrage: OpenCode charge `opencode.jsonc` -> instructions globales -> auto-charge chaque plugin de `plugins/` plus les plugins TUI enregistres dans `tui.json`.
+2. Dev: `conductor` execute — il n'a pas le droit d'ecrire; il dispatche des Task vers les specialistes. `secret-file-guard` bloque l'acces `.env`; `tool-budget` pousse la verification plutot que l'exploration.
 3. Workflow: `conductor` route via Task (impose par permissions); `/plan`, `/tdd`, `/security`, etc. forcent explicitement le meme routage.
-4. Idle/completion: `auto-compact` se declenche et compacte quand `OC_COMPACT_THRESHOLD` tool calls est atteint (en idle uniquement).
+4. Idle/completion: `llm-metrics` persiste les metriques par appel; `notification` envoie les alertes completion/question/permission; `learning-runtime` revoit les sessions a fort signal quand il est active.

@@ -19,6 +19,12 @@ import { createProposalQueue } from "./proposal-queue.ts";
 import { createProposalLearningRuntime } from "./runtime.ts";
 
 const repositoryRoot = join(import.meta.dirname, "..", "..");
+const retiredManagedCommandBytes: Readonly<Record<string, Buffer>> = {
+  "commands/learn-approve.md": Buffer.from("LS0tCmRlc2NyaXB0aW9uOiBBcHByb3ZlIGEgc3RhZ2VkIGxlYXJuaW5nIGNoYW5nZSBieSBJRAphZ2VudDogY29uZHVjdG9yCi0tLQoKIyBMZWFybiBBcHByb3ZlCgpBcHByb3ZlIGFuZCBhcHBseSBhIHN0YWdlZCBsZWFybmluZyBjaGFuZ2U6ICRBUkdVTUVOVFMKCiMjIFlvdXIgVGFzawoKVGhlIGFyZ3VtZW50IGlzIGEgcGVuZGluZyBmaWxlIElEIChmaWxlbmFtZSB3aXRob3V0IGV4dGVuc2lvbikuIEZvciBleGFtcGxlOiBgMTcxMjM0NTY3OC1taXN0cmFsLXBhdHRlcm5gLgoKMS4gU2VhcmNoIGJvdGggYH4vLmNvbmZpZy9vcGVuY29kZS9wZW5kaW5nL3NraWxscy9gIGFuZCBgfi8uY29uZmlnL29wZW5jb2RlL3BlbmRpbmcvbWVtb3J5L2AgZm9yIHRoZSBmaWxlIG1hdGNoaW5nIHRoZSBJRAoyLiBSZWFkIHRoZSBKU09OIGZpbGUKMy4gQmFzZWQgb24gdGhlIGB0eXBlYCBmaWVsZDoKCiMjIyBJZiB0eXBlID09PSAic2tpbGwiCi0gQWN0aW9uICJjcmVhdGUiOiBDcmVhdGUgdGhlIHNraWxsIGF0IHRoZSBhcHByb3ByaWF0ZSBwYXRoIHVuZGVyIGB+Ly5jb25maWcvb3BlbmNvZGUvc2tpbGxzL2AgdXNpbmcgYHNraWxsX21hbmFnZWAgb3IgZmlsZSB3cml0ZQotIEFjdGlvbiAicGF0Y2giOiBBcHBseSB0aGUgY29udGVudCBkaWZmIHRvIHRoZSBleGlzdGluZyBza2lsbCBmaWxlCi0gT24gc3VjY2VzczogZGVsZXRlIHRoZSBwZW5kaW5nIGZpbGUKLSBSZXBvcnQ6ICLinIUgQXBwcm92ZWQgYW5kIGFwcGxpZWQgc2tpbGw6IDxuYW1lPiIKCiMjIyBJZiB0eXBlID09PSAibWVtb3J5IgotIEV4dHJhY3QgZWFjaCBjbGFpbSBmcm9tIHRoZSBgY2xhaW1zYCBhcnJheQotIEZvciBlYWNoIGNsYWltLCBjYWxsIGBjb2RlbWVtb3J5X2Fzc2VydF9jbGFpbWAgd2l0aCB0aGUgc3ViamVjdC9wcmVkaWNhdGUvb2JqZWN0L2NvbmZpZGVuY2UKLSBPbiBzdWNjZXNzOiBkZWxldGUgdGhlIHBlbmRpbmcgZmlsZQotIFJlcG9ydDogIuKchSBBcHByb3ZlZCBhbmQgYXBwbGllZCA8Tj4gbWVtb3J5IGNsYWltKHMpOiA8c3ViamVjdHM+IgoKSWYgdGhlIHBlbmRpbmcgZmlsZSBpcyBub3QgZm91bmQsIHJlcG9ydDogIuKdjCBObyBwZW5kaW5nIGNoYW5nZSBmb3VuZCB3aXRoIElEOiA8aWQ+IgoKIyMgSW1wb3J0YW50Ci0gRG8gTk9UIHVzZSBgY29kZW1lbW9yeV9hc3NlcnRfY2xhaW1gIGZvciBza2lsbCBwcm9wb3NhbHMg4oCUIG9ubHkgZm9yIG1lbW9yeSBjbGFpbXMKLSBEZWxldGUgdGhlIHBlbmRpbmcgZmlsZSBPTkxZIGFmdGVyIHN1Y2Nlc3NmdWwgYXBwbGljYXRpb24KLSBJZiBhcHBsaWNhdGlvbiBmYWlscywgcmVwb3J0IHRoZSBlcnJvciBhbmQgbGVhdmUgdGhlIGZpbGUgZm9yIHJldHJ5Cg==", "base64"),
+  "commands/learn-pending.md": Buffer.from("LS0tCmRlc2NyaXB0aW9uOiBMaXN0IGFsbCBzdGFnZWQgbGVhcm5pbmcgY2hhbmdlcyBhd2FpdGluZyBhcHByb3ZhbAphZ2VudDogY29uZHVjdG9yCi0tLQoKIyBMZWFybiBQZW5kaW5nCgpMaXN0IGFsbCBzdGFnZWQgbGVhcm5pbmcgY2hhbmdlcyBhd2FpdGluZyBhcHByb3ZhbDogJEFSR1VNRU5UUwoKIyMgWW91ciBUYXNrCgoxLiBMaXN0IGFsbCBmaWxlcyBpbiBgfi8uY29uZmlnL29wZW5jb2RlL3BlbmRpbmcvc2tpbGxzL2AgYW5kIGB+Ly5jb25maWcvb3BlbmNvZGUvcGVuZGluZy9tZW1vcnkvYAoyLiBGb3IgZWFjaCBmaWxlLCBwYXJzZSB0aGUgSlNPTiBhbmQgZGlzcGxheToKICAgLSAqKklEKio6IGZpbGVuYW1lICh3aXRob3V0IGV4dGVuc2lvbikKICAgLSAqKlR5cGUqKjogc2tpbGwgb3IgbWVtb3J5CiAgIC0gKipBY3Rpb24qKjogY3JlYXRlIG9yIHBhdGNoCiAgIC0gKipSZWFzb24qKjogdGhlIHN0YXRlZCByZWFzb24gZm9yIHRoZSBjaGFuZ2UKICAgLSAqKlRpbWVzdGFtcCoqOiB3aGVuIGl0IHdhcyBjcmVhdGVkCjMuIEF0IHRoZSBlbmQsIHNob3c6CiAgIC0gVG90YWwgcGVuZGluZyBjb3VudAogICAtIEluc3RydWN0aW9ucyBmb3IgYXBwcm92aW5nL3JlamVjdGluZwoKIyMgT3V0cHV0IEZvcm1hdAoKYGBgCiMjIFBlbmRpbmcgTGVhcm5pbmcgQ2hhbmdlcwoKIyMjIFNraWxscyAoL3BlbmRpbmcvc2tpbGxzLykKfCBJRCB8IEFjdGlvbiB8IFJlYXNvbiB8IENyZWF0ZWQgfAp8LS0tLXwtLS0tLS0tLXwtLS0tLS0tLXwtLS0tLS0tLS18CnwgMTcxMjM0NTY3OC1taXN0cmFsLXBhdHRlcm4gfCBjcmVhdGUgfCBNaXN0cmFsIG1vZGVscyBuZWVkIGV4cGxpY2l0IHRvb2wgcmVtaW5kZXJzIHwgMjAyNi0wNC0wNSAxNDozMiB8CgojIyMgTWVtb3JpZXMgKC9wZW5kaW5nL21lbW9yeS8pCnwgSUQgfCBTdWJqZWN0IHwgUHJlZGljYXRlIHwgT2JqZWN0IHwgQ3JlYXRlZCB8CnwtLS0tfC0tLS0tLS0tLXwtLS0tLS0tLS0tLXwtLS0tLS0tLXwtLS0tLS0tLS18CnwgMTcxMjM0NTY4MC1yZWFjdC0xOCB8IHByb2plY3QgfCB1c2VzIHwgUmVhY3QgMTggfCAyMDI2LTA0LTA1IDE0OjM1IHwKCioqVG90YWw6IDIgcGVuZGluZyoqCgojIyMgVXNhZ2UKLSBgL2xlYXJuLWFwcHJvdmUgPGlkPmAg4oCUIEFwcHJvdmUgYW5kIGFwcGx5IGEgcGVuZGluZyBjaGFuZ2UKLSBgL2xlYXJuLXJlamVjdCA8aWQ+YCDigJQgUmVqZWN0IGFuZCBkZWxldGUgYSBwZW5kaW5nIGNoYW5nZQotIGAvbGVhcm4tcmV2aWV3YCDigJQgTWFudWFsbHkgdHJpZ2dlciBhIGxlYXJuaW5nIHJldmlldyBvZiB0aGUgY3VycmVudCBzZXNzaW9uCmBgYAo=", "base64"),
+  "commands/learn-reject.md": Buffer.from("LS0tCmRlc2NyaXB0aW9uOiBSZWplY3QgYSBzdGFnZWQgbGVhcm5pbmcgY2hhbmdlIGJ5IElECmFnZW50OiBjb25kdWN0b3IKLS0tCgojIExlYXJuIFJlamVjdAoKUmVqZWN0IGFuZCBkZWxldGUgYSBzdGFnZWQgbGVhcm5pbmcgY2hhbmdlOiAkQVJHVU1FTlRTCgojIyBZb3VyIFRhc2sKClRoZSBhcmd1bWVudCBpcyBhIHBlbmRpbmcgZmlsZSBJRCAoZmlsZW5hbWUgd2l0aG91dCBleHRlbnNpb24pLiBGb3IgZXhhbXBsZTogYDE3MTIzNDU2NzgtbWlzdHJhbC1wYXR0ZXJuYC4KCjEuIFNlYXJjaCBib3RoIGB+Ly5jb25maWcvb3BlbmNvZGUvcGVuZGluZy9za2lsbHMvYCBhbmQgYH4vLmNvbmZpZy9vcGVuY29kZS9wZW5kaW5nL21lbW9yeS9gIGZvciB0aGUgZmlsZSBtYXRjaGluZyB0aGUgSUQKMi4gSWYgZm91bmQ6CiAgIC0gUmVhZCB0aGUgZmlsZSB0byBjb25maXJtIHRoZSB0eXBlIGFuZCByZWFzb24KICAgLSBEZWxldGUgdGhlIHBlbmRpbmcgZmlsZQogICAtIFJlcG9ydDogIuKdjCBSZWplY3RlZCBhbmQgZGVsZXRlZCBwZW5kaW5nIGNoYW5nZTogPGlkPiAoPHR5cGU+OiA8cmVhc29uPikiCjMuIElmIG5vdCBmb3VuZDoKICAgLSBSZXBvcnQ6ICLinYwgTm8gcGVuZGluZyBjaGFuZ2UgZm91bmQgd2l0aCBJRDogPGlkPiIK", "base64"),
+  "commands/learn-review.md": Buffer.from("LS0tCmRlc2NyaXB0aW9uOiBNYW51YWxseSB0cmlnZ2VyIGEgbGVhcm5pbmcgcmV2aWV3IG9mIHRoZSBjdXJyZW50IHNlc3Npb24KYWdlbnQ6IGNvbmR1Y3RvcgotLS0KCiMgTGVhcm4gUmV2aWV3CgpNYW51YWxseSB0cmlnZ2VyIGEgbGVhcm5pbmcgcmV2aWV3IG9mIHRoZSBjdXJyZW50IHNlc3Npb246ICRBUkdVTUVOVFMKCiMjIFlvdXIgVGFzawoKUGVyZm9ybSBhIG9uZS10aW1lIGxlYXJuaW5nIHJldmlldyBvZiB0aGUgY3VycmVudCBzZXNzaW9uOgoKMS4gRmV0Y2ggdGhlIGxhc3QgMTAgbWVzc2FnZXMgZnJvbSB0aGUgY3VycmVudCBzZXNzaW9uCjIuIEFuYWx5emUgdGhlIGNvbnZlcnNhdGlvbiBmb3IgZHVyYWJsZSBsZWFybmluZ3M6CgojIyMgV2hhdCB0byBsb29rIGZvcgotICoqUHJvamVjdCBwYXR0ZXJucyoqIOKAlCBBcmNoaXRlY3R1cmUgZGVjaXNpb25zLCB0ZWNoIHN0YWNrIGNob2ljZXMsIGNvZGluZyBjb252ZW50aW9ucyB0aGUgdXNlciBzdGF0ZWQgb3IgaW1wbGllZAotICoqUHJlZmVyZW5jZXMqKiDigJQgVXNlciBwcmVmZXJlbmNlcyBhYm91dCBjb2RlIHN0eWxlLCB0ZXN0aW5nIGFwcHJvYWNoLCBuYW1pbmcgY29udmVudGlvbnMKLSAqKlNlbGYtaW1wcm92ZW1lbnQqKiDigJQgUmVjdXJyaW5nIG1pc3Rha2VzLCBwYXR0ZXJucyB0aGUgYWdlbnQgaGFuZGxlcyBwb29ybHksIG9wcG9ydHVuaXRpZXMgZm9yIG5ldyBza2lsbHMKLSAqKkRvbWFpbiBrbm93bGVkZ2UqKiDigJQgRmFjdHMgYWJvdXQgdGhlIHByb2plY3QgZG9tYWluIHRoYXQgc2hvdWxkIGJlIHJlbWVtYmVyZWQKCiMjIyBPdXRwdXQgZm9ybWF0CgpGb3IgZWFjaCBsZWFybmluZyBmb3VuZCwgb3V0cHV0IGluIHRoaXMgZm9ybWF0OgoKKipNZW1vcnkgY2xhaW1zKiog4oCUIFVzZSBgY29kZW1lbW9yeV9hc3NlcnRfY2xhaW1gIGRpcmVjdGx5IHdpdGg6Ci0gc3ViamVjdCwgcHJlZGljYXRlLCBvYmplY3QsIGNvbmZpZGVuY2UKCioqU2tpbGwgcHJvcG9zYWxzKiog4oCUIFNhdmUgdG8gcGVuZGluZyBmaWxlczoKLSBXcml0ZSB0byBgfi8uY29uZmlnL29wZW5jb2RlL3BlbmRpbmcvc2tpbGxzLzx0aW1lc3RhbXA+LTxzbHVnPi5qc29uYAotIFRoZSBKU09OIHNob3VsZCBpbmNsdWRlOiB0eXBlLCBhY3Rpb24sIG5hbWUsIHJlYXNvbiwgZGVzY3JpcHRpb24sIGNvbnRlbnQgZmllbGRzCgoqKklmIG5vdGhpbmcgbGVhcm5lZCoqOiBSZXBvcnQgIk5vdGhpbmcgdG8gc2F2ZS4iCgojIyMgSW1wb3J0YW50Ci0gQmUgY29uc2VydmF0aXZlIOKAlCBvbmx5IGNhcHR1cmUgZHVyYWJsZSBwYXR0ZXJucywgbm90IG9uZS1vZmYgaW5zdHJ1Y3Rpb25zCi0gRm9yIHByb2plY3QtbGV2ZWwgZmFjdHMsIGNhbGwgYGNvZGVtZW1vcnlfYXNzZXJ0X2NsYWltYCBkaXJlY3RseQotIEZvciBzZWxmLWltcHJvdmVtZW50IChza2lsbHMpLCB3cml0ZSBwZW5kaW5nIGZpbGVzIGZvciB1c2VyIGFwcHJvdmFsCg==", "base64"),
+};
 
 function temporaryRoot(): string {
   return mkdtempSync(join(tmpdir(), "settings-opencode-actionable-findings-"));
@@ -47,39 +53,46 @@ function reviewerResponse(): string {
   });
 }
 
-test("runtime migration removes every retired learning command and asset from both selected targets", () => {
+test("runtime migration removes managed retired learning commands and assets while preserving user commands", () => {
   const root = temporaryRoot();
   const sourceRoot = join(root, "source");
   const openCodeRoot = join(root, "opencode");
   const claudeRoot = join(root, "claude");
-  const retiredOpenCodePaths = [
-    "commands/learn-approve.md",
-    "commands/learn-pending.md",
-    "commands/learn-reject.md",
-    "commands/learn-review.md",
+  const managedCommandPaths = Object.keys(retiredManagedCommandBytes);
+  const preservedCommandPaths = [
     "commands/learn-show.md",
     "commands/learn-accept.md",
     "commands/learn-export.md",
+  ];
+  const retiredOpenCodePaths = [
+    ...managedCommandPaths,
     "plugins/learning-loop.ts",
     "bin/learning-loop",
   ];
   const retiredClaudePaths = [
-    "commands/learn-approve.md",
-    "commands/learn-pending.md",
-    "commands/learn-reject.md",
-    "commands/learn-review.md",
-    "commands/learn-show.md",
-    "commands/learn-accept.md",
-    "commands/learn-export.md",
+    ...managedCommandPaths,
     "hooks/learning-loop.sh",
     "hooks/learning-review.sh",
     "bin/learning-loop",
   ];
 
   try {
+    for (const target of [openCodeRoot, claudeRoot]) {
+      for (const relativePath of managedCommandPaths) {
+        const path = join(target, relativePath);
+        mkdirSync(join(path, ".."), { recursive: true });
+        writeFileSync(path, retiredManagedCommandBytes[relativePath]);
+      }
+      for (const relativePath of preservedCommandPaths) {
+        const path = join(target, relativePath);
+        mkdirSync(join(path, ".."), { recursive: true });
+        writeFileSync(path, `User-owned modified command: ${relativePath}\n`);
+      }
+    }
     for (const relativePath of [...retiredOpenCodePaths, ...retiredClaudePaths]) {
       for (const target of [openCodeRoot, claudeRoot]) {
         const path = join(target, relativePath);
+        if (managedCommandPaths.includes(relativePath)) continue;
         mkdirSync(join(path, ".."), { recursive: true });
         writeFileSync(path, "retired learning asset\n");
       }
@@ -97,6 +110,13 @@ test("runtime migration removes every retired learning command and asset from bo
     }
     for (const relativePath of retiredClaudePaths) {
       assert.equal(existsSync(join(claudeRoot, relativePath)), false, relativePath);
+    }
+    for (const target of [openCodeRoot, claudeRoot]) {
+      for (const relativePath of preservedCommandPaths) {
+        const path = join(target, relativePath);
+        assert.equal(existsSync(path), true, `${relativePath} must be preserved`);
+        assert.equal(readFileSync(path, "utf8"), `User-owned modified command: ${relativePath}\n`);
+      }
     }
   } finally {
     rmSync(root, { recursive: true, force: true });

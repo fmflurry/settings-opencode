@@ -1,10 +1,29 @@
-import { chmodSync, closeSync, cpSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, cpSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { dirname, join, parse, resolve } from "node:path";
 
 const LEGACY_OPENCODE_FILES = ["plugins/learning-loop.ts", "bin/learning-loop"] as const;
 const LEGACY_CLAUDE_FILES = ["hooks/learning-loop.sh", "hooks/learning-review.sh", "bin/learning-loop"] as const;
 const LEGACY_HOOK_COMMANDS = new Set(["learning-loop.sh", "learning-review.sh", "learning-loop", "learning-review"]);
+const RETIRED_MANAGED_COMMAND_DIGESTS = {
+  "learn-approve.md": "852328ee88f1dd141cc1622bce8427810e41343f2d285e317a6dc7e8a7c3b100",
+  "learn-pending.md": "467f4245c304500ae7fe369ed75a28be4127b4b0ed27c8f5dc3a162d715f55c7",
+  "learn-reject.md": "7340444f4543ce02861cf5037ce210ad9a0d0b08e8d8c9e65dad69a9b537287d",
+  "learn-review.md": "524bdfaf328a123b04d18786cd4f7846e59adc37cd0438e7e9c4612a9ef5dd31",
+} as const;
+const RETIRED_MANAGED_ASSET_DIGESTS: Readonly<Record<string, ReadonlySet<string>>> = {
+  "plugins/learning-loop.ts": new Set([
+    "5b343814b26aab10a3cbf7dec1fb99e0797dc75915ed6db8c0594f98c756e1ae",
+    "f115fa070a45a2eb192fae5ae061fed1e0bc69c08f5889c7f2a7e1fdc5a8041f",
+    "9a35b25f5f7a3c28aaa564407d8ae1e51120b6e3908ba43e83892995445802a1",
+    "38ba29a7146244306584afefa0583e0b173908d56f03ec2ffa9bead23bea10bc",
+    "76a2d9e77626e97f3c38e6fdd5a1ab9ccac10e140692bbf21b58cd74432bd9ac",
+    "a6aebffab780bb7b265a98d3d0f3351a87461e37790954fb3614f9df8e4c65d1",
+  ]),
+  "bin/learning-loop": new Set(["5b343814b26aab10a3cbf7dec1fb99e0797dc75915ed6db8c0594f98c756e1ae"]),
+  "hooks/learning-loop.sh": new Set(["5b343814b26aab10a3cbf7dec1fb99e0797dc75915ed6db8c0594f98c756e1ae"]),
+  "hooks/learning-review.sh": new Set(["5b343814b26aab10a3cbf7dec1fb99e0797dc75915ed6db8c0594f98c756e1ae"]),
+};
 
 type JsonPrimitive = string | number | boolean | null;
 type JsonValue = JsonPrimitive | JsonObject | readonly JsonValue[];
@@ -61,6 +80,7 @@ function rejectSymlinkTarget(path: string): void {
 
 function copyIfPresent(source: string, destination: string): void {
   if (!existsSync(source)) return;
+  if (existsSync(destination) && realpathSync(source) === realpathSync(destination)) return;
   rejectSymlinkTarget(destination);
   rejectSymlinkTarget(dirname(destination));
   mkdirSync(dirname(destination), { recursive: true, mode: 0o700 });
@@ -127,8 +147,24 @@ function removeLegacyLearningCommands(root: string): void {
   const commands = join(root, "commands");
   rejectSymlinkTarget(commands);
   if (!existsSync(commands)) return;
-  for (const entry of readdirSync(commands)) {
-    if (/^learn-[a-z0-9][a-z0-9-]*\.md$/i.test(entry)) rmSync(join(commands, entry), { force: true });
+  for (const [entry, managedDigest] of Object.entries(RETIRED_MANAGED_COMMAND_DIGESTS)) {
+    const destination = join(commands, entry);
+    const metadata = lstatSync(destination, { throwIfNoEntry: false });
+    if (!metadata) continue;
+    if (metadata.isSymbolicLink()) {
+      console.warn(`[learning-runtime] Preserving retired command ${destination}: symbolic links are not managed.`);
+      continue;
+    }
+    if (!metadata.isFile()) {
+      console.warn(`[learning-runtime] Preserving retired command ${destination}: path is not a regular managed file.`);
+      continue;
+    }
+    const destinationDigest = createHash("sha256").update(readFileSync(destination)).digest("hex");
+    if (destinationDigest !== managedDigest) {
+      console.warn(`[learning-runtime] Preserving retired command ${destination}: content differs from the known managed legacy payload.`);
+      continue;
+    }
+    rmSync(destination, { force: true });
   }
 }
 
@@ -137,6 +173,21 @@ function removeLegacyLearningAssets(root: string, assets: readonly string[]): vo
   for (const relativePath of assets) {
     const destination = join(root, relativePath);
     rejectSymlinkTarget(dirname(destination));
+    const metadata = lstatSync(destination, { throwIfNoEntry: false });
+    if (!metadata) continue;
+    if (metadata.isSymbolicLink()) {
+      console.warn(`[learning-runtime] Preserving retired asset ${destination}: symbolic links are not managed.`);
+      continue;
+    }
+    if (!metadata.isFile()) {
+      console.warn(`[learning-runtime] Preserving retired asset ${destination}: path is not a regular managed file.`);
+      continue;
+    }
+    const destinationDigest = createHash("sha256").update(readFileSync(destination)).digest("hex");
+    if (!RETIRED_MANAGED_ASSET_DIGESTS[relativePath]?.has(destinationDigest)) {
+      console.warn(`[learning-runtime] Preserving retired asset ${destination}: content differs from every known managed legacy payload.`);
+      continue;
+    }
     rmSync(destination, { force: true });
   }
 }
@@ -178,24 +229,35 @@ export function synchronizeLearningRuntime(options: { readonly sourceRoot: strin
   let opencodeRuntimeSynchronized = !targets.opencode;
   let claudeRuntimeSynchronized = !targets.claude;
   if (targets.opencode) {
-    rejectSymlinkTarget(options.openCodeRoot);
-    copyIfPresent(sourcePath(options.sourceRoot, "opencode", "learning-runtime.ts"), join(options.openCodeRoot, "plugins", "learning-runtime.ts"));
-    copyIfPresent(join(options.sourceRoot, "bin", "proposal-learning"), join(options.openCodeRoot, "bin", "proposal-learning"));
-    copyIfPresent(join(options.sourceRoot, "bin", "proposal-learning.cmd"), join(options.openCodeRoot, "bin", "proposal-learning.cmd"));
-    removeLegacyLearningAssets(options.openCodeRoot, LEGACY_OPENCODE_FILES);
-    writeManifest(options.openCodeRoot, "opencode");
-    opencodeRuntimeSynchronized = existsSync(join(options.openCodeRoot, "plugins", "learning-runtime.ts")) && existsSync(join(options.openCodeRoot, "bin", "proposal-learning"));
+    const runtimeSource = sourcePath(options.sourceRoot, "opencode", "learning-runtime.ts");
+    const runtimeDestination = join(options.openCodeRoot, "plugins", "learning-runtime.ts");
+    if (existsSync(runtimeSource) && existsSync(runtimeDestination) && realpathSync(runtimeSource) === realpathSync(runtimeDestination)) {
+      opencodeRuntimeSynchronized = existsSync(join(options.openCodeRoot, "bin", "proposal-learning"));
+    } else {
+      rejectSymlinkTarget(options.openCodeRoot);
+      copyIfPresent(runtimeSource, runtimeDestination);
+      copyIfPresent(join(options.sourceRoot, "bin", "proposal-learning"), join(options.openCodeRoot, "bin", "proposal-learning"));
+      copyIfPresent(join(options.sourceRoot, "bin", "proposal-learning.cmd"), join(options.openCodeRoot, "bin", "proposal-learning.cmd"));
+      removeLegacyLearningAssets(options.openCodeRoot, LEGACY_OPENCODE_FILES);
+      writeManifest(options.openCodeRoot, "opencode");
+      opencodeRuntimeSynchronized = existsSync(runtimeDestination) && existsSync(join(options.openCodeRoot, "bin", "proposal-learning"));
+    }
   }
   if (targets.claude) {
-    rejectSymlinkTarget(options.claudeRoot);
-    copyIfPresent(sourcePath(options.sourceRoot, "claude", "hooks/learning-user-prompt-submit.sh"), join(options.claudeRoot, "hooks", "learning-user-prompt-submit.sh"));
-    copyIfPresent(join(options.sourceRoot, "plugins", "learning"), join(options.claudeRoot, "hooks", "learning"));
-    copyIfPresent(join(options.sourceRoot, "bin", "proposal-learning"), join(options.claudeRoot, "bin", "proposal-learning"));
-    copyIfPresent(join(options.sourceRoot, "bin", "proposal-learning.cmd"), join(options.claudeRoot, "bin", "proposal-learning.cmd"));
-    removeLegacyLearningAssets(options.claudeRoot, LEGACY_CLAUDE_FILES);
-    claudeSettingsMerged = mergeClaudeHook(join(options.claudeRoot, "settings.json"), options.claudeRoot);
-    if (claudeSettingsMerged) writeManifest(options.claudeRoot, "claude");
-    claudeRuntimeSynchronized = existsSync(join(options.claudeRoot, "hooks", "learning-user-prompt-submit.sh")) && existsSync(join(options.claudeRoot, "hooks", "learning", "claude-runtime.ts")) && claudeSettingsMerged;
+    const claudeSource = join(options.sourceRoot, ".claude");
+    if (existsSync(claudeSource) && existsSync(options.claudeRoot) && realpathSync(claudeSource) === realpathSync(options.claudeRoot)) {
+      claudeRuntimeSynchronized = existsSync(join(options.claudeRoot, "hooks", "learning-user-prompt-submit.sh"));
+    } else {
+      rejectSymlinkTarget(options.claudeRoot);
+      copyIfPresent(sourcePath(options.sourceRoot, "claude", "hooks/learning-user-prompt-submit.sh"), join(options.claudeRoot, "hooks", "learning-user-prompt-submit.sh"));
+      copyIfPresent(join(options.sourceRoot, "plugins", "learning"), join(options.claudeRoot, "hooks", "learning"));
+      copyIfPresent(join(options.sourceRoot, "bin", "proposal-learning"), join(options.claudeRoot, "bin", "proposal-learning"));
+      copyIfPresent(join(options.sourceRoot, "bin", "proposal-learning.cmd"), join(options.claudeRoot, "bin", "proposal-learning.cmd"));
+      removeLegacyLearningAssets(options.claudeRoot, LEGACY_CLAUDE_FILES);
+      claudeSettingsMerged = mergeClaudeHook(join(options.claudeRoot, "settings.json"), options.claudeRoot);
+      if (claudeSettingsMerged) writeManifest(options.claudeRoot, "claude");
+      claudeRuntimeSynchronized = existsSync(join(options.claudeRoot, "hooks", "learning-user-prompt-submit.sh")) && existsSync(join(options.claudeRoot, "hooks", "learning", "claude-runtime.ts")) && claudeSettingsMerged;
+    }
   }
   return { claudeSettingsMerged, opencodeRuntimeSynchronized, claudeRuntimeSynchronized };
 }

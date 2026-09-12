@@ -14,8 +14,6 @@ function environment(): Readonly<Record<string, string | undefined>> {
   return process.env;
 }
 
-export { invokeLocalReviewer } from "./learning/reviewer-transport.ts";
-
 const ProposalLearningPlugin: Plugin = async () => {
   const env = environment();
   const reviewerConfiguration = localReviewerConfiguration(env);

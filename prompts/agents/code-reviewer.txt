@@ -166,9 +166,13 @@ const usersWithPosts = await db.query(`
 `);
 ```
 
+### Tenant-Scoped Data & RLS (gc.platform)
+
+When reviewing code that adds or modifies a tenant-scoped entity (has `tenant_id` column or FK chain to a tenant-scoped table), defer to the **database-reviewer** agent for the RLS checklist: ENABLE+FORCE ROW LEVEL SECURITY, USING+WITH CHECK clauses, fail-closed `current_setting('app.tenant_id', true)`, GRANT to app_login, EF Core HasQueryFilter, isolation test.
+
 ### .NET / Minimal API Patterns (HIGH)
 
-When reviewing .NET / C# code, you MUST load `skills/dotnet-cop/enforcement.md` and classify findings by its BLOCK/WARN model. BLOCK = architecture + correctness violations (review fails); treat as blocking. WARN = style (advisory). Also load the `dotnet-clean-architecture` skill for full conventions. Deterministic rules should ideally be enforced by the repo's analyzer/.editorconfig config (see `skills/dotnet-cop/enforcement-tooling.md`); if absent, flag the gap as a [MEDIUM] recommendation to add it.
+When reviewing .NET / C# code, you MUST load `skills/dotnet-cop/enforcement.md` and classify findings by its BLOCK/WARN model. BLOCK = architecture + correctness violations (review fails); treat as blocking. WARN = style (advisory). Also load the `dotnet-clean-architecture` skill for full conventions, and the `dotnet-ddd` skill — specifically its `review-checklist.md` — for DDD tactical-pattern checks on domain-layer code. DDD scope is auto-enabled when the diff touches domain code (`**/*.Domain/**`, `**/Domain/**`, or `**/Core/**`). Deterministic rules should ideally be enforced by the repo's analyzer/.editorconfig config (see `skills/dotnet-cop/enforcement-tooling.md`); if absent, flag the gap as a [MEDIUM] recommendation to add it.
 
 Also check:
 

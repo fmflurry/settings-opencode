@@ -35,10 +35,10 @@ npx jest           # Jest runner
 npx vitest run     # Vitest runner
 ```
 
-**.NET / C#** — xUnit is the project convention (see `dotnet-clean-architecture` skill):
+**.NET / C#** — xUnit v3 is the project convention (see `dotnet-clean-architecture` skill):
 ```bash
-dotnet test                                              # full suite
-dotnet test --filter "FullyQualifiedName~<TestName>"    # narrow run
+GCPLATFORM_REQUIRE_DOCKER_TESTS=1 dotnet test backend/tests/GcPlatform.<Module>.Tests
+dotnet test backend/tests/GcPlatform.<Module>.Tests --filter "FullyQualifiedName~<TestName>"
 ```
 
 ### 3. Delegate Implementation (GREEN)
@@ -120,14 +120,13 @@ When working on a .NET project (detected by `*.sln`/`*.csproj`/`global.json`), l
 
 | Concern | Library / pattern |
 | --- | --- |
-| Test framework | xUnit (`[Fact]`, `[Theory]`) |
-| Mocking | NSubstitute (`Substitute.For<IPort>()`) |
-| Assertions | FluentAssertions (`.Should().Be(...)`) |
-| Narrow (unit) | Mock outgoing ports; instantiate use case directly in constructor |
-| Wide (integration) | `WebApplicationFactory` + service overrides (`WafApp`) |
-| EF Core mocking | MockQueryable (`BuildMockDbSet()`) |
+| Test framework | xUnit v3 (`[Fact]`, `[Theory]`, `[InlineData]`) |
+| Assertions | built-in `Assert.*` + **Shouldly** (`.ShouldBe(...)`); FluentAssertions and NUnit are forbidden |
+| Test doubles | hand-rolled `Stub*` / `Capturing*` / `Fake*` classes — no mocking library (NSubstitute and Moq are forbidden) |
+| Unit (application) | replace outgoing ports with hand-rolled doubles; instantiate the use case directly |
+| Integration | `WebApplicationFactory<Program>` + `Testcontainers.PostgreSql` (Docker-gated) |
+| EF Core | real Postgres via Testcontainers; `MockQueryable`/`BuildMockDbSet()` is not used |
 
-Narrow test class naming: `<VerbNoun>Should` in `tests/narrow/<ModuleName>/`.
-Wide test class naming: `<VerbNoun>EndpointShould` in `tests/wide/<ModuleName>/`.
+Test class naming: `<VerbNoun>Should` under `backend/tests/GcPlatform.<Module>.Tests/<Area>/` (`Application/`, `Domain/`, `Events/`, `Infrastructure/`, `Integration/`, `Architecture/`, `Composition/`).
 
-For detailed mocking patterns and framework-specific examples, see `skill: tdd-workflow` and the `dotnet-clean-architecture` skill (testing-patterns.md).
+For detailed mocking patterns and framework-specific examples, see `skill: tdd` and the `dotnet-clean-architecture` skill (testing-patterns.md).

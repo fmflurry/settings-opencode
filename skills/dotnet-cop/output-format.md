@@ -90,8 +90,8 @@ app.MapPost("/orders", async (CreateOrderRequest req, ICreateOrder useCase) =>
 
 **References.**
 - Project rule: `AGENTS.md §Architecture`
-- Skill: [[dotnet-cop-ports-adapters]]
-- Pattern: dotnet-clean-architecture / Dependency Rules
+- Skill: [[dotnet-cop-optional-cqrs]], [[dotnet-cop-optional-event-sourcing]] (when module opts in)
+- Pattern: dotnet-clean-architecture / SoT minimal-API / opt-in CQRS
 ```
 
 CRITICAL findings (🔴 / 🟠) always rendered in this block format even in senior mode.

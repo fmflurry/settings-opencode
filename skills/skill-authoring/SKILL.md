@@ -22,7 +22,7 @@ Skills encode specialized knowledge for Claude Code's `/` command system. This g
 
 ### Level 2: SKILL.md body (loaded on trigger)
 
-- **Hard max 500 lines**. Target < 350.
+- **Hard cap 500 lines**. Target < 500.
 - Include only info needed on **every** activation: overview, core concepts, mandatory rules, quick-start checklist.
 - Section structure: When to use, core concepts, required conventions, checklist.
 - Wiki-link to reference files for recipes, templates, detailed examples: `[reference-name.md](reference-name.md)` or `[[reference-name]]`.
@@ -42,7 +42,7 @@ Skills encode specialized knowledge for Claude Code's `/` command system. This g
 | "Only if…" workflow, edge case | — | Yes | — |
 | Shared by several skills (DRY) | — | — | Yes, link to it |
 
-Example: `dotnet-cop` and `security-review` both link to `dotnet-clean-architecture/postgres-schema-per-context.md` instead of copying the RLS doctrine.
+Example: `dotnet-cop` loads `[[dotnet-clean-architecture]]` (and `[[dotnet-ddd]]`) as its architecture ground truth instead of copying the hexagonal/DDD doctrine into its own body.
 
 ## Description Quality (Trigger Activation)
 

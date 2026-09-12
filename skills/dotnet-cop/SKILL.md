@@ -2,10 +2,11 @@
 name: dotnet-cop
 description: >
   Pre-merge code review for .NET 10 pull requests. Ground truth: Minimal API + IModule
-  (reflection-based isolation) + hexagonal per module (Application/Core/Infrastructure) +
-  EF Core CRUD. Optional additive: DDD / CQRS / event sourcing per module. Diffs current
-  branch against a target branch, applies .NET-specific checklists (Minimal API endpoints,
-  modular isolation, ports & adapters, EF Core + schema-per-module + RLS, C# strictness,
+  (reflection-based isolation) + hexagonal per module (Domain/Application/Infrastructure).
+  Persistence is chosen per bounded context — EF Core CRUD and event-sourced Marten stores
+  are both first-class, with no global default. Optional additive: DDD / CQRS per module.
+  Diffs current branch against a target branch, applies .NET-specific checklists (Minimal
+  API endpoints, modular isolation, ports & adapters, schema-per-module + RLS, C# strictness,
   xUnit v3 only), runs dotnet build + dotnet format --verify-no-changes, and emits a
   tiered report (verbose for juniors, terse for seniors). Auto-loads project AGENTS.md
   rules. Use when user runs /cop-review, says "pre-merge review", or invokes dotnet-cop.
@@ -13,7 +14,7 @@ description: >
 
 # dotnet-cop
 
-Pre-merge review. Compares HEAD vs `origin/<target>`. .NET-aware. Project-aware (reads `AGENTS.md`). Tooling-aware (runs dotnet build + dotnet format --verify-no-changes).
+Pre-merge review. Compares HEAD vs `origin/<target>`. Minimal-API-first, SoT-aware. Project-aware (reads `AGENTS.md`). Tooling-aware (runs dotnet build + dotnet format --verify-no-changes).
 
 ## When to Activate
 
@@ -27,7 +28,7 @@ Pre-merge review. Compares HEAD vs `origin/<target>`. .NET-aware. Project-aware 
 |---|---|---|---|
 | `<target>` | yes | — | Target branch (e.g. `main`, `develop`, `release/x`) |
 | `--level` | no | auto | `junior` (verbose teaching) or `senior` (terse). Auto = senior. |
-| `--scope` | no | all | Comma list: `minimal-api,isolation,ports-adapters,ef-core,csharp,result,ddd` + optional `cqrs,event-sourcing` |
+| `--scope` | no | all | Comma list: `minimal-api,isolation,ports-adapters,ef-core,csharp,result,ddd` + optional `cqrs,event-sourcing`. `ddd` auto-enables when the diff touches domain files; pass `ddd` to force it on. |
 | `--no-tools` | no | false | Skip dotnet build + format check (static review only) |
 
 ## Hard Rules
@@ -50,14 +51,15 @@ Pre-merge review. Compares HEAD vs `origin/<target>`. .NET-aware. Project-aware 
 6. For each changed file:
      - Skim full file (not just hunk) for context
      - Apply relevant sub-checklists by path/role:
-         *Module.cs / *Extensions.cs        -> modular-isolation.md
+          *Module.cs / *Extensions.cs        -> modular-isolation.md
+          Infrastructure/Events/*.cs / *DbContext.cs -> cross-module-communication.md
          *Endpoint.cs (Minimal API)         -> minimal-api.md
-         Core/Ports/Incoming/*.cs           -> ports-adapters.md
-         Core/Ports/Outgoing/*.cs           -> ports-adapters.md
+         **/Ports/Incoming/*.cs              -> ports-adapters.md
+         **/Ports/Outgoing/*.cs              -> ports-adapters.md
          Infrastructure/Adapter/*.cs        -> ports-adapters.md
          *DbContext.cs / Migrations/**      -> ef-core.md
          *.cs (any)                         -> csharp-strict.md
-     - If --scope includes ddd && Core/ domain code changed: load [[dotnet-ddd]] (review-checklist.md); defer deep CQRS/ES to optional-cqrs.md / optional-event-sourcing.md
+     - If ddd is in scope OR the diff touches domain files (paths under **/*.Domain/** or **/Domain/**): load [[dotnet-ddd]] (review-checklist.md); defer deep CQRS/ES to optional-cqrs.md / optional-event-sourcing.md. ddd is auto-enabled for domain diffs; --scope=ddd forces it on when no domain file is detected.
      - If --scope includes cqrs && module signals use: optional-cqrs.md
      - If --scope includes event-sourcing && module signals use: optional-event-sourcing.md
 7. If !--no-tools:
@@ -83,10 +85,11 @@ Promote to BLOCK if AGENTS.md flags the category as mandatory.
 
 - [[dotnet-cop-minimal-api]] — endpoint mapping, route groups, ProblemDetails, FluentValidation at boundary, no business logic in handlers.
 - [[dotnet-cop-modular-isolation]] — module boundaries, no direct cross-module type references (hard blocker), communication via ports/events, reflection-based module discovery, per-module language autonomy.
-- [[dotnet-cop-ports-adapters]] — hexagonal: Core defines ports, Infrastructure implements adapters; dependency direction; no EF entities leaking into Core.
+- [[dotnet-cop-cross-module-communication]] — Cross-module communication (modular monolith): Wolverine-only inter-module reads, per-module projection DbContexts, forbidden cross-domain read ports in SharedKernel, `Model/` convention. Illustrated with the Sales module.
+- [[dotnet-cop-ports-adapters]] — hexagonal: Domain/Application define ports, Infrastructure implements adapters; dependency direction; no EF entities leaking into Domain/Application.
 - [[dotnet-cop-ef-core]] — DbContext per context/projection (hard blocker on shared DbContext), schema-per-module isolation, FORCE RLS mandatory on all context-schema tables, query splitting, N+1 prevention.
 - [[dotnet-cop-result]] — business errors returned as `Result`/`Result<T>`, never thrown; `Error` defined in Domain; no HTTP coupling in Domain/Application.
-- [[dotnet-ddd]] (ddd scope) — DDD tactical patterns (entities, value objects, aggregates, repositories) and strategic design for domain-layer code. Deep CQRS/ES enforcement defers to [[dotnet-cop-optional-cqrs]] and [[dotnet-cop-optional-event-sourcing]].
+- [[dotnet-ddd]] (ddd scope — auto-enabled when the diff touches domain files) — DDD tactical patterns (entities, value objects, aggregates, repositories) and strategic design for domain-layer code. Deep CQRS/ES enforcement defers to [[dotnet-cop-optional-cqrs]] and [[dotnet-cop-optional-event-sourcing]].
 - [[dotnet-cop-optional-cqrs]] (opt-in) — commands/queries, handlers, CQRS pattern. Only when module signals use.
 - [[dotnet-cop-optional-event-sourcing]] (opt-in) — event-sourced aggregates, immutable events, append-only event store. Only when module signals use.
 - [[dotnet-cop-output-format]] — junior vs senior render templates.

@@ -131,84 +131,116 @@ The following BLOCK rules have **no stock Roslyn analyzer**:
 
 These are enforced by a combination of **architecture tests** (build-time, in a test project) and **dotnet-cop review**. Architecture tests run in CI as part of the test suite.
 
-### NetArchTest example
+### ArchUnitNET for architecture enforcement
 
-Add a project `tests/architecture/ArchitectureTests.csproj` referencing `NetArchTest.Rules`:
+Add a test project referencing `ArchUnitNET` (per [ADR-0010](https://github.com/gc-platform/gc.platform/blob/main/docs/adr/0010-archunitnet-tests-architecture.md)):
 
 ```xml
-<PackageReference Include="NetArchTest.Rules" Version="1.*" />
+<PackageReference Include="TngTech.ArchUnitNET" Version="0.13.3" />
+<PackageReference Include="TngTech.ArchUnitNET.xUnitV3" Version="0.13.3" />
 ```
 
 ```csharp
-// tests/architecture/DependencyRulesShould.cs
-using NetArchTest.Rules;
+// tests/GcPlatform.Api.Tests/Architecture/ArchitectureFixture.cs
+using TngTech.ArchUnitNET.Core;
+using TngTech.ArchUnitNET.Loader;
 using Xunit;
 
-public class DependencyRulesShould
+public class ArchitectureFixture
 {
-    private const string CoreNamespace = "MyApp.Module.*.Core";
-    private const string ApplicationNamespace = "MyApp.Module.*.Application";
-    private const string InfrastructureNamespace = "MyApp.Module.*.Infrastructure";
-    private const string EfNamespace = "Microsoft.EntityFrameworkCore";
+    private static Architecture? _model;
 
-    [Fact]
-    public void Core_has_no_dependency_on_Infrastructure()
+    // Load assembly once and share across all tests
+    public static Architecture Model => _model ??= new ArchLoader().LoadAssembly(typeof(Program).Assembly).Build();
+
+    public class Layer
     {
-        var result = Types.InCurrentDomain()
-            .That().ResideInNamespaceMatching(CoreNamespace)
-            .ShouldNot().HaveDependencyOn(InfrastructureNamespace)
-            .GetResult();
+        public static IObjectProvider<Class> Domain => 
+            Model.Classes().That().ResideInNamespace("GcPlatform.*.Domain");
 
-        Assert.True(result.IsSuccessful,
-            "Core must not depend on Infrastructure: " +
-            string.Join(", ", result.FailingTypes?.Select(t => t.FullName) ?? []));
+        public static IObjectProvider<Class> Application =>
+            Model.Classes().That().ResideInNamespace("GcPlatform.*.Application");
+
+        public static IObjectProvider<Class> Infrastructure =>
+            Model.Classes().That().ResideInNamespace("GcPlatform.*.Infrastructure");
+
+        public static IObjectProvider<Class> Presentation =>
+            Model.Classes().That().ResideInNamespace("GcPlatform.*.Presentation");
+    }
+
+    public static IObjectProvider<Class> NoDependency => 
+        Model.Classes().That().ResideInNamespace("Microsoft.EntityFrameworkCore")
+            .Or().ResideInNamespace("Npgsql")
+            .Or().ResideInNamespace("System.Net.Http");
+}
+
+// tests/GcPlatform.Api.Tests/Architecture/LayerDependencyRules.cs
+using TngTech.ArchUnitNET.xUnit;
+using Xunit;
+using static GcPlatform.Api.Tests.Architecture.ArchitectureFixture;
+
+public class LayerDependencyRules
+{
+    [Fact]
+    public void Domain_depends_only_on_SharedKernel()
+    {
+        var rule = ArchRuleDefinition.Classes()
+            .That().Are(Layer.Domain)
+            .Should().NotDependOnAny(Layer.Infrastructure, ArchitectureFixture.NoDependency)
+            .And().NotDependOnNamespaceMatching("GcPlatform.*.Application");
+
+        rule.Check(Model);
     }
 
     [Fact]
-    public void Core_has_no_dependency_on_EfCore()
+    public void Application_does_not_depend_on_Infrastructure()
     {
-        var result = Types.InCurrentDomain()
-            .That().ResideInNamespaceMatching(CoreNamespace)
-            .ShouldNot().HaveDependencyOn(EfNamespace)
-            .GetResult();
+        var rule = ArchRuleDefinition.Classes()
+            .That().Are(Layer.Application)
+            .Should().NotDependOnAny(Layer.Infrastructure, ArchitectureFixture.NoDependency);
 
-        Assert.True(result.IsSuccessful,
-            "Core must not reference EF Core: " +
-            string.Join(", ", result.FailingTypes?.Select(t => t.FullName) ?? []));
+        rule.Check(Model);
     }
 
     [Fact]
-    public void Application_has_no_dependency_on_Infrastructure()
+    public void Presentation_depends_only_inward()
     {
-        var result = Types.InCurrentDomain()
-            .That().ResideInNamespaceMatching(ApplicationNamespace)
-            .ShouldNot().HaveDependencyOn(InfrastructureNamespace)
-            .GetResult();
+        var rule = ArchRuleDefinition.Classes()
+            .That().Are(Layer.Presentation)
+            .Should().NotDependOnAny(Layer.Domain, Layer.Application, Layer.Infrastructure);
 
-        Assert.True(result.IsSuccessful,
-            "Application must not depend on Infrastructure: " +
-            string.Join(", ", result.FailingTypes?.Select(t => t.FullName) ?? []));
-    }
-
-    [Fact]
-    public void No_cross_module_direct_references()
-    {
-        // Each module's Core/Application must not reference another module's Core/Application.
-        // Pattern: MyApp.Module.Order.Core must not depend on MyApp.Module.User.Core (or vice versa).
-        // Adjust namespace tokens to match your actual module naming.
-        var orderCoreTypes = Types.InCurrentDomain()
-            .That().ResideInNamespaceMatching("MyApp.Module.Order.Core")
-            .ShouldNot().HaveDependencyOn("MyApp.Module.User")
-            .GetResult();
-
-        Assert.True(orderCoreTypes.IsSuccessful,
-            "OrderModule.Core must not directly reference UserModule: " +
-            string.Join(", ", orderCoreTypes.FailingTypes?.Select(t => t.FullName) ?? []));
+        rule.Check(Model);
     }
 }
-```
 
-> **Note on ArchUnitNET:** `ArchUnitNET` is a more expressive alternative that supports fluent layering assertions and custom predicates. Use it if the team already depends on it; the rule intent is identical.
+// tests/GcPlatform.Api.Tests/Architecture/FrameworkIsolationRules.cs
+using TngTech.ArchUnitNET.xUnit;
+using Xunit;
+using static GcPlatform.Api.Tests.Architecture.ArchitectureFixture;
+
+public class FrameworkIsolationRules
+{
+    [Fact]
+    public void EntityFrameworkCore_confined_to_Infrastructure()
+    {
+        var rule = ArchRuleDefinition.Classes()
+            .That().Are(Layer.Domain.Or(Layer.Application))
+            .Should().NotDependOnAny(Layer.Infrastructure)
+            .And().NotDependOnNamespaceMatching("Microsoft.EntityFrameworkCore");
+
+        rule.Check(Model);
+    }
+
+    [Fact]
+    public void Npgsql_confined_to_Infrastructure()
+    {
+        var rule = ArchRuleDefinition.Classes()
+            .That().Are(Layer.Domain.Or(Layer.Application))
+            .Should().NotDependOnNamespaceMatching("Npgsql");
+
+        rule.Check(Model);
+    }
+}
 
 ---
 
@@ -216,9 +248,9 @@ public class DependencyRulesShould
 
 | BLOCK rule | Enforcement mechanism | Deterministic? |
 |---|---|---|
-| Module-isolation violation | NetArchTest / ArchUnitNET architecture test | Yes (build-time, CI) |
-| Port/adapter direction violation (infra in Core/App) | NetArchTest `Core_has_no_dependency_on_Infrastructure` | Yes (build-time, CI) |
-| EF entities in Core (Core refs EF namespace) | NetArchTest `Core_has_no_dependency_on_EfCore` | Yes (build-time, CI) |
+| Module-isolation violation | ArchUnitNET / ArchUnitNET architecture test | Yes (build-time, CI) |
+| Port/adapter direction violation (infra in Core/App) | ArchUnitNET `Core_has_no_dependency_on_Infrastructure` | Yes (build-time, CI) |
+| EF entities in Core (Core refs EF namespace) | ArchUnitNET `Core_has_no_dependency_on_EfCore` | Yes (build-time, CI) |
 | Business logic in endpoint handler | dotnet-cop review only — no stock analyzer covers this | **Review-only** |
 | Missing `.AsNoTracking()` on read-only paths | dotnet-cop review only — no stock analyzer covers this | **Review-only** |
 | Missing ProblemDetails mapping (raw 500) | dotnet-cop review only | **Review-only** |

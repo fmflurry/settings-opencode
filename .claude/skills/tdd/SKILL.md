@@ -1,6 +1,6 @@
 ---
 name: tdd
-description: Test-driven development via strict RED-GREEN-REFACTOR cycle. Build event-sourced aggregates and domain logic with passing tests before any production code. Optional: outer-loop acceptance tests (Application layer, ATDD) for explicit use-case specification. Mandatory: 80%+ coverage, narrow + wide test layers, domain-driven design, immutable aggregates, no hardcoding. Applies universally to any stack's TDD discipline. See patterns.md for stack-specific examples. [[dotnet-clean-architecture]] for DDD context.
+description: Test-driven development via strict RED-GREEN-REFACTOR cycle. Build aggregates and domain logic with passing tests before any production code (when the aggregate is event-sourced, drive it the same way). Optional: outer-loop acceptance tests (Application layer, ATDD) for explicit use-case specification. Mandatory: 80%+ coverage, narrow + wide test layers, domain-driven design, immutable aggregates, no hardcoding. Applies universally to any stack's TDD discipline. See patterns.md for stack-specific examples. [[dotnet-clean-architecture]] for DDD context.
 ---
 
 # Test-Driven Development — RED-GREEN-REFACTOR (mandatory baseline + optional ATDD outer loop)
@@ -77,7 +77,7 @@ Repeat the loop below for each stub until the list is exhausted. **Work in order
    - **Handler** in `Application/Handlers/<UseCaseName>Handler.cs` implementing `ICommandHandler<…>` / `IQueryHandler<…>`, collaborators injected via primary constructor.
    - **Read model** as a `record` DTO in `Application/ReadModels/` (for queries — backed by a projection, not by rehydrating the aggregate).
    - **Repository methods** added to the domain collection interface (`Orders`, `Products`, …) as the handler requires them. Write-side `Save` persists the aggregate's uncommitted events.
-   - **Test doubles** in `tests/.../TestDoubles/` — a fake implementing the collection interface for the repository under write (e.g. `FakeInMemoryOrderRepository : Orders`, storing events or the aggregate in memory); use **NSubstitute** for read-only collaborators like `Products`.
+   - **Test doubles** — hand-rolled classes implementing the port interface, nested next to the test or under `TestDoubles/`: `Stub*` for canned reads, `Capturing*` to record writes, `Fake*`/`InMemory*` for in-memory stores (e.g. `FakeInMemoryOrderRepository : Orders`, storing events or the aggregate in memory). There is no mocking library.
 3. **Run the acceptance test** — it should now compile and fail for the *right* reason (behavior missing, not compilation).
 4. **Drive the behavior in with the inner loop** (see below): whenever the handler needs domain logic, switch to the inner loop and build it via domain unit tests — **only as far as this acceptance test needs**, then climb back up. Aggregate state must change only by raising/applying events.
 5. **Acceptance test goes green.** Run the suite:
@@ -90,13 +90,13 @@ Repeat the loop below for each stub until the list is exhausted. **Work in order
 
 ### Conventions for acceptance tests
 
-- Stack: **xUnit v3** + **NSubstitute** + xUnit built-in `Assert`.
+- Stack: **xUnit v3** + xUnit built-in `Assert.*` and **Shouldly** (`.ShouldBe(...)`). FluentAssertions, NUnit, NSubstitute and Moq are forbidden.
 - Tag every test: `[Trait("Category", "Unit test")]` and `[Trait("Nature", "Acceptance test")]`.
-- Acceptance tests live next to domain tests in `tests/GcPlatform.<Context>.Tests/` (e.g. handler tests in `PlaceOrderTests.cs`).
+- Acceptance tests live next to domain tests under `backend/tests/GcPlatform.<Module>.Tests/<Area>/` (e.g. handler tests in `Application/<Area>/PlaceOrderShould.cs`).
 - Async handlers: `await handler.Handle(command, TestContext.Current.CancellationToken)`.
 - Assert on the `Result`: `Assert.True(result.IsSuccess)`, `Assert.NotEqual(Guid.Empty, result.Data)`, and on persisted state via the fake (`orders.FindForTest(result.Data)`), or on the **events** the aggregate emitted.
-- Verify collaborator interactions with NSubstitute where it matters: `sub.Received(1).Find(Arg.Any<List<Guid>>())`.
-- Prefer a **fake** for the repository you write to, a **substitute** for query collaborators.
+- Verify collaborator calls through the double itself (a `WasCalled` flag or an appended call-log) — there is no interaction-mocking library.
+- Prefer a **capturing/fake** double for the repository you write to, a **stub** for query collaborators.
 
 ### Example (handler acceptance test)
 
@@ -108,11 +108,9 @@ public async Task PlaceOrder_WithOneItem_ShouldSaveOrderAndReturnOrderId()
 {
     // Arrange
     var productId = new Guid("bec56751-d09e-4910-81da-fa87ca4b0325");
-    var substitute = Substitute.For<Products>();
-    substitute.Find(Arg.Any<List<Guid>>())
-        .ReturnsAsync([new Product(productId, "Bordeaux rosé", 5.99m)]);
+    var products = new StubProductRepository([new Product(productId, "Bordeaux rosé", 5.99m)]);
     var orders = new FakeInMemoryOrderRepository();
-    var handler = new PlaceOrderHandler(orders, substitute);
+    var handler = new PlaceOrderHandler(orders, products);
     var command = new PlaceOrder { OrderItems = [new Tuple<Guid, int>(productId, 1)] };
 
     // Act
@@ -127,11 +125,11 @@ public async Task PlaceOrder_WithOneItem_ShouldSaveOrderAndReturnOrderId()
 
 ### Backlog markers
 
-The `false.ShouldBeTrue()` stubs from Phase 1 *are* the backlog — each marks a specified-but-unbuilt scenario. A green suite with remaining stubs means the spec isn't fully covered yet. In Phase 2 you replace one marker at a time with a real test and drive it green.
+The `Assert.False(true, "shopping-list marker: …")` stubs from Phase 1 *are* the backlog — each marks a specified-but-unbuilt scenario. A green suite with remaining stubs means the spec isn't fully covered yet. In Phase 2 you replace one marker at a time with a real test and drive it green.
 
 ### Commits (outer loop)
 
-Follow the project's Conventional Commits. Typical rhythm: one `test(<context>): add acceptance test list for <UseCaseName>` (Phase 1), then per stub (Phase 2) a `test(<context>): …` when you flesh it into a real failing test, followed by `feat(<context>): …` commits as domain + Application code fill in.
+Follow the project's Conventional Commits — all commit messages are written in English. Typical rhythm: one `test(<context>): add acceptance test list for <UseCaseName>` (Phase 1), then per stub (Phase 2) a `test(<context>): …` when you flesh it into a real failing test, followed by `feat(<context>): …` commits as domain + Application code fill in.
 
 ### Boundary (outer loop)
 
@@ -200,9 +198,9 @@ Minimal code is the mechanism that makes the design emerge:
 
 Introduce a variable/branch/loop **only** when a new failing example makes the previous cheat insufficient — never before. Each `[InlineData]` row is one such triangulation step.
 
-## Event sourcing in the inner loop
+## Event sourcing in the inner loop (when the aggregate is event-sourced)
 
-Aggregates mutate state **only** by raising and applying domain events — even under TDD:
+When the bounded context's aggregate is event-sourced, it mutates state **only** by raising and applying domain events — even under TDD. (If the context uses an EF Core CRUD model instead, follow the same RED-GREEN-REFACTOR discipline without this constraint; both persistence styles are first-class.)
 
 - A factory/behavior method **validates**, then `Raise`s a past-tense event; the `When` handler applies it. Assert through the factory result and the resulting state, never by setting fields directly.
 - When a behavior triggers a new state change, the natural TDD step is: a test asserting the new state → a new event + its `When` case to satisfy it.
@@ -215,7 +213,7 @@ Aggregates mutate state **only** by raising and applying domain events — even 
 - Tag every test: `[Trait("Category", "Unit test")]` and `[Trait("Nature", "Developper test")]`.
 - `[Theory]` + `[InlineData(...)]` for scenario examples (emerges during triangulation).
 - Domain objects use **private constructors + static factory methods** (`Order.Place(...)`, `OrderItem.Of(...)`) — test through those, never `new`.
-- Domain tests live in `tests/GcPlatform.<Context>.Tests/` (e.g. `PlacingOrderTests.cs`).
+- Domain tests live under `backend/tests/GcPlatform.<Module>.Tests/Domain/` (e.g. `PlacingOrderShould.cs`).
 
 ## Commits — one per phase, as a checkpoint
 

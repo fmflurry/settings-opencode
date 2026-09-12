@@ -1,8 +1,70 @@
 # dotnet-cop / EF Core
 
-DbContext per module/schema, migrations via `dotnet ef migrations add`, no lazy-loading surprises, AsNoTracking for reads, no N+1, query splitting, migration safety.
+DbContext per module/schema, migrations via `dotnet ef migrations add`, no lazy-loading surprises, AsNoTracking for reads, no N+1, query splitting, migration safety. **Doctrine**: schema-per-module isolation + FORCE RLS on all context-schema tables + lightweight app-role (DML-only, no DDL).
 
-## 🔴 Blockers
+## 🟢 Blockers
+
+### Single shared `DbContext` across modules (god context)
+```csharp
+// BAD — one DbContext references all module entity types
+public class AppDbContext(DbContextOptions options) : DbContext(options)
+{
+    public DbSet<Order> Orders { get; set; }
+    public DbSet<User> Users { get; set; }    // from different modules
+    // ...
+}
+
+// GOOD — per-module DbContext
+public class OrderDbContext(DbContextOptions<OrderDbContext> options) : DbContext(options)
+{
+    public DbSet<Order> Orders { get; set; }
+}
+public class UserDbContext(DbContextOptions<UserDbContext> options) : DbContext(options)
+{
+    public DbSet<User> Users { get; set; }
+}
+```
+A shared DbContext couples modules at the infrastructure level, preventing independent schema evolution and deployment. Each module owns its own context and schema.
+
+### Cross-schema access or grant (schema isolation violated)
+A query, migration, or role grant violates module schema isolation:
+- `GRANT ... ON SCHEMA <other_context> TO <context>_app` — forbidden cross-schema grant.
+- `SELECT ... FROM <other_context>.table_name` or raw SQL cross-schema reference.
+- `JOIN <other_context>.table` in a handler query.
+
+**Doctrine**: Each module's `<context>_app` role may **only** access tables in its own `<context>` schema. Cross-module communication is exclusively via integration events (Wolverine bus), never via shared database tables.
+
+### Table created without FORCE ROW LEVEL SECURITY (mandatory in all context schemas)
+
+A new table is created in any context schema (via `CreateTable(...)` in a migration) without:
+- `ALTER TABLE <context>.<table> ENABLE ROW LEVEL SECURITY;`
+- `ALTER TABLE <context>.<table> FORCE ROW LEVEL SECURITY;`
+- `CREATE POLICY <table>_tenant_isolation` with both `USING` and `WITH CHECK` clauses, fail-closed: `current_setting('app.tenant_id', true)` (the `, true` flag is **required**).
+
+**Doctrine**: Bulk RLS enable happens once per context via `<Context>EnableRls` migration (enumerates all existing tables). All **subsequent tables** created in migrations must immediately include RLS + FORCE + policy in the **same migration**.
+
+**Canonical pattern** (for new tables):
+```sql
+ALTER TABLE <context>.<table> ENABLE ROW LEVEL SECURITY;
+ALTER TABLE <context>.<table> FORCE ROW LEVEL SECURITY;
+CREATE POLICY <table>_tenant_isolation ON <context>.<table>
+  USING  (tenant_id = (SELECT current_setting('app.tenant_id', true)))
+  WITH CHECK (tenant_id = (SELECT current_setting('app.tenant_id', true)));
+```
+
+For **child tables** without own `tenant_id`, use EXISTS subquery to the parent.
+
+**Database provisioning:** When a new module adds schema/roles/RLS to the provisioning script (managed-DB scenario), consult the `db-provisioning` skill — it ensures the SQL script, app-boot provisioners, and conformance test stay synchronized across roles, grants, and RLS.
+
+### DDL by runtime role or missing REVOKE CREATE (DML-only doctrine violated)
+
+A migration grants DDL privileges to `<context>_app` or creates/owns objects under the runtime role:
+- `GRANT CREATE ON SCHEMA <context> TO <context>_app`
+- Table owned by `<context>_app` instead of `<context>_migrator`.
+- Missing `REVOKE CREATE ON SCHEMA <context> FROM PUBLIC, <context>_app`.
+- Runtime connection used to run migrations (schema ownership wrong).
+
+**Doctrine**: `<context>_app` is DML-only (SELECT, INSERT, UPDATE, DELETE + USAGE on sequences). Only `<context>_migrator` (owner) performs DDL. Migrations run under `<Context>MigrationConnection` with `<context>_migrator` role.
 
 ### Raw SQL with string interpolation (SQL injection)
 ```csharp
@@ -91,15 +153,6 @@ If lazy loading is present, flag it as 🟡 risk unless AGENTS.md explicitly all
 ### Migration without corresponding snapshot update
 EF Core auto-generates the `*ModelSnapshot.cs`. A migration file added without an updated snapshot indicates the migration was hand-edited or generated incorrectly — flag for author verification.
 
-### DbContext shared across modules (single god context)
-Per the dotnet-clean-architecture convention, each module should use its own `DbContext` scoped to its schema/tables. A single `AppDbContext` that references all entity types couples modules at the infrastructure level:
-```
-✅ Module/Order/Infrastructure/Context/OrderDbContext.cs
-✅ Module/User/Infrastructure/Context/UserDbContext.cs
-❌ Infrastructure/Context/AppDbContext.cs (contains Order + User entities)
-```
-Flag if a new entity type from module A is added to a shared DbContext that already contains module B entities.
-
 ### Query splitting missing on large collection navigations
 ```csharp
 // BAD — Cartesian explosion with multiple collection includes
@@ -115,6 +168,13 @@ var orders = await context.Orders
     .Include(o => o.Tags)
     .ToListAsync();
 ```
+
+### Tenant-scoped entity without RLS policy (isolation gap)
+An entity/table with a `tenant_id` column (tenant-scoped) is added/modified without:
+- `ENABLE ROW LEVEL SECURITY` + `FORCE ROW LEVEL SECURITY` on the table, and
+- a policy `USING`/`WITH CHECK (tenant_id = current_setting('app.tenant_id', true))`.
+
+**Risk:** Real isolation loss. RLS keyed on the `app.tenant_id` GUC (stamped by `TenantSessionInterceptor`) is the mandatory isolation mechanism. There is **no** EF Core `HasQueryFilter` tenant predicate in this repo — do not add one and do not expect one.
 
 ## 🔵 Nits
 

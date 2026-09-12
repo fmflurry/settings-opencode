@@ -3,13 +3,13 @@
   "autoupdate": true,
   "default_agent": "conductor",
   "instructions": [
-    "{file:instructions/subagent-routing.md}",
-    "{file:instructions/question-handling.md}",
-    "{file:instructions/codememory-first.md}",
-    "{file:instructions/verification-gate.md}",
-    "{file:instructions/harness-parity.md}",
-    "{file:instructions/brief-contract.md}",
-    "{file:instructions/tool-budget.md}",
+    "~/.config/opencode/instructions/subagent-routing.md",
+    "~/.config/opencode/instructions/question-handling.md",
+    "~/.config/opencode/instructions/codememory-first.md",
+    "~/.config/opencode/instructions/verification-gate.md",
+    "~/.config/opencode/instructions/harness-parity.md",
+    "~/.config/opencode/instructions/brief-contract.md",
+    "~/.config/opencode/instructions/tool-budget.md",
   ],
   "agent": {
     "conductor": {
@@ -408,7 +408,7 @@
       },
     },
     "learning-reviewer": {
-      "description": "Background reviewer that analyzes conversation turns and extracts durable learnings (memories, skills). Runs per-turn, non-blocking. Project memories auto-apply; self-improvement changes are staged for approval.",
+      "description": "Background reviewer that analyzes conversation turns and extracts durable learnings (memories, skills). One learning review per idle window (not per turn), non-blocking. Project memories auto-apply; self-improvement changes are staged for approval.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_LEARNING}",
       "prompt": "{file:prompts/agents/learning-reviewer.txt}",
@@ -419,7 +419,8 @@
         "read": true,
         "grep": true,
         "glob": true,
-        "apply_patch": true,
+        "edit": true,
+        "write": true,
         "code-memory_*": true,
       },
       "permission": {
@@ -428,19 +429,25 @@
           "*": "deny",
           "~/.config/opencode/skills/*": "allow",
           "~/.config/opencode/pending/skills/*": "allow",
+          ".opencode/skills/*": "allow",
+          ".opencode/pending/skills/*": "allow",
         },
         "grep": {
           "*": "deny",
           "~/.config/opencode/skills/*": "allow",
+          ".opencode/skills/*": "allow",
         },
         "glob": {
           "*": "deny",
           "~/.config/opencode/skills/*": "allow",
           "~/.config/opencode/pending/skills/*": "allow",
+          ".opencode/skills/*": "allow",
+          ".opencode/pending/skills/*": "allow",
         },
-        "apply_patch": {
+        "edit": {
           "*": "deny",
           "~/.config/opencode/pending/skills/*.json": "allow",
+          ".opencode/pending/skills/*.json": "allow",
         },
         "bash": "deny",
         "task": "deny",
@@ -564,35 +571,16 @@
       "description": "Generate skills from git history",
       "template": "{file:commands/skill-create.md}\n\n$ARGUMENTS",
     },
-    "learn-pending": {
-      "description": "List all staged learning changes awaiting approval (skills + memories)",
-      "template": "{file:commands/learn-pending.md}\n\n$ARGUMENTS",
-      "agent": "conductor",
-      "subtask": true,
-    },
-    "learn-approve": {
-      "description": "Approve a staged learning change by ID",
-      "template": "{file:commands/learn-approve.md}\n\n$ARGUMENTS",
-      "agent": "conductor",
-      "subtask": true,
-    },
-    "learn-reject": {
-      "description": "Reject a staged learning change by ID",
-      "template": "{file:commands/learn-reject.md}\n\n$ARGUMENTS",
-      "agent": "conductor",
-      "subtask": true,
-    },
-    "learn-review": {
-      "description": "Manually trigger a learning review of the current session",
-      "template": "{file:commands/learn-review.md}\n\n$ARGUMENTS",
-      "agent": "conductor",
-      "subtask": true,
-    },
   },
   "mcp": {
     "context7": {
       "type": "local",
       "command": ["npx", "-y", "@upstash/context7-mcp@latest"],
+      "enabled": false,
+    },
+    "blender": {
+      "type": "local",
+      "command": ["uv", "--directory", "$HOME/dev/blender_mcp/mcp", "run", "blender-mcp"],
       "enabled": false,
     },
     "wallaby": {
@@ -634,7 +622,6 @@
     "opencode-skill-creator",
     "./plugins/notification.ts",
     "./plugins/mistral-affinity.js",
-    "./plugins/learning-loop.ts",
     "./plugins/llm-metrics.ts",
     "./plugins/secret-file-guard.ts",
     "./plugins/tool-budget.ts",

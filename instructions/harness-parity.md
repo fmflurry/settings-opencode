@@ -10,4 +10,4 @@ Consult the `harness-parity` skill for the translation table and replication che
 
 ## Scope Note
 
-**PROJECT-SCOPED:** Harness-parity rules apply to a project's own `.claude/` ↔ `.opencode/` pair. This settings repo itself has no `.opencode/` directory; the root `skills/` directory is managed separately and is not subject to harness-parity rules. Apply harness-parity only when a project has both `.claude/` and `.opencode/` directories.
+**PROJECT-SCOPED:** Harness-parity applies to a project's own `.claude/` ↔ `.opencode/` pair. A repository that has no `.opencode/` directory — for example the global settings repo, whose root `skills/` directory is managed separately — is not subject to harness-parity rules. Apply harness-parity only when the repository has both `.claude/` and `.opencode/` directories.

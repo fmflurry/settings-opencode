@@ -20,6 +20,13 @@
 #   A skill that exists in only ONE root is not drift — it is reported only in
 #   the summary count.
 #
+#   An INSTRUCTIONS section then repeats the comparison for `instructions/*.md`,
+#   matched by basename across the settings instructions dir, the live OpenCode
+#   instructions dir, and (when REPO_DIR is given) <repo>/.opencode/instructions.
+#   The kept-overlap topics — subagent-routing, question-handling,
+#   codememory-first, verification-gate, harness-parity, caveman-ultra — must
+#   stay identical, so they get an explicit watchlist.
+#
 # USAGE
 #   skill-drift-check.sh [-q|--quiet] [REPO_DIR]
 #
@@ -46,8 +53,8 @@
 #                                  otherwise they are skipped like sync-skills.sh
 #
 # EXIT
-#   0  no drift among duplicated skills
-#   1  drift detected
+#   0  no drift among duplicated skills or instructions
+#   1  drift detected (skills or instructions)
 #   2  usage / configuration error
 #
 # READ-ONLY
@@ -67,7 +74,8 @@ for arg in "$@"; do
     case "$arg" in
         -q|--quiet) QUIET=1 ;;
         -h|--help)
-            sed -n '2,55p' "${BASH_SOURCE[0]:-$0}" | sed 's/^# \{0,1\}//'
+            sed -n '2,/^set -o pipefail/p' "${BASH_SOURCE[0]:-$0}" \
+                | grep -v '^set -o pipefail' | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         --*)
@@ -240,9 +248,156 @@ printf -- '%.0s-' $(seq 1 78); printf '\n'
 printf 'Duplicated skills: %d  (OK: %d, DRIFT: %d)  |  single-root skills: %d\n' \
     "$duplicated" "$ok" "$drift" "$single"
 
-if [ "$drift" -gt 0 ]; then
-    printf 'RESULT: DRIFT detected (%d skill(s)) — copies must be reconciled.\n' "$drift"
+# ------------------------------ instructions --------------------------------
+
+INSTR_ROOTS_LABELS=()
+INSTR_ROOTS_PATHS=()
+
+add_instr_root() {
+    local label="$1" path="$2"
+    if [ -d "$path" ]; then
+        INSTR_ROOTS_LABELS+=("$label")
+        INSTR_ROOTS_PATHS+=("$path")
+    fi
+}
+
+add_instr_root "settings/instructions"       "$SETTINGS_DIR/instructions"
+add_instr_root "opencode/instructions"       "$OPENCODE_HOME/instructions"
+if [ -n "$REPO_DIR" ]; then
+    add_instr_root "repo/.opencode/instructions" "$REPO_DIR/.opencode/instructions"
+fi
+
+instr_drift=0
+printf '\n== INSTRUCTIONS (matched by basename) ==\n'
+if [ "${#INSTR_ROOTS_PATHS[@]}" -eq 0 ]; then
+    printf 'skill-drift-check: no instructions root found — skipping\n'
+else
+    i=0
+    while [ "$i" -lt "${#INSTR_ROOTS_PATHS[@]}" ]; do
+        printf '   [%d] %-30s %s\n' "$i" "${INSTR_ROOTS_LABELS[$i]}" "${INSTR_ROOTS_PATHS[$i]}"
+        i=$((i + 1))
+    done
+
+    : > "$TMP/instr.all"
+    i=0
+    while [ "$i" -lt "${#INSTR_ROOTS_PATHS[@]}" ]; do
+        for f in "${INSTR_ROOTS_PATHS[$i]}"/*.md; do
+            [ -f "$f" ] || continue
+            basename "$f" >> "$TMP/instr.all"
+        done
+        i=$((i + 1))
+    done
+    LC_ALL=C sort -u "$TMP/instr.all" > "$TMP/instr.txt"
+
+    printf '\n%-40s %6s  %-12s %s\n' 'INSTRUCTION' 'COPIES' 'ROOTS' 'STATUS'
+    printf -- '%.0s-' $(seq 1 78); printf '\n'
+
+    instr_dup=0
+    instr_ok=0
+    instr_single=0
+
+    while IFS= read -r base; do
+        [ -n "$base" ] || continue
+        copies=0
+        roots_with=""
+        i=0
+        while [ "$i" -lt "${#INSTR_ROOTS_PATHS[@]}" ]; do
+            if [ -f "${INSTR_ROOTS_PATHS[$i]}/$base" ]; then
+                copies=$((copies + 1))
+                roots_with="${roots_with}[$i] "
+            fi
+            i=$((i + 1))
+        done
+        if [ "$copies" -eq 1 ]; then
+            instr_single=$((instr_single + 1))
+            continue
+        fi
+
+        instr_dup=$((instr_dup + 1))
+        ref_root=""
+        ref_digest=""
+        status=OK
+        i=0
+        while [ "$i" -lt "${#INSTR_ROOTS_PATHS[@]}" ]; do
+            f="${INSTR_ROOTS_PATHS[$i]}/$base"
+            if [ -f "$f" ]; then
+                digest="$(shasum -a 256 "$f" | cut -d' ' -f1)"
+                if [ -z "$ref_digest" ]; then
+                    ref_digest="$digest"
+                    ref_root="$i"
+                elif [ "$digest" != "$ref_digest" ]; then
+                    status=DRIFT
+                fi
+            fi
+            i=$((i + 1))
+        done
+
+        printf '%-40s %6s  %-12s %s\n' "$base" "$copies" "$roots_with" "$status"
+
+        if [ "$status" = "DRIFT" ]; then
+            instr_drift=$((instr_drift + 1))
+            if [ "$QUIET" -eq 0 ]; then
+                i=0
+                while [ "$i" -lt "${#INSTR_ROOTS_PATHS[@]}" ]; do
+                    f="${INSTR_ROOTS_PATHS[$i]}/$base"
+                    if [ -f "$f" ] && [ "$i" != "$ref_root" ] \
+                        && ! diff -q "${INSTR_ROOTS_PATHS[$ref_root]}/$base" "$f" >/dev/null 2>&1; then
+                        printf '    [%d] %s  vs  [%d] %s\n' \
+                            "$ref_root" "${INSTR_ROOTS_LABELS[$ref_root]}" \
+                            "$i" "${INSTR_ROOTS_LABELS[$i]}"
+                        diff -u "${INSTR_ROOTS_PATHS[$ref_root]}/$base" "$f" \
+                            | sed -n '3,14p' | sed 's/^/      /'
+                    fi
+                    i=$((i + 1))
+                done
+            fi
+        else
+            instr_ok=$((instr_ok + 1))
+        fi
+    done < "$TMP/instr.txt"
+
+    printf -- '%.0s-' $(seq 1 78); printf '\n'
+    printf 'Duplicated instructions: %d  (OK: %d, DRIFT: %d)  |  single-root: %d\n' \
+        "$instr_dup" "$instr_ok" "$instr_drift" "$instr_single"
+
+    # Kept-overlap watchlist: these topics must be identical wherever present.
+    # A DRIFT here is already counted by the table above; only MISSING adds new drift.
+    KEEP_OVERLAP="subagent-routing question-handling codememory-first verification-gate harness-parity caveman-ultra"
+    read -r -a keep_arr <<< "$KEEP_OVERLAP"
+    printf '\nKept-overlap watchlist (must stay identical):\n'
+    for k in "${keep_arr[@]}"; do
+        present=0
+        ref_digest=""
+        kstatus=OK
+        i=0
+        while [ "$i" -lt "${#INSTR_ROOTS_PATHS[@]}" ]; do
+            f="${INSTR_ROOTS_PATHS[$i]}/$k.md"
+            if [ -f "$f" ]; then
+                present=$((present + 1))
+                digest="$(shasum -a 256 "$f" | cut -d' ' -f1)"
+                if [ -z "$ref_digest" ]; then
+                    ref_digest="$digest"
+                elif [ "$digest" != "$ref_digest" ]; then
+                    kstatus=DRIFT
+                fi
+            fi
+            i=$((i + 1))
+        done
+        total="${#INSTR_ROOTS_PATHS[@]}"
+        if [ "$present" -lt "$total" ]; then
+            kstatus="MISSING ($present/$total)"
+            instr_drift=$((instr_drift + 1))
+        fi
+        printf '  %-22s %s\n' "$k.md" "$kstatus"
+    done
+fi
+
+# ------------------------------ result ---------------------------------------
+
+if [ "$drift" -gt 0 ] || [ "$instr_drift" -gt 0 ]; then
+    printf 'RESULT: DRIFT detected (skills: %d, instructions: %d) — copies must be reconciled.\n' \
+        "$drift" "$instr_drift"
     exit 1
 fi
-printf 'RESULT: no drift among duplicated skills.\n'
+printf 'RESULT: no drift among duplicated skills or instructions.\n'
 exit 0

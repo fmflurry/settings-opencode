@@ -102,9 +102,9 @@ When migrating a legacy/mixed module to Clean Architecture:
 
 ### 7. Replace Direct Module Coupling
 
-- Identify where one module imports another's internals
+- Identify where one module imports another (internals OR `public-api.ts`/`integration-api.ts`)
 - Create context providers and register in `ContextRegistry`
-- Route all cross-module interactions via `contextProvidersFor()` or integration-api mirroring
+- Route all cross-module interactions via `contextProvidersFor()`; types become local ACL copies (see cross-domain.md)
 
 ### 8. Validate
 

@@ -26,7 +26,7 @@ Pre-merge review. Compares HEAD vs `origin/<target>`. Angular-aware. Project-awa
 |---|---|---|---|
 | `<target>` | yes | — | Target branch (e.g. `main`, `develop`, `release/x`) |
 | `--level` | no | auto | `junior` (verbose teaching) or `senior` (terse). Auto = senior. |
-| `--scope` | no | all | Comma list: `signals,rxjs,arch,flurryx,ts,a11y,ddd` |
+| `--scope` | no | all | Comma list: `signals,rxjs,arch,flurryx,ts,design,ddd,a11y` |
 | `--no-tools` | no | false | Skip lint + tsc (static review only) |
 
 ## Hard Rules
@@ -49,10 +49,11 @@ Pre-merge review. Compares HEAD vs `origin/<target>`. Angular-aware. Project-awa
 6. For each changed file:
      - Skim full file (not just hunk) for context
      - Apply relevant sub-checklists by extension/role:
-          *.component.ts / *.html  -> signals.md, rxjs.md, clean-architecture.md, a11y
+          *.component.ts / *.component.html / *.component.css -> signals.md, rxjs.md, clean-architecture.md, design-system.md, a11y
          *.facade.ts / *.store.ts -> flurryx.md, clean-architecture.md
          *.adapter.ts / *.port.ts -> clean-architecture.md
          *.ts                     -> typescript-strict.md
+         domain/**/*.ts           -> angular-ddd
      - If --scope includes ddd && domain/ code changed: load [[angular-ddd]] (review-checklist.md) for tactical/strategic DDD checks
 7. If !--no-tools:
      - npm run lint -- --quiet (or eslint --quiet) on changed files
@@ -80,9 +81,10 @@ Promote to BLOCK if AGENTS.md flags the category as mandatory.
 - [[angular-cop-signals]] — Angular signals, change detection, OnPush, computed, no-method-in-template
 - [[angular-cop-rxjs]] — RxJS hygiene, takeUntilDestroyed, async pipe, leak patterns
 - [[angular-cop-clean-architecture]] — facade / use-case / port / adapter / store boundaries
-- [[angular-ddd]] (ddd scope) — DDD tactical patterns (entities, value objects, aggregates, repositories) and strategic design (bounded contexts, ubiquitous language, ACL) for domain-layer code. Complements [[angular-cop-clean-architecture]] layering.
 - [[angular-cop-flurryx]] — flurryx-specific rules (decorator order, keyed stores, no manual Record updates)
 - [[angular-cop-typescript-strict]] — no `any`, immutability, narrowing, no `!`, readonly
+- [[angular-cop-design-system]] — Kourou v0 design-token / color / spacing / typography bypass severity (load for *.html and template-bearing files)
+- [[angular-ddd]] — DDD tactical patterns (entities, value objects, aggregates, repositories) and strategic design (bounded contexts, ubiquitous language, ACL) for domain-layer code
 - [[angular-cop-output-format]] — junior vs senior render templates
 
 ## AGENTS.md Loading

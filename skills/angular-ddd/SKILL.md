@@ -64,7 +64,7 @@ The Angular-specific delta vs. the .NET DDD skill:
 | Entity | Has identity; equality by ID, not attributes | [tactical-patterns.md § Entity](tactical-patterns.md#entity) |
 | Value Object | No identity; immutable; equality by attributes | [tactical-patterns.md § Value Object](tactical-patterns.md#value-object) |
 | Aggregate + Root | Consistency boundary; root is sole entry point | [tactical-patterns.md § Aggregate](tactical-patterns.md#aggregate--aggregate-root) |
-| Repository | DDD pattern realised as `<VerbNoun>Port` classes (e.g. `GetOrderPort`, `SaveOrderPort`) in `core/ports/` | [tactical-patterns.md § Repository](tactical-patterns.md#repository) |
+| Repository | Collection-like abstraction over aggregates | [tactical-patterns.md § Repository](tactical-patterns.md#repository) |
 | Factory | Encapsulates complex creation logic | [tactical-patterns.md § Factory](tactical-patterns.md#factory) |
 | Specification | Reusable, composable query/predicate logic | [tactical-patterns.md § Specification](tactical-patterns.md#specification) |
 | Domain Service | Stateless logic that doesn't belong to an entity | [tactical-patterns.md § Domain Service](tactical-patterns.md#domain-service-vs-application-service) |
@@ -125,7 +125,7 @@ When writing new domain code:
 - [ ] Expose mutations only through the aggregate root's public methods
 - [ ] Define repository ports in `core/ports/` (return aggregates, not DTOs)
 - [ ] Use domain events for cross-aggregate or cross-context communication
-- [ ] Keep domain services stateless; prefer rule functions when behavior fits one entity
+- [ ] Keep domain services stateless; prefer entity methods when behavior fits one entity
 
 ## Hard Rules
 

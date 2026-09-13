@@ -56,6 +56,7 @@ When scope is not useful or not clear, this no-scope form is also valid:
 
 ### Commit Rules
 
+- **English only**: subject and body MUST be English, even when the diff or conversation is French.
 - Prefer including a meaningful `scope` when the affected area is clear
 - Omit `scope` instead of inventing one when it is not clear
 - Use a concise present-tense summary

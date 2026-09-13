@@ -37,7 +37,7 @@ This is a practitioner synthesis, not a verbatim reproduction. Where sources dis
 ## Core Principles
 
 1. **The domain model is the software.** Business logic lives in domain objects, not in services or controllers. (Evans, ch. 1)
-2. **Ubiquitous Language.** Code names match the domain expert's vocabulary. No translation layer between business and code. (Evans, ch. 2)
+2. **Ubiquitous Language.** Code names match the domain expert's vocabulary. No translation layer between business and code. (Evans, ch. 2) **In this project the ubiquitous language is English:** one canonical English term per domain concept (anchor: `docs/architecture/ubiquitous-language.md`), no synonyms within a bounded context.
 3. **Bounded Contexts define boundaries.** Each context owns its model. Shared types across contexts are a design smell. (Evans, ch. 14)
 4. **Aggregates enforce invariants.** All mutations go through the aggregate root. External code never reaches inside. (Vernon, ch. 10)
 5. **Value Objects are immutable and identity-free.** They describe characteristics, not things. (Evans, ch. 5)
@@ -88,7 +88,7 @@ The `code-reviewer` agent applies [review-checklist.md](review-checklist.md) whe
 When writing new domain code:
 
 - [ ] Identify the bounded context this code belongs to
-- [ ] Name types using the context's ubiquitous language
+- [ ] Name types using the context's ubiquitous language — canonical English terms from `docs/architecture/ubiquitous-language.md`; never introduce a synonym
 - [ ] Model entities with identity + behavior (not just data)
 - [ ] Extract value objects for descriptive attributes (immutable, no ID)
 - [ ] Group related entities into aggregates; designate one root
@@ -106,3 +106,4 @@ When writing new domain code:
 4. **Repositories return aggregates.** Never return EF Core entities, `IQueryable`, or raw DTOs from a domain repository interface. (Vernon, ch. 12)
 5. **Bounded-context boundaries are hard.** No shared internal types across contexts. Use ACL or integration events. (Evans, ch. 14)
 6. **Domain layer has zero infrastructure dependencies.** No `using Microsoft.EntityFrameworkCore`, no `HttpClient`, no framework attributes in domain types.
+7. **Ubiquitous language is English.** All domain names (entities, value objects, events, services) are English; each concept has exactly one name within a bounded context. Canonical terms live in `docs/architecture/ubiquitous-language.md`.

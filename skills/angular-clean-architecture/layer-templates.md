@@ -4,7 +4,7 @@ Worked example: `companies` module (normalized to canonical layout).
 
 ## Import Conventions (Path Aliases)
 
-Prefer the project's tsconfig path aliases over relative paths. Deep relative climbing is forbidden.
+Prefer the tsconfig path alias `@/*` → `src/app/*` over relative paths. Deep relative climbing is forbidden.
 
 ```typescript
 // BAD — deep relative climbing, hard to read and breaks on file moves
@@ -19,7 +19,7 @@ Rules:
 - **Intra-module across layers**: alias form preferred — `import { Company } from '@/modules/companies/core/models'`.
 - **Same-directory** `./sibling` remains acceptable — `import { x } from './company.model'`.
 - **Deep `../..` climbing is forbidden.**
-- If the repo mirrors tsconfig aliases in its test-runner config (e.g. gc.platform mirrors `frontend/tsconfig.json` in `frontend/vitest.config.ts`), adding any NEW alias requires updating BOTH files.
+- `frontend/vitest.config.ts` mirrors the tsconfig alias, so tests resolve identically. Adding any NEW alias requires updating BOTH `frontend/tsconfig.json` AND `frontend/vitest.config.ts`.
 
 ## 1. Core Model
 
@@ -48,7 +48,7 @@ Rules: `type` or `interface`, optional `?:` props, group by entity, never `any`.
 ```typescript
 // core/ports/get-companies.port.ts
 import { Observable } from 'rxjs';
-import { Company } from '../models';
+import { Company } from '@/modules/companies/core/models';
 
 export abstract class GetCompaniesPort {
   abstract getAll(): Observable<Company[]>;
@@ -111,7 +111,7 @@ Rules: `@Injectable()` (no `providedIn`), inject ports via `inject()`, single re
 ```typescript
 // application/store/companies.store.ts
 import { Store } from 'flurryx';
-import { Company } from '../../core/models';
+import { Company } from '@/modules/companies/core/models';
 
 type CompaniesStoreConfig = {
   COMPANIES: Company[];
@@ -272,6 +272,8 @@ export { companiesServicesProviders } from './companies-service.providers';
 export { companiesInfrastructureProviders } from './infrastructure/companies-infrastructure.providers';
 ```
 
+Consumers: composition root only. Modules never import another module's `public-api.ts` — see [cross-domain.md](cross-domain.md).
+
 ## 14. Integration API (Reactive Contract)
 
 ```typescript
@@ -279,6 +281,8 @@ export { companiesInfrastructureProviders } from './infrastructure/companies-inf
 
 export { CompaniesStore } from './application/store';
 ```
+
+Consumers: composition root only. Modules never import another module's `integration-api.ts` — reactive needs are ports bound via the registry, see [cross-domain.md](cross-domain.md).
 
 ## 15. Standalone Component
 

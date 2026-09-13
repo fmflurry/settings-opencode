@@ -137,33 +137,39 @@ export function process(order: Order, stripe: Stripe): void {
 
 **Definition.** Context mapping describes the relationship between bounded contexts. Patterns include: **Shared Kernel** (small shared model both contexts agree to maintain together), **Customer/Supplier** (one context depends on the other's API), **Conformist** (downstream adopts upstream's model as-is), **Partnership**, **Separate Ways**. (Evans, ch. 14)
 
-**When to use Shared Kernel.** Only for a very small set of types that genuinely must be identical across contexts (e.g., `Money`, `CustomerId` as a correlation ID). Keep it minimal — every shared type is a coupling cost.
+**Project default: local ACL copies, not a shared kernel.** Modules never import modules — not even `public-api.ts` or `integration-api.ts` (see [[angular-clean-architecture]]). Each context owns local copies of the cross-context types it needs in its own `core/models/` (ACL read models) and `core/rules/` (pure computations). Duplication across contexts is preferred over sharing.
+
+**Shared Kernel is the exception, not the default.** Only for a very small set of types that genuinely must be identical across contexts (e.g., `Money`, `CustomerId` as a correlation ID), and only with explicit team sign-off. When approved: keep it minimal — every shared type is a coupling cost — place it in neutral `src/app/shared/` (never inside a module), and never let it become a general-purpose type dump.
 
 ### GOOD
 
 ```ts
-// shared/kernel/money.model.ts — tiny, stable, both contexts agree on this
+// Default: each context owns local copies of the cross-context types it needs
+// src/app/modules/sales/core/models/money.model.ts
 export type Money = {
   readonly amount: number;
   readonly currency: string;
 };
 
-// Each context has its own Customer type but references the shared CustomerId
-// for cross-context correlation only.
+// src/app/modules/inventory/core/models/money.model.ts — local duplicate, intentional
+export type Money = {
+  readonly amount: number;
+  readonly currency: string;
+};
 ```
 
 ### BAD
 
 ```ts
-// "Shared kernel" that is actually a god-model
-// shared/models.ts
+// "Shared kernel" that is actually a general-purpose type dump
+// src/app/shared/models.ts
 export interface Customer { /* 30 fields */ }
 export interface Product { /* 25 fields */ }
 export interface Order { /* 40 fields */ }
 // Every module depends on this — changes ripple everywhere
 ```
 
-**Checklist:** Shared kernel contains only a handful of stable value types; no behavior-rich entities in shared code; each context owns its own aggregates; cross-context references use IDs or domain events, not shared entity types.
+**Checklist:** Cross-context type needs default to local ACL copies in each context; a shared kernel exists only with explicit team sign-off, lives in neutral `src/app/shared/` (never inside a module), and contains only a handful of stable value types; no behavior-rich entities in shared code; each context owns its own aggregates; cross-context references use IDs or domain events, not shared entity types.
 
 ---
 

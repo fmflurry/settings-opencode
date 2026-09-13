@@ -12,7 +12,7 @@ Maps DDD event-sourcing and CQRS concepts to their flurryx equivalents in an Ang
 | Replay | `store.replay(ids)`, `replayDeadLetters()`, `undo()` / `redo()` | Re-executes persisted messages through the broker. |
 | Snapshots / time travel | `restoreStoreAt(index)`, `restoreResource(key, index)`, `createSnapshotRestorePatch` | Snapshot navigation without re-publishing messages. |
 | Dead-letter / retry | `getDeadLetters()`, `replayDeadLetter(id)`, `replayDeadLetterCommand(id, resolver)` | Failed messages are captured with metadata; async resolver can fix and replay. |
-| Domain events (DDD) | Immutable TS records in `core/events/` | Application layer turns them into store updates/messages. Cross-module reactions via flurryx mirrors or context registry (see [[angular-clean-architecture]]). |
+| Domain events (DDD) | Immutable TS records in `core/events/` | Application layer turns them into store updates/messages. Cross-module reactions via capability ports returning `Observable<T>`, bound via the context registry (see [[angular-clean-architecture]]); flurryx mirrors are intra-module only. |
 | CQRS read/write split | Write: use case → domain → port → adapter → `syncToStore`. Read: `store.get(KEY)` signal projections; `derive` / `mirror` for read-optimized slots. | Write path enforces invariants; read path is a projection. |
 
 For full API signatures, builder methods, and channel configuration: see [[flurryx]].
@@ -60,7 +60,7 @@ export function confirm(order: Order): { order: Order; events: ReadonlyArray<Ord
 
 ### 3. Dispatching (application layer)
 
-The use case or facade receives the events and decides what to do: persist the aggregate, push to the store via `syncToStore`, or forward to a cross-module channel. This is where flurryx enters — see [[flurryx]] for the store-write API.
+The use case or facade receives the events and decides what to do: persist the aggregate, push to the store via `syncToStore`, or expose them to other modules via a capability port. This is where flurryx enters — see [[flurryx]] for the store-write API.
 
 ```
 use case → domain rule → { newState, events }
@@ -70,7 +70,7 @@ use case → domain rule → { newState, events }
 
 ### 4. Reacting (application / infrastructure layer)
 
-Cross-module reactions use flurryx mirrors (`mirror`, `derive`, `mirrorKeyed`) or the context registry (see [[angular-clean-architecture]]). The reacting module never imports the source module's domain types directly.
+Cross-module reactions use capability ports returning `Observable<T>`, bound via the context registry (see [[angular-clean-architecture]]) — importing or mirroring another module's store is forbidden. flurryx mirrors (`mirror`, `derive`, `mirrorKeyed`) remain valid within a module only. The reacting module never imports the source module's domain types directly.
 
 ---
 

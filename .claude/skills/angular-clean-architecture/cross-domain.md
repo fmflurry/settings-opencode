@@ -1,26 +1,64 @@
 # Cross-Module Communication
 
-Two mechanisms: **synchronous** (context registry → port binding) and **reactive** (integration-api store exports + flurryx mirroring).
+**Hard rule — modules never import modules.** A file under `src/app/modules/<A>/**` must NEVER import from `src/app/modules/<B>/**` — not even B's `public-api.ts` or `integration-api.ts`. Zero exceptions. Only the composition root (`src/app/core/**`, `app.config.ts`, `app.routes.ts`, layout shell) may import module contracts.
 
-## 1. Synchronous — Context Registry
+| Module A needs… | Mechanism |
+|-----------------|-----------|
+| Something module B **does** (capability) | Port contract in a neutral location, B's adapter implements it, registry binds — see §1 |
+| Module B's **types or computations** | FORBIDDEN — A owns local ACL copies in its own `core/models/` + `core/rules/` — see §2 |
 
-A consuming module needs data from another module at call time (e.g., orders needs company names).
+## 1. Capability — Port + Adapter + Registry Binding
 
-### Registering a Context
+The contract (port) lives in a neutral app-level location — `src/app/core/context/contracts/` — or consumer-side in A's `core/ports/`. The PROVIDER module's adapter implements it. The binding (`{ provide: <Port>, useExisting: <Adapter> }`) is declared at the composition root via the context registry (`core/context/`, `contextProvidersFor([...])`). The consumer module imports only from `core/` (allowed direction); the provider module imports only from `core/`; consumer and provider never see each other.
+
+### Worked example: chat needs auth's access token
+
+**1. Contract — neutral location** (both modules may import from `core/`):
+
+```typescript
+// src/app/core/context/contracts/get-access-token.port.ts
+
+export abstract class GetAccessTokenPort {
+  abstract getAccessToken(): string | null;
+}
+```
+
+**2. Provider adapter implements the contract** (auth imports from `core/`, never from chat):
+
+```typescript
+// src/app/modules/auth/infrastructure/adapters/get-access-token.adapter.ts
+import { GetAccessTokenPort } from '@/core/context/contracts/get-access-token.port';
+
+@Injectable()
+export class GetAccessTokenAdapter implements GetAccessTokenPort {
+  getAccessToken(): string | null { /* read the persisted token */ }
+}
+```
+
+**3. Binding — composition root** (app-level may import module contracts):
+
+```typescript
+// src/app/core/context/auth-context.providers.ts
+import { Provider } from '@angular/core';
+import { GetAccessTokenAdapter } from '@/modules/auth/public-api';
+import { GetAccessTokenPort } from './contracts/get-access-token.port';
+
+export const AUTH_CONTEXT_PROVIDERS: Provider[] = [
+  GetAccessTokenAdapter,
+  // useExisting aliases the port to the single adapter instance — never instantiated twice
+  { provide: GetAccessTokenPort, useExisting: GetAccessTokenAdapter },
+];
+```
 
 ```typescript
 // src/app/core/context/context.registry.ts
 
 export enum AppContext {
-  COMPANIES = 'companies',
-  CURRENCIES = 'currencies',
-  ORDERS = 'orders',
+  AUTH = 'auth',
 }
 
 export const CONTEXT_REGISTRY: Record<AppContext, Provider[]> = {
-  companies: COMPANIES_CONTEXT_PROVIDERS,
-  currencies: CURRENCIES_CONTEXT_PROVIDERS,
-  orders: ORDERS_CONTEXT_PROVIDERS,
+  auth: AUTH_CONTEXT_PROVIDERS,
 };
 
 export function contextProvidersFor(contexts: AppContext[]): Provider[] {
@@ -28,109 +66,57 @@ export function contextProvidersFor(contexts: AppContext[]): Provider[] {
 }
 ```
 
-### Creating Context Providers
-
-Context providers bind the module's **port** to its **adapter** — never a concrete class from another module.
+**4. Consumer injects the port** (chat imports from `core/`, never from auth):
 
 ```typescript
-// src/app/core/context/companies-context.providers.ts
-import { getCompaniesProviders } from '@gc/companies/public-api';
+// src/app/modules/chat/infrastructure/adapters/signalr-chat-stream.adapter.ts
+import { GetAccessTokenPort } from '@/core/context/contracts/get-access-token.port';
 
-export const COMPANIES_CONTEXT_PROVIDERS: Provider[] = [
-  ...getCompaniesProviders(),   // binds GetCompaniesPort → GetCompaniesAdapter
-];
+private readonly accessTokenPort = inject(GetAccessTokenPort);
 ```
 
-The module's `public-api.ts` exports the providers function that performs the port→adapter binding. Consumers never reference the adapter directly.
-
-### Consuming in Service Providers
-
 ```typescript
-// In orders module:
-export function ordersServicesProviders(): Provider[] {
-  return [
-    OrdersFacade,
-    GetOrdersUseCase,
-    ...ordersInfrastructureProviders(),
-    ...contextProvidersFor([AppContext.COMPANIES]),  // inject GetCompaniesPort
-  ];
-}
+// src/app/modules/chat/chat-service.providers.ts — pull the binding:
+import { AppContext, contextProvidersFor } from '@/core/context/context.registry';
+
+...contextProvidersFor([AppContext.AUTH]),
 ```
 
-The orders use case injects `GetCompaniesPort` (abstract class). At runtime, DI resolves it to `GetCompaniesAdapter`. The orders module has zero compile-time dependency on companies internals.
+### Adding Cross-Module Capability for a New Feature
 
-### Adding Cross-Module Access for a New Feature
+1. Create the port in `src/app/core/context/contracts/<verb-noun>.port.ts` (or consumer-side in A's `core/ports/`)
+2. Provider module implements it with an adapter; export the adapter from the provider's `public-api.ts`
+3. Declare the binding (`provide: <Port>, useExisting: <Adapter>`) in `src/app/core/context/<module>-context.providers.ts`
+4. Add the entry to `AppContext` enum + `CONTEXT_REGISTRY`
+5. Consumer modules pull via `contextProvidersFor([AppContext.<MODULE>])`
 
-1. Ensure the source module exports a providers fn from `public-api.ts`
-2. Create context providers in `src/app/core/context/<module>-context.providers.ts`
-3. Add entry to `AppContext` enum + `CONTEXT_REGISTRY`
-4. Consumer modules pull via `contextProvidersFor([AppContext.<MODULE>])`
+## 2. Types & Computations — Local ACL Copies (Never Shared)
 
-**Rule:** Never import another module's internals — always go through the port.
-
-## 2. Reactive — Store Mirroring via integration-api
-
-When a consuming module needs **live reactive access** to another module's cached state (e.g., a dashboard mirroring company list updates).
-
-### Source Module Exports Store
+Cross-module type sharing is FORBIDDEN — even via `public-api.ts`. Each bounded context owns local ACL (anti-corruption-layer) read models in its own `core/models/` and local pure computations in `core/rules/`, even if that duplicates another module's types/logic. Duplication across contexts is preferred over sharing (established convention: invoices already owns local customer/catalog-item copies rather than importing them).
 
 ```typescript
-// src/app/modules/companies/integration-api.ts
-export { CompaniesStore } from './application/store';
-```
+// src/app/modules/payments/core/models/receivable.model.ts
 
-### Consumer Mirrors at Builder Level
+// WRONG — module importing another module's types
+import { Invoice } from '@/modules/invoices/public-api';
 
-```typescript
-// src/app/modules/dashboard/application/store/dashboard.store.ts
-import { CompaniesStore } from '@gc/companies/integration-api';
-
-type DashboardStoreConfig = {
-  COMPANIES: Company[];
-  WIDGETS: Widget[];
+// RIGHT — payments owns a local ACL read model shaped to its own needs
+export type ReceivableInvoice = {
+  id: string;
+  number: string;
+  dueDate: string;
+  amountDue: number;
 };
-
-export const DashboardStore = Store.for<DashboardStoreConfig>()
-  .mirror(CompaniesStore, 'COMPANIES')   // 1:1 mirror — updates flow both ways
-  .build();
 ```
 
-### Standalone Mirroring (imperative)
-
-```typescript
-import { mirrorKey, collectKeyed } from 'flurryx';
-
-// One-way mirror
-const cleanup = mirrorKey(CompaniesStore, 'COMPANIES', DashboardStore, 'COMPANIES', {
-  direction: 'source-to-target',
-});
-
-// Aggregate single-entity fetches into keyed slot
-const cleanup2 = collectKeyed(CompanyDetailsStore, 'DETAIL', DashboardStore, 'COMPANIES_KEYED', {
-  extractId: (company) => company?.id,
-});
-```
-
-### Keyed Mirroring at Builder Level
-
-```typescript
-export const DashboardStore = Store.for<DashboardStoreConfig>()
-  .mirrorKeyed(CompanyDetailsStore, 'DETAIL', { extractId: (c) => c?.id }, 'COMPANIES_KEYED')
-  .build();
-```
-
-## Decision Guide
-
-| Need | Mechanism | Example |
-|------|-----------|---------|
-| Call-time data fetch (one-shot) | Context registry → port | Orders fetches company name |
-| Live reactive state sharing | integration-api + `.mirror()` | Dashboard mirrors company list |
-| Per-entity aggregation | `collectKeyed` / `.mirrorKeyed()` | Collecting company details into keyed slot |
-| Derived/transformed view | `.derive()` / `deriveKey()` | Formatting totals from another store |
+Same for computations: never import another module's rule functions (e.g. `computeInvoiceTotals` from invoices) — re-implement the pure function locally in `payments/core/rules/`. The consumer's adapter maps the provider's payload into the local read model; that mapping IS the anti-corruption layer.
 
 ## Rules
 
-- **Sync access**: always via port (context registry). Never inject a concrete adapter cross-module.
-- **Reactive access**: always via `integration-api.ts` store export. Never import from `application/store/` directly.
-- **No god-stores**: each module owns its own store. Cross-module state flows via mirroring, not a shared mega-store.
-- **Caching is transparent**: `@SkipIfCached` in the source module's adapter/facade handles dedup. Consumers just call the port.
+- **Zero module→module imports** — not even `public-api.ts`/`integration-api.ts`. Only the composition root imports module contracts.
+- **Capabilities**: always via port + context-registry binding. Never inject a concrete adapter cross-module.
+- **Types/computations**: always local ACL copies. Never import another module's models or rules.
+- **Reactive needs are capabilities too**: expose a port returning `Observable<T>` and bind it via the registry. Never import another module's store or mirror it cross-module.
+- **No god-stores**: each module owns its own store.
+- **Caching is transparent**: `@SkipIfCached` in the provider module's adapter/facade handles dedup. Consumers just call the port.
+- **Enforcement**: isolation audit — resolve every import specifier in `modules/**`; any resolution landing in another module's directory is a violation.

@@ -127,10 +127,10 @@ export abstract class GetCustomerPort {
 import { map } from 'rxjs/operators';
 
 @Injectable()
-export class GetCustomersAdapter extends GetCustomersPort {
+export class GetCustomersAdapter extends GetCustomerPort {
   constructor(private endpoint: CustomersEndpoint) {}
   
-  get(id: CustomerId): Observable<Customer> {
+  execute(id: CustomerId): Observable<Customer> {
     return this.endpoint.fetch(id).pipe(
       map((dto: CustomerDTO) => this.mapDTOToCustomer(dto))
     );
@@ -145,7 +145,7 @@ export class GetCustomersAdapter extends GetCustomersPort {
 **BAD example:**
 ```typescript
 // Port exposes DTO type, adapter mapping is implicit
-export abstract class GetCustomersPort {
+export abstract class GetCustomerPort {
   abstract get(id: string): Observable<CustomerDTO>;
 }
 ```
@@ -333,9 +333,9 @@ export abstract class GetOrderPort {
 ```typescript
 // Overloaded port — violates ISP
 export abstract class OrderPort {
-  abstract get(id: string): Observable<any>;
-  abstract create(data: any): Observable<any>;
-  abstract update(id: string, data: any): Observable<any>;
+  abstract get(id: string): Observable<unknown>;
+  abstract create(data: unknown): Observable<unknown>;
+  abstract update(id: string, data: unknown): Observable<unknown>;
   abstract delete(id: string): Observable<void>;
 }
 ```
@@ -490,15 +490,15 @@ export class ConfirmOrderEvent {
 ### Context Mapping & Cross-Context Communication
 
 - [ ] 🟢 Cross-context references use IDs or domain events, not shared entity class references.
-- [ ] 🟢 Shared kernel (if used) contains only immutable value types (e.g., `CorrelationId`, `Money`, common enums). No entities, repositories, or behavior-rich objects.
+- [ ] 🟢 Cross-context types are context-local by default: each module owns its own copies in its own `core/models/` (ACL). Shared-kernel usage is flagged — requires explicit team sign-off, lives in neutral `src/app/shared/` (never inside a module), and contains only immutable value types (e.g., `CorrelationId`, `Money`, common enums). No entities, repositories, or behavior-rich objects.
 
 **GOOD example:**
 ```typescript
 // src/app/modules/sales/core/models/order.ts
 type Order = {
   readonly id: OrderId;
-  readonly customerId: CustomerId;  // ← shared ID type
-  readonly total: Money;  // ← shared value type
+  readonly customerId: CustomerId;  // ← sales' own local ID type
+  readonly total: Money;  // ← sales' own local value type
 };
 
 // src/app/modules/fulfillment/core/models/shipment.ts
@@ -507,8 +507,8 @@ type Shipment = {
   readonly orderId: OrderId;  // ← reference by ID, not by Order object
 };
 
-// Shared kernel (minimal)
-// shared/kernel/money.model.ts
+// fulfillment owns local copies of the same concepts — duplication is intentional
+// src/app/modules/fulfillment/core/models/money.model.ts
 type Money = {
   readonly amount: number;
   readonly currency: string;
@@ -551,7 +551,7 @@ type Money = { /* value object */ };
 type OrderId = string & { readonly __brand: 'OrderId' };  // branded identity
 
 // ports
-abstract class GetCustomersPort { /* ... */ }
+abstract class GetCustomerPort { /* ... */ }
 abstract class CreateOrderPort { /* ... */ }
 ```
 

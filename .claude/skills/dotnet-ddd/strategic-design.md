@@ -68,6 +68,13 @@ public class Product
 
 **When to use.** Always, within every bounded context. If a developer cannot explain a class name to a domain expert without translating, the language is broken.
 
+**Project rule (gc.platform).** The platform's ubiquitous language is English. Canonical terms
+are listed in `docs/architecture/ubiquitous-language.md` and align with the frontend module
+names (`invoices`, `payments`, `dunning`, `customers`, `catalog`). One term per concept within
+a context; no synonyms, no French identifiers. Cross-context divergence (same real-world entity,
+different names in different contexts) remains legal — see dotnet-clean-architecture
+§ Language & Naming.
+
 ### GOOD
 
 ```csharp

@@ -53,8 +53,8 @@ src/app/modules/{moduleName}/
 ├── routes.ts                # lazy loadComponent + route-level providers
 ├── routes.constants.ts
 ├── {moduleName}-service.providers.ts    # SELF-REGISTRATION entrypoint
-├── public-api.ts            # SYNC contract: models, ports, providers fn
-└── integration-api.ts       # REACTIVE contract: exports store for cross-module mirroring
+├── public-api.ts            # SYNC contract — composition root imports only, never module→module
+└── integration-api.ts       # REACTIVE contract — composition root imports only, never module→module
 ```
 
 Full layout with worked example: [module-template.md](module-template.md).
@@ -71,7 +71,7 @@ Presentation  Application  Application   Core     Infrastructure
 - **Application depends on Core only** — facades orchestrate use cases + store; use cases call ports.
 - **Infrastructure depends on Core only** — adapters implement ports using HTTP clients.
 - **Components NEVER inject use cases or stores directly** — always inject facades.
-- **Cross-module communication uses the Context Registry or integration-api store exports** — never import another module's internals.
+- **Modules NEVER import modules** — a file under `src/app/modules/<A>/**` never imports from `src/app/modules/<B>/**`, not even `public-api.ts`/`integration-api.ts`. Capabilities go through context-registry ports in `core/`; types are local ACL copies. Only the composition root (`core/**`, `app.config.ts`, `app.routes.ts`, layout shell) imports module contracts. See [cross-domain.md](cross-domain.md).
 
 ### Root Store vs Route Providers (Caching Mechanism)
 
@@ -101,6 +101,8 @@ Full before/after migration: [session-proxy-migration.md](session-proxy-migratio
 - **Never** inject `UseCase` classes directly into components — always go through a Facade
 - **Never** inject stores directly into components — facades expose store signals
 - **Never** import flurryx, Angular, or HttpClient in `core/`
+- **Never** deep-climb relative imports (`../../...`) — use the `@/` path alias (see [Import Conventions](layer-templates.md))
+- **Never** import from another module — a file under `src/app/modules/<A>/**` never imports from `src/app/modules/<B>/**`, not even `public-api.ts`/`integration-api.ts`. Capabilities via context-registry ports, types via local ACL copies (see [cross-domain.md](cross-domain.md))
 - **Never** re-fetch reference data without `@SkipIfCached`
 - **Never** inject a concrete adapter/proxy across modules — inject the port
 - Components must depend on facades for ALL domain interactions
@@ -125,13 +127,13 @@ Full before/after migration: [session-proxy-migration.md](session-proxy-migratio
 | Infra Providers | Function returning `Provider[]`, bind ports to adapters |
 | Service Providers | Aggregates facades + use cases + infra + `contextProvidersFor()` |
 | Routes | `loadComponent` lazy loading, route-level providers |
-| Public API | SYNC contract: models, ports, providers fn |
-| Integration API | REACTIVE contract: store export for cross-module mirroring |
+| Public API | SYNC contract (models, ports, providers fn) — composition root imports only |
+| Integration API | REACTIVE contract (store export) — composition root imports only |
 | Component | Standalone, `OnPush`, `inject()` only, facade-only, signals |
 
 ## Cross-Module Communication
 
-Two mechanisms: **sync** (context registry binding to ports) and **reactive** (integration-api store exports + flurryx mirroring). **For full patterns**: See [cross-domain.md](cross-domain.md).
+**Modules never import modules** — not even another module's `public-api.ts`/`integration-api.ts`. Capabilities: port contract in `core/` + provider adapter + context-registry binding. Types: local ACL copies, never shared. **For full patterns**: See [cross-domain.md](cross-domain.md).
 
 ## Testing Patterns
 
@@ -228,7 +230,7 @@ Follow these steps **in order**. Full templates in [layer-templates.md](layer-te
 - [ ] Routes lazy-load components with route-level providers
 - [ ] Components inject facades only, use signals + OnPush
 - [ ] `public-api.ts` exports models, ports, providers fn
-- [ ] `integration-api.ts` exports store for cross-module mirroring
+- [ ] `integration-api.ts` exports store (composition root imports only)
 - [ ] Registered in `app.routes.ts` via `loadChildren`
 - [ ] Tests written (80%+ coverage)
 - [ ] No `any` type used anywhere
@@ -240,8 +242,9 @@ Follow these steps **in order**. Full templates in [layer-templates.md](layer-te
 - [ ] Components use facade only — no use case or store references in presentation
 - [ ] No `any` introduced anywhere
 - [ ] Core layer has zero framework/infra imports
+- [ ] Imports use the `@/` path alias — no deep relative climbing (`../../...`)
 - [ ] Store is root-provided (not in route providers)
 - [ ] `@SkipIfCached` outermost, `@Loading` beneath
-- [ ] Cross-module access via port (context registry) or store mirror (integration-api)
+- [ ] Zero module→module imports — not even `public-api.ts`/`integration-api.ts` (capabilities via context-registry ports, types via local ACL copies)
 - [ ] All event handlers are thin — logic delegated to facade
 - [ ] Immutable updates throughout — no object mutation

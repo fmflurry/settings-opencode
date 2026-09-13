@@ -67,3 +67,9 @@ Whenever you **add, edit, rename, or delete** any artifact — no matter which h
 ---
 
 **Maintenance**: If new artifact types are introduced or paths change, update this table. Keep it as the single source of truth for Claude ↔ OpenCode artifact translation.
+
+---
+
+## Scope Note
+
+**The harness-parity skill itself is PROJECT-SCOPED:** it governs a project's own `.claude/` ↔ `.opencode/` pair. It does NOT govern the translation layer between this settings repo's `.claude/skills/` and its root `skills/` directory. This settings repo itself has no `.opencode/` directory; the root `skills/` directory is managed separately and is not subject to harness-parity rules. Harness-parity rules apply only when a project has both `.claude/` and `.opencode/` directories under version control.

@@ -11,6 +11,8 @@ Write commit messages terse and exact. Conventional Commits format. No fluff. Wh
 
 ## Rules
 
+- **English only**: subject and body MUST be English, even when the diff or conversation is French.
+
 **Subject line:**
 - `<type>(<scope>): <imperative summary>` — `<scope>` optional
 - Types: `feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `chore`, `build`, `ci`, `style`, `revert`

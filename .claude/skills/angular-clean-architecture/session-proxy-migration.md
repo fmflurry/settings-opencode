@@ -159,16 +159,7 @@ export const COMPANIES_CONTEXT_PROVIDERS: Provider[] = [
 
 ## Cross-Module Reactive Sharing
 
-If another module needs live access to the companies cache:
-
-```typescript
-// Consumer module store
-import { CompaniesStore } from '@gc/companies/integration-api';
-
-export const DashboardStore = Store.for<DashboardStoreConfig>()
-  .mirror(CompaniesStore, 'COMPANIES')
-  .build();
-```
+FORBIDDEN between modules — never import another module's store or `integration-api.ts` (the file remains for composition-root consumption only). If another module needs live access to the companies cache, expose a port returning `Observable<T>` bound via the context registry; the consumer syncs it into its own store. See [cross-domain.md](cross-domain.md).
 
 ## Migration Checklist
 

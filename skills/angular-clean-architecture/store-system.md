@@ -72,16 +72,7 @@ export const CompaniesStore = Store.for<CompaniesStoreConfig>().build({
 
 ## Cross-Module Reactive Sharing
 
-Export the store token from `integration-api.ts`. Consumers mirror it:
-
-```typescript
-// consumer module store
-export const OrdersStore = Store.for<OrdersStoreConfig>()
-  .mirror(CompaniesStore, 'COMPANIES')
-  .build();
-```
-
-Or standalone: `mirrorKey(CompaniesStore, 'COMPANIES', OrdersStore, 'COMPANIES')`.
+FORBIDDEN between modules — a module never imports another module's store or `integration-api.ts`, and never mirrors it. Reactive needs are capabilities: expose a port returning `Observable<T>`, bind it via the context registry, and the consumer syncs the result into its own store. See [cross-domain.md](cross-domain.md).
 
 ## Root vs Route Scope
 

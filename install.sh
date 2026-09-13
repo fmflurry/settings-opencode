@@ -416,7 +416,7 @@ copy_tree_with_seed() {
 
 # Claude Code stores conversation and runtime data alongside configuration. Never
 # mirror that tree wholesale: only canonical, repository-owned assets are copied.
-CLAUDE_MANAGED_ALLOWLIST=("CLAUDE.md" "RTK.md" "agents" "hooks" "rules" "skills" "policy-limits.json")
+CLAUDE_MANAGED_ALLOWLIST=("CLAUDE.md" "RTK.md" "agents" "commands" "hooks" "rules" "skills" "policy-limits.json")
 
 copy_claude_allowlist() {
     local src="$1" dst="$2" managed

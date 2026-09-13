@@ -19,6 +19,7 @@ After the first Task gate is satisfied, primary agents MUST use CodeMemory for r
 - Implementation work: write/port/scaffold/apply-spec non-test code -> `coder`
 - Writing or editing docs, README, markdown, HTML reports, release notes, ADRs, prose -> `writer`
 - Git, commit, branch, push, pull request creation/status, PR creation/status -> `git-specialist`
+- Preparing a PR: splitting a diff into atomic commits, drafting a commit-sequencing plan, drafting a PR body -> `git-specialist` (sequences the commits itself; `/create-pull-request` owns the PR body)
 - `/cop-review` pre-merge review -> `code-reviewer` directly. It owns the command, selects applicable `angular-cop`/`dotnet-cop` skills itself, and never delegates or routes through `conductor`.
 - Code review, PR review, pull request review, current-change review, "does this need review" -> `code-reviewer` (read-only; fixes go to `coder`)
 - OpenCode/Claude Code ecosystem audit, skill or agent parity, harness coherence -> `ecosystem-auditor` (read-only; findings only)
@@ -31,6 +32,8 @@ After the first Task gate is satisfied, primary agents MUST use CodeMemory for r
 - Codemap or generated-doc updates -> `doc-updater`
 - Dead code, unused exports, duplication cleanup -> `refactor-cleaner`
 - SQL, PostgreSQL, Supabase, RLS, migrations -> `database-reviewer`
+- PostgreSQL live-instance operations (health, vacuum/bloat, WAL/checkpoints, backups/PITR, pooling, runtime role/RLS audit, container persistence/upgrades) -> `postgres-dba` (read-only advisory; mutations are emitted as human-confirmed commands)
+- DB disambiguation: SQL/migration/schema/query code review -> `database-reviewer`; live instance diagnostics/operations -> `postgres-dba`
 
 ## Conductor Cannot Write Directly
 
@@ -42,6 +45,10 @@ The primary `conductor` agent has `write` and `edit` disabled (permissions + hoo
 - Generated docs/codemaps -> `doc-updater`
 - Refactor cleanup -> `refactor-cleaner`
 - Git operations (commit/push/PR) -> `git-specialist`
+
+Read-only specialists report findings only (no `write`/`edit`): `planner`, `architect`, `code-reviewer`, `angular-cop`, `dotnet-cop`, `security-reviewer`, `database-reviewer`, `postgres-dba`, `ecosystem-auditor`, `gdpr-specialist`, `scout`.
+
+Writable agents may write/edit within their brief: `coder`, `writer`, `tdd-guide`, `refactor-cleaner`, `build-error-resolver`, `doc-updater`, `e2e-runner`, `api-spec-architect`, `git-specialist`.
 
 There is no "direct trivial edit" escape hatch for the primary anymore. If you find yourself wanting to edit, pick a subagent.
 

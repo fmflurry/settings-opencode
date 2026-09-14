@@ -25,6 +25,7 @@ After the first routing gate is satisfied, all codebase exploration (search, sym
 | Pre-merge code review (Angular + TS focus)                           | `Agent` → `angular-cop`                  |
 | Pre-merge code review (.NET / Minimal API / modular monolith focus)  | `Agent` → `dotnet-cop`                   |
 | Git commits, branches, pushes, PR create/status                      | `Agent` → `git-specialist`               |
+| Blender / 3D modeling, rendering, materials, lighting, rigging, glTF + three.js export | `Agent` → `gaudi`                        |
 | Broad codebase exploration (>3 queries)                              | `Agent` → `Explore`                      |
 
 If two rules match, route the **writing/changing** work first; reviews/security run after.

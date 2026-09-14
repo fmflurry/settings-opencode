@@ -45,6 +45,7 @@ Before any `read`/`grep`/`glob`/`bash`, check the routing table. If the request 
 | Dead code, duplication cleanup                             | `task` → `refactor-cleaner` |
 | SQL / Postgres / Supabase / migrations                     | `task` → `database-reviewer` |
 | Codemap / doc gen / doc update                             | `task` → `doc-updater`   |
+| Blender / 3D modeling, rendering, materials, lighting, rigging, glTF + three.js export | `task` → `gaudi`         |
 
 Two rules match → route the **writing/changing** work first; review/security after.
 

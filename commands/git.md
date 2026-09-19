@@ -28,6 +28,8 @@ If scope is not useful or not clear, this form is also valid:
 
 Allowed types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
 
+**English only**: commit messages MUST be written in English — subject, body, and footers — even when the user or conversation is French. Translate French input into an English summary; never emit French commit messages.
+
 2. Enforce the branch naming format exactly:
 
 ```text

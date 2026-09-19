@@ -1,10 +1,10 @@
 ---
 description: Orchestrate multiple agents for complex tasks
-agent: planner
-subtask: true
 ---
 
 # Orchestrate Command
+
+> CC: delegate this to the `planner` subagent via the Agent tool (subagent_type: `planner`). The subagent inspects the repo and runs the steps below.
 
 Orchestrate multiple specialized agents for this complex task: $ARGUMENTS
 
@@ -18,19 +18,19 @@ Orchestrate multiple specialized agents for this complex task: $ARGUMENTS
 
 ## Available Agents
 
-| Agent                  | Specialty               | Use For                 |
-| ---------------------- | ----------------------- | ----------------------- |
-| planner                | Implementation planning | Complex feature design  |
-| architect              | System design           | Architectural decisions |
-| code-reviewer          | Code quality            | Review changes          |
-| security-reviewer      | Security analysis       | Vulnerability detection |
-| tdd-guide              | Test-driven dev         | Feature implementation  |
-| build-error-resolver   | Build fixes             | TypeScript/build errors |
-| e2e-runner             | E2E testing             | User flow testing       |
-| doc-updater            | Documentation           | Updating docs           |
-| refactor-cleaner       | Code cleanup            | Dead code removal       |
-| database-reviewer      | Database                | Query optimization      |
-| postgres-dba           | PostgreSQL instance ops | Live DB health, vacuum  |
+| Agent                | Specialty               | Use For                 |
+| -------------------- | ----------------------- | ----------------------- |
+| planner              | Implementation planning | Complex feature design  |
+| architect            | System design           | Architectural decisions |
+| code-reviewer        | Code quality            | Review changes          |
+| security-reviewer    | Security analysis       | Vulnerability detection |
+| tdd-guide            | Test-driven dev         | Feature implementation  |
+| build-error-resolver | Build fixes             | TypeScript/build errors |
+| e2e-runner           | E2E testing             | User flow testing       |
+| doc-updater          | Documentation           | Updating docs           |
+| refactor-cleaner     | Code cleanup            | Dead code removal       |
+| database-reviewer    | Database                | Query optimization      |
+| postgres-dba         | PostgreSQL instance ops | Live DB health, vacuum  |
 
 ## Orchestration Patterns
 
@@ -45,9 +45,9 @@ Use when: Later tasks depend on earlier results
 ### Parallel Execution
 
 ```
-┌→ security-reviewer
-planner →├→ code-reviewer
-└→ architect
+           ┌→ security-reviewer
+planner → ├→ code-reviewer
+           └→ architect
 ```
 
 Use when: Tasks are independent
@@ -55,9 +55,9 @@ Use when: Tasks are independent
 ### Fan-Out/Fan-In
 
 ```
-         ┌→ agent-1 ─┐
-planner →├→ agent-2 ─┼→ synthesizer
-         └→ agent-3 ─┘
+           ┌→ agent-1 ─┐
+planner → ├→ agent-2 ─┼→ synthesizer
+           └→ agent-3 ─┘
 ```
 
 Use when: Multiple perspectives needed

@@ -1,10 +1,10 @@
 ---
 description: Generate and run E2E tests with Playwright
-agent: e2e-runner
-subtask: true
 ---
 
 # E2E Command
+
+> CC: delegate this to the `e2e-runner` subagent via the Agent tool (subagent_type: `e2e-runner`). The subagent inspects the repo and runs the steps below.
 
 Generate and run end-to-end tests using Playwright: $ARGUMENTS
 

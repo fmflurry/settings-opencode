@@ -1,4 +1,6 @@
-# Git Workflow
+# Git Workflow (mandatory)
+
+**Applies to `git-specialist` and to any agent about to run `git commit` or `git push`.** This is the canonical spec for commit cohesion and staging discipline — `git-specialist` operates against these exact rules. Do not restate the full spec elsewhere in an agent prompt; reference this file instead.
 
 ## Commit Message Format
 
@@ -10,8 +12,6 @@
 
 Types: feat, fix, refactor, docs, test, chore, perf, ci
 
-Note: Attribution disabled globally via ~/.claude/settings.json.
-
 ## Language (mandatory)
 
 Every commit message MUST be written in English — subject, body, and footers — regardless of
@@ -22,8 +22,6 @@ never quote or transliterate the French. Conventional Commits format and the typ
 rules above are unchanged. The same English requirement applies to PR titles and PR bodies.
 
 ## Precedence (mandatory)
-
-This is the canonical spec — `git-specialist` operates against these exact rules. Do not restate the full spec elsewhere; reference this section instead.
 
 Logical cohesion is the hard rule; commit size is a signal, never a blocker. A commit is one coherent logical set of changes. Size never justifies breaking a coherent set apart. When cohesion and a size number conflict, cohesion wins.
 
@@ -106,22 +104,22 @@ In all cases:
 ## Feature Implementation Workflow
 
 1. **Plan First**
-   - Use **planner** agent to create implementation plan
+   - Delegate to `planner` for an implementation plan
    - Identify dependencies and risks
    - Break down into phases
 
 2. **TDD Approach**
-   - Use **tdd-guide** agent
+   - Delegate to `tdd-guide`
    - Write tests first (RED)
    - Implement to pass tests (GREEN)
    - Refactor (IMPROVE)
    - Verify 80%+ coverage
 
 3. **Code Review**
-   - Use **code-reviewer** agent immediately after writing code
+   - Delegate to `code-reviewer` immediately after writing code
    - Address CRITICAL and HIGH issues
    - Fix MEDIUM issues when possible
 
 4. **Commit & Push**
    - Detailed commit messages
-   - Follow conventional commits format
+   - Follow Conventional Commits format

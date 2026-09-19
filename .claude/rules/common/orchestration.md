@@ -16,19 +16,24 @@ After the first routing gate is satisfied, all codebase exploration (search, sym
 | Architecture / system design / cross-module tradeoffs                | `Agent` → `architect`                    |
 | Tests, coverage, TDD, RED-GREEN-REFACTOR                             | `Agent` → `tdd-guide`                    |
 | Code review on changed code or PR                                    | `Agent` → `code-reviewer`                |
+| OpenCode/Claude Code ecosystem audit, skill/agent parity, harness coherence | `Agent` → `ecosystem-auditor`       |
+| Language-specific review (TS/Angular, .NET/C#, SQL/Postgres, security) | `Agent` → `angular-cop`, `dotnet-cop`, `database-reviewer`, `security-reviewer` (otherwise `code-reviewer`) |
 | Security review (auth, secrets, input, PII)                          | `Agent` → `security-reviewer`            |
-| Build / typecheck / lint errors                                      | `Agent` → `build-error-resolver`         |
+| Build / typecheck / lint errors                                      | `Agent` → `build-error-resolver`     |
 | Playwright / E2E browser flows                                       | `Agent` → `e2e-runner`                   |
 | Dead code, duplication, consolidation cleanup                        | `Agent` → `refactor-cleaner`             |
 | SQL, Postgres, Supabase, RLS, migrations                             | `Agent` → `database-reviewer`            |
+| DB live-instance ops (health, vacuum, WAL, backups, pooling)         | `Agent` → `postgres-dba`                 |
 | Codemap or doc generation/update                                     | `Agent` → `doc-updater`                  |
 | Pre-merge code review (Angular + TS focus)                           | `Agent` → `angular-cop`                  |
 | Pre-merge code review (.NET / Minimal API / modular monolith focus)  | `Agent` → `dotnet-cop`                   |
-| Git commits, branches, pushes, PR create/status                      | `Agent` → `git-specialist`               |
-| Blender / 3D modeling, rendering, materials, lighting, rigging, glTF + three.js export | `Agent` → `gaudi`                        |
-| Broad codebase exploration (>3 queries)                              | `Agent` → `Explore`                      |
+| Git commits, branches, pushes, PR create/status                      | `Agent` → `git-specialist` (or `/push-changes`, `/create-pull-request`) |
+| Preparing a PR: splitting a diff into atomic commits, drafting a PR body/commit sequence | `Agent` → `git-specialist` (sequences atomic commits itself; `/create-pull-request` owns the PR body) |
+| Broad codebase exploration (>3 queries)                              | `Agent` → `scout`                        |
 
 If two rules match, route the **writing/changing** work first; reviews/security run after.
+
+**DB disambiguation:** SQL/migration/schema/query *code* review → `database-reviewer`. *Live instance* operations (health, vacuum/bloat, WAL/checkpoints, backups/PITR, pooling, runtime role/RLS audit, container persistence/upgrades) → `postgres-dba` (read-only advisory; mutations are emitted as human-confirmed commands).
 
 ## What You Handle Directly
 
@@ -42,6 +47,8 @@ If two rules match, route the **writing/changing** work first; reviews/security 
 - Run independent specialists in **parallel** (e.g., `code-reviewer` + `security-reviewer` on the same diff) — same message, multiple `Agent` blocks.
 - After a subagent returns, synthesize the result. Don't dump raw output.
 - If a specialist returns blockers or questions, surface them via `AskUserQuestion` — do **not** answer them yourself by inferring intent.
+- **Read-only specialists** (`planner`, `architect`, `code-reviewer`, `angular-cop`, `dotnet-cop`, `security-reviewer`, `database-reviewer`, `postgres-dba`, `ecosystem-auditor`, `gdpr-specialist`, `scout`) report findings only — they do NOT write or edit files.
+- **Writable agents** are authorized to write/edit within their brief: `coder`, `writer`, `tdd-guide`, `refactor-cleaner`, `build-error-resolver`, `doc-updater`, `e2e-runner`, `api-spec-architect`, `git-specialist`. The orchestrator decides whether to dispatch them for remediation.
 
 ## Question Relay Protocol
 

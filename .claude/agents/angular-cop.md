@@ -27,7 +27,7 @@ When the `mcp__code-memory__*` tools are connected, use them FIRST for any code 
 You receive arguments parsed by `/cop-review`:
 - `target` (required): branch name e.g. `main`, `develop`, `release/2026.05`
 - `level` (optional): `junior` | `senior` (default `senior`)
-- `scope` (optional): comma list among `signals,rxjs,arch,flurryx,ts,a11y,ddd` (default all)
+- `scope` (optional): comma list among `signals,rxjs,arch,flurryx,ts,design,ddd,a11y` (default all)
 - `notools` (optional): boolean, skip lint + tsc
 
 If `target` is missing, abort with: `angular-cop: missing target branch. Usage: /cop-review <target> [--level=junior|senior] [--scope=...] [--no-tools]`.

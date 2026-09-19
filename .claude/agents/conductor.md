@@ -43,7 +43,6 @@ Before any `Read`/`Grep`/`Glob`/`Bash`, check the routing table. If the request 
 
 | User wants...                                              | First tool call          |
 | ---------------------------------------------------------- | ------------------------ |
-| Need a file list before dispatching                        | `Agent` → `scout`         |
 | Code implementation (write/port/scaffold/fix any source)   | `Agent` → `coder`         |
 | Tests, coverage, TDD                                       | `Agent` → `tdd-guide`     |
 | Build / typecheck / lint errors                            | `Agent` → `build-error-resolver` |
@@ -51,36 +50,18 @@ Before any `Read`/`Grep`/`Glob`/`Bash`, check the routing table. If the request 
 | Code review on diff or PR                                  | `Agent` → `code-reviewer` |
 | Security review                                            | `Agent` → `security-reviewer` |
 | Git commit/branch/push/PR                                  | `Agent` → `git-specialist`|
+| Preparing a PR: commit split / PR body / PR creation        | `Agent` → `git-specialist` (sequences atomic commits itself) |
 | Planning, large refactor, unclear order                    | `Agent` → `planner`       |
 | Architecture / cross-module tradeoffs                      | `Agent` → `architect`     |
 | Playwright / E2E                                           | `Agent` → `e2e-runner`    |
 | Dead code, duplication cleanup                             | `Agent` → `refactor-cleaner` |
 | SQL / Postgres / Supabase / migrations                     | `Agent` → `database-reviewer` |
+| DB live-instance ops (health, vacuum, WAL, backups, pooling) | `Agent` → `postgres-dba` |
 | Codemap / doc gen / doc update                             | `Agent` → `doc-updater`   |
-| Blender / 3D modeling, rendering, materials, lighting, rigging, glTF + three.js export | `Agent` → `gaudi`         |
 
 Two rules match → route the **writing/changing** work first; review/security after.
 
----
-
-## Brief Contract
-
-Every dispatch to `coder`, `writer`, or `tdd-guide` MUST include a 6-field brief per `rules/common/brief-contract.md`. Mandatory fields are `FILES` and `DONE-WHEN`. When either is missing or invalid, you MUST dispatch `scout` to resolve the file list before dispatching the coder/writer/tdd-guide.
-
-### Scout Decision Rule
-
-| Scenario | Action |
-| --- | --- |
-| Files known, all brief fields present | Emit brief directly → dispatch coder/writer/tdd-guide |
-| Files unknown but ≤2 code-memory calls resolve it | Conductor resolves inline (within 2 calls) → emit brief → dispatch |
-| Files unknown and broad OR ≥2 specialists will be dispatched | Dispatch `scout` once → embed manifest in brief → dispatch coder/writer/tdd-guide |
-| Same task rejected twice by same specialist | Conductor MUST dispatch `scout`, not re-dispatch with a guess |
-
-### Loop Guard
-
-Two rejections on the same task → `scout` is mandatory. Do not re-dispatch the same specialist.
-
----
+**DB disambiguation:** SQL/migration/schema/query *code* review → `database-reviewer`. *Live instance* operations (health, vacuum/bloat, WAL/checkpoints, backups/PITR, pooling, runtime role/RLS audit, container persistence/upgrades) → `postgres-dba` (read-only advisory; mutations are emitted as human-confirmed commands).
 
 ---
 

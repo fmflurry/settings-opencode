@@ -16,16 +16,8 @@ When the `mcp__code-memory__*` tools are connected, use them FIRST for any code 
 
 - Implement non-test code per the brief given by the caller (build agent or tdd-guide).
 - Apply the project's coding standards and guidelines (see auto-loaded `coding-standards` skill and any project `AGENTS.md` / rules).
-- **Before writing any C#** (`*.csproj`/`*.sln`/`*.slnx` in scope), you MUST load the `dotnet-clean-architecture` skill AND `skills/dotnet-cop/enforcement.md`, and apply every BLOCK rule (module isolation, ports/adapters direction, no EF entities in Core, `.AsNoTracking()` on reads, ProblemDetails, no `FromSqlRaw` interpolation, CancellationToken propagation).
+- **Before writing any C#** (`*.csproj`/`*.sln`/`*.slnx` in scope), you MUST load the `dotnet-clean-architecture` skill, the `dotnet-ddd` skill (DDD tactical patterns for domain code), AND `skills/dotnet-cop/enforcement.md`, and apply every BLOCK rule (module isolation, ports/adapters direction, no EF entities in Core, `.AsNoTracking()` on reads, ProblemDetails, no `FromSqlRaw` interpolation, CancellationToken propagation, English-only code & PascalCase English module naming).
 - **Before writing any Angular/TS** (`angular.json` in scope), you MUST load `angular-clean-architecture` AND `skills/angular-cop/enforcement.md`, and apply every BLOCK rule (no `any`, facade-not-UseCase in components, no RxJS leaks, immutability, clean-arch boundaries).
-- **Angular/TS imports — path alias mandatory.** For every cross-directory import inside the Angular app root (e.g. `src/app/`), use the project's tsconfig path aliases (`compilerOptions.paths` in the repo's tsconfig; e.g. gc.platform defines `@/` as `"@/*": ["./src/app/*"]` in `frontend/tsconfig.json`). Deep relative climbing (`../../...`) is forbidden and is a BLOCK finding per `skills/angular-cop/enforcement.md`.
-  ```typescript
-  // BAD — deep relative climbing
-  import { Company } from '../../../core/models';
-  // GOOD — path alias
-  import { Company } from '@/modules/companies/core/models';
-  ```
-  Same-directory `./sibling` imports and targets outside the aliased root (e.g. `src/environments/`) stay relative.
 - Self-verify before reporting done.
 
 Out of scope:
@@ -62,27 +54,6 @@ In your final report, paste the **last ~15 lines of each command's stdout/stderr
 - Unable to run a step (missing tool, no internet, permission) → state the blocker. Do not pretend it passed.
 
 **Never report "done" with a broken build.** A pretty diff with a red build is a regression, not a feature.
-
-## Brief Acceptance Gate (runs BEFORE any tool call)
-
-Before your first tool call, check the brief for `## FILES` and `## DONE-WHEN`.
-
-REJECT (return immediately, zero tool calls) when either is true:
-- `FILES` is absent, empty, or names a directory rather than files.
-- `DONE-WHEN` contains no executable command.
-
-Rejection format — this is your entire response:
-
-```
-## Blocker: brief not dispatchable
-Missing: <FILES | DONE-WHEN | both>
-To proceed I need: <the one specific thing>
-Suggested scout query: <codememory_retrieve query that would produce it>
-```
-
-Do NOT self-scout to repair the brief. Do NOT "make a start". A rejected brief costs ~2k tokens; a self-scouted one costs up to 2.4M.
-
-Also see `rules/common/tool-budget.md` for exploratory shell rate-limiting (3-call default, L1/L2 trip levels).
 
 ## Ambiguity Gate (Socratic)
 

@@ -112,10 +112,6 @@ When reviewing Angular code, you MUST load `skills/angular-cop/enforcement.md` a
 
 Also check:
 
-- **Relative-import climbing (BLOCK per angular-cop enforcement)**
-  - Cross-directory imports inside the Angular app root (e.g. `src/app/**`) must use the project's tsconfig path aliases (`compilerOptions.paths`; e.g. gc.platform defines `"@/*": ["./src/app/*"]` in `frontend/tsconfig.json`); deep relative climbing (`../../...`) is a BLOCK finding.
-  - BAD: `import { Company } from '../../../core/models'` → GOOD: `import { Company } from '@/modules/companies/core/models'`.
-  - Do NOT flag same-directory `./sibling` imports or targets the alias cannot express (outside the aliased root, e.g. `src/environments/`). Flag only lines touched by the diff.
 - **Missing unsubscribe / cleanup**
   - Subscriptions in ngOnInit (or services) without takeUntilDestroyed(), async pipe, or proper teardown → memory leaks & duplicate work.
   - Also watch fromEvent, interval, router.events, custom Subjects.
@@ -175,7 +171,7 @@ const usersWithPosts = await db.query(`
 
 ### Tenant-Scoped Data & RLS (gc.platform)
 
-When reviewing code that adds or modifies a tenant-scoped entity (has `tenant_id` column or FK chain to a tenant-scoped table), defer to the **database-reviewer** agent for the RLS checklist: ENABLE+FORCE ROW LEVEL SECURITY, USING+WITH CHECK clauses, fail-closed `current_setting('app.tenant_id', true)`, GRANT to app_login, EF Core HasQueryFilter, isolation test.
+When reviewing code that adds or modifies a tenant-scoped entity (has `tenant_id` column or FK chain to a tenant-scoped table), defer to the **database-reviewer** agent for the RLS checklist: ENABLE+FORCE ROW LEVEL SECURITY, USING+WITH CHECK clauses, fail-closed `current_setting('app.tenant_id', true)`, GRANT to gc_kourou_app_login, EF Core HasQueryFilter, isolation test.
 
 ### .NET / Minimal API Patterns (HIGH)
 

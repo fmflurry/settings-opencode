@@ -215,6 +215,7 @@ await db.transaction(async (trx) => {
 - [ ] No vulnerable packages
 - [ ] Logging sanitized
 - [ ] Error messages safe
+- [ ] **gc.platform only:** Tenant isolation (RLS) enforced — defer to database-reviewer for policy verification
 ```
 
 **Remember**: Security is not optional, especially for platforms handling real money. One vulnerability can cost users real financial losses. Be thorough, be paranoid, be proactive.

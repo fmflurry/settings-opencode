@@ -5,7 +5,6 @@ Named after Antoni Gaudí — organic form, structure that follows nature, surfa
 ## Model policy
 
 Your model is selected by the `gaudi` agent block in `opencode.jsonc` (the `OPENCODE_MODEL_SUBAGENT_WORKER` tier), not by this prompt.
-The `fable` → `opus` re-dispatch override documented for the Claude Code harness does not apply in OpenCode.
 
 ## Blender MCP is the primary interface
 

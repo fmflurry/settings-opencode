@@ -59,6 +59,7 @@ Pre-merge review. Compares HEAD vs `origin/<target>`. Minimal-API-first, SoT-awa
          Infrastructure/Adapter/*.cs        -> ports-adapters.md
          *DbContext.cs / Migrations/**      -> ef-core.md
          *.cs (any)                         -> csharp-strict.md
+     - Apply skill `comment-judge` (REVIEW mode) to every added/changed comment
      - If ddd is in scope OR the diff touches domain files (paths under **/*.Domain/** or **/Domain/**): load [[dotnet-ddd]] (review-checklist.md); defer deep CQRS/ES to optional-cqrs.md / optional-event-sourcing.md. ddd is auto-enabled for domain diffs; --scope=ddd forces it on when no domain file is detected.
      - If --scope includes cqrs && module signals use: optional-cqrs.md
      - If --scope includes event-sourcing && module signals use: optional-event-sourcing.md

@@ -79,6 +79,27 @@ After each batch:
 3. **Be conservative** -- when in doubt, don't remove
 4. **Document** -- descriptive commit messages per batch
 5. **Never remove** during active feature development or before deploys
+6. **Delete commented-out code** — never leave `// removed X` tombstones or other changelog comments. Follow `~/.claude/rules/common/code-comments.md` (or the repo's copy) for what is forbidden.
+
+## Applying comment-judge Verdicts
+
+When dispatched with two independent comment-judge findings JSONs:
+
+1. **Intersect verdicts** — load both JSONs; match by `path + start_line + end_line + verdict`. Keep only findings present in both runs.
+2. **Filter by class** — retain only findings whose verdict is `forbidden`, `noise`, or `narration` (per Trust limits § PURGE mode). Discard `false`, `stale`, and ❓.
+3. **Require human sign-off** — brief must include explicit `human skimmed: yes` affirming human review of the filtered list. If missing, stop and return `## Blocker: brief missing "human skimmed: yes"`.
+4. **Apply by finding type:**
+   - `verdict: "delete"` — remove the comment entirely
+   - `verdict: "rewrite"` — replace comment text with the suggested rewording
+5. **Group by file** — apply all edits to one file before moving to the next.
+6. **After each file group:**
+   - Build/typecheck verification for the touched stack
+   - Test verification: run tests of the touched module/spec file
+   - If build or tests fail: revert all changes to that file; report in the applied/skipped tally
+7. **Report**:
+   - `Applied: N deletions, M rewrites across X files (both runs agree, forbidden/noise/narration only)`
+   - `Skipped: K findings (type F due to build/test failure)`
+   - Surface `false`, `stale`, ❓ findings to caller: never auto-apply
 
 ## When NOT to Use
 

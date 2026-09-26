@@ -204,40 +204,19 @@ types/market.types.ts         # camelCase with .types suffix
 
 ## Comments & Documentation
 
-### When to Comment
+**Comment Discipline:** Default to no comment. Code, names, and tests carry intent. See `~/.claude/rules/common/code-comments.md` (or the repo's copy) for the full rule: forbidden classes (narration, changelog, claims, commented code), allowed classes (non-obvious why, constraints with references), and enforcement — if the repo provides `scripts/check-added-comments.sh`, run it; otherwise `git diff -U0 | grep -nE '^\+.*(//|/\*|#|<!--)'`.
 
-```typescript
-// ✅ GOOD: Explain WHY, not WHAT
-// Use exponential backoff to avoid overwhelming the API during outages
-const delay = Math.min(1000 * Math.pow(2, retryCount), 30000);
+### JSDoc / XML Docs
 
-// Deliberately using mutation here for performance with large arrays
-items.push(newItem);
-
-// ❌ BAD: Stating the obvious
-// Increment counter by 1
-count++;
-
-// Set name to user's name
-name = user.name;
-```
-
-### JSDoc for Public APIs
+Add JSDoc or XML docs only where a published contract requires it — public APIs, abstract methods, interfaces exposed to other modules. Keep it minimal; link to ADRs when non-obvious.
 
 ````typescript
 /**
  * Searches markets using semantic similarity.
  *
- * @param query - Natural language search query
- * @param limit - Maximum number of results (default: 10)
- * @returns Array of markets sorted by similarity score
- * @throws {Error} If OpenAI API fails or Redis unavailable
- *
- * @example
- * ```typescript
- * const results = await searchMarkets('election', 5)
- * console.log(results[0].name) // "Trump vs Biden"
- * ```
+ * @param query Natural language search query
+ * @param limit Maximum number of results (default: 10)
+ * @returns Markets sorted by similarity score; empty if none match
  */
 export async function searchMarkets(
   query: string,

@@ -21,6 +21,7 @@ When the `mcp__code-memory__*` tools are connected, use them FIRST for any code 
 4. **Load `AGENTS.md` from cwd.** If it exists, it overrides this prompt and the skill. Cite the section when a finding stems from AGENTS.md.
 5. **Confidence ≥ 80%.** When uncertain, emit `❓ q:` instead of `🔴 bug:`. Never speculate.
 6. **No fluff.** No "great work", no restating what the diff shows, no hedging.
+7. **Comment audit mandatory** (`~/.claude/rules/common/code-comments.md`, or the repo's copy). Every added/changed comment is verified for truthfulness and allowed class. False or forbidden comments block approval. Comments are never filtered as noise.
 
 ## Invocation Contract
 
@@ -76,6 +77,7 @@ If `scope` is set, intersect — except `ddd`, which is auto-enabled whenever th
 For each changed file:
 - Read the changed file for context. For files ≤ 400 lines read the full file; for larger files read only the changed hunks plus ~30 lines of surrounding context, so the working set stays small and the report renders before context grows unwieldy.
 - Apply checklists from loaded sub-pages.
+- For every added/changed comment: verify it (truthfulness, allowed class per `~/.claude/rules/common/code-comments.md`, or the repo's copy). Flag false or forbidden comments as 🔴 [comment].
 - Record `(severity, file, line, category, problem, fix, citation)` tuples.
 - Confidence < 80% -> downgrade to `❓ q:`.
 
@@ -83,6 +85,9 @@ For each changed file:
 Run in order, capture output:
 
 ```bash
+# check-added-comments — verify added/changed comment class and truthfulness; falls back to grep if the script is absent
+if [ -f scripts/check-added-comments.sh ]; then bash scripts/check-added-comments.sh <base> 2>&1; else git diff -U0 <base>...HEAD | grep -nE '^\+.*(//|/\*|#|<!--)'; fi  # exits 1 if forbidden/false found
+
 # dotnet build — full solution, errors only
 dotnet build --nologo -clp:ErrorsOnly 2>&1 | head -200
 
@@ -90,9 +95,9 @@ dotnet build --nologo -clp:ErrorsOnly 2>&1 | head -200
 dotnet format --verify-no-changes 2>&1 | tail -50
 ```
 
-If a command is unavailable (no .NET SDK, no solution file), note it in the Tooling section but don't fail the review.
+If a command is unavailable (script missing, no .NET SDK, no solution file), note it in the Tooling section but don't fail the review.
 
-Map build error codes to severity: compiler errors -> 🔴 bug. Aggregate format violations into counts with first 20 offenders.
+Map script exit codes to severity: forbidden/false comments -> 🔴 [comment]. Build error codes -> 🔴 bug. Format violations -> 🔴 [format].
 
 ### 7. Render report
 Use `skills/dotnet-cop/output-format.md` templates.
@@ -114,6 +119,7 @@ else                              -> APPROVE
 **Severity mapping from `enforcement.md`:**
 - BLOCK rules (architecture + correctness violations from `skills/dotnet-cop/enforcement.md`) → emit as 🔴 blocking findings → verdict BLOCK.
 - WARN rules (style/naming from `skills/dotnet-cop/enforcement.md`) → emit as 🟡 advisory findings → does not block alone.
+- False/stale comments → 🔴 [bug] (asserts behavior code does not perform). Forbidden comment class → 🔴 [comment].
 
 If `--no-tools`: append `(tooling skipped — verdict does not reflect build state)` to the verdict line. Do not silently produce APPROVE when the build was never run.
 
@@ -141,5 +147,6 @@ Keep it compact: one finding per line in senior mode, cap per-file findings at 1
 - [ ] Does the Verdict match the severity logic?
 - [ ] No "great work" / "looks good overall" filler?
 - [ ] No restating what the diff already shows?
+- [ ] Comments count line present in header (added N · verified V · forbidden X · false F)?
 
 Fail any -> revise before emit.

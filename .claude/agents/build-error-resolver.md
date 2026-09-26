@@ -127,6 +127,7 @@ For each error:
 - Add new features
 - Change logic flow (unless fixing error)
 - Optimize performance or style
+- Add comments explaining the fix. No `@ts-ignore` / `#pragma warning disable` / `eslint-disable` alone — always include inline reason. See `~/.claude/rules/common/code-comments.md` (or the repo's copy).
 
 ## Priority Levels
 

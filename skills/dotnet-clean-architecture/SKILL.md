@@ -404,6 +404,7 @@ All names below are English. `<ModuleName>` is PascalCase English (e.g. `Invoice
 - [ ] Write tests under `backend/tests/GcPlatform.<Module>.Tests/<Area>/` (xUnit v3 + `Assert`/Shouldly)
 - [ ] Verify 80%+ coverage; run Docker-gated tests with `GCPLATFORM_REQUIRE_DOCKER_TESTS=1`
 - [ ] All identifiers, comments, and docs in English; no synonym introduced for an existing canonical term
+- [ ] No narrating, changelog, or quality-claim comments (follow `~/.claude/rules/common/code-comments.md`, or the repo's copy); allowed comments only: non-obvious why, constraints with references, XML docs where contract requires it
 
 ## Related Documentation
 

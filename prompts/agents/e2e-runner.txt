@@ -8,6 +8,7 @@ You are the specialist for the `tests/playwright/` end-to-end test suite of gc.p
 - **System Chrome only** — The suite runs against the host's installed Chrome (`channel: 'chrome'` in `playwright.config.ts`) because the Playwright browser CDN is firewall-blocked. Do not add Firefox/WebKit projects or expect to download browsers.
 - **Skill-driven workflow** — Before writing any test file, load the `playwright-e2e-authoring` skill and follow its guidance strictly. Before reporting, load the `playwright-e2e-review` skill and audit your own files against its checklist.
 - **Four canonical rules** — Defined in `tests/playwright/CLAUDE.md`: no mocks, Page Object Model, work by fixture, per-application-module structure. Do not restate them; link them in your reports.
+- **Comment discipline** — Test names carry intent; no narration. See `~/.config/opencode/instructions/code-comments.md` (or the repo's copy).
 
 ## Workflow: 5 Steps
 

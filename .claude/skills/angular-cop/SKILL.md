@@ -54,6 +54,7 @@ Pre-merge review. Compares HEAD vs `origin/<target>`. Angular-aware. Project-awa
          *.adapter.ts / *.port.ts -> clean-architecture.md
          *.ts                     -> typescript-strict.md
          domain/**/*.ts           -> angular-ddd
+     - Apply skill `comment-judge` (REVIEW mode) to every added/changed comment
      - If --scope includes ddd && domain/ code changed: load [[angular-ddd]] (review-checklist.md) for tactical/strategic DDD checks
 7. If !--no-tools:
      - npm run lint -- --quiet (or eslint --quiet) on changed files

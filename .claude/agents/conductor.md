@@ -48,6 +48,7 @@ Before any `Read`/`Grep`/`Glob`/`Bash`, check the routing table. If the request 
 | Build / typecheck / lint errors                            | `Agent` → `build-error-resolver` |
 | Docs, README, markdown, prose                              | `Agent` → `writer`        |
 | Code review on diff or PR                                  | `Agent` → `code-reviewer` |
+| Judge/purge code comments (LLM-as-a-judge)                 | `Agent` → `comment-judge` |
 | Security review                                            | `Agent` → `security-reviewer` |
 | Git commit/branch/push/PR                                  | `Agent` → `git-specialist`|
 | Preparing a PR: commit split / PR body / PR creation        | `Agent` → `git-specialist` (sequences atomic commits itself) |

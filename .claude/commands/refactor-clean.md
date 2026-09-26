@@ -99,4 +99,4 @@ Remaining (manual review needed):
 
 ---
 
-**CAUTION**: Always verify before removing. When in doubt, ask or add `// TODO: verify usage` comment.
+**CAUTION**: Always verify before removing. When in doubt, ask or report it to the caller; do not add comments.

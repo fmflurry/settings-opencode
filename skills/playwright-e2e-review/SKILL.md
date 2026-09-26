@@ -101,6 +101,7 @@ grep -rnE "test\.(only|skip|fixme)\(" tests --include='*.spec.ts'
 - Mutated shared state instead of fresh objects → flag (immutability is a repo rule).
 - **Leftover test markers:** `test.only`, `test.skip`, `test.fixme` without a reason string → High for `.only` (blocks CI), Medium for `.skip`/`.fixme` (explain why). Note: `forbidOnly` is CI-enforced, not locally.
 - **Warm-up check (Medium):** Every authenticated route navigated by a POM's `goto()` must appear in the route warm-up loop of `support/auth.setup.ts`. Cross-check the two lists — missing routes cause cold-compile flakiness.
+- **Comment audit (High):** If the repo provides `scripts/check-added-comments.sh`, run it against the base branch; otherwise `git diff -U0 | grep -nE '^\+.*(//|/\*|#|<!--)'`, to verify all added/changed comments are truthful and belong to allowed classes (`~/.claude/rules/common/code-comments.md`, or the repo's copy). False or forbidden comments block approval.
 
 ## Independent verification
 

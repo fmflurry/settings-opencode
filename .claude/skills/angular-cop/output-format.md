@@ -11,6 +11,8 @@ Two modes: `senior` (default, terse) and `junior` (verbose + teaching). CRITICAL
 **Source:** `<current-branch>` @ `<head-sha-short>`
 **Files changed:** N    **Insertions:** +X    **Deletions:** -Y
 
+Comments: added 5 · verified 4 · forbidden 0 · false 1
+
 | 🔴 | 🟠 | 🟡 | 🟢 | 🔵 | ❓ |
 |----|----|----|----|----|----|
 | 2 | 0 | 5 | 1 | 8 | 1 |
@@ -85,17 +87,22 @@ CRITICAL findings (🔴 / 🟠) always rendered in this block format even in sen
 
 ## Verdict logic
 
-Tooling hard-fail comes FIRST. A red build trumps any static-review verdict.
+Tooling hard-fail comes FIRST. A red build, forbidden comments, or **confirmed** false comments (per Trust limits) trump any static-review verdict.
 
 ```
-if tsc errors > 0                                       -> BLOCK (reason: "build red")
+if forbidden-comments > 0                                -> BLOCK (reason: "forbidden comments")
+elif false-comments > 0 AND reviewed confirmed any      -> BLOCK (reason: "false comments confirmed by you with quoted repo line")
+elif tsc errors > 0                                       -> BLOCK (reason: "build red")
 elif lint errors > 0  (warnings excluded)               -> BLOCK (reason: "lint red")
 elif any (🔴 or 🟠)                                     -> BLOCK
 elif any (🟢 with AGENTS.md hard-rule citation)         -> BLOCK
+elif unconfirmed false/stale comments > 0              -> APPROVE-WITH-CHANGES (flag for follow-up, but not blocking)
 elif any 🟡                                             -> APPROVE-WITH-CHANGES
 elif only 🔵 / ❓                                       -> APPROVE
-else (no findings + tooling clean)                      -> APPROVE
+else (no findings + tooling clean + no forbidden)      -> APPROVE
 ```
+
+(True false comments are only blocking if YOU have confirmed them by quoting a contradicting line from the repo itself; per comment-judge Trust limits.)
 
 If `--no-tools` was passed, the tooling gate is skipped but the verdict line MUST explicitly note `(tooling skipped — verdict does not reflect build state)`.
 

@@ -111,6 +111,7 @@ dotnet test --collect:"XPlat Code Coverage"
 - Tests depending on each other (shared state)
 - Asserting too little (passing tests that don't verify anything)
 - Not mocking external dependencies (Database, OpenAI, etc.)
+- Adding narrative comments in test bodies. Test names carry intent; `// Arrange`, `// Act`, `// Assert` markers are allowed, no other narration. See `~/.claude/rules/common/code-comments.md` (or the repo's copy).
 
 ## Quality Checklist
 

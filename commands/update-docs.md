@@ -30,9 +30,9 @@ Update documentation to reflect recent changes: $ARGUMENTS
 - Error codes
 
 ### Code Comments
-- JSDoc for public APIs
-- Complex logic explanations
-- TODO/FIXME cleanup
+- JSDoc for public APIs (when a published contract requires it)
+- Removed narrating and stale comments per `~/.claude/rules/common/code-comments.md` (or the repo's copy)
+- TODO with tickets, lint suppressions with inline reasons
 
 ### Guides
 - How-to tutorials

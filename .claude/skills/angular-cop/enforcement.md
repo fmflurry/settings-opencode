@@ -22,6 +22,8 @@ Canonical severity list for `angular-cop` and the coder self-check.
 | Unjustified `as` cast bypassing narrowing | `as SomeType` without a preceding type guard · Code review only (ESLint `@typescript-eslint/consistent-type-assertions` at `warn` level) | Casts hide type errors; the bug surfaces at runtime. |
 | Missing `ChangeDetectionStrategy.OnPush` on stateful components | Check `@Component({ changeDetection: … })` absence on components that read facade signals or have `input()` bindings | Without OnPush, Angular runs full tree checks on every browser event. With signals, OnPush is both correct and mandatory for performance. |
 | Inline component template via `template:` property | Grep for `template: \`\|'` inside `@Component({…})` blocks in `*.component.ts` files | External `templateUrl` required. Inline templates prevent HTML tooling, bloat the component class, and obscure git diffs. Always use `templateUrl: './x.component.html'`. |
+| **False or stale comment** | Comment asserts behavior the code does not perform (e.g., "thread-safe" without synchronization); or comment true at write time but made false by subsequent diff changes | Truthfulness is non-negotiable. Comments are code documentation and must match reality, or they become bugs. See `~/.claude/rules/common/code-comments.md` §Truthfulness clause. |
+| **Forbidden comment class** | Comment narrates what code does, restates signature, references task/PR/agent, logs history, claims quality, suppresses linting without reason, or repeats a type name | These belong in commit messages or removal, never in code. See `~/.claude/rules/common/code-comments.md` §Forbidden comment classes. |
 
 ---
 

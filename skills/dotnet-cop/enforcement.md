@@ -29,6 +29,8 @@ Review fails when any of these is present. Corresponds to 🔴 bug, 🟠 sec, an
 | **Non-English identifier** | Any type/method/property/variable/namespace using French words or accented characters | Code is written in English; mixed-language modules break grep-ability and ubiquitous language |
 | **Non-English comment or XML doc** | Comment or `///` doc in French (or other non-English) | Comments and docs are English everywhere |
 | **Synonym for a canonical term** | Type/endpoint names a concept with a term absent from `docs/architecture/ubiquitous-language.md` | Ubiquitous language: one term per concept; synonyms fragment the vocabulary |
+| **False or stale comment** | Comment asserts behavior the code does not perform (e.g., "thread-safe" without synchronization); or comment true at write time but made false by subsequent diff changes | Truthfulness is non-negotiable. Comments are code documentation and must match reality, or they become bugs. See `~/.claude/rules/common/code-comments.md` §Truthfulness clause. |
+| **Forbidden comment class** | Comment narrates what code does, restates signature, references task/PR/agent, logs history, claims quality, suppresses linting without reason, or repeats a type name | These belong in commit messages or removal, never in code. See `~/.claude/rules/common/code-comments.md` §Forbidden comment classes. |
 
 ---
 

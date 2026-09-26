@@ -71,7 +71,7 @@ const result = await db.query(query, [userId]);
 - **Mutation patterns** — Prefer immutable operations (spread, map, filter)
 - **console.log statements** — Remove debug logging before merge
 - **Missing tests** — New code paths without test coverage
-- **Dead code** — Commented-out code, unused imports, unreachable branches
+- **Dead code** — Commented-out code, unused imports, unreachable branches. (See Comments section for comment auditing — never filtered as noise.)
 - **Import hygiene** — Duplicate imports from the same module, repeated specifiers, or split type/value imports that can be merged safely. Treat TypeScript/Sonar warnings like `typescript:S3863` as auto-fix candidates.
 
 ```typescript
@@ -98,6 +98,23 @@ function processUsers(users) {
     .map((user) => ({ ...user, verified: true }));
 }
 ```
+
+### Comments (HIGH — never filtered as noise)
+
+For every added or changed comment in the diff:
+
+1. If the repo provides `scripts/check-added-comments.sh`, run it; otherwise `git diff -U0 | grep -nE '^\+.*(//|/\*|#|<!--)'`.
+2. Load skill `comment-judge` (REVIEW mode) and apply its rubric to classify each added/changed comment:
+   - **verified**: Comment explains a non-obvious constraint or choice; it matches code behavior.
+   - **forbidden-class**: Narrates what code does, restates signature, references task/PR/agent, logs history, claims quality, or repeats a type. Move to commit message or remove. (tier 🟡, BLOCK).
+   - **false-or-stale**: Comment asserts behavior the code does not perform (e.g., "thread-safe" without locking). (tier 🔴, but ❓ advisory — only BLOCK when YOU confirm by quoting a contradicting line from the repo itself, per Trust limits).
+3. Also flag pre-existing comments made false or misleading by the diff's code changes (truthfulness clause).
+
+**Noise-filter exception:** Comment findings are NEVER dropped as noise or style issues, even if other MEDIUM issues are consolidated.
+
+- Dead-code item (above) points to this section.
+- Summary line includes: `Comments: added N · verified V · forbidden X · false F · ❓ Q`.
+- Approval: BLOCK if `forbidden > 0` OR (`false > 0` AND you have quoted repo line contradicting the comment). ❓ = advisory unless confirmed by you.
 
 ### Angular Patterns (HIGH)
 
@@ -254,6 +271,8 @@ End every review with:
 ```
 ## Review Summary
 
+Comments: added 5 · verified 4 · forbidden 0 · false 1
+
 | Severity | Count | Status |
 |----------|-------|--------|
 | CRITICAL | 0     | pass   |
@@ -266,9 +285,9 @@ Verdict: WARNING — 2 HIGH issues should be resolved before merge.
 
 ## Approval Criteria
 
-- **Approve**: No CRITICAL or HIGH issues and lint passes
-- **Warning**: HIGH issues only (can merge with caution)
-- **Block**: CRITICAL issues found, or lint errors present — must fix before merge
+- **Approve**: No CRITICAL or HIGH issues, lint passes, and no forbidden comments; false/stale comments OK if unconfirmed (❓)
+- **Warning**: HIGH issues only (can merge with caution); false/stale flagged but not confirmed
+- **Block**: CRITICAL issues found, lint errors present, forbidden comments detected, or false comments confirmed by you (with quoted contradicting repo line) — must fix before merge
 
 ## Project-Specific Guidelines
 

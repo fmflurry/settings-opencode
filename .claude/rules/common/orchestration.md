@@ -22,6 +22,7 @@ After the first routing gate is satisfied, all codebase exploration (search, sym
 | Build / typecheck / lint errors                                      | `Agent` → `build-error-resolver`     |
 | Playwright / E2E browser flows                                       | `Agent` → `e2e-runner`                   |
 | Dead code, duplication, consolidation cleanup                        | `Agent` → `refactor-cleaner`             |
+| Judge/purge comments in a path (LLM-as-a-judge)                      | `Agent` → `comment-judge`                |
 | SQL, Postgres, Supabase, RLS, migrations                             | `Agent` → `database-reviewer`            |
 | DB live-instance ops (health, vacuum, WAL, backups, pooling)         | `Agent` → `postgres-dba`                 |
 | Codemap or doc generation/update                                     | `Agent` → `doc-updater`                  |
@@ -35,6 +36,8 @@ If two rules match, route the **writing/changing** work first; reviews/security 
 
 **DB disambiguation:** SQL/migration/schema/query *code* review → `database-reviewer`. *Live instance* operations (health, vacuum/bloat, WAL/checkpoints, backups/PITR, pooling, runtime role/RLS audit, container persistence/upgrades) → `postgres-dba` (read-only advisory; mutations are emitted as human-confirmed commands).
 
+**Comment purge flow:** `comment-judge <path>` (run twice independently) → intersect verdicts → human skims list → `refactor-cleaner` with both JSONs (applies only forbidden/noise/narration with agreement); false/stale/❓ → human.
+
 ## What You Handle Directly
 
 - `Read` to gather context for a precise specialist brief (only when essential).
@@ -47,7 +50,7 @@ If two rules match, route the **writing/changing** work first; reviews/security 
 - Run independent specialists in **parallel** (e.g., `code-reviewer` + `security-reviewer` on the same diff) — same message, multiple `Agent` blocks.
 - After a subagent returns, synthesize the result. Don't dump raw output.
 - If a specialist returns blockers or questions, surface them via `AskUserQuestion` — do **not** answer them yourself by inferring intent.
-- **Read-only specialists** (`planner`, `architect`, `code-reviewer`, `angular-cop`, `dotnet-cop`, `security-reviewer`, `database-reviewer`, `postgres-dba`, `ecosystem-auditor`, `gdpr-specialist`, `scout`) report findings only — they do NOT write or edit files.
+- **Read-only specialists** (`planner`, `architect`, `code-reviewer`, `angular-cop`, `dotnet-cop`, `security-reviewer`, `database-reviewer`, `postgres-dba`, `ecosystem-auditor`, `comment-judge`, `gdpr-specialist`, `scout`) report findings only — they do NOT write or edit files.
 - **Writable agents** are authorized to write/edit within their brief: `coder`, `writer`, `tdd-guide`, `refactor-cleaner`, `build-error-resolver`, `doc-updater`, `e2e-runner`, `api-spec-architect`, `git-specialist`. The orchestrator decides whether to dispatch them for remediation.
 
 ## Question Relay Protocol

@@ -31,9 +31,12 @@ After the first Task gate is satisfied, primary agents MUST use CodeMemory for r
 - E2E/browser journeys/Playwright -> `e2e-runner`
 - Codemap or generated-doc updates -> `doc-updater`
 - Dead code, unused exports, duplication cleanup -> `refactor-cleaner`
+- Judge/purge comments in a path (LLM-as-a-judge) -> `comment-judge`
 - SQL, PostgreSQL, Supabase, RLS, migrations -> `database-reviewer`
 - PostgreSQL live-instance operations (health, vacuum/bloat, WAL/checkpoints, backups/PITR, pooling, runtime role/RLS audit, container persistence/upgrades) -> `postgres-dba` (read-only advisory; mutations are emitted as human-confirmed commands)
 - DB disambiguation: SQL/migration/schema/query code review -> `database-reviewer`; live instance diagnostics/operations -> `postgres-dba`
+
+**Comment purge flow:** `comment-judge <path>` (run twice independently) → intersect verdicts → human skims list → `refactor-cleaner` with both JSONs (applies only forbidden/noise/narration with agreement); false/stale/❓ → human.
 
 ## Conductor Cannot Write Directly
 
@@ -46,7 +49,7 @@ The primary `conductor` agent has `write` and `edit` disabled (permissions + hoo
 - Refactor cleanup -> `refactor-cleaner`
 - Git operations (commit/push/PR) -> `git-specialist`
 
-Read-only specialists report findings only (no `write`/`edit`): `planner`, `architect`, `code-reviewer`, `angular-cop`, `dotnet-cop`, `security-reviewer`, `database-reviewer`, `postgres-dba`, `ecosystem-auditor`, `gdpr-specialist`, `scout`.
+Read-only specialists report findings only (no `write`/`edit`): `planner`, `architect`, `code-reviewer`, `angular-cop`, `dotnet-cop`, `security-reviewer`, `database-reviewer`, `postgres-dba`, `ecosystem-auditor`, `comment-judge`, `gdpr-specialist`, `scout`.
 
 Writable agents may write/edit within their brief: `coder`, `writer`, `tdd-guide`, `refactor-cleaner`, `build-error-resolver`, `doc-updater`, `e2e-runner`, `api-spec-architect`, `git-specialist`.
 

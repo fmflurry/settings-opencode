@@ -23,6 +23,7 @@ Located in `~/.claude/agents/` (project scope: `<project>/.claude/agents/`):
 | dotnet-cop | .NET code review | Pre-merge .NET Minimal API |
 | git-specialist | Git operations | Commits, branches, PRs |
 | gdpr-specialist | GDPR compliance | Data protection review |
+| comment-judge | Comment judging | Judge/purge comments (read-only) |
 
 ## Immediate Agent Usage
 

@@ -27,13 +27,13 @@
 
 ## What's inside
 
-A hardened primary `conductor` agent backed by **20 specialist sub-agents** (planner, architect, coder, writer, code-reviewer, ecosystem-auditor, angular-cop, dotnet-cop, gdpr-specialist, security-reviewer, tdd-guide, build-error-resolver, e2e-runner, doc-updater, refactor-cleaner, database-reviewer, api-spec-architect, git-specialist, scout, learning-reviewer), wired together by:
+A hardened primary `conductor` agent backed by **19 specialist sub-agents** (planner, architect, coder, writer, code-reviewer, ecosystem-auditor, angular-cop, dotnet-cop, gdpr-specialist, security-reviewer, tdd-guide, build-error-resolver, e2e-runner, doc-updater, refactor-cleaner, database-reviewer, api-spec-architect, git-specialist, scout), wired together by:
 
 - **Mandatory sub-agent delegation** from `conductor`: the primary has `write` and `edit` denied at the permission layer. The orchestrator cannot patch files — every change MUST go through `coder` (source code), `writer` (docs/markdown/HTML), `tdd-guide` (tests), or `git-specialist` (commits/PRs). This makes routing **model-agnostic**: even open-weight models that ignore prose rules are mechanically forced to delegate.
 - **Front-loaded first-tool gate** in `prompts/agents/conductor.txt`: hard rules at the top, routing table second, six few-shot User → `task` examples (with explicit wrong-way contrasts) so literal models copy the right pattern.
 - **Slash commands** that force routing to the right specialist (`/plan`, `/tdd`, `/security`, `/cop-review`, …).
 - **Always-on docs** loaded at session start — subagent routing, question handling, [CodeMemory-first](https://github.com/fmflurry/code-memory) repo orientation, verification gate, harness parity, brief contract, and tool budget.
-- **OpenCode plugins** — `.env` secret-file guard, desktop notifications, LLM metrics, a tool-budget nudge, Mistral cache affinity, CodeMemory nudges, and proposal-only local learning.
+- **OpenCode plugins** — `.env` secret-file guard, desktop notifications, LLM metrics, a tool-budget nudge, Mistral cache affinity, and CodeMemory nudges.
 - **Custom tools** — `run-tests`, `check-coverage`, `security-audit`, plus a codemap generator.
 - **A `.claude/` mirror** — hooks, rule packs, and skills, so Claude Code benefits from the same guardrails.
 
@@ -51,8 +51,7 @@ The two halves stand alone. Use the OpenCode side, the Claude Code mirror, or bo
   - [Skills](#skills-en)
   - [Plugins & hooks](#plugins-en)
 - [Custom tools](#tools-en)
-- [Local learning operations](#learning-en)
-  - [TUI plugins](#tui-en)
+- [TUI plugins](#tui-en)
   - [Claude Code mirror](#claude-en)
   - [How it fits together](#flow-en)
 - [Français](#francais)
@@ -417,7 +416,6 @@ Defined in `opencode.jsonc` under `agent`:
 | `api-spec-architect`   | subagent | OpenAPI / API specification design.                                                                                                                                               |
 | `git-specialist`       | subagent | Branches, commits, pushes, PRs (mini model).                                                                                                                                      |
 | `scout`                | subagent | Emits a file manifest for an unknown file set.                                                                                                                                    |
-| `learning-reviewer`    | subagent | Local proposal-only learning reviewer. Extracts durable learnings non-interactively.                                                                                              |
 
 ### Hardened sub-agent orchestration
 
@@ -501,7 +499,6 @@ All TypeScript plugins use `@opencode-ai/plugin@1.4.6`. OpenCode auto-loads ever
 - `plugins/code-memory.ts` — CodeMemory auto-retrieve / auto-learn nudges (no-op when the `code-memory` CLI is absent).
 - `plugins/llm-metrics.ts` + `plugins/llm-metrics-lib/` — real-time LLM-behavior monitor: hooks bus events into per-call metrics (tokens, TTFT, duration, cost, model, finish reason, end-to-end + generation tok/s) appended as NDJSONL to `~/data/llm-metrics.jsonl`, backed by a shared pure core (110 unit tests). Local-only, no egress; response-text capture is bounded and opt-out. Full architecture, env knobs, tok/s definitions, subagent aggregation, and privacy boundary in [`LLM_METRICS.md`](LLM_METRICS.md).
 - `plugins/kdco-primitives/` — shared utilities (mutex, shell, terminal-detect, project-id resolver, types).
-- `plugins/learning-runtime.ts` + `plugins/learning/` — proposal-only local learning for one local OS profile's own conversations. It starts disabled and requires explicit profile acknowledgement. Allowlisted, sanitized high-signal descriptors reach a locally launched reviewer only through the supported POSIX (macOS/Linux) artifact-validation path; native Windows fails closed. The runtime validates the executable and separately verified model artifact and supplies the latter through a fixed `--model-artifact` argument; raw prompts, transcripts, tool output, and PII do not reach the reviewer. Artifact validation does not by itself prove that a reviewer cannot log or forward descriptors. It is capped at two proposals per session and ten per day, supports retention/purge/deletion/export/audit, and has immediate cross-process revoke. Accept/reject only changes proposal state: no claim assertion or automatic materialization. Canonical OpenCode/Claude sync, organizational governance, machine-readable CLI output, and the complete boundary are in [`LEARNING.md`](LEARNING.md).
 - `opencode-skill-creator` _(external npm, declared in `opencode.jsonc › plugin`)_ — skill scaffolding and benchmarking.
 - _Not loaded:_ `plugins/ecc-hooks.ts.disabled` and `tui-plugins/caveman.tsx.disabled` ship disabled and are skipped by the loader.
 
@@ -514,18 +511,6 @@ Reusable OpenCode tools exposed via `tools/index.ts`:
 - `tools/run-tests.ts` — detects package manager + framework and builds the test command.
 - `tools/check-coverage.ts` — reads coverage reports and compares against a threshold.
 - `tools/security-audit.ts` — scans deps + secrets + risky patterns.
-
-<a id="learning-en"></a>
-
-### Local learning operations
-
-Local learning is advisory and proposal-only. The local `bin/proposal-learning` wrapper is the
-only queue control plane for both OpenCode and Claude; neither exposes learning slash commands,
-a learning agent, state tool, or proposal content to an LLM. It starts disabled and requires the
-versioned acknowledgement and profile metadata documented in [`LEARNING.md`](LEARNING.md).
-Accept/reject changes state only: an accepted proposal still requires normal human-authored,
-reviewed PR/change material. The full privacy, local-model, retention, scheduler, deployment,
-and CLI contract is in [`LEARNING.md`](LEARNING.md).
 
 <a id="tui-en"></a>
 
@@ -553,7 +538,7 @@ and CLI contract is in [`LEARNING.md`](LEARNING.md).
 1. Startup: OpenCode loads `opencode.jsonc` -> always-on instructions -> auto-loads every plugin in `plugins/` plus the TUI plugins registered in `tui.json`.
 2. Dev: `conductor` executes — it cannot write files; it dispatches Task calls to specialists. `secret-file-guard` blocks `.env` access; `tool-budget` nudges verification over exploration.
 3. Workflow: `conductor` routes to specialists through Task (perm-enforced); `/plan`, `/tdd`, `/security`, etc. force the same routing explicitly.
-4. Idle/completion: `llm-metrics` persists per-call metrics; `notification` sends completion/question/permission alerts; `learning-runtime` reviews high-signal sessions when enabled.
+4. Idle/completion: `llm-metrics` persists per-call metrics; `notification` sends completion/question/permission alerts.
 
 ---
 
@@ -561,7 +546,7 @@ and CLI contract is in [`LEARNING.md`](LEARNING.md).
 
 ## Français
 
-Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), **vingt sous-agents specialises**, des instructions toujours actives, des commandes slash, des plugins (secret-file guard, notifications, llm-metrics, tool-budget, apprentissage local par propositions), des outils custom et un mirror Claude Code.
+Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), **dix-neuf sous-agents specialises**, des instructions toujours actives, des commandes slash, des plugins (secret-file guard, notifications, llm-metrics, tool-budget), des outils custom et un mirror Claude Code.
 
 <a id="objectif-fr"></a>
 
@@ -635,7 +620,6 @@ Definis dans `opencode.jsonc` (champ `agent`):
 | `api-spec-architect`   | subagent | Design OpenAPI / specification API.                                                                                                                                              |
 | `git-specialist`       | subagent | Branches, commits, push, PRs (modele mini).                                                                                                                                      |
 | `scout`                | subagent | Emet un manifeste de fichiers pour un ensemble inconnu.                                                                                                                          |
-| `learning-reviewer`    | subagent | Revue d'apprentissage locale par propositions. Extrait les connaissances durables de maniere non-interactive.                                                                     |
 
 ### Orchestration durcie des sous-agents
 
@@ -717,21 +701,10 @@ Tous les plugins TypeScript utilisent `@opencode-ai/plugin@1.4.6`. OpenCode auto
 - `plugins/mistral-affinity.js` — ajoute un header `x-affinity` stable aux appels Mistral / compatibles Mistral pour l'affinite de cache.
 - `plugins/tool-budget.ts` — pousse le modele vers la verification plutot que l'exploration via le system prompt (ne bloque jamais un appel d'outil).
 - `plugins/code-memory.ts` — nudges auto-retrieve / auto-learn CodeMemory (no-op si le CLI `code-memory` est absent).
-- `plugins/learning-runtime.ts` + `plugins/learning/` — apprentissage local par propositions limite aux conversations propres a un profil OS local. Desactive par defaut, il exige un acquittement explicite. Seuls des descripteurs structures, nettoyes et a fort signal atteignent un executable offline de revue verifie, controle par le proprietaire, avec un artefact de modele verifie separement et passe par l'argument fixe `--model-artifact` ; jamais prompts bruts, transcripts, sorties d'outils ou PII. Limites : deux propositions par session et dix par jour ; retention/purge/suppression/export/audit et revocation inter-processus immediate. Accept/reject ne change que l'etat : aucune assertion de claim ni materialisation automatique. Voir [`LEARNING.md`](LEARNING.md).
 - `plugins/llm-metrics.ts` + `plugins/llm-metrics-lib/` — moniteur temps reel du comportement LLM : accroche les evenements du bus en metriques par appel (tokens, TTFT, duree, cout, modele, finish reason, tok/s end-to-end + generation) ajoutees en NDJSONL dans `~/data/llm-metrics.jsonl`, adosse a un coeur pur partage (110 tests unitaires). Local uniquement, aucun egress ; la capture du texte de reponse est bornee et desactivable. Architecture complete, variables d'environnement, definitions des tok/s, aggregation des sous-agents et limite de confidentialite dans [`LLM_METRICS.md`](LLM_METRICS.md).
 - `plugins/kdco-primitives/` — utilities partages (mutex, shell, terminal-detect, project-id resolver, types).
 - `opencode-skill-creator` _(npm externe, declare dans `opencode.jsonc › plugin`)_ — scaffolding et benchmark de skills.
 - _Non charges:_ `plugins/ecc-hooks.ts.disabled` et `tui-plugins/caveman.tsx.disabled` sont livres desactives et ignores par le loader.
-
-### Operations d'apprentissage local
-
-L'apprentissage est consultatif et limite aux propositions. Le wrapper local
-`bin/proposal-learning` est l'unique plan de controle pour OpenCode et Claude : aucune commande
-slash, aucun agent/outillage d'etat, ni contenu de proposition n'est expose a un LLM. Il est
-desactive par defaut et exige l'acquittement versionne et les metadonnees de profil decrits dans
-[`LEARNING.md`](LEARNING.md). Accepter ou rejeter ne change que l'etat ; une proposition acceptee
-exige toujours une modification/PR normale revue par un humain. Voir `LEARNING.md` pour le
-contrat complet de confidentialite, modele local, retention, scheduler, deploiement et CLI.
 
 <a id="tools-fr"></a>
 
@@ -769,4 +742,4 @@ Outils OpenCode reutilisables exposes via `tools/index.ts`:
 1. Demarrage: OpenCode charge `opencode.jsonc` -> instructions globales -> auto-charge chaque plugin de `plugins/` plus les plugins TUI enregistres dans `tui.json`.
 2. Dev: `conductor` execute — il n'a pas le droit d'ecrire; il dispatche des Task vers les specialistes. `secret-file-guard` bloque l'acces `.env`; `tool-budget` pousse la verification plutot que l'exploration.
 3. Workflow: `conductor` route via Task (impose par permissions); `/plan`, `/tdd`, `/security`, etc. forcent explicitement le meme routage.
-4. Idle/completion: `llm-metrics` persiste les metriques par appel; `notification` envoie les alertes completion/question/permission; `learning-runtime` revoit les sessions a fort signal quand il est active.
+4. Idle/completion: `llm-metrics` persiste les metriques par appel; `notification` envoie les alertes completion/question/permission.

@@ -215,44 +215,6 @@ function Sync-Skills($srcDir, [string[]]$destDirs) {
     }
 }
 
-function Sync-LearningRuntime($srcDir, $opencodeDir, $claudeDir, [bool]$opencodeReady, [bool]$claudeReady) {
-    if (-not $opencodeReady -and -not $claudeReady) { return }
-    $node = Get-Command node -ErrorAction SilentlyContinue
-    if (-not $node) { Die 'proposal-learning runtime synchronization requires node' }
-    $args = @('--experimental-strip-types', (Join-Path $srcDir 'plugins\learning\installer-cli.ts'), '--source-root', $srcDir, '--opencode-root', $opencodeDir, '--claude-root', $claudeDir)
-    if ($opencodeReady) { $args += '--opencode' }
-    if ($claudeReady) { $args += '--claude' }
-    & $node.Source @args
-    if ($LASTEXITCODE -ne 0) { Die 'proposal-learning runtime synchronization failed' }
-    Ok 'synchronized proposal-learning runtime'
-}
-
-function Install-LearningMaintenance($runtimeRoot) {
-    if (-not $runtimeRoot -or -not [IO.Path]::IsPathRooted($runtimeRoot) -or $runtimeRoot.IndexOfAny([char[]]@("`r", "`n", "`t")) -ge 0) {
-        Die 'proposal-learning maintenance rejected an unsafe runtime path'
-    }
-    $node = Get-Command node -ErrorAction SilentlyContinue
-    if (-not $node -or -not [IO.Path]::IsPathRooted($node.Source)) { Die 'proposal-learning maintenance requires an absolute node executable' }
-    $stateCli = Join-Path $runtimeRoot 'state-cli.ts'
-    if (-not (Test-Path -LiteralPath $stateCli -PathType Leaf)) { Die 'proposal-learning state CLI is unavailable' }
-    $stateHome = if ($env:XDG_STATE_HOME) { $env:XDG_STATE_HOME } else { Join-Path $env:USERPROFILE '.local\state' }
-    if (-not [IO.Path]::IsPathRooted($stateHome) -or $stateHome.IndexOfAny([char[]]@("`r", "`n", "`t")) -ge 0) { Die 'proposal-learning maintenance rejected an unsafe XDG state path' }
-    $escapePowerShellLiteral = { param($value) return $value.Replace("'", "''") }
-    $wrapper = Join-Path $runtimeRoot 'proposal-learning-purge.ps1'
-    @(
-        "`$ErrorActionPreference = 'Stop'",
-        "`$env:XDG_STATE_HOME = '$(& $escapePowerShellLiteral $stateHome)'",
-        "& '$(& $escapePowerShellLiteral $node.Source)' --experimental-strip-types '$(& $escapePowerShellLiteral $stateCli)' purge",
-        'exit $LASTEXITCODE'
-    ) | Set-Content -LiteralPath $wrapper -Encoding utf8
-    $taskName = 'settings-opencode-proposal-learning-purge'
-    $action = New-ScheduledTaskAction -Execute (Join-Path $PSHOME 'powershell.exe') -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$wrapper`""
-    $trigger = New-ScheduledTaskTrigger -Daily -At 03:00
-    $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable
-    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description 'state-cli.ts purge' -Force | Out-Null
-    Ok 'registered daily proposal-learning maintenance'
-}
-
 function Test-ReparsePoint($path) {
     if (-not (Test-Path -LiteralPath $path)) { return $false }
     $item = Get-Item -LiteralPath $path -Force
@@ -502,7 +464,6 @@ if ($opencodeTargetReady -and -not $opencodeTargetIsSource) {
     Move-LegacyNotificationHelper $OpencodeDir
 }
 
-Sync-LearningRuntime $SrcDir $OpencodeDir $ClaudeDir $opencodeTargetReady $claudeTargetReady
 
 # ------------------------------ env vars -------------------------------------
 

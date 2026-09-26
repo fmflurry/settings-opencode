@@ -35,7 +35,7 @@ import type {
 
 const SERVICE = "llm-metrics";
 
-// ─── Env helpers (mirrors learning-loop.ts) ──────────────────────────────────
+// ─── Env helpers ─────────────────────────────────────────────────────────────
 
 const envProc = (
   globalThis as { process?: { env?: Record<string, string | undefined> } }

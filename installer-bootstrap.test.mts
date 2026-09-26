@@ -986,58 +986,6 @@ test("installer source-equals-target paths never mutate the source checkout", ()
   assert.deepEqual(failures, [], failures.join("\n\n"));
 });
 
-test("PowerShell bootstrap invokes learning synchronization after target preparation and propagates failure", {
-  skip: pwshSkipReason,
-}, () => {
-  const result = runPowerShellAstAssertions(String.raw`
-$syncFunctions = @($ast.FindAll({
-    param($node)
-    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
-        $node.Name -eq 'Sync-LearningRuntime'
-}, $true))
-if ($syncFunctions.Count -ne 1) {
-    throw "expected exactly one Sync-LearningRuntime definition, found $($syncFunctions.Count)"
-}
-
-$syncInvocations = @($ast.FindAll({
-    param($node)
-    $node -is [System.Management.Automation.Language.CommandAst] -and
-        $node.GetCommandName() -eq 'Sync-LearningRuntime'
-}, $true))
-if ($syncInvocations.Count -ne 1) {
-    throw "expected exactly one Sync-LearningRuntime invocation, found $($syncInvocations.Count)"
-}
-
-$invocation = $syncInvocations[0]
-$actualArguments = @(($invocation.CommandElements | Select-Object -Skip 1) | ForEach-Object { $_.Extent.Text })
-$expectedArguments = @('$SrcDir', '$OpencodeDir', '$ClaudeDir', '$opencodeTargetReady', '$claudeTargetReady')
-if (($actualArguments -join [char]0) -ne ($expectedArguments -join [char]0)) {
-    throw "Sync-LearningRuntime must receive prepared roots and readiness flags; got: $($actualArguments -join ' ')"
-}
-
-$copyCommands = @($ast.FindAll({
-    param($node)
-    $node -is [System.Management.Automation.Language.CommandAst] -and
-        $node.GetCommandName() -in @('Copy-Tree', 'Copy-TreeWithSeed')
-}, $true))
-$lastCopyEnd = ($copyCommands | ForEach-Object { $_.Extent.EndOffset } | Measure-Object -Maximum).Maximum
-if ($null -eq $lastCopyEnd -or $invocation.Extent.StartOffset -le $lastCopyEnd) {
-    throw 'Sync-LearningRuntime must be invoked after OpenCode and Claude target preparation'
-}
-
-$syncFunctionText = $syncFunctions[0].Extent.Text
-if ($syncFunctionText -notmatch '\$LASTEXITCODE\s+-ne\s+0') {
-    throw 'Sync-LearningRuntime must inspect a non-zero native node exit status'
-}
-if ($syncFunctionText -notmatch 'Die\s+.*proposal-learning runtime synchronization failed') {
-    throw 'Sync-LearningRuntime must propagate synchronization failure through Die'
-}
-`);
-  const output = `${result.stdout}\n${result.stderr}`;
-
-  assert.equal(result.status, 0, `PowerShell runtime synchronization contract failed\n${output}`);
-});
-
 test("PowerShell bootstrap guards source-equivalent OpenCode and Claude targets from mutation", {
   skip: pwshSkipReason,
 }, () => {

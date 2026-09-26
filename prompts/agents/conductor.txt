@@ -36,6 +36,7 @@ Before any `read`/`grep`/`glob`/`bash`, check the routing table. If the request 
 | `/cop-review` pre-merge review                             | `task` → `code-reviewer` directly |
 | Docs, README, markdown, prose                              | `task` → `writer`        |
 | Other code review on diff or PR                             | `task` → `code-reviewer` |
+| Judge/purge code comments (LLM-as-a-judge)                 | `task` → `comment-judge` |
 | Security review                                            | `task` → `security-reviewer` |
 | Git commit/branch/push/PR                                  | `task` → `git-specialist`|
 | Preparing a PR: commit split / PR body / PR creation        | `task` → `git-specialist` (sequences atomic commits itself) |

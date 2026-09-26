@@ -499,160 +499,6 @@ sync_skills() {
     fi
 }
 
-sync_learning_runtime() {
-    if [ "$OPENCODE_TARGET_READY" != "1" ] && [ "$CLAUDE_TARGET_READY" != "1" ]; then
-        err "proposal-learning runtime sync failed: no selected harness target is ready"
-        return 1
-    fi
-    if ! command -v node >/dev/null 2>&1; then
-        err "proposal-learning runtime sync failed: node is unavailable"
-        return 1
-    fi
-    if node --experimental-strip-types "$REPO_DIR/plugins/learning/installer-cli.ts" \
-        --source-root "$REPO_DIR" \
-        --opencode-root "$TARGET_OPENCODE" \
-        --claude-root "$TARGET_CLAUDE" \
-        $([ "$OPENCODE_TARGET_READY" = "1" ] && printf '%s' '--opencode') \
-        $([ "$CLAUDE_TARGET_READY" = "1" ] && printf '%s' '--claude'); then
-        ok "synchronized proposal-learning runtime"
-    else
-        err "proposal-learning runtime sync failed; existing harness settings were left unchanged"
-        return 1
-    fi
-}
-
-install_learning_maintenance() {
-    [ "$OPENCODE_TARGET_READY" = "1" ] || [ "$CLAUDE_TARGET_READY" = "1" ] || return 0
-    if ! command -v node >/dev/null 2>&1; then
-        err "proposal-learning maintenance cannot be registered: node is unavailable"
-        return 1
-    fi
-
-    local runtime_root="$TARGET_CLAUDE/hooks/learning"
-    [ "$OPENCODE_TARGET_READY" = "1" ] && runtime_root="$TARGET_OPENCODE/plugins/learning"
-    local node_path
-    node_path="$(command -v node)"
-    local state_home="${XDG_STATE_HOME:-}"
-    case "$runtime_root:$node_path" in
-        *$'\n'*|*$'\r'*|*$'\t'*|*' '*|*'..'*|*'//'*|:* )
-            err "proposal-learning maintenance rejected an unsafe runtime, executable, or state path"
-            return 1
-            ;;
-    esac
-    case "$runtime_root:$node_path" in
-        /*:/*) ;;
-        *)
-            err "proposal-learning maintenance requires absolute runtime and executable paths"
-            return 1
-            ;;
-    esac
-    if [ -n "$state_home" ]; then
-        case "$state_home" in
-            /*) ;;
-            *)
-                err "proposal-learning maintenance requires an absolute XDG state path when XDG_STATE_HOME is set"
-                return 1
-                ;;
-        esac
-    fi
-
-    plist_escape() {
-        printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g; s/'"'"'/\&apos;/g'
-    }
-
-    case "$(uname -s)" in
-    Darwin)
-    if ! command -v launchctl >/dev/null 2>&1; then
-        err "proposal-learning maintenance cannot be registered: launchctl is unavailable"
-        return 1
-    fi
-    local launch_agents="$HOME/Library/LaunchAgents"
-    local label="com.settings-opencode.proposal-learning-maintenance"
-    local plist="$launch_agents/$label.plist"
-    local temporary state_environment_xml=""
-    if [ -n "$state_home" ]; then
-        state_environment_xml="<key>EnvironmentVariables</key><dict><key>XDG_STATE_HOME</key><string>$(plist_escape "$state_home")</string></dict>"
-    fi
-    mkdir -p "$launch_agents"
-    temporary="$(mktemp "$launch_agents/.${label}.XXXXXX")"
-    cat > "$temporary" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>$label</string>
-  <key>ProgramArguments</key><array><string>$(plist_escape "$node_path")</string><string>--experimental-strip-types</string><string>$(plist_escape "$runtime_root/state-cli.ts")</string><string>purge</string></array>
-  $state_environment_xml
-  <key>RunAtLoad</key><true/>
-  <key>StartInterval</key><integer>86400</integer>
-</dict></plist>
-EOF
-    chmod 600 "$temporary"
-    mv "$temporary" "$plist"
-    launchctl bootout "gui/$(id -u)/$label" >/dev/null 2>&1 || true
-    if launchctl bootstrap "gui/$(id -u)" "$plist"; then
-        ok "registered daily proposal-learning maintenance"
-    else
-        rm -f "$plist"
-        err "proposal-learning maintenance registration failed"
-        return 1
-    fi
-    ;;
-    Linux)
-    local systemd_dir="$HOME/.config/systemd/user"
-    local service="$systemd_dir/settings-opencode-proposal-learning-purge.service"
-    local timer="$systemd_dir/settings-opencode-proposal-learning-purge.timer"
-    if command -v systemctl >/dev/null 2>&1; then
-        mkdir -p "$systemd_dir"
-        validate_linux_maintenance_path() {
-            if [[ "$1" =~ [\;\&\|\`\$\<\>] ]] || [[ "$1" == *$'\n'* || "$1" == *$'\r'* || "$1" == *$'\t'* || "$1" == *' '* || "$1" == *'..'* || "$1" == *//* ]]; then
-                err "proposal-learning maintenance rejected shell metacharacters or unsafe path"
-                return 1
-            fi
-        }
-        validate_linux_maintenance_path "$runtime_root" || return 1
-        validate_linux_maintenance_path "$node_path" || return 1
-        [ -z "$state_home" ] || validate_linux_maintenance_path "$state_home" || return 1
-        local state_environment=""
-        [ -z "$state_home" ] || state_environment="Environment=XDG_STATE_HOME=$state_home"
-        cat > "$service" <<EOF
-[Service]
-Type=oneshot
-$state_environment
-ExecStart=$node_path --experimental-strip-types $runtime_root/state-cli.ts purge
-EOF
-        cat > "$timer" <<EOF
-[Unit]
-Description=Daily proposal-learning purge
-[Timer]
-OnCalendar=daily
-Persistent=true
-[Install]
-WantedBy=timers.target
-EOF
-        if systemctl --user daemon-reload && systemctl --user enable --now "$(basename "$timer")"; then
-            ok "registered daily proposal-learning maintenance"
-            return 0
-        fi
-        rm -f "$service" "$timer"
-    fi
-    err "proposal-learning maintenance requires a working systemd user timer"
-    return 1
-    ;;
-    MINGW*|MSYS*|CYGWIN*)
-    if command -v schtasks.exe >/dev/null 2>&1 && schtasks.exe /Create /F /SC DAILY /TN "settings-opencode-proposal-learning-purge" /TR "\"$node_path\" --experimental-strip-types \"$runtime_root/state-cli.ts\" purge" >/dev/null; then
-        ok "registered daily proposal-learning maintenance"
-        return 0
-    fi
-    err "proposal-learning maintenance requires schtasks.exe"
-    return 1
-    ;;
-    *)
-    err "proposal-learning maintenance is unsupported on this platform"
-    return 1
-    ;;
-    esac
-}
-
 # ------------------------------ env-var block --------------------------------
 
 # Resolve the launcher path the installer actually deployed to $TARGET_OPENCODE.
@@ -971,7 +817,6 @@ install_repo_link() {
         copy_tree "$REPO_DIR" "$TARGET_OPENCODE"
         ensure_opencode_runtime_dirs
         [ -f "$TARGET_OPENCODE/bin/opencode-pick" ] && chmod +x "$TARGET_OPENCODE/bin/opencode-pick"
-        [ -f "$TARGET_OPENCODE/bin/proposal-learning" ] && chmod +x "$TARGET_OPENCODE/bin/proposal-learning"
         ok "copied $REPO_DIR -> $TARGET_OPENCODE (node_modules excluded)"
         OPENCODE_TARGET_READY=1
         return 0
@@ -1018,7 +863,6 @@ install_repo_link() {
     copy_tree "$REPO_DIR" "$TARGET_OPENCODE"
     ensure_opencode_runtime_dirs
     [ -f "$TARGET_OPENCODE/bin/opencode-pick" ] && chmod +x "$TARGET_OPENCODE/bin/opencode-pick"
-    [ -f "$TARGET_OPENCODE/bin/proposal-learning" ] && chmod +x "$TARGET_OPENCODE/bin/proposal-learning"
     ok "copied $REPO_DIR -> $TARGET_OPENCODE (node_modules excluded)"
     OPENCODE_TARGET_READY=1
 }
@@ -1577,7 +1421,6 @@ if [ "$SKIP_OPENCODE" != "1" ]; then
     fi
 fi
 install_claude_mirror
-sync_learning_runtime || exit 1
 install_notify_scripts
 
 # The repo-path export, model/reasoning defaults, and the global settings-sync

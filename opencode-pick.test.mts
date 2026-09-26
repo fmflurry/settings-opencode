@@ -456,36 +456,6 @@ test("diagnostics omit ambient learning-model and control-bearing values", () =>
   assert.doesNotMatch(capture.stderr, /\u001b/);
 });
 
-test("learning-reviewer keeps its ambient pinned model across profiles", () => {
-  const pinnedModel = "ollama/qwen2.5-coder:7b-instruct";
-  const profileModels = [
-    "openai/gpt-5.4",
-    "mistral/mistral-medium-2604",
-  ];
-
-  for (const selectedModel of profileModels) {
-    const capture = launch(
-      {
-        OPENCODE_MODEL_CONDUCTOR: selectedModel,
-        OPENCODE_MODEL_SUBAGENT_MINI: selectedModel,
-        OPENCODE_MODEL_SUBAGENT_PLANNER: selectedModel,
-        OPENCODE_MODEL_SUBAGENT_WORKER: selectedModel,
-        OPENCODE_REASONING_CONDUCTOR: "",
-        OPENCODE_REASONING_PRIMARY: "",
-        OPENCODE_REASONING_SECONDARY: "",
-        OPENCODE_REASONING_TERTIARY: "",
-      },
-      { ambient: { OPENCODE_MODEL_LEARNING: pinnedModel } },
-    );
-
-    assert.equal(
-      capture.learningModel,
-      pinnedModel,
-      `${selectedModel} must retain the learning-reviewer pin`,
-    );
-  }
-});
-
 test("repository Mistral profile clears every reasoning tier despite ambient values", () => {
   const capture = launch(
     {},

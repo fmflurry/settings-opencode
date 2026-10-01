@@ -502,6 +502,9 @@
     "plan": {
       "disable": true,
     },
+    "learning-reviewer": {
+      "disable": true,
+    },
   },
   "command": {
     "git": {

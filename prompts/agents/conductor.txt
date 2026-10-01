@@ -37,6 +37,7 @@ Before any `read`/`grep`/`glob`/`bash`, check the routing table. If the request 
 | Docs, README, markdown, prose                              | `task` → `writer`        |
 | Other code review on diff or PR                             | `task` → `code-reviewer` |
 | Judge/purge code comments (LLM-as-a-judge)                 | `task` → `comment-judge` |
+| Kill comments in a diff/scope and flag refactor targets (MUST KILL) | `task` → `haruspex-commentorum` (or skill `/interfectio-commentarum`) |
 | Security review                                            | `task` → `security-reviewer` |
 | Git commit/branch/push/PR                                  | `task` → `git-specialist`|
 | Preparing a PR: commit split / PR body / PR creation        | `task` → `git-specialist` (sequences atomic commits itself) |

@@ -501,13 +501,7 @@ sync_skills() {
 
 # ------------------------------ env-var block --------------------------------
 
-# Resolve the launcher path the installer actually deployed to $TARGET_OPENCODE.
-# Uniform across all install modes (global, --local, WSL) — no special-casing.
-opencode_launcher_path() { printf '%s\n' "$TARGET_OPENCODE/bin/opencode-pick"; }
-
-# $1 = absolute path to the deployed opencode-pick launcher.
 env_block_content() {
-    local launcher_path="${1:?env_block_content: launcher_path argument required}"
     cat <<'EOF'
 # Added by settings-opencode installer. Edit values to match your provider.
 # To remove this block, run: settings-sync --uninstall
@@ -523,7 +517,6 @@ export OPENCODE_REASONING_SECONDARY="medium"
 export OPENCODE_REASONING_TERTIARY="low"
 EOF
     printf 'export SETTINGS_OPENCODE_REPO="%s"\n' "$REPO_DIR"
-    printf 'alias ocp="%s"\n' "$launcher_path"
 }
 
 # Insert or replace the marker-fenced block in $1 (rc file).
@@ -548,7 +541,7 @@ write_env_block() {
 
     {
         printf "\n%s\n" "$MARKER_START"
-        env_block_content "$(opencode_launcher_path)"
+        env_block_content
         printf "%s\n" "$MARKER_END"
     } >> "$rc"
     ok "wrote env block to $rc"
@@ -816,7 +809,6 @@ install_repo_link() {
         handle_nested_opencode_claude
         copy_tree "$REPO_DIR" "$TARGET_OPENCODE"
         ensure_opencode_runtime_dirs
-        [ -f "$TARGET_OPENCODE/bin/opencode-pick" ] && chmod +x "$TARGET_OPENCODE/bin/opencode-pick"
         ok "copied $REPO_DIR -> $TARGET_OPENCODE (node_modules excluded)"
         OPENCODE_TARGET_READY=1
         return 0
@@ -862,7 +854,6 @@ install_repo_link() {
 
     copy_tree "$REPO_DIR" "$TARGET_OPENCODE"
     ensure_opencode_runtime_dirs
-    [ -f "$TARGET_OPENCODE/bin/opencode-pick" ] && chmod +x "$TARGET_OPENCODE/bin/opencode-pick"
     ok "copied $REPO_DIR -> $TARGET_OPENCODE (node_modules excluded)"
     OPENCODE_TARGET_READY=1
 }
@@ -923,42 +914,8 @@ install_deps() {
     ok "deps installed"
 }
 
-# Warn about a legacy standalone opencode-pick binary. The managed 'ocp' alias
-# is now written as an absolute path, so PATH shadowing no longer breaks it —
-# but a stray script left over from an old install may still confuse `command
-# -v opencode-pick` or direct invocations. Never deletes anything.
-warn_legacy_opencode_pick_binary() {
-    local target="$1" legacy candidate
-
-    legacy="$HOME/.local/bin/opencode-pick"
-    if [ -e "$legacy" ] && [ "$legacy" != "$target" ]; then
-        warn "legacy launcher found at $legacy (differs from $target)"
-        info "the managed 'ocp' alias is an absolute path now, so this won't shadow it; remove or repoint it manually if unused:"
-        info "  rm \"$legacy\"   # or: ln -sf \"$target\" \"$legacy\""
-    fi
-
-    candidate="$(command -v opencode-pick 2>/dev/null || true)"
-    if [ -n "$candidate" ] && [ "$candidate" != "$target" ] && [ "$candidate" != "$legacy" ]; then
-        warn "an 'opencode-pick' binary on PATH ($candidate) differs from the installed launcher ($target)"
-        info "the managed 'ocp' alias already points at the absolute path above, so PATH shadowing is neutralized for 'ocp'; repoint or remove the stray binary manually if unused:"
-        info "  rm \"$candidate\"   # or: ln -sf \"$target\" \"$candidate\""
-    fi
-}
-
 install_env_vars() {
     step "Configuring shell environment variables"
-
-    local launcher
-    launcher="$(opencode_launcher_path)"
-    if [ ! -x "$launcher" ]; then
-        warn "launcher missing or not executable: $launcher — the 'ocp' alias will be written but won't work until this exists"
-    fi
-    local profile_file
-    profile_file="$(dirname "$launcher")/opencode-models.zsh"
-    if [ ! -f "$profile_file" ]; then
-        warn "opencode-models.zsh not found next to the launcher: $profile_file — opencode-pick profile resolution will fail"
-    fi
-    warn_legacy_opencode_pick_binary "$launcher"
 
     local rc
     rc="$(detect_shell_rc)"
@@ -966,7 +923,7 @@ install_env_vars() {
         warn "couldn't detect a known shell rc for SHELL=${SHELL:-unset}"
         info "add the following to your shell profile manually:"
         printf "\n"
-        env_block_content "$launcher" | sed 's/^/        /'
+        env_block_content | sed 's/^/        /'
         printf "\n"
         return 0
     fi
@@ -978,7 +935,7 @@ install_env_vars() {
     else
         info "skipped. Here's the block to paste manually:"
         printf "\n"
-        env_block_content "$launcher" | sed 's/^/        /'
+        env_block_content | sed 's/^/        /'
         printf "\n"
     fi
 }
@@ -1413,7 +1370,7 @@ if [ "$SKIP_OPENCODE" != "1" ]; then
             step "Shell environment variables — skipped (--local does not modify global rc)"
             info "To use per-project env vars, add the following to a .envrc or source it manually:"
             printf "\n"
-            env_block_content "$(opencode_launcher_path)" | sed 's/^/        /'
+            env_block_content | sed 's/^/        /'
             printf "\n"
         fi
     else

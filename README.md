@@ -281,30 +281,9 @@ Then drop a slash command:
 
 It should route to the `planner` sub-agent and return a structured plan without writing code.
 
-### Model profile picker (`ocp`)
+### Changing models
 
-`ocp` (alias for `opencode-pick`) launches OpenCode with a chosen model/reasoning profile. The canonical profiles are the `OPENCODE_MODEL_*` / `OPENCODE_REASONING_*` export blocks in `bin/opencode-models.zsh`, adjacent to `bin/opencode-pick`. By default, the installer deploys both files to `~/.config/opencode/bin/`. Local installs use `./.opencode/bin/`; WSL global installs target `/mnt/c/Users/<you>/.config/opencode/bin/` on the Windows side.
-
-**Usage:**
-
-```bash
-ocp                          # Interactive picker (fzf if installed, else numbered menu)
-ocp --list                   # List available profiles
-ocp --profile "<name>"       # Launch with a named profile
-ocp -- <args>                # Forward args to opencode
-```
-
-`reasoningEffort` controls the provider request option. `variant` is OpenCode's TUI-visible per-model reasoning state. A profile launch sets both to the same non-empty effort for each configured agent and synchronizes the conductor model's `variant` in `${XDG_STATE_HOME:-$HOME/.local/state}/opencode/model.json`.
-
-Verify a profile without making a billable model request:
-
-```bash
-ocp --profile "<name>" -- debug agent conductor
-```
-
-The conductor output should show matching `variant` and `reasoningEffort` values. Relaunch OpenCode through `ocp` after changing profiles so the selected profile resets the current TUI state.
-
-At launch, the picker preserves the ambient environment and injects per-agent settings through an `OPENCODE_CONFIG_CONTENT` overlay. Launcher diagnostics print only an explicit allowlist of model and reasoning variables; they never print `OPENCODE_CONFIG_CONTENT` or secret/token variables. **Bash-based, macOS/Linux/WSL only** (native Windows uses static `OPENCODE_*` env vars written by `bootstrap.ps1`).
+Edit the `OPENCODE_MODEL_*` / `OPENCODE_REASONING_*` exports in `~/.config/zsh/60-opencode-models.zsh`, then open a new shell.
 
 ### Updating
 

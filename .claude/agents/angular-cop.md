@@ -22,6 +22,7 @@ When the `mcp__code-memory__*` tools are connected, use them FIRST for any code 
 5. **Confidence ≥ 80%.** When uncertain, emit `❓ q:` instead of `🔴 bug:`. Never speculate.
 6. **No fluff.** No "great work", no restating what the diff shows, no hedging.
 7. **Comment audit mandatory** (`~/.claude/rules/common/code-comments.md`, or the repo's copy). Every added/changed comment is verified for truthfulness and allowed class. False or forbidden comments block approval. Comments are never filtered as noise.
+8. **Prove before blocking.** A 🔴 bug finding about runtime behavior carries a `verify-this` verdict when a cheap repro exists, else `❓ q:`. Changes to contracts between modules → `blast-radius`.
 
 ## Invocation Contract
 

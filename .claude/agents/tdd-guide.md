@@ -68,6 +68,8 @@ When re-dispatched after coder returns, re-run the suite and confirm GREEN. If s
 - Return a sharper GREEN brief to the orchestrator, or
 - Fix the test if the test itself was wrong (your responsibility).
 
+For a bug fix, your RED→GREEN pair is the baseline and treatment — report it in the `verify-this` output shape.
+
 ### 5. Refactor (IMPROVE)
 
 If impl-side refactor is needed, return the brief to the orchestrator for `coder`. You may refactor the test files yourself. Tests must stay green throughout.

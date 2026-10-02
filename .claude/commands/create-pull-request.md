@@ -116,6 +116,8 @@ URL:    <url>
 Branch: <head> → <base>
 ```
 
+Next step: watch checks with `loop-on-ci`.
+
 ## Safety
 
 - Never force-push to `main` / `master` / default branch.

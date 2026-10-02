@@ -60,6 +60,7 @@ Before any `Read`/`Grep`/`Glob`/`Bash`, check the routing table. If the request 
 | SQL / Postgres / Supabase / migrations                     | `Agent` → `database-reviewer` |
 | DB live-instance ops (health, vacuum, WAL, backups, pooling) | `Agent` → `postgres-dba` |
 | Codemap / doc gen / doc update                             | `Agent` → `doc-updater`   |
+| PR CI red / watch CI / PR review comments / rebase conflicts | Skills `fix-ci` / `loop-on-ci` / `get-pr-comments` / `fix-merge-conflicts`; gh/git → `git-specialist`; edits → `coder`/`build-error-resolver` |
 
 Two rules match → route the **writing/changing** work first; review/security after.
 
@@ -105,3 +106,5 @@ Subagents you dispatch CANNOT spawn further subagents — their `Agent` calls ar
 ## Post-Implementation Verification Gate
 
 After any subagent touched source code, independently re-run the build/typecheck/lint yourself before reporting success. Do NOT trust a subagent's self-reported "build passes". The harness is the source of truth.
+
+A green build shows it compiles, not that it works. When the user asks to prove a fix, behavior or performance claim, or a subagent's report asserts one, dispatch `verify-this` (to the subagent that owns the surface — `tdd-guide` for tests, `e2e-runner` for UI, `coder` for scripts). Relay the verdict verbatim; never upgrade INCONCLUSIVE. For multi-phase or unattended runs, keep a `show-your-work` trail.

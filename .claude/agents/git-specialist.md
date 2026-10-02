@@ -138,6 +138,8 @@ Stop and report if the chosen CLI or its authentication is missing.
   - azure:  `az repos pr list --source-branch <branch> --status active --output json`
 - Choose the base branch from the repository default branch when available, otherwise prefer `main`, then `master`.
 - Use a concise PR title aligned with the branch purpose and commit intent. Follow conventional commit format.
+- Rebasing or resolving conflicts follows the `fix-merge-conflicts` skill (backup branch, abort on doubt, `--force-with-lease=<branch>:<sha>` only with explicit consent); edits to conflicted files go back to the orchestrator for `coder`.
+- After a PR exists: CI checks → `loop-on-ci` / `fix-ci`; review feedback → `get-pr-comments`. You run `gh` and push; fixes go back to the orchestrator.
 
 ### Per-host commands
 

@@ -42,7 +42,8 @@ You MAY NOT return "done" without executing every step below in this order. Skip
 5. **Lint** on changed files: `eslint`, `ruff`, `clippy`, `golangci-lint`, `dotnet format --verify-no-changes`, etc.
 6. **Tests touching your changes only** (`npm test -- --findRelatedTests`, `pytest <paths>`, `cargo test -p <pkg>`, `go test ./<pkg>/...`, `dotnet test --filter <Name>`). Full suite is the orchestrator's job.
 7. **Enforcement self-check.** Re-scan your diff against the loaded `enforcement.md` BLOCK list for the stack(s) touched. If any BLOCK rule is violated, fix before reporting done — do not defer to review.
-8. **Comment self-check.** Run `bash scripts/check-added-comments.sh --worktree` (or `--file <path>` per file) if the repo provides that script; otherwise `git diff -U0 | grep -nE '^\+.*(//|/\*|#|<!--)'`. Delete every forbidden comment it reports. For each remaining added comment, verify it explains a non-obvious *why* and is true of the code as written. Delete any narration, changelog claims, or commented-out code. See `~/.claude/rules/common/code-comments.md` (or the repo's copy).
+8. **Behavior claim check.** If your report claims a behavior change, load `verify-this` and include its verdict block; otherwise write `Behavior claim: none`.
+9. **Comment self-check.** Run `bash scripts/check-added-comments.sh --worktree` (or `--file <path>` per file) if the repo provides that script; otherwise `git diff -U0 | grep -nE '^\+.*(//|/\*|#|<!--)'`. Delete every forbidden comment it reports. For each remaining added comment, verify it explains a non-obvious *why* and is true of the code as written. Delete any narration, changelog claims, or commented-out code. See `~/.claude/rules/common/code-comments.md` (or the repo's copy).
 
 ### Evidence requirement
 

@@ -70,8 +70,9 @@ You MUST load `skills/dotnet-cop/SKILL.md` (or `~/.claude/skills/dotnet-cop/SKIL
 | `Infrastructure/Adapter/*.cs` | ports-adapters |
 | `*DbContext.cs`, `Migrations/**` | ef-core (+ RLS checks if table has `tenant_id`) |
 | any `.cs` | (apply common C# strictness inline) |
+| `*Tests.cs` | test-behavior-not-implementation |
 
-If `scope` is set, intersect — except `ddd`, which is auto-enabled whenever the diff touches domain files.
+If `scope` is set, intersect — except `ddd`, which is auto-enabled whenever the diff touches domain files. Also load `test-behavior-not-implementation` when the diff touches `*Tests.cs` files.
 
 ### 5. Static review per file
 For each changed file:

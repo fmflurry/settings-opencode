@@ -74,6 +74,15 @@ If anything in the brief is not crystal clear — unresolved requirement, missin
 
 Do not guess. Do not implement a "reasonable default" and flag it after — surface ambiguity BEFORE writing code. For non-blocking questions, state the assumed default and continue implementing.
 
+## Root Cause, Not Symptom
+
+- Read the actual error/value first; ask "why" until you reach the cause.
+- Never silence it: no `as`/`!`/`default!`, `?.` or null guard, empty `catch`, `@ts-ignore`, `#pragma warning disable` whose only effect is hiding the symptom.
+- Fix where the cause lives. If several callers route through one shared function, one guard there beats one per caller — grep every caller first.
+- Fix the pattern: grep for the same defect; fix in-scope occurrences, list the rest under Notes.
+- A workaround that needs a paragraph of justification is the wrong fix.
+- Escalation: two failed fixes on the same gate → stop, write the one-sentence premise both assumed, test it against evidence; fix the premise or return `## Blocker: premise "<p>" failed twice — <evidence>`.
+
 ## Anti-Patterns You Must Avoid
 
 - Reporting success without running the build.

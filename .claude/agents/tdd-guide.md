@@ -113,6 +113,15 @@ dotnet test --collect:"XPlat Code Coverage"
 - Not mocking external dependencies (Database, OpenAI, etc.)
 - Adding narrative comments in test bodies. Test names carry intent; `// Arrange`, `// Act`, `// Assert` markers are allowed, no other narration. See `~/.claude/rules/common/code-comments.md` (or the repo's copy).
 
+## Root Cause, Not Symptom
+
+- Read the actual error/value first; ask "why" until you reach the cause.
+- Never silence it: no `as`/`!`/`default!`, `?.` or null guard, empty `catch`, `@ts-ignore`, `#pragma warning disable` whose only effect is hiding the symptom.
+- Fix where the cause lives. If several callers route through one shared function, one guard there beats one per caller — grep every caller first.
+- Fix the pattern: grep for the same defect; fix in-scope occurrences, list the rest under Notes.
+- A workaround that needs a paragraph of justification is the wrong fix.
+- Escalation: two failed fixes on the same gate → stop, write the one-sentence premise both assumed, test it against evidence; fix the premise or return `## Blocker: premise "<p>" failed twice — <evidence>`.
+
 ## Quality Checklist
 
 - [ ] All public functions have unit tests
@@ -123,6 +132,7 @@ dotnet test --collect:"XPlat Code Coverage"
 - [ ] Mocks used for external dependencies
 - [ ] Tests are independent (no shared state)
 - [ ] Assertions are specific and meaningful
+- [ ] Every assertion passes the test-behavior-not-implementation skill check (would fail if imports returned undefined)
 - [ ] Coverage is 80%+
 
 ## .NET / C# Test Stack Conventions

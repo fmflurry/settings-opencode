@@ -70,8 +70,9 @@ You MUST load `skills/angular-cop/SKILL.md` (or `~/.claude/skills/angular-cop/SK
 | `*.port.ts`, `*.adapter.ts` | clean-architecture |
 | any `.ts` | typescript-strict |
 | domain/**/*.ts | angular-ddd |
+| `*.spec.ts` | test-behavior-not-implementation |
 
-If `scope` is set, intersect. If --scope includes `ddd` and domain code has changed, load [[angular-ddd]] (review-checklist.md) for DDD tactical and strategic pattern checks.
+If `scope` is set, intersect. If --scope includes `ddd` and domain code has changed, load [[angular-ddd]] (review-checklist.md) for DDD tactical and strategic pattern checks. Also load `test-behavior-not-implementation` when the diff touches `*.spec.ts` files.
 
 ### 5. Static review per file
 For each changed file:

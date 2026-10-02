@@ -80,6 +80,7 @@ const result = await db.query(query, [userId]);
 - **Missing tests** — New code paths without test coverage
 - **Dead code** — Commented-out code, unused imports, unreachable branches. (See Comments section for comment auditing — never filtered as noise.)
 - **Import hygiene** — Duplicate imports from the same module, repeated specifiers, or split type/value imports that can be merged safely. Treat TypeScript/Sonar warnings like `typescript:S3863` as auto-fix candidates.
+- **Changed/added tests:** Load the `test-behavior-not-implementation` skill; mock-only, weak, self-referential, and constant-pin tests are HIGH.
 
 ```typescript
 // BAD: Deep nesting + mutation

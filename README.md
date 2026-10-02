@@ -41,15 +41,52 @@ A hardened primary `conductor` agent backed by **25 specialist sub-agents**, wir
 | Custom tool files            | 4     | `run-tests`, `check-coverage`, `security-audit`, plus the `index.ts` barrel             |
 | TUI plugins                  | 2     | `llm-metrics` sidebar + `panda-banner`                                                  |
 
-What that buys you:
+**Highlighted subagents** — full roster in [Agents](#agents-en).
 
-- **Mandatory sub-agent delegation** from `conductor`: the primary has `write` and `edit` denied at the permission layer. The orchestrator cannot patch files — every change MUST go through `coder` (source code), `writer` (docs/markdown/HTML), `tdd-guide` (tests), or `git-specialist` (commits/PRs). Routing is **model-agnostic**: even open-weight models that ignore prose rules are mechanically forced to delegate.
-- **A front-loaded first-tool gate** in `prompts/agents/conductor.txt`: hard rules at the top, routing table second, six few-shot User → `task` examples (with explicit wrong-way contrasts) so literal models copy the right pattern.
-- **Slash commands** that force routing to the right specialist (`/plan`, `/tdd`, `/security`, `/cop-review`, …).
-- **Always-on instructions** loaded at session start — routing, question handling, CodeMemory-first orientation, verification gate, harness parity, brief contract, tool budget, comment discipline, git workflow, worktree safety, coding style, testing.
-- **OpenCode plugins** — `.env` secret-file guard, desktop notifications, LLM metrics, a tool-budget nudge, Mistral cache affinity, and CodeMemory nudges.
-- **Custom tools** — `run-tests`, `check-coverage`, `security-audit`.
-- **A `.claude/` mirror** — hooks, rule packs, agents, and skills, so Claude Code benefits from the same guardrails.
+| Name                | What it does                                | Why it's good                                                                     |
+| ------------------- | ------------------------------------------- | --------------------------------------------------------------------------------- |
+| `conductor`         | Primary orchestrator; `write`/`edit` denied | Even literal models must delegate — routing is enforced by permissions, not prose |
+| `planner`           | Turns requests into phased plans            | Surfaces dependencies and risks before code is written                            |
+| `coder`             | Writes and edits source code                | Only writer for application code, scoped to a brief                               |
+| `tdd-guide`         | Drives test-first cycles                    | RED-GREEN-REFACTOR with coverage; delegates implementation to `coder`             |
+| `code-reviewer`     | Reviews diffs before merge                  | Catches regressions and convention drift early                                    |
+| `security-reviewer` | Audits auth, secrets, and input             | Read-only findings; fixes routed to `coder`                                       |
+| `git-specialist`    | Sequences atomic commits and PRs            | Cohesion-first splits, Conventional Commits, no force-push                        |
+| `scout`             | Maps the repo before a dispatch             | Produces file manifests so briefs stay precise                                    |
+| `comment-judge`     | Judges added comments by rubric             | Flags false, stale, and noisy comments                                            |
+| `postgres-dba`      | Runs live PostgreSQL diagnostics            | Read-only advisory; mutating commands left for humans                             |
+
+**Highlighted skills** — full catalog in [Skills](#skills-en).
+
+| Name                               | What it does                                | Why it's good                                                   |
+| ---------------------------------- | ------------------------------------------- | --------------------------------------------------------------- |
+| `socratic-design`                  | Asks one dependency-safe question per round | Gates decisions before plans; no chained interrogation          |
+| `caveman`                          | Ultra-terse replies (~75% fewer tokens)     | Keeps full technical accuracy at a fraction of the context cost |
+| `verify-this`                      | Falsifiable verification of a claim         | Green means fresh evidence, not optimism                        |
+| `blast-radius`                     | Traces what a change can break              | Proves safety with real code, beyond the diff                   |
+| `why`                              | Cites design rationale from history         | Searches source control and evidence MCPs in parallel           |
+| `chimera`                          | Runs parallel candidates, grafts the best   | Avoids locking in the wrong shape early                         |
+| `humanizer`                        | Strips AI tells from prose                  | Keeps writing sounding like a person wrote it                   |
+| `test-behavior-not-implementation` | Detects tests that cannot fail              | Catches mock-only and self-referential assertions               |
+| `show-your-work`                   | Keeps a per-decision log                    | Gives reviewers a trail for unattended runs                     |
+| `fix-ci`                           | Finds failing checks and fixes them         | Routes by failure type: build, test, or security                |
+| `config-sync`                      | Propagates harness config changes           | Keeps repo and live directories in step                         |
+| `openspec-propose`                 | Generates a full change proposal            | Design, specs, and tasks in one step                            |
+
+**Highlighted commands** — full list in [Slash commands](#commands-en).
+
+| Name           | What it does                      | Why it's good                                      |
+| -------------- | --------------------------------- | -------------------------------------------------- |
+| `/plan`        | Delegates to `planner` for a plan | Forces routing before any code is written          |
+| `/tdd`         | Runs a test-first cycle           | Same TDD guardrails, triggered on demand           |
+| `/cop-review`  | Pre-merge review of the branch    | Applies stack-specific checklists and runs lint    |
+| `/security`    | Security audit of the change      | Read-only findings; fixes routed to `coder`        |
+| `/git`         | Branch and commit operations      | Keeps git work in the specialist's hands           |
+| `/build-fix`   | Resolves build and type errors    | Focused loop until the build is green              |
+| `/orchestrate` | Multi-agent coordination          | Plans dependency order across specialists          |
+| `/verify`      | Verification loop                 | Checks the goal against concrete criteria          |
+| `/db-health`   | Read-only PostgreSQL health check | Surfaces vacuum, wraparound, and connection issues |
+| `/api-spec`    | Generates OpenAPI 3.1 specs       | One spec per bounded context, Zalando-style        |
 
 The two halves stand alone. Use the OpenCode side, the Claude Code mirror, or both — whichever you'd find useful.
 

@@ -439,7 +439,6 @@ copy_claude_allowlist() {
             --exclude='file-history' \
             --exclude='session-env' \
             --exclude='shell-snapshots' \
-            --exclude='homunculus' \
             --exclude='cache' \
             --exclude='data' \
             --exclude='*.log' \
@@ -510,7 +509,6 @@ export OPENCODE_MODEL_CONDUCTOR="myMistral/mistral-medium-2604"
 export OPENCODE_MODEL_SUBAGENT_PLANNER="myMistral/mistral-large-latest"
 export OPENCODE_MODEL_SUBAGENT_WORKER="myMistral/mistral-medium-latest"
 export OPENCODE_MODEL_SUBAGENT_MINI="myMistral/mistral-small-latest"
-export OPENCODE_MODEL_LEARNING="ollama/qwen2.5-coder:7b-instruct"
 export OPENCODE_REASONING_CONDUCTOR="high"
 export OPENCODE_REASONING_PRIMARY="high"
 export OPENCODE_REASONING_SECONDARY="medium"

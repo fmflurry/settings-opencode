@@ -544,12 +544,6 @@
     "plan": {
       "disable": true,
     },
-    "learn": {
-      "disable": true,
-    },
-    "learning-reviewer": {
-      "disable": true,
-    },
   },
   "command": {
     "git": {

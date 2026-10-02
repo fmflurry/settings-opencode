@@ -32,6 +32,8 @@ const bootstrapPath = join(repoRoot, "bootstrap.sh");
 const powerShellBootstrapPath = join(repoRoot, "bootstrap.ps1");
 const installerPath = join(repoRoot, "install.sh");
 const retiredInstallableLearningPaths = [
+  "commands/evolve.md",
+  "pending/skills/.gitkeep",
   "commands/learn-approve.md",
   "commands/learn-pending.md",
   "commands/learn-reject.md",

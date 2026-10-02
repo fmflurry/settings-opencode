@@ -668,6 +668,28 @@
       "agent": "postgres-dba",
       "subtask": true,
     },
+    "show-me": {
+      "description": "Explain a topic visually by producing a self-contained HTML artifact (diagram, infographic, or short slide deck) and opening it. Usage: /show-me <topic>",
+      "template": "{file:commands/show-me.md}\n\n$ARGUMENTS",
+      "agent": "writer",
+      "subtask": true,
+    },
+    "show-your-work": {
+      "description": "Keep a reviewable TSV decision trail for long-running or unattended work. Usage: /show-your-work [task-slug]",
+      "template": "{file:commands/show-your-work.md}\n\n$ARGUMENTS",
+      "agent": "conductor",
+    },
+    "comment-judge": {
+      "description": "Judge code comments against the forbidden/false/stale/narration/noise/keep rubric and emit structured findings. Usage: /comment-judge <path>",
+      "template": "{file:commands/comment-judge.md}\n\n$ARGUMENTS",
+      "agent": "comment-judge",
+      "subtask": true,
+    },
+    "interfectio-commentarum": {
+      "description": "Spawn Haruspex Commentorum, fix accepted comment findings, and offer encodings for claimed constraints. Usage: /interfectio-commentarum [path|diff]",
+      "template": "{file:commands/interfectio-commentarum.md}\n\n$ARGUMENTS",
+      "agent": "conductor",
+    },
   },
   "mcp": {
     "context7": {

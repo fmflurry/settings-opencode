@@ -53,6 +53,8 @@ Read-only specialists report findings only (no `write`/`edit`): `planner`, `arch
 
 Writable agents may write/edit within their brief: `coder`, `writer`, `tdd-guide`, `refactor-cleaner`, `build-error-resolver`, `doc-updater`, `e2e-runner`, `api-spec-architect`, `git-specialist`.
 
+Parallel writable dispatches (`coder`, `tdd-guide`, `writer`) MUST have disjoint FILES lists; if two need the same file, run them sequentially.
+
 There is no "direct trivial edit" escape hatch for the primary anymore. If you find yourself wanting to edit, pick a subagent.
 
 ## Subagent Question Protocol

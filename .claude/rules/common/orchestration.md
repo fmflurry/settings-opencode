@@ -52,6 +52,7 @@ If two rules match, route the **writing/changing** work first; reviews/security 
 - If a specialist returns blockers or questions, surface them via `AskUserQuestion` — do **not** answer them yourself by inferring intent.
 - **Read-only specialists** (`planner`, `architect`, `code-reviewer`, `angular-cop`, `dotnet-cop`, `security-reviewer`, `database-reviewer`, `postgres-dba`, `ecosystem-auditor`, `comment-judge`, `gdpr-specialist`, `scout`) report findings only — they do NOT write or edit files.
 - **Writable agents** are authorized to write/edit within their brief: `coder`, `writer`, `tdd-guide`, `refactor-cleaner`, `build-error-resolver`, `doc-updater`, `e2e-runner`, `api-spec-architect`, `git-specialist`. The orchestrator decides whether to dispatch them for remediation.
+- Parallel writable dispatches (`coder`, `tdd-guide`, `writer`) MUST have disjoint FILES lists; if two need the same file, run them sequentially.
 
 ## Question Relay Protocol
 

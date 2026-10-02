@@ -61,4 +61,4 @@ edits ≤ 5 | exploratory bash ≤ 3 | turns ≤ 25
 
 ## Loop Guard
 
-Two rejections on the same task (e.g., coder rejects brief twice) → conductor MUST dispatch `scout`, not re-dispatch the same coder with a guess.
+Two rejections on the same task (e.g., coder rejects brief twice) → conductor MUST dispatch `scout`, not re-dispatch the same coder with a guess. Before re-dispatching, write the premise both attempts shared into the brief's CONTEXT ALREADY RESOLVED field as "rejected premise: …".

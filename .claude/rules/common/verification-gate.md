@@ -23,13 +23,15 @@ You MAY NOT tell the user "done", "complete", "ready", "ready to merge", or rend
    - Java/Gradle: `./gradlew --offline compileJava compileTestJava -x test` (or `compileKotlin` for Kotlin)
    - .NET: `dotnet build --nologo -clp:ErrorsOnly --no-restore` (run `dotnet restore` first if `obj/` is missing); pass the explicit path for a solution: `dotnet build path/to/Solution.sln` or `dotnet build path/to/Solution.slnx` (SDK 9.0.200+ required for `.slnx`)
 3. When a `scripts.lint` entry exists in `package.json`, run `<pm> run lint` (auto-detect package manager: `bun.lock`/`bun.lockb` → `bun`; `pnpm-lock.yaml` → `pnpm`; `yarn.lock` → `yarn`; else `npm`). Lint errors are **blocking** — treat them exactly like build errors: fix before claiming "done".
-4. Paste the last ~15 lines of each command's actual output into your reply, OR explicitly state `n/a — <reason>`. No paraphrasing.
+4. When the diff changes behavior, also run the tests covering the changed files (e.g. `dotnet test --filter <Class>`, `npx vitest related <files> --run`, `npx jest --findRelatedTests <files>`) or use the `run` skill for UI changes; a compile proves nothing about behavior.
+5. Paste the last ~15 lines of each command's actual output into your reply, OR explicitly state `n/a — <reason>`. No paraphrasing.
 
 ## On failure
 
 - Build or lint errors caused by the diff in this turn → fix or dispatch the build-error-resolver subagent. Re-verify. Loop until green.
 - Errors pre-existing on the base branch → list under `## Pre-existing failures`, confirm via `git stash && <cmd>`, then proceed without claiming you fixed them.
 - Two consecutive resolver passes that fail to reduce error count → stop, escalate to the user with the residual error log.
+- Before a third fix attempt on the same failure, write down the one-sentence premise the failed fixes shared and check it against the actual error; fix the premise, not a third variant.
 
 ## Skip conditions
 

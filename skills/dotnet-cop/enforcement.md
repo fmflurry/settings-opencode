@@ -18,6 +18,7 @@ Review fails when any of these is present. Corresponds to 🔴 bug, 🟠 sec, an
 | **EF leaking out of Infrastructure** | EF namespace or `DbContext` in Domain or Application files | Infrastructure must not leak into Domain; Domain must be testable without a real database |
 | **Raw SQL with string interpolation** (SQL injection) | `FromSqlRaw($"...")` or `ExecuteSqlRaw($"...")` with interpolated variable | Gate-enforced: Roslyn CA2100 flags this |
 | **Null-forgiving without guard** | CS8600/8602/8604 unsuppressed — unjustified `!` on nullable | Gate-enforced: `<Nullable>enable</Nullable>` required |
+| **Non-exhaustive switch on enum/closed hierarchy** | switch expression with `_ => throw`/default arm hiding variants, or CS8509/CS8524 warnings ignored | New variant must break the build; promote CS8509 via `<WarningsAsErrors>` |
 | **Missing CancellationToken on async I/O** | `async` method accepts `CancellationToken` but doesn't pass to `SaveChangesAsync`, `ToListAsync`, etc. | Gate-enforced: Roslyn CA2016 |
 | **Single shared `DbContext` across modules** | One `DbContext` references entity types from multiple modules | Couples modules at infrastructure; prevents independent schema evolution |
 | **Cross-schema access** | Query/migration violates module schema isolation (`SELECT ... FROM <other_context>.table`) | Modules must communicate via events, never via shared database |
@@ -66,6 +67,7 @@ Advisory findings. Reported as 🟡 risk or 🔵 nit. Do not block on their own 
 
 | Rule | Detection | Why |
 |---|---|---|
+| **Record/DTO duplicating a Contracts or entity shape** | `record` or `class` mirrors fields from an `IModule` contract type, EF entity, or OpenAPI spec | Derive via mapping/projection so schema drift fails compilation; see `ddd-type-duplication-across-layers`. |
 | **Missing `.AsNoTracking()` on read-only query paths** | EF query never calls `SaveChangesAsync` but tracking is enabled | Unnecessary tracking overhead; identity map grows unboundedly |
 | **N+1 query pattern** | Loop executing one query per row; `.Select` triggering lazy navigation without `.Include` | O(N) round-trips instead of O(1) |
 | **Lazy loading enabled without justification** | `UseLazyLoadingProxies()` not explicitly permitted by AGENTS.md | Makes N+1 invisible until production |

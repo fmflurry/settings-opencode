@@ -10,6 +10,8 @@ Run verification loop to validate the implementation: $ARGUMENTS
 
 ## Your Task
 
+If $ARGUMENTS names a specific claim, use `verify-this` and return its verdict instead of the checklist below.
+
 Execute comprehensive verification:
 
 1. **Type Check**: `npx tsc --noEmit`

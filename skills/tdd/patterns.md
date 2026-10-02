@@ -31,11 +31,11 @@ describe('Button Component', () => {
     expect(screen.getByText('Click me')).toBeInTheDocument()
   })
 
-  it('calls onClick when clicked', () => {
+  it('calls onClick when clicked with item id', () => {
     const handleClick = jest.fn()
-    render(<Button onClick={handleClick}>Click</Button>)
+    render(<Button id="item-42" onClick={handleClick}>Click</Button>)
     fireEvent.click(screen.getByRole('button'))
-    expect(handleClick).toHaveBeenCalledTimes(1)
+    expect(handleClick).toHaveBeenCalledWith('item-42')
   })
 })
 ```
@@ -135,6 +135,7 @@ Coverage thresholds in package.json:
 // Testing internal state instead of behavior
 expect(component.state.count).toBe(5)
 ```
+- See also: [test-behavior-not-implementation](/skills/test-behavior-not-implementation/) for mock-only, weak, and self-referential assertions.
 
 ### ✅ CORRECT: User-Visible Behavior
 ```typescript

@@ -44,6 +44,7 @@ When requirements, scope, or constraints are ambiguous:
 - Identify affected components
 - Review similar implementations
 - Consider reusable patterns
+- Refactors, renames, deletions, schema/migration, contracts between modules or shared kernel → run `blast-radius` and fold its Risks/Cleared into Risks & Mitigations
 
 ### 3. Step Breakdown
 

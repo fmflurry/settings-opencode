@@ -87,3 +87,11 @@ User: "Plan and implement a pagination util with tests." → sequential: `task` 
 - Independent specialists in **parallel** (e.g., code-reviewer + security-reviewer on the same diff).
 - After a subagent returns, synthesize for the user — don't dump raw output.
 - Subagent returns a blocker/question → follow `instructions/question-handling.md` (BLOCKING vs NON-BLOCKING). Do not answer by inference.
+
+## Behavior Claims & Verification
+
+A green build shows it compiles, not that it works. When the user asks to prove a fix, behavior or performance claim, or a subagent's report asserts one, dispatch `verify-this` (to the agent that owns the surface — `tdd-guide` for tests, `e2e-runner` for UI, `coder` for scripts). Relay the verdict verbatim; never upgrade INCONCLUSIVE. For multi-phase or unattended runs, keep a `show-your-work` trail.
+
+## Routing for CI & Git Issues
+
+PR CI red, watch CI, PR review comments, rebase conflicts → use skills `fix-ci`, `loop-on-ci`, `get-pr-comments`, `fix-merge-conflicts` as appropriate; gh/git workflow → `task` → `git-specialist`; code edits → `coder` or `build-error-resolver`.

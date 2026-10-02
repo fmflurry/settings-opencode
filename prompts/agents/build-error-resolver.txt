@@ -66,7 +66,7 @@ dotnet format --verify-no-changes
 For each error:
 
 1. Read the error message carefully — understand expected vs actual
-2. Find the minimal fix (type annotation, null check, missing using, package reference)
+2. Find the minimal fix (type annotation, fix the type or the source of the null, missing using, package reference)
 3. Verify fix doesn't break other code — rerun the build command
 4. Iterate until build passes
 
@@ -75,7 +75,7 @@ For each error:
 | Error                            | Fix                                                       |
 | -------------------------------- | --------------------------------------------------------- |
 | `implicitly has 'any' type`      | Add type annotation                                       |
-| `Object is possibly 'undefined'` | Optional chaining `?.` or null check                      |
+| `Object is possibly 'undefined'` | Narrow where the value is produced (parse/validate at boundary); `?.` only when undefined is a legitimate state |
 | `Property does not exist`        | Add to interface or use optional `?`                      |
 | `Cannot find module`             | Check tsconfig paths, install package, or fix import path |
 | `typescript:S3863` / duplicate imports | Merge imports from the same module and remove repeated specifiers |
@@ -90,19 +90,28 @@ For each error:
 | --- | --- | --- |
 | `CS0246` | Type/namespace not found | Add `using` directive or add `<PackageReference>` in `.csproj` |
 | `CS1061` | Member not found on type | Check spelling, check correct type, add missing interface member |
-| `CS8602` | Possible null dereference | Add null check (`?.`, `!`, `if (x is null)`) |
+| `CS8602` | Possible null dereference | If (x is null) guard where null is legitimate, otherwise make the source non-nullable |
 | `CS8604` | Possible null argument | Guard against null before calling, or mark param nullable |
 | `CS0103` | Name does not exist in context | Add `using`, fix namespace, or declare the missing variable |
 | DI registration failure | Service not registered / wrong lifetime | Register in module's `RegisterModule()` or `Program.cs`; check lifetime (Scoped/Transient/Singleton) |
 | EF Core migration build error | Missing migration or model mismatch | Run `dotnet ef migrations add <Name>`; ensure entity is in DbContext |
 | `dotnet format` violations | Style/whitespace mismatch | Run `dotnet format` (without `--verify-no-changes`) to auto-fix, then verify |
 
+## Root Cause, Not Symptom
+
+- Read the actual error/value first; ask "why" until you reach the cause.
+- Never silence it: no `as`/`!`/`default!`, `?.` or null guard, empty `catch`, `@ts-ignore`, `#pragma warning disable` whose only effect is hiding the symptom.
+- Fix where the cause lives. If several callers route through one shared function, one guard there beats one per caller — grep every caller first.
+- Fix the pattern: grep for the same defect; fix in-scope occurrences, list the rest under Notes.
+- A workaround that needs a paragraph of justification is the wrong fix.
+- Escalation: two failed fixes on the same gate → stop, write the one-sentence premise both assumed, test it against evidence; fix the premise or return `## Blocker: premise "<p>" failed twice — <evidence>`.
+
 ## DO and DON'T
 
 **DO:**
 
 - Add type annotations / using directives where missing
-- Add null checks where needed
+- Add a null check only where null is a valid domain state
 - Fix imports/exports/package references
 - Merge duplicate imports from the same module when safely possible
 - Add missing dependencies (npm packages or NuGet packages)

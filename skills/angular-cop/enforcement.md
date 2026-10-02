@@ -20,6 +20,7 @@ Canonical severity list for `angular-cop` and the coder self-check.
 | Clean Architecture boundary violation — domain importing framework or infrastructure | `import { … } from '@angular/…'` or `'rxjs'` inside `domain/` · same plugin | Domain is pure TypeScript. Zero Angular or HTTP dependencies. See [[angular-cop-clean-architecture]]. |
 | Non-null assertion `!` on uncertain values | Grep `\b!\b` on property access/function results · ESLint `@typescript-eslint/no-non-null-assertion` | `!` suppresses compiler checks silently. Prefer explicit narrowing or throwing with a clear message. |
 | Unjustified `as` cast bypassing narrowing | `as SomeType` without a preceding type guard · Code review only (ESLint `@typescript-eslint/consistent-type-assertions` at `warn` level) | Casts hide type errors; the bug surfaces at runtime. |
+| Non-exhaustive `switch` on a union/enum | new/changed `switch` lacking a `never`-typed default (`const _exhaustive: never = x`) · ESLint `@typescript-eslint/switch-exhaustiveness-check` | A new variant compiles silently and falls through at runtime. |
 | Missing `ChangeDetectionStrategy.OnPush` on stateful components | Check `@Component({ changeDetection: … })` absence on components that read facade signals or have `input()` bindings | Without OnPush, Angular runs full tree checks on every browser event. With signals, OnPush is both correct and mandatory for performance. |
 | Inline component template via `template:` property | Grep for `template: \`\|'` inside `@Component({…})` blocks in `*.component.ts` files | External `templateUrl` required. Inline templates prevent HTML tooling, bloat the component class, and obscure git diffs. Always use `templateUrl: './x.component.html'`. |
 | **False or stale comment** | Comment asserts behavior the code does not perform (e.g., "thread-safe" without synchronization); or comment true at write time but made false by subsequent diff changes | Truthfulness is non-negotiable. Comments are code documentation and must match reality, or they become bugs. See `~/.claude/rules/common/code-comments.md` §Truthfulness clause. |
@@ -33,6 +34,7 @@ Canonical severity list for `angular-cop` and the coder self-check.
 
 | Rule | How to detect | Why |
 |---|---|---|
+| Hand-rolled type duplicating a schema-owned shape | interface in `infrastructure/api/{request,response}` mirroring an OpenAPI/DTO shape field by field | Derive (generated client, `Pick`/`Omit`, schema `infer`) so drift fails compilation; see `ddd-type-duplication-across-layers`. |
 | Signal name ends in `$` | Grep `\$ =.*signal(` | `$` is the RxJS stream convention. Signals should not carry it. |
 | `WritableSignal<T>` exposed on facade public API | Look for `readonly x: WritableSignal<T>` or `x = signal<T>(…)` (non-private) | Facades expose read-only signals. Use `.asReadonly()`. |
 | `input()` / `output()` not used in new Angular 16+ code | `@Input()` / `@Output()` decorators in new components | Prefer signal inputs/outputs. Flag only on newly added code, not legacy. |

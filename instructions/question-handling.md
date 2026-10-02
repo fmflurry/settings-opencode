@@ -62,6 +62,8 @@ Before surfacing ANY blocking question to user:
    - Why: reasoning
    - If opposite: what changes
 
+Reversible work (edits on a branch, read-only checks) proceeds on the stated default; irreversible actions (push, delete, worktree removal, live-config sync, prod/DB mutation) need explicit user confirmation.
+
 ## Subagent Gate
 
 If your brief is ambiguous:

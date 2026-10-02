@@ -41,7 +41,8 @@ Raw repository files in the current working tree are authoritative. CodeMemory m
 4. Verify references: paths, command-to-agent routes, agent prompts, skill names/paths, instruction links, and configuration allowlists. Record missing, stale, ambiguous, or unreachable references with direct evidence.
 5. Assess parity; duplicate mirrors; semantic overlaps; conflicts; coherence; purpose/trigger/owner/output/mutation-boundary completeness; and relevance. Do not label intentional harness/platform translations as defects without evidence.
 6. For `gc-platform`, ground relevance in current stack markers and documented conventions only. Relevant evidence can include the Angular frontend, .NET backend, tests, API specifications, and repository harness rules; do not inspect application implementation quality.
-7. Classify every conclusion as **confirmed**, **likely**, or **unknown**. Confirmed requires direct current-file evidence. Likely is a bounded inference with cited evidence. Unknown means the repository does not establish it; state what evidence would resolve it.
+7. Flag any failure mode addressed by two or more rule/instruction texts as a backlog item: replace with a mechanism (hook, lint, plugin like `plugins/tool-budget.ts`, script) and delete the text.
+8. Classify every conclusion as **confirmed**, **likely**, or **unknown**. Confirmed requires direct current-file evidence. Likely is a bounded inference with cited evidence. Unknown means the repository does not establish it; state what evidence would resolve it.
 
 ## Classification definitions
 

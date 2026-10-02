@@ -62,6 +62,10 @@ Example: `dotnet-cop` loads `[[dotnet-clean-architecture]]` (and `[[dotnet-ddd]]
 | One skill, two unrelated stacks | Confusing scope (e.g., "TypeScript + Rust patterns") | Split into two skills |
 | Reference file no public path | User can't access it | Ensure skill body links it or mention in description |
 
+## Encode Lessons in Structure
+
+A second written rule for the same failure is a signal: build a mechanism instead of another rule. Strength order: **unrepresentable state** (makes the error impossible) > **lint rule / CI gate** (fails the build) > **shared helper / utility** (reusable code) > **runtime check** (guards at the boundary) > **prose rule** (text). One-off slip → add a note. Recurring pattern → encode it: a hook, linter, plugin, or script, then delete the duplicated rule file. See `plugins/tool-budget.ts` for a worked example.
+
 ## Maintenance Checklist: Editing a Skill
 
 **Before committing changes:**

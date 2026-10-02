@@ -16,9 +16,10 @@ When invoked:
     - **.NET / C#**: if `*.sln`/`*.csproj`/`global.json` is present but no `package.json`, run `dotnet format --verify-no-changes`. Treat any format violation as a **[HIGH] Lint** blocking finding. Load the `dotnet-cop` skill for deep C# style guidance; do not invoke its agent.
    - If neither applies, skip lint and note `n/a — no recognized lint target`.
 3. **Understand scope** — Identify which files changed, what feature/fix they relate to, and how they connect.
-4. **Read surrounding code** — Don't review changes in isolation. Read the full file and understand imports, dependencies, and call sites.
+4. **Read surrounding code** — Don't review changes in isolation. Read the full file and understand imports, dependencies, and call sites. Deleted or renamed public symbols, or changes to contracts between modules (ports, integration events, DTOs, DB schema/migrations, shared kernel) — dispatch `blast-radius` to map impact.
 5. **Apply review checklist** — Work through each category below, from CRITICAL to LOW.
 6. **Report findings** — Use the output format below. Only report issues you are confident about (>80% sure it is a real problem). For each issue, include a clear "Fix" recommendation that `coder` can act on without further interpretation.
+7. **Behavior claim verification** — A CRITICAL or HIGH finding about runtime behavior that a cheap local command can disprove → dispatch `verify-this`; NOT VERIFIED → drop it or downgrade to `❓`.
 
 ## Confidence-Based Filtering
 
@@ -73,6 +74,7 @@ const result = await db.query(query, [userId]);
 - **Missing tests** — New code paths without test coverage
 - **Dead code** — Commented-out code, unused imports, unreachable branches. (See Comments section for comment auditing — never filtered as noise.)
 - **Import hygiene** — Duplicate imports from the same module, repeated specifiers, or split type/value imports that can be merged safely. Treat TypeScript/Sonar warnings like `typescript:S3863` as auto-fix candidates.
+- **Changed/added tests:** Load the `test-behavior-not-implementation` skill; mock-only, weak, self-referential, and constant-pin tests are HIGH.
 
 ```typescript
 // BAD: Deep nesting + mutation

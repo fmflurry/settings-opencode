@@ -112,6 +112,8 @@ Full canonical spec (cohesion rule, counting scope, size-signal thresholds, lega
 - If a PR already exists for the branch, return that URL instead of creating a duplicate.
 - Choose the base branch from the repository default branch when available, otherwise prefer `main`, then `master`.
 - Use a concise PR title aligned with the branch purpose and commit intent.
+- Rebasing or resolving conflicts follows the `fix-merge-conflicts` skill (backup branch, abort on doubt, `--force-with-lease=<branch>:<sha>` only with explicit consent); edits to conflicted files go back to the orchestrator for `coder`.
+- After a PR exists: CI checks → `loop-on-ci` / `fix-ci`; review feedback → `get-pr-comments`. You run `gh` and push; fixes go back to the orchestrator.
 
 ## Safety Rules
 

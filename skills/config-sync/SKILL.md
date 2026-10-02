@@ -133,6 +133,10 @@ diff /Users/fmflurry/Workspace/settings-opencode/opencode.jsonc ~/.config/openco
 
 Propagation is complete when the edited files appear in their respective target locations.
 
+## Encode Lessons in Structure
+
+A second written rule for the same failure is a signal: build a mechanism instead of another rule. Strength order: **unrepresentable state** (makes the error impossible) > **lint rule / CI gate** (fails the build) > **shared helper / utility** (reusable code) > **runtime check** (guards at the boundary) > **prose rule** (text). One-off slip → add a note. Recurring pattern → encode it: a hook, linter, plugin, or script, then delete the duplicated rule file.
+
 ## Important: Seed-Only Personal Files
 
 Files marked **seed-only** in the table above are populated only on first install. On subsequent reinstalls, `install.sh` preserves user edits in those files **by never overwriting them**.

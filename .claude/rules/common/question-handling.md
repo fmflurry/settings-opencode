@@ -27,8 +27,8 @@ Tag in output: `## Note: <question> (assumed: <default>)`
 
 ### On receiving blocking question:
 1. Attempt self-resolution: check repo (CodeMemory, codememory_claims, grep, read)
-2. If resolvable → answer it, re-dispatch with answer folded into brief
-3. If NOT resolvable → `ask` tool immediately
+2. If resolvable from cited repo/CodeMemory evidence (never inferred intent) → answer it, re-dispatch (`Agent`) with answer folded into brief
+3. If NOT resolvable → `AskUserQuestion` immediately
 
 ### On receiving non-blocking question:
 1. Add to session accumulator (keep list in memory)
@@ -53,9 +53,9 @@ Tag in output: `## Note: <question> (assumed: <default>)`
 Before surfacing ANY blocking question to user:
 1. `codememory_retrieve` — semantic search for answer
 2. `codememory_claims` — user preferences/decisions
-3. `grep`/`read` — verify exact files if CodeMemory is suggestive
-4. If REPO CAN ANSWER → answer it, fold into re-dispatch brief
-5. Only if REPO CANNOT ANSWER → `ask` tool with socratic-design shape:
+3. `Grep`/`Read` — verify exact files if CodeMemory is suggestive
+4. If REPO CAN ANSWER (cite the evidence; never infer intent) → answer it, fold into re-dispatch brief
+5. Only if REPO CANNOT ANSWER → `AskUserQuestion` with socratic-design shape:
    - Evidence: what you found
    - Question: single dependency-safe question
    - Recommended: your best answer

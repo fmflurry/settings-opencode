@@ -11,6 +11,10 @@
     "~/.config/opencode/instructions/brief-contract.md",
     "~/.config/opencode/instructions/tool-budget.md",
     "~/.config/opencode/instructions/code-comments.md",
+    "~/.config/opencode/instructions/git-workflow.md",
+    "~/.config/opencode/instructions/worktree-destruction-safety.md",
+    "~/.config/opencode/instructions/coding-style.md",
+    "~/.config/opencode/instructions/testing.md",
   ],
   "agent": {
     "conductor": {

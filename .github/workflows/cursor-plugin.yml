@@ -1,0 +1,43 @@
+name: cursor-plugin
+
+on:
+  push:
+    branches: [master]
+    paths: &paths
+      - '.claude/**'
+      - 'skills/**'
+      - 'commands/**'
+      - 'opencode.jsonc'
+      - 'scripts/cursor-plugin/**'
+      - 'scripts/build-cursor-plugin.mjs'
+      - 'plugins/**'
+      - '.cursor-plugin/**'
+  pull_request:
+    branches: [master]
+    paths: *paths
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install jq
+        run: sudo apt-get install -y jq
+      - name: Build plugin
+        run: node scripts/build-cursor-plugin.mjs
+      - name: Check plugin
+        run: node scripts/cursor-plugin/check.mjs
+      - name: Drift check
+        run: |
+          git add -N plugins/
+          git diff --exit-code -- plugins/ || { echo "plugins/ is out of date: run node scripts/build-cursor-plugin.mjs and commit"; exit 1; }
+      # No root package.json: ajv is installed into an untracked root node_modules so validate.mjs can resolve it.
+      - name: Install schema validator
+        run: npm install --no-save --no-package-lock ajv@8 ajv-formats
+      - name: Validate manifests
+        run: node scripts/cursor-plugin/validate.mjs
+      - name: Test hooks
+        run: bash scripts/cursor-plugin/test-hooks.sh

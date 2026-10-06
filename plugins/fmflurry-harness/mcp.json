@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "code-memory": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "flurryx-code-memory@latest",
+        "code-memory-mcp"
+      ],
+      "env": {
+        "CODE_MEMORY_PROJECT": "auto",
+        "CLAIMS_EXTRACTION": "true"
+      }
+    }
+  }
+}

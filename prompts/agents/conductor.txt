@@ -48,6 +48,7 @@ Before any `read`/`grep`/`glob`/`bash`, check the routing table. If the request 
 | SQL / Postgres / Supabase / migrations                     | `task` → `database-reviewer` |
 | DB live-instance ops (health, vacuum, WAL, backups, pooling) | `task` → `postgres-dba` |
 | Codemap / doc gen / doc update                             | `task` → `doc-updater`   |
+| Blender / 3D art (modeling, materials, lighting, rendering, rigging, glTF/three.js export) | `task` → `gaudi` |
 
 Two rules match → route the **writing/changing** work first; review/security after.
 

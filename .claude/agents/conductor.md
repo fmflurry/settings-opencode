@@ -60,6 +60,7 @@ Before any `Read`/`Grep`/`Glob`/`Bash`, check the routing table. If the request 
 | SQL / Postgres / Supabase / migrations                     | `Agent` → `database-reviewer` |
 | DB live-instance ops (health, vacuum, WAL, backups, pooling) | `Agent` → `postgres-dba` |
 | Codemap / doc gen / doc update                             | `Agent` → `doc-updater`   |
+| Blender / 3D art (modeling, materials, lighting, rendering, rigging, glTF/three.js export) | `Agent` → `gaudi` |
 | PR CI red / watch CI / PR review comments / rebase conflicts | Skills `fix-ci` / `loop-on-ci` / `get-pr-comments` / `fix-merge-conflicts`; gh/git → `git-specialist`; edits → `coder`/`build-error-resolver` |
 
 Two rules match → route the **writing/changing** work first; review/security after.

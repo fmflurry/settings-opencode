@@ -66,6 +66,7 @@
           "scout": "allow",
           "why-investigator": "allow",
           "why-synthesizer": "allow",
+          "gaudi": "allow",
         },
       },
     },

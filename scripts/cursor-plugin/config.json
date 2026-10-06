@@ -1,0 +1,41 @@
+{
+  "name": "fmflurry-harness",
+  "displayName": "fmflurry Harness",
+  "description": "Conductor routing, specialist agents, skills, commands, rules and MCP servers from the fmflurry harness.",
+  "version": "0.1.0",
+  "homepage": "https://github.com/fmflurry/settings-opencode/tree/master/plugins/fmflurry-harness",
+  "repository": "https://github.com/fmflurry/settings-opencode",
+  "keywords": ["agents", "conductor", "subagents", "skills", "rules", "hooks", "mcp", "code-memory"],
+  "category": "developer-tools",
+  "tags": ["orchestration", "routing", "workflow"],
+  "models": { "opus": "inherit", "sonnet": "inherit", "haiku": "fast", "default": "inherit" },
+  "rules": {
+    "always": [
+      "common/agents", "common/brief-contract", "common/code-comments", "common/codebase-exploration",
+      "common/coding-style", "common/git-workflow", "common/harness-parity", "common/hooks",
+      "common/orchestration", "common/patterns", "common/performance", "common/question-handling",
+      "common/security", "common/testing", "common/tool-budget", "common/verification-gate",
+      "common/worktree-destruction-safety"
+    ],
+    "requested": [
+      "typescript/coding-style", "typescript/hooks", "typescript/patterns",
+      "typescript/security", "typescript/testing"
+    ],
+    "drop": []
+  },
+  "hooks": {
+    "include": ["pre-tool-use.sh", "rtk-rewrite.sh", "prefer-code-memory.sh", "tool-budget.sh", "stop.sh", "subagent-stop.sh"]
+  },
+  "cursorHookEvents": [
+    "sessionStart", "sessionEnd", "preToolUse", "postToolUse", "postToolUseFailure", "subagentStart", "subagentStop",
+    "beforeShellExecution", "afterShellExecution", "beforeMCPExecution", "afterMCPExecution", "beforeReadFile",
+    "afterFileEdit", "beforeSubmitPrompt", "preCompact", "stop", "afterAgentResponse", "afterAgentThought",
+    "beforeTabFileRead", "afterTabFileEdit", "workspaceOpen"
+  ],
+  "pluginKeys": [
+    "name", "displayName", "description", "version", "minClientVersions", "author", "publisher",
+    "homepage", "repository", "license", "logo", "keywords", "category", "tags", "commands",
+    "agents", "skills", "rules", "hooks", "variables", "mcpServers"
+  ],
+  "agentKeys": ["name", "description", "model", "readonly", "is_background"]
+}

@@ -703,7 +703,7 @@ Two directories, one source of truth. The **lab** is wherever you cloned this re
 - `scripts/sync-skills.sh` computes the canonical skill union and copies it into every active harness target. installers call it; you can run it standalone.
 - `scripts/skill-drift-check.sh` is a **read-only** drift detector: it hashes every copy of a skill across the known roots (repo `.claude/skills`, `.opencode/skills`, `~/.config/opencode/skills`, `~/.claude/skills`) and exits non-zero when two copies of the same skill diverge. Also compares the kept-overlap instruction topics.
 - The `config-sync` skill is the agent-facing version of the same job: edit an agent/rule/skill here, and it propagates the change across harness dirs.
-- `install-cursor.sh` ports the skills, subagents, commands, rules, hooks, and MCP servers into `~/.cursor` as physical copies (no symlinks), so Cursor can run standalone. Flags: `--yes`, `--uninstall`, `--no-backup`.
+- `install-cursor.sh` builds the Cursor plugin (`node scripts/build-cursor-plugin.mjs` -> `plugins/fmflurry-harness/`) and copies it to `~/.cursor/plugins/local/fmflurry-harness`; then run Developer: Reload Window in Cursor. Flags: `--yes`, `--link` (symlink instead of copy), `--migrate-legacy` (back up then remove what the old installer copied into `~/.cursor`, keeping your own entries), `--uninstall`, `--no-backup`. Limits: no per-agent tool allowlist, conductor routing by instruction only, Notification hooks unsupported.
 
 **Parity phrasing:** the two harnesses are *synced on install*, not continuously identical. Right now `skills/` holds 69 skills while the shipped `.claude/skills/` mirror holds 52 — the canonical set outgrew the last sync. Run `settings-sync --skills-only` (or `scripts/sync-skills.sh`) to reconcile, and `scripts/skill-drift-check.sh` to confirm.
 
@@ -949,7 +949,7 @@ Deux repertoires, une source de verite: le **lab** (ton clone de ce repo) et le 
 - `scripts/sync-skills.sh` calcule l'union canonique et copie vers chaque harness.
 - `scripts/skill-drift-check.sh` — detecteur read-only de drift entre copies de skills; sort non-zero en cas de divergence.
 - Le skill `config-sync` fait la meme propagation cote agent.
-- `install-cursor.sh` porte skills, agents, commandes, règles, hooks et MCP dans `~/.cursor` (copies physiques, pas de symlinks).
+- `install-cursor.sh` génère un plugin Cursor (`node scripts/build-cursor-plugin.mjs` -> `plugins/fmflurry-harness/`) et le copie dans `~/.cursor/plugins/local/fmflurry-harness`, puis Developer: Reload Window dans Cursor. Options : `--yes`, `--link` (symlink au lieu de copie), `--migrate-legacy` (sauvegarde puis supprime ce que l'ancien installeur a copié dans `~/.cursor`, en gardant vos propres entrées), `--uninstall`, `--no-backup`. Limites : pas de liste d'outils par agent, routage du conductor par instruction uniquement, hooks Notification non supportés.
 
 **Parite:** les harnesses sont *synces a l'install*, pas identiques en continu. Aujourd'hui `skills/` = 69 alors que `.claude/skills/` = 52: lancer `settings-sync --skills-only` pour reconcilier.
 

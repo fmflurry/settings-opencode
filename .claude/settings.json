@@ -111,17 +111,6 @@
           }
         ]
       }
-    ],
-    "UserPromptSubmit": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/learning-user-prompt-submit.sh"
-          }
-        ]
-      }
     ]
   },
   "enabledPlugins": {

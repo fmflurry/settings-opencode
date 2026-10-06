@@ -1,0 +1,12 @@
+{
+  "name": "fmflurry",
+  "owner": { "name": "fmflurry" },
+  "metadata": { "description": "Plugins by fmflurry." },
+  "plugins": [
+    {
+      "name": "fmflurry-harness",
+      "source": "plugins/fmflurry-harness",
+      "description": "Conductor routing, specialist agents, skills, commands, rules and MCP servers from the fmflurry harness."
+    }
+  ]
+}

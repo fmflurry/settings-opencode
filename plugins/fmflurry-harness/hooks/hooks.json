@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "command": "${CURSOR_PLUGIN_ROOT}/hooks/scripts/cursor-adapter.sh ${CURSOR_PLUGIN_ROOT}/hooks/scripts/pre-tool-use.sh preToolUse"
+      },
+      {
+        "command": "${CURSOR_PLUGIN_ROOT}/hooks/scripts/cursor-adapter.sh ${CURSOR_PLUGIN_ROOT}/hooks/scripts/rtk-rewrite.sh preToolUse",
+        "matcher": "Shell"
+      },
+      {
+        "command": "${CURSOR_PLUGIN_ROOT}/hooks/scripts/cursor-adapter.sh ${CURSOR_PLUGIN_ROOT}/hooks/scripts/prefer-code-memory.sh preToolUse",
+        "matcher": "Grep|Shell"
+      },
+      {
+        "command": "${CURSOR_PLUGIN_ROOT}/hooks/scripts/cursor-adapter.sh ${CURSOR_PLUGIN_ROOT}/hooks/scripts/tool-budget.sh preToolUse",
+        "matcher": "Shell|Write"
+      }
+    ],
+    "stop": [
+      {
+        "command": "${CURSOR_PLUGIN_ROOT}/hooks/scripts/cursor-adapter.sh ${CURSOR_PLUGIN_ROOT}/hooks/scripts/stop.sh stop"
+      }
+    ],
+    "subagentStop": [
+      {
+        "command": "${CURSOR_PLUGIN_ROOT}/hooks/scripts/cursor-adapter.sh ${CURSOR_PLUGIN_ROOT}/hooks/scripts/subagent-stop.sh subagentStop"
+      }
+    ]
+  }
+}

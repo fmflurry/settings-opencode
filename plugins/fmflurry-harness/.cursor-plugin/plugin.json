@@ -1,0 +1,35 @@
+{
+  "name": "fmflurry-harness",
+  "displayName": "fmflurry Harness",
+  "description": "Conductor routing, specialist agents, skills, commands, rules and MCP servers from the fmflurry harness.",
+  "version": "0.1.0",
+  "author": {
+    "name": "fmflurry"
+  },
+  "homepage": "https://github.com/fmflurry/settings-opencode/tree/master/plugins/fmflurry-harness",
+  "repository": "https://github.com/fmflurry/settings-opencode",
+  "license": "MIT",
+  "logo": "assets/logo.png",
+  "keywords": [
+    "agents",
+    "conductor",
+    "subagents",
+    "skills",
+    "rules",
+    "hooks",
+    "mcp",
+    "code-memory"
+  ],
+  "category": "developer-tools",
+  "tags": [
+    "orchestration",
+    "routing",
+    "workflow"
+  ],
+  "skills": "./skills/",
+  "agents": "./agents/",
+  "commands": "./commands/",
+  "rules": "./rules/",
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": "./mcp.json"
+}

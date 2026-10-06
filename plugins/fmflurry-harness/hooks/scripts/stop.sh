@@ -1,0 +1,80 @@
+#!/bin/bash
+# Stop Hook - Notification + Session Verification + Auto-Compact
+# Runs when Claude Code stops and waits for user input
+
+# Read hook input from stdin
+INPUT=$(cat)
+TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null)
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+
+# Resolve the notify scripts dir: installed location first, repo-relative
+# fallback last (so running out of the repo checkout still works).
+NOTIFY_SCRIPTS_DIR="${NOTIFY_SCRIPTS_DIR:-}"
+for _d in "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts" 2>/dev/null && pwd)"; do
+  [ -n "$NOTIFY_SCRIPTS_DIR" ] && break
+  [ -f "$_d/notify-gate.sh" ] && NOTIFY_SCRIPTS_DIR="$_d"
+done
+
+# Shared append-only trigger logger (log-only; never affects delivery).
+NOTIFY_LOG_SH="$NOTIFY_SCRIPTS_DIR/notify-log.sh"
+[ -f "$NOTIFY_LOG_SH" ] && source "$NOTIFY_LOG_SH"
+
+# Auto-compact: check if Claude is asking about compacting the conversation
+if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
+  LAST_CONTENT=$(tail -c 8000 "$TRANSCRIPT_PATH" 2>/dev/null)
+  if echo "$LAST_CONTENT" | grep -qi \
+    -e "compact" \
+    -e "context.*running low" \
+    -e "running low.*context" \
+    -e "context window" \
+    -e "conversation.*long" \
+    -e "summarize.*conversation" \
+    -e "should I summarize"; then
+    # Auto-answer yes - tell Claude to proceed with compaction
+    echo '{"continue":true}'
+    echo "Auto-compact: automatically continuing with compaction" >&2
+    exit 0
+  fi
+fi
+
+# Guard against duplicate fires within the same turn (see anthropics/claude-code#54360:
+# Stop can re-invoke with stop_hook_active=true when a prior Stop hook caused continuation).
+STOP_HOOK_ACTIVE=$(echo "$INPUT" | jq -r '.stop_hook_active // false' 2>/dev/null)
+if [ "$STOP_HOOK_ACTIVE" = "true" ]; then
+  type notify_log >/dev/null 2>&1 && notify_log claude-code Stop "$SESSION_ID" turn-end SUPPRESSED:stop_hook_active "Task done"
+  exit 0
+fi
+
+# Route through the notify-gate: it suppresses delivery while subagents are
+# in flight and debounces bursts, then handles logging + delivery itself.
+NOTIFY_GATE_SH="$NOTIFY_SCRIPTS_DIR/notify-gate.sh"
+[ -f "$NOTIFY_GATE_SH" ] && NOTIFY_DESKTOP=1 "$NOTIFY_GATE_SH" claude-code Stop "$SESSION_ID" turn-end "Claude Code" "Task done — your attention is required"
+
+# Check for uncommitted secrets (warn only)
+if git rev-parse --git-dir > /dev/null 2>&1; then
+  if git diff --name-only 2>/dev/null | grep -qE "\.env$|secrets\."; then
+    echo "⚠️  Warning: Uncommitted sensitive files detected" >&2
+  fi
+fi
+
+# Check for console.log statements in TypeScript/JavaScript (warn only)
+if git rev-parse --git-dir > /dev/null 2>&1; then
+  CONSOLE_LOGS=$(git diff --cached 2>/dev/null | grep -c "console\.log" || true)
+  if [ "$CONSOLE_LOGS" -gt 0 ]; then
+    echo "⚠️  Warning: $CONSOLE_LOGS console.log statements in staged changes" >&2
+  fi
+fi
+
+# Session tool-budget ratio summary (see tool-budget.sh / rules/common/tool-budget.md)
+if [ -n "$SESSION_ID" ]; then
+  BUDGET_FILE="${CLAUDE_SESSION_DIR:-${TMPDIR:-/tmp}/fmflurry-harness/session-env/${SESSION_ID}}/toolbudget.tsv"
+  if [ -f "$BUDGET_FILE" ]; then
+    EXPLORATORY_COUNT=$(grep -c -- $'\texploratory$' "$BUDGET_FILE" 2>/dev/null || echo 0)
+    EDIT_COUNT=$(grep -c -- $'\tedit$' "$BUDGET_FILE" 2>/dev/null || echo 0)
+    RATIO="n/a"
+    [ "$EDIT_COUNT" -gt 0 ] 2>/dev/null && RATIO=$(awk -v e="$EXPLORATORY_COUNT" -v d="$EDIT_COUNT" 'BEGIN { printf "%.2f", e / d }')
+    echo "📊 Tool budget: ${EXPLORATORY_COUNT} exploratory / ${EDIT_COUNT} edits (ratio ${RATIO})" >&2
+  fi
+fi
+
+exit 0

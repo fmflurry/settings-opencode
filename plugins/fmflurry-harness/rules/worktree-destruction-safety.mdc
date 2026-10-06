@@ -1,0 +1,57 @@
+---
+description: "Worktree Destruction Safety (mandatory)"
+alwaysApply: true
+---
+# Worktree Destruction Safety (mandatory)
+
+A worktree directory is the **only copy** of any uncommitted work inside it. Removing one is a destructive data operation, not bookkeeping — treat it with the same caution as `rm -rf`, never like `git branch -d`.
+
+**Boundary with [worktree-switching](worktree-switching.md):** that rule (where configured) governs *entering*, creating, and switching between worktrees. This rule governs their *destruction* — `git worktree remove`, `git worktree prune`, `git worktree move`, or any raw filesystem delete of a worktree directory. Read both; they do not overlap.
+
+## Why this exists
+
+A worktree was destroyed by a raw `git worktree remove --force` + `git worktree prune` run outside Orca's managed pipeline: directory emptied, `.git/worktrees/<name>` admin dir removed, branch left behind only because `git worktree remove` doesn't touch branches by default (Orca's own removal pipeline *does* include a `branch_delete` stage — the same accident through Orca would have taken the branch too). No trash step ran, so the content was not recoverable — it survived only by luck (nothing was committed, and a session transcript happened to let it be reconstructed). Orca has no integrity check for "a worktree I track vanished from git"; it silently reflects `git worktree list` at the next poll, so the desync stays invisible until a human notices. The gap was enforcement, not documentation — Orca's own bundled `orca-cli` skill already recommends `orca worktree rm` over raw `git worktree` for Orca-managed state.
+
+## Orca-managed detection (read-only, portable)
+
+A repo is Orca-managed when either is true:
+
+- it appears in `orca repo list`
+- the target path is enumerated by `orca worktree list --json`
+
+If the `orca` CLI is not installed or not on `PATH`, this rule's Orca-routing requirement (below) does not apply — say so explicitly. The **mandatory pre-removal checks** further down apply regardless of Orca's presence; they are plain `git` and are always in scope.
+
+## Mandatory: route worktree lifecycle through Orca when Orca-managed
+
+Inside an Orca-managed repo, worktree creation and removal go through Orca:
+
+- `orca worktree create ...`
+- `orca worktree rm --worktree path:<p> --json`
+
+Forbidden by default in an Orca-managed repo: raw `git worktree remove`, `git worktree prune`, `git worktree move`, and `rm -rf <worktree-dir>`. These bypass Orca's trash step (`~/orca/workspaces/<repo>/.orca-worktree-trash/`) and make the removal unrecoverable.
+
+## Mandatory pre-removal checks (any mechanism, any repo)
+
+Run in order, before executing ANY worktree removal — Orca-routed or (per the Escape hatch) raw:
+
+1. `git -C <path> status --porcelain` — any output (uncommitted or untracked content) → **STOP**, surface it to the human. Never pass `--force` past this.
+2. `git -C <path> rev-list --count origin/<base>..HEAD` — non-zero → **STOP**, report the exact count of commits not on the base branch.
+3. `orca worktree list --json` (when Orca-managed) — a recent `lastActivityAt` on the target → a session may be live in it → **STOP**.
+4. Resolve the path being acted on and diff it against `git worktree list --porcelain` immediately before executing, so the acting agent removes the path it believes it is removing — not a stale or mistyped one.
+
+Any STOP means: report the finding to the human and wait. Do not reinterpret a general cleanup instruction as authorization to proceed past a STOP.
+
+## Escape hatch
+
+A human may explicitly authorise a raw `git worktree` operation instead of the Orca-routed path. When they do:
+
+- State the exact command that will run.
+- State plainly that it bypasses Orca's trash and is not recoverable through Orca.
+- Get an explicit OK to that specific command. Never infer this from a general "clean up worktrees" instruction — the authorization must name the operation, not just the goal.
+
+## Anti-patterns
+
+- Running `git worktree remove --force` (or `rm -rf`) on an Orca-managed repo because it's faster than the CLI.
+- Treating a clean `git worktree list` as proof the directory is safe to delete — it doesn't tell you about uncommitted content or live activity.
+- Proceeding past a `git status --porcelain` non-empty result because the caller "just wants it gone."
+- Authorizing raw git worktree ops from an inferred "clean everything up" brief instead of a named command.

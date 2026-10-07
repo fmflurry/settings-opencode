@@ -184,7 +184,9 @@ export function stripAtImports(body) {
 }
 
 export function sanitize(text, repoDir) {
-  return text.split(repoDir).join('<repo>').replace(/\/Users\/[^/\s"'`)]+/g, '/home/user');
+  const repoName = repoDir.split('/').pop().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const authorCheckout = new RegExp(`/(?:Users|home)/[^/\\s"'\`)]+/Workspace/${repoName}(?![\\w-])`, 'g');
+  return text.split(repoDir).join('<repo>').replace(authorCheckout, '<repo>').replace(/\/Users\/[^/\s"'`)]+/g, '/home/user');
 }
 
 const HOOK_EVENT_MAP = { PreToolUse: 'preToolUse', Stop: 'stop', SubagentStop: 'subagentStop' };

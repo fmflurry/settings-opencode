@@ -37,11 +37,11 @@ Each tier defines an **ordered fallback list**. If the configured slug is reject
 
 | Tier | Primary default | Fallback order | Use |
 | --- | --- | --- | --- |
-| coding | `grok-4.7-xhigh` | `grok-4.7-high`, `claude-opus-5-5-high`, `gpt-5.6-sol-high` | implementation, tests, build fixes |
-| smart | `claude-opus-5-5-high` | `gpt-5.6-sol-high`, `claude-opus-5-5-medium`, `grok-4.7-xhigh` | planning, architecture, review, security; expensive |
+| coding | `grok-4.7-xhigh` | `grok-4.7-high`, `claude-opus-5-5-high` | implementation, tests, build fixes |
+| smart | `claude-opus-5-5-high` | `claude-opus-5-5-medium`, `grok-4.7-xhigh` | planning, architecture, review, security; expensive |
 | cheap | `composer-2.5` | `claude-sonnet-5-5-medium`, `grok-4.7-medium` | git, codebase search, docs, comment triage |
 
-No `-fast` variants are used. Families: `claude-*`, `gpt-*`, `grok-*`, `composer-*`, `muse-*`, `gemini-*`.
+No `-fast` variants are used. Families: `claude-*`, `grok-*`, `composer-*`, `muse-*`, `gemini-*`.
 
 ### Deterministic escalation
 

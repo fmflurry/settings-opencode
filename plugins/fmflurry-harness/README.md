@@ -20,20 +20,38 @@ A conductor that routes every task to the matching specialist subagent (planner,
 
 ## Models
 
-Model selection is dynamic. Subagents carry no `model` in their frontmatter; the conductor passes the tier's model on every `Task` call.
+Model selection is deterministic. Subagents declare their tier via `tier:` frontmatter (`coding`, `smart`, or `cheap`). The conductor passes the appropriate model on every `Task` call.
 
-After install, run `/setup-harness`. It detects the model slugs available to you, proposes one per tier, and writes `~/.cursor/rules/fmflurry-harness-models.mdc`. It applies to new chats. Without that rule the defaults below are used.
+### Configuration
 
-| Tier | Default slug | Use | Agents |
+After install, run `/setup-harness`. It detects available model slugs, proposes one per tier, and writes **two config files** for maximum compatibility:
+
+1. **Cursor rule**: `~/.cursor/rules/fmflurry-harness-models.mdc` (Cursor desktop only)
+2. **Plain-file fallback**: `~/.agents/fmflurry-harness-models.md` (all environments, including cloud agents)
+
+The conductor reads from the first file that exists (rule wins, then plain-file, then inline defaults). Config applies to new chats.
+
+### Tiers & Fallbacks
+
+Each tier has a primary default and an **ordered fallback list**. If the configured slug is rejected by `Task`, the conductor tries the next fallback. If the list is exhausted, the task fails with a clear error — no guessing.
+
+| Tier | Primary default | Fallback order | Use |
 | --- | --- | --- | --- |
-| coding | `grok-4.7-xhigh` | implementation, tests, build fixes | coder, tdd-guide, build-error-resolver, refactor-cleaner, e2e-runner, api-spec-architect, gaudi |
-| smart | `claude-opus-5-5-high` | planning, architecture, review, security; expensive, so dispatch it only when needed | planner, architect, code-reviewer, security-reviewer, angular-cop, dotnet-cop, database-reviewer, postgres-dba, gdpr-specialist, ecosystem-auditor, why-synthesizer |
-| cheap | `composer-2.5` | git, codebase search, docs, comment triage | git-specialist, scout, writer, doc-updater, why-investigator, comment-judge, haruspex-commentorum |
+| coding | `grok-4.7-xhigh` | `grok-4.7-high`, `claude-opus-5-5-high`, `gpt-5.6-sol-high` | implementation, tests, build fixes |
+| smart | `claude-opus-5-5-high` | `gpt-5.6-sol-high`, `claude-opus-5-5-medium`, `grok-4.7-xhigh` | planning, architecture, review, security; expensive |
+| cheap | `composer-2.5` | `claude-sonnet-5-5-medium`, `grok-4.7-medium` | git, codebase search, docs, comment triage |
 
-- `-fast` variants cost about 2x (Grok) to 6x (Composer) more, so they are deliberately avoided.
+No `-fast` variants are used (they cost 2x–6x more).
+
+### Escalation
+
+After **two consecutive failed attempts** on the same task, the conductor escalates to the smart tier for the next attempt. This is deterministic and logged in the decision trail.
+
+### Notes
+
 - A tier value of `inherit` or `auto` runs on the parent model.
 - Pick Grok 4.7 xhigh in the model picker for the main chat; a plugin cannot set it.
-- Cloud agents and grokbot may not receive user rules, so they fall back to the defaults.
+- Cloud agents and grokbot environments use the plain-file fallback, ensuring consistent behavior everywhere.
 
 ## Limitations
 

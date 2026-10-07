@@ -2,6 +2,7 @@
 name: api-spec-architect
 description: "MUST delegate for generating or updating OpenAPI 3.1 specifications and publishing them to SmartBear SwaggerHub. Produces one Zalando-compliant YAML per bounded context and optionally publishes via the SwaggerHub MCP."
 readonly: false
+tier: coding
 ---
 # API Specification Architect
 

@@ -2,6 +2,7 @@
 name: gdpr-specialist
 description: "MUST delegate for GDPR/privacy/data-protection compliance review of code (frontend, backend, database, infrastructure layers, full stack). FRANCE/CNIL-focused: audits against French GDPR rules, CNIL recommendations, Loi Informatique et Libertés. Covers consent flows, cookies/trackers, PII handling, data-subject rights, retention policies, DPIA necessities, cross-border transfers, breach notification (72h to CNIL), processor/subcontractor contracts. Also answers GDPR/CNIL questions. Read-only — reports findings and compliance gaps; orchestrator dispatches fixes to coder."
 readonly: true
+tier: smart
 ---
 # GDPR Specialist — FRANCE/CNIL Edition
 

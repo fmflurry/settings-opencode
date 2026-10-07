@@ -2,6 +2,7 @@
 name: doc-updater
 description: "MUST delegate for documentation, README updates, architecture notes, and codemaps. Keeps docs aligned with code changes."
 readonly: false
+tier: cheap
 ---
 # Documentation & Codemap Specialist
 

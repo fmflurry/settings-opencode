@@ -46,5 +46,5 @@
     "homepage", "repository", "license", "logo", "keywords", "category", "tags", "commands",
     "agents", "skills", "rules", "hooks", "variables", "mcpServers"
   ],
-  "agentKeys": ["name", "description", "model", "readonly", "is_background"]
+  "agentKeys": ["name", "description", "model", "readonly", "is_background", "tier"]
 }

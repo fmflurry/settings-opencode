@@ -71,16 +71,32 @@ export function emitAgent({ name, description, model, readonly }, body) {
     '---',
     `name: ${name}`,
     `description: ${JSON.stringify(description)}`,
-    `model: ${model}`,
+    `model: ${JSON.stringify(model)}`,
     `readonly: ${readonly}`,
     '---',
     '',
   ].join('\n') + body;
 }
 
-export function claudeAgent(text, models) {
+export function tierModels(config) {
+  const byAgent = new Map();
+  for (const [tier, names] of Object.entries(config.agentTiers)) {
+    if (!(tier in config.modelTiers)) throw new Error(`agentTiers: unknown tier "${tier}"`);
+    for (const name of names) {
+      if (byAgent.has(name)) throw new Error(`agent "${name}" is in several tiers (${byAgent.get(name).tier}, ${tier})`);
+      byAgent.set(name, { tier, model: config.modelTiers[tier] });
+    }
+  }
+  return (name) => {
+    const hit = byAgent.get(name);
+    if (!hit) throw new Error(`agent "${name}" is in no tier of agentTiers`);
+    return hit.model;
+  };
+}
+
+export function claudeAgent(text, modelFor) {
   const { fm, body } = splitFrontmatter(text);
-  const model = models[unquote(fm.model)] ?? models.default;
+  const model = modelFor(unquote(fm.name));
   return {
     name: unquote(fm.name),
     out: emitAgent(
@@ -101,7 +117,7 @@ function resolvePrompt(repoDir, placeholder) {
   return candidates.find((c) => fs.existsSync(c)) ?? null;
 }
 
-export function opencodeAgent(repoDir, name, def, models) {
+export function opencodeAgent(repoDir, name, def, modelFor) {
   const promptPath = resolvePrompt(repoDir, def.prompt);
   if (!promptPath) throw new Error(`opencode agent ${name}: prompt not found (${def.prompt})`);
   const tools = def.tools ?? {};
@@ -109,7 +125,7 @@ export function opencodeAgent(repoDir, name, def, models) {
     {
       name,
       description: def.description ?? '',
-      model: models.default,
+      model: modelFor(name),
       readonly: tools.write === false && tools.edit === false,
     },
     fs.readFileSync(promptPath, 'utf8'),
@@ -151,6 +167,22 @@ export function walkMd(dir, out = []) {
 const CURSOR_NOTE =
   'Cursor cannot block the primary agent from writing; routing is by instruction, not enforcement.';
 
+export function modelsSection() {
+  return [
+    '## Models',
+    '',
+    "- The primary agent's model is chosen by the user in Cursor's model picker. Pick Grok 4.7 xhigh, because a plugin can't set it.",
+    '- Each subagent carries its own model in its frontmatter, so do not pass `model` in `Task` calls. Only override it to escalate (cheap to smart) when a task proves harder than expected.',
+    '',
+    '| Tier | Use |',
+    '| --- | --- |',
+    '| coding | implementation, tests, build fixes |',
+    '| smart | planning, architecture, review, security; expensive, so dispatch it only when needed |',
+    '| cheap | git, codebase search, docs, comment triage |',
+    '',
+  ].join('\n');
+}
+
 export function conductorRuleBody(conductorMd) {
   const { body } = splitFrontmatter(conductorMd);
   const translated = body
@@ -158,7 +190,7 @@ export function conductorRuleBody(conductorMd) {
     .replace(/`AskUserQuestion`/g, 'ask the user')
     .replace(/`Agent`/g, '`Task`')
     .replace(/\bAgent calls?\b/g, (s) => s.replace('Agent', 'Task'));
-  return translated;
+  return `${translated.replace(/\n*$/, '\n')}\n${modelsSection()}`;
 }
 
 export function conductorSkill() {
@@ -176,6 +208,7 @@ export function conductorSkill() {
     '',
     CURSOR_NOTE,
     '',
+    modelsSection(),
   ].join('\n');
 }
 

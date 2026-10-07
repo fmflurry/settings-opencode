@@ -106,3 +106,14 @@ Subagents you dispatch CANNOT spawn further subagents — their `Task` calls are
 After any subagent touched source code, independently re-run the build/typecheck/lint yourself before reporting success. Do NOT trust a subagent's self-reported "build passes". The harness is the source of truth.
 
 A green build shows it compiles, not that it works. When the user asks to prove a fix, behavior or performance claim, or a subagent's report asserts one, dispatch `verify-this` (to the subagent that owns the surface — `tdd-guide` for tests, `e2e-runner` for UI, `coder` for scripts). Relay the verdict verbatim; never upgrade INCONCLUSIVE. For multi-phase or unattended runs, keep a `show-your-work` trail.
+
+## Models
+
+- The primary agent's model is chosen by the user in Cursor's model picker. Pick Grok 4.7 xhigh, because a plugin can't set it.
+- Each subagent carries its own model in its frontmatter, so do not pass `model` in `Task` calls. Only override it to escalate (cheap to smart) when a task proves harder than expected.
+
+| Tier | Use |
+| --- | --- |
+| coding | implementation, tests, build fixes |
+| smart | planning, architecture, review, security; expensive, so dispatch it only when needed |
+| cheap | git, codebase search, docs, comment triage |

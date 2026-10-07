@@ -8,7 +8,16 @@
   "keywords": ["agents", "conductor", "subagents", "skills", "rules", "hooks", "mcp", "code-memory"],
   "category": "developer-tools",
   "tags": ["orchestration", "routing", "workflow"],
-  "models": { "opus": "inherit", "sonnet": "inherit", "haiku": "fast", "default": "inherit" },
+  "modelTiers": {
+    "coding": "grok-4.7[effort=xhigh,fast=false]",
+    "smart": "claude-opus-5-5[effort=high]",
+    "cheap": "composer-2.5[fast=false]"
+  },
+  "agentTiers": {
+    "coding": ["coder", "tdd-guide", "build-error-resolver", "refactor-cleaner", "e2e-runner", "api-spec-architect", "gaudi"],
+    "smart": ["planner", "architect", "code-reviewer", "security-reviewer", "angular-cop", "dotnet-cop", "database-reviewer", "postgres-dba", "gdpr-specialist", "ecosystem-auditor", "why-synthesizer"],
+    "cheap": ["git-specialist", "scout", "writer", "doc-updater", "why-investigator", "comment-judge", "haruspex-commentorum"]
+  },
   "rules": {
     "always": [
       "common/agents", "common/brief-contract", "common/code-comments", "common/codebase-exploration",

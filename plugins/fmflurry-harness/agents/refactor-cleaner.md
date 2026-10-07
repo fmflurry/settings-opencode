@@ -1,7 +1,7 @@
 ---
 name: refactor-cleaner
 description: "MUST delegate for dead code, unused exports, duplication, and consolidation cleanup. Preserves behavior and verifies safety."
-model: inherit
+model: "grok-4.7[effort=xhigh,fast=false]"
 readonly: false
 ---
 # Refactor & Dead Code Cleaner

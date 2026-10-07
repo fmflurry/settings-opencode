@@ -1,7 +1,7 @@
 ---
 name: security-reviewer
 description: "MUST delegate for auth, user input, API endpoints, secrets, payments, PII, or sensitive data. Read-only — reports vulnerabilities; orchestrator dispatches fixes to coder."
-model: inherit
+model: "claude-opus-5-5[effort=high]"
 readonly: true
 ---
 # Security Reviewer

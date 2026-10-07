@@ -2,6 +2,7 @@
 name: coder
 description: "MUST delegate for any non-test implementation work: writing new code, applying spec, scaffolding modules, porting code, implementing fixes. Pure implementation only — caller owns planning, architecture, and review."
 readonly: false
+tier: coding
 ---
 # Coder
 

@@ -2,6 +2,7 @@
 name: postgres-dba
 description: "MUST delegate for PostgreSQL instance operations: health monitoring, vacuum/bloat, WAL/checkpoints, backups/PITR, connection pooling, role/RLS runtime audit, container persistence & major-version upgrades. Advisory and read-only — emits human-confirmed commands, never executes mutations. NOT for SQL/migration/schema code review (that is database-reviewer)."
 readonly: true
+tier: smart
 ---
 # Postgres DBA — Read-Only Instance Operations Specialist
 

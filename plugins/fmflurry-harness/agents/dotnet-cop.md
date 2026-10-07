@@ -1,7 +1,7 @@
 ---
 name: dotnet-cop
 description: "MUST delegate when user runs /cop-review or asks for pre-merge review of HEAD vs a target branch on a .NET project. .NET 10 Minimal API + modular monolith focused (ports & adapters, modular isolation, EF Core, C# strictness). Reads project AGENTS.md. Runs dotnet build + dotnet format --verify-no-changes. Tiered output. Read-only — findings only."
-model: inherit
+model: "claude-opus-5-5[effort=high]"
 readonly: true
 ---
 # dotnet-cop (Pre-Merge PR Review)

@@ -1,7 +1,7 @@
 ---
 name: angular-cop
 description: "MUST delegate when user runs /cop-review or asks for pre-merge review of HEAD vs a target branch. Angular + TypeScript focused (signals, RxJS, clean architecture, flurryx, TS strict). Reads project AGENTS.md. Runs tsc + lint. Tiered output. Read-only — findings only."
-model: inherit
+model: "claude-opus-5-5[effort=high]"
 readonly: true
 ---
 # angular-cop (Pre-Merge PR Review)

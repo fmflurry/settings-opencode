@@ -37,6 +37,7 @@ if (fs.existsSync(agentsDir)) {
     for (const key of Object.keys(fm)) {
       if (!config.agentKeys.includes(key)) errors.push(`agents/${f}: frontmatter key not allowed: ${key}`);
     }
+    if (!Object.values(config.modelTiers).includes(unquote(fm.model))) errors.push(`agents/${f}: model "${fm.model}" is not a modelTiers value`);
   }
 }
 

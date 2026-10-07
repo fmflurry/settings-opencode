@@ -6,13 +6,14 @@ import { fileURLToPath } from 'node:url';
 import {
   parseJsonc, buildMcp, splitFrontmatter, unquote, claudeAgent, opencodeAgent, slug, mdc,
   firstHeading, globsFromPaths, walkMd, conductorRuleBody, conductorSkill, stripAtImports, sanitize,
-  buildHooks, portableHookScript,
+  buildHooks, portableHookScript, tierModels,
 } from './cursor-plugin/lib.mjs';
 
 const repoDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const config = JSON.parse(fs.readFileSync(path.join(repoDir, 'scripts/cursor-plugin/config.json'), 'utf8'));
 const out = path.join(repoDir, 'plugins', config.name);
 const claudeDir = path.join(repoDir, '.claude');
+const modelFor = tierModels(config);
 
 const read = (p) => fs.readFileSync(p, 'utf8');
 function write(rel, content, mode) {
@@ -63,7 +64,7 @@ const claudeAgentsDir = path.join(claudeDir, 'agents');
 const emitted = new Set();
 for (const file of fs.readdirSync(claudeAgentsDir).filter((f) => f.endsWith('.md')).sort()) {
   if (file === 'conductor.md') continue;
-  const agent = claudeAgent(read(path.join(claudeAgentsDir, file)), config.models);
+  const agent = claudeAgent(read(path.join(claudeAgentsDir, file)), modelFor);
   write(`agents/${agent.name}.md`, agent.out);
   emitted.add(agent.name);
 }
@@ -71,7 +72,7 @@ for (const file of fs.readdirSync(claudeAgentsDir).filter((f) => f.endsWith('.md
 const opencodeCfg = parseJsonc(read(path.join(repoDir, 'opencode.jsonc')));
 for (const [name, def] of Object.entries(opencodeCfg.agent ?? {})) {
   if (name === 'conductor' || def.disable || emitted.has(name)) continue;
-  write(`agents/${name}.md`, opencodeAgent(repoDir, name, def, config.models));
+  write(`agents/${name}.md`, opencodeAgent(repoDir, name, def, modelFor));
   emitted.add(name);
 }
 
@@ -139,5 +140,9 @@ const counts = {
   commands: count('commands', '.md'),
   rules: count('rules', '.mdc'),
 };
-write('README.md', read(path.join(repoDir, 'scripts/cursor-plugin/README.template.md')).replace(/\{\{(\w+)\}\}/g, (_, k) => counts[k]));
+const values = {
+  ...counts,
+  tierAgents: Object.entries(config.agentTiers).map(([tier, names]) => `- **${tier}**: ${names.join(', ')}`).join('\n'),
+};
+write('README.md', read(path.join(repoDir, 'scripts/cursor-plugin/README.template.md')).replace(/\{\{(\w+)\}\}/g, (_, k) => values[k]));
 console.log(Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(' '));

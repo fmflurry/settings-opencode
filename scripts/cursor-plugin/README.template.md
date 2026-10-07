@@ -18,6 +18,22 @@ A conductor that routes every task to the matching specialist subagent (planner,
 | Hooks | Pre-tool-use guards, command rewriting, code-memory preference, tool budget, stop checks |
 | MCP | `code-memory` |
 
+## Models
+
+Each subagent pins its model by tier in its frontmatter.
+
+| Tier | Model | Purpose |
+| --- | --- | --- |
+| coding | `grok-4.7[effort=xhigh,fast=false]` | Implementation, tests, build fixes |
+| smart | `claude-opus-5-5[effort=high]` | Planning, architecture, review, security (expensive) |
+| cheap | `composer-2.5[fast=false]` | Git, codebase search, docs, comment triage |
+
+{{tierAgents}}
+
+- Cursor falls back to a compatible model if a model is blocked by your plan or team.
+- `-fast` variants cost about 2x (Grok) to 6x (Composer) more, so they are deliberately avoided.
+- Pick Grok 4.7 xhigh in the model picker for the main chat; a plugin cannot set it.
+
 ## Limitations
 
 - Cursor has no per-agent tool allowlist: agents can only be marked `readonly`.

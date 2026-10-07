@@ -18,8 +18,8 @@ Each agent declares its tier via `tier:` frontmatter. The three tiers are:
 
 | Tier | Primary default | Fallback order | Use |
 | --- | --- | --- | --- |
-| coding | `grok-4.7-xhigh` | `grok-4.7-high`, `claude-opus-5-5-high`, `gpt-5.6-sol-high` | implementation, tests, build fixes |
-| smart | `claude-opus-5-5-high` | `gpt-5.6-sol-high`, `claude-opus-5-5-medium`, `grok-4.7-xhigh` | planning, architecture, review, security; expensive |
+| coding | `grok-4.7-xhigh` | `grok-4.7-high`, `claude-opus-5-5-high` | implementation, tests, build fixes |
+| smart | `claude-opus-5-5-high` | `claude-opus-5-5-medium`, `grok-4.7-xhigh` | planning, architecture, review, security; expensive |
 | cheap | `composer-2.5` | `claude-sonnet-5-5-medium`, `grok-4.7-medium` | git, codebase search, docs, comment triage |
 
 ## Procedure
@@ -27,11 +27,11 @@ Each agent declares its tier via `tier:` frontmatter. The three tiers are:
 1. Enumerate the model slugs you can pass to a `Task` subagent in this session (see the Task tool's `model` parameter). If Cursor exposes a models list, prefer it. If none are detectable, ask the user to paste the slugs. Never write a slug you have not confirmed is available. The aliases `inherit` and `auto` are always valid; they run on the parent model and omit `model`.
 
 2. Propose one slug per tier:
-   - **coding**: implementation, tests, build fixes. Default `grok-4.7-xhigh` (non-fast variant). If unavailable, try the fallback order: `grok-4.7-high`, `claude-opus-5-5-high`, `gpt-5.6-sol-high`. Never use `-fast` variants.
-   - **smart**: planning, architecture, review, security. Default `claude-opus-5-5-high`. If unavailable, try the fallback order: `gpt-5.6-sol-high`, `claude-opus-5-5-medium`, `grok-4.7-xhigh`.
+   - **coding**: implementation, tests, build fixes. Default `grok-4.7-xhigh` (non-fast variant). If unavailable, try the fallback order: `grok-4.7-high`, `claude-opus-5-5-high`. Never use `-fast` variants.
+   - **smart**: planning, architecture, review, security. Default `claude-opus-5-5-high`. If unavailable, try the fallback order: `claude-opus-5-5-medium`, `grok-4.7-xhigh`.
    - **cheap**: git, codebase search, docs, comment triage. Default `composer-2.5`. If unavailable, try the fallback order: `claude-sonnet-5-5-medium`, `grok-4.7-medium`. Never use `-fast` variants or the `fast` alias for cheap.
    
-   If all fallbacks are exhausted, ask the user to choose from the available slugs.
+   If all fallbacks are exhausted, ask the user to choose from the available slugs. Never propose GPT models.
 
 3. Show the proposal; the user may edit it. Then write **both config files**:
 

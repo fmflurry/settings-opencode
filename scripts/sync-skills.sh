@@ -60,8 +60,8 @@ _check_rsync() {
         return 0
     fi
     local rv
-    rv="$(rsync --version 2>&1 | head -1)"
-    if printf "%s" "$rv" | grep -qi openrsync; then
+    rv="$(rsync --version 2>&1)"
+    if [[ "${rv%%$'\n'*}" == *[Oo]pen[Rr]sync* ]]; then
         _USE_RSYNC=0
         warn "openrsync detected — using tar-pipe fallback (avoids nested-dir bug)"
     fi

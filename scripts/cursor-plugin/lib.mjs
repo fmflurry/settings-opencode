@@ -66,41 +66,38 @@ export function isReadonly({ tools, disallowedTools }) {
   return allowed !== null && !MUTATING_TOOLS.some((t) => allowed.includes(t));
 }
 
-export function emitAgent({ name, description, model, readonly }, body) {
+export function emitAgent({ name, description, readonly }, body) {
   return [
     '---',
     `name: ${name}`,
     `description: ${JSON.stringify(description)}`,
-    `model: ${JSON.stringify(model)}`,
     `readonly: ${readonly}`,
     '---',
     '',
   ].join('\n') + body;
 }
 
-export function tierModels(config) {
+export function tierGuard(config) {
   const byAgent = new Map();
   for (const [tier, names] of Object.entries(config.agentTiers)) {
-    if (!(tier in config.modelTiers)) throw new Error(`agentTiers: unknown tier "${tier}"`);
+    if (!(tier in config.defaultTierModels)) throw new Error(`agentTiers: unknown tier "${tier}"`);
     for (const name of names) {
-      if (byAgent.has(name)) throw new Error(`agent "${name}" is in several tiers (${byAgent.get(name).tier}, ${tier})`);
-      byAgent.set(name, { tier, model: config.modelTiers[tier] });
+      if (byAgent.has(name)) throw new Error(`agent "${name}" is in several tiers (${byAgent.get(name)}, ${tier})`);
+      byAgent.set(name, tier);
     }
   }
   return (name) => {
-    const hit = byAgent.get(name);
-    if (!hit) throw new Error(`agent "${name}" is in no tier of agentTiers`);
-    return hit.model;
+    if (!byAgent.has(name)) throw new Error(`agent "${name}" is in no tier of agentTiers`);
   };
 }
 
-export function claudeAgent(text, modelFor) {
+export function claudeAgent(text, assertTiered) {
   const { fm, body } = splitFrontmatter(text);
-  const model = modelFor(unquote(fm.name));
+  assertTiered(unquote(fm.name));
   return {
     name: unquote(fm.name),
     out: emitAgent(
-      { name: unquote(fm.name), description: unquote(fm.description), model, readonly: isReadonly(fm) },
+      { name: unquote(fm.name), description: unquote(fm.description), readonly: isReadonly(fm) },
       body,
     ),
   };
@@ -117,15 +114,15 @@ function resolvePrompt(repoDir, placeholder) {
   return candidates.find((c) => fs.existsSync(c)) ?? null;
 }
 
-export function opencodeAgent(repoDir, name, def, modelFor) {
+export function opencodeAgent(repoDir, name, def, assertTiered) {
   const promptPath = resolvePrompt(repoDir, def.prompt);
   if (!promptPath) throw new Error(`opencode agent ${name}: prompt not found (${def.prompt})`);
+  assertTiered(name);
   const tools = def.tools ?? {};
   return emitAgent(
     {
       name,
       description: def.description ?? '',
-      model: modelFor(name),
       readonly: tools.write === false && tools.edit === false,
     },
     fs.readFileSync(promptPath, 'utf8'),
@@ -167,33 +164,66 @@ export function walkMd(dir, out = []) {
 const CURSOR_NOTE =
   'Cursor cannot block the primary agent from writing; routing is by instruction, not enforcement.';
 
-export function modelsSection() {
+export const SETUP_RULE_FILE = 'fmflurry-harness-models.mdc';
+
+const TIER_USE = {
+  coding: 'implementation, tests, build fixes',
+  smart: 'planning, architecture, review, security; expensive, so dispatch it only when needed',
+  cheap: 'git, codebase search, docs, comment triage',
+};
+
+export function tierTable(config) {
+  return [
+    '| Tier | Default slug | Use | Agents |',
+    '| --- | --- | --- | --- |',
+    ...Object.entries(config.agentTiers).map(
+      ([tier, names]) => `| ${tier} | \`${config.defaultTierModels[tier]}\` | ${TIER_USE[tier]} | ${names.join(', ')} |`,
+    ),
+  ].join('\n');
+}
+
+export function modelsSection(config) {
+  const d = config.defaultTierModels;
   return [
     '## Models',
     '',
-    "- The primary agent's model is chosen by the user in Cursor's model picker. Pick Grok 4.7 xhigh, because a plugin can't set it.",
-    '- Each subagent carries its own model in its frontmatter, so do not pass `model` in `Task` calls. Only override it to escalate (cheap to smart) when a task proves harder than expected.',
+    `- Every \`Task\` dispatch MUST pass \`model\` = the slug for the target agent's tier. Subagents carry no model of their own.`,
+    `- Read the tier slugs from the \`${SETUP_RULE_FILE.replace('.mdc', '')}\` rule if present. Otherwise use the defaults (coding \`${d.coding}\`, smart \`${d.smart}\`, cheap \`${d.cheap}\`).`,
+    '- When a tier value is `inherit` or `auto`, omit `model` from the `Task` call.',
+    '- If `Task` rejects a slug, retry with the tier default and say so. If the default is rejected too, use the closest valid slug of the same family from the error message, preferring the highest effort.',
+    '- Escalation: you may dispatch a cheap- or coding-tier agent with the smart slug when a task proves harder than expected; say so.',
+    "- The primary agent's model is chosen by the user in Cursor's model picker (Grok 4.7 xhigh recommended); a plugin can't set it.",
+    '- Cloud agents and grokbot may not receive user rules, in which case the defaults apply.',
+    '- Suggest running `/setup-harness` once after install to detect available models and write the tier rule.',
     '',
-    '| Tier | Use |',
-    '| --- | --- |',
-    '| coding | implementation, tests, build fixes |',
-    '| smart | planning, architecture, review, security; expensive, so dispatch it only when needed |',
-    '| cheap | git, codebase search, docs, comment triage |',
+    tierTable(config),
     '',
   ].join('\n');
 }
 
-export function conductorRuleBody(conductorMd) {
+export function setupSkill(template, config) {
+  const d = config.defaultTierModels;
+  const values = {
+    ruleFile: SETUP_RULE_FILE,
+    tierTable: tierTable(config),
+    codingDefault: d.coding,
+    smartDefault: d.smart,
+    cheapDefault: d.cheap,
+  };
+  return template.replace(/\{\{(\w+)\}\}/g, (_, k) => values[k]);
+}
+
+export function conductorRuleBody(conductorMd, config) {
   const { body } = splitFrontmatter(conductorMd);
   const translated = body
     .replace(/^> Harness note:.*$/m, `> ${CURSOR_NOTE} Delegate with the \`Task\` tool (set \`subagent_type\` to the specialist name); ask the user directly when a load-bearing fact is missing.`)
     .replace(/`AskUserQuestion`/g, 'ask the user')
     .replace(/`Agent`/g, '`Task`')
     .replace(/\bAgent calls?\b/g, (s) => s.replace('Agent', 'Task'));
-  return `${translated.replace(/\n*$/, '\n')}\n${modelsSection()}`;
+  return `${translated.replace(/\n*$/, '\n')}\n${modelsSection(config)}`;
 }
 
-export function conductorSkill() {
+export function conductorSkill(config) {
   return [
     '---',
     'name: conductor',
@@ -208,7 +238,7 @@ export function conductorSkill() {
     '',
     CURSOR_NOTE,
     '',
-    modelsSection(),
+    modelsSection(config),
   ].join('\n');
 }
 

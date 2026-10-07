@@ -1,7 +1,6 @@
 ---
 name: build-error-resolver
 description: "MUST delegate when build, typecheck, lint, or TypeScript errors occur. Fixes only those errors with minimal diffs."
-model: "grok-4.7[effort=xhigh,fast=false]"
 readonly: false
 ---
 # Build Error Resolver

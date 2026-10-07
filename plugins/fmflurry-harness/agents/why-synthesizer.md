@@ -1,7 +1,6 @@
 ---
 name: why-synthesizer
 description: "Spawned by the why skill only. Merges investigator findings into one evidence-weighted answer per synthesizer-prompt.md. Read-only."
-model: "claude-opus-5-5[effort=high]"
 readonly: true
 ---
 # why-synthesizer

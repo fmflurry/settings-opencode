@@ -6,14 +6,14 @@ import { fileURLToPath } from 'node:url';
 import {
   parseJsonc, buildMcp, splitFrontmatter, unquote, claudeAgent, opencodeAgent, slug, mdc,
   firstHeading, globsFromPaths, walkMd, conductorRuleBody, conductorSkill, stripAtImports, sanitize,
-  buildHooks, portableHookScript, tierModels,
+  buildHooks, portableHookScript, tierGuard, setupSkill, tierTable,
 } from './cursor-plugin/lib.mjs';
 
 const repoDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const config = JSON.parse(fs.readFileSync(path.join(repoDir, 'scripts/cursor-plugin/config.json'), 'utf8'));
 const out = path.join(repoDir, 'plugins', config.name);
 const claudeDir = path.join(repoDir, '.claude');
-const modelFor = tierModels(config);
+const assertTiered = tierGuard(config);
 
 const read = (p) => fs.readFileSync(p, 'utf8');
 function write(rel, content, mode) {
@@ -58,13 +58,14 @@ for (const entry of fs.readdirSync(path.join(out, 'skills'), { withFileTypes: tr
 }
 fs.mkdirSync(path.join(out, 'assets'), { recursive: true });
 fs.copyFileSync(path.join(repoDir, 'scripts/cursor-plugin/assets/logo.png'), path.join(out, 'assets/logo.png'));
-write('skills/conductor/SKILL.md', conductorSkill());
+write('skills/conductor/SKILL.md', conductorSkill(config));
+write('skills/setup-harness/SKILL.md', setupSkill(read(path.join(repoDir, 'scripts/cursor-plugin/templates/setup-harness.md')), config));
 
 const claudeAgentsDir = path.join(claudeDir, 'agents');
 const emitted = new Set();
 for (const file of fs.readdirSync(claudeAgentsDir).filter((f) => f.endsWith('.md')).sort()) {
   if (file === 'conductor.md') continue;
-  const agent = claudeAgent(read(path.join(claudeAgentsDir, file)), modelFor);
+  const agent = claudeAgent(read(path.join(claudeAgentsDir, file)), assertTiered);
   write(`agents/${agent.name}.md`, agent.out);
   emitted.add(agent.name);
 }
@@ -72,7 +73,7 @@ for (const file of fs.readdirSync(claudeAgentsDir).filter((f) => f.endsWith('.md
 const opencodeCfg = parseJsonc(read(path.join(repoDir, 'opencode.jsonc')));
 for (const [name, def] of Object.entries(opencodeCfg.agent ?? {})) {
   if (name === 'conductor' || def.disable || emitted.has(name)) continue;
-  write(`agents/${name}.md`, opencodeAgent(repoDir, name, def, modelFor));
+  write(`agents/${name}.md`, opencodeAgent(repoDir, name, def, assertTiered));
   emitted.add(name);
 }
 
@@ -107,7 +108,7 @@ write('rules/always__harness.mdc', mdc(
 ));
 write('rules/conductor.mdc', mdc(
   { description: 'Conductor: route every task to the matching specialist subagent', alwaysApply: true },
-  conductorRuleBody(read(path.join(claudeAgentsDir, 'conductor.md'))),
+  conductorRuleBody(read(path.join(claudeAgentsDir, 'conductor.md')), config),
 ));
 
 const hooks = buildHooks(JSON.parse(read(path.join(claudeDir, 'settings.json'))), config.hooks.include);
@@ -142,7 +143,7 @@ const counts = {
 };
 const values = {
   ...counts,
-  tierAgents: Object.entries(config.agentTiers).map(([tier, names]) => `- **${tier}**: ${names.join(', ')}`).join('\n'),
+  tierTable: tierTable(config),
 };
 write('README.md', read(path.join(repoDir, 'scripts/cursor-plugin/README.template.md')).replace(/\{\{(\w+)\}\}/g, (_, k) => values[k]));
 console.log(Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(' '));

@@ -1,7 +1,6 @@
 ---
 name: writer
 description: "MUST delegate for writing or editing non-code text artifacts: documentation, README, markdown, HTML reports, release notes, ADRs, prose, change logs. Forbidden from touching source code files."
-model: "composer-2.5[fast=false]"
 readonly: false
 ---
 # Writer

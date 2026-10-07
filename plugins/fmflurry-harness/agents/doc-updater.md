@@ -1,7 +1,6 @@
 ---
 name: doc-updater
 description: "MUST delegate for documentation, README updates, architecture notes, and codemaps. Keeps docs aligned with code changes."
-model: "composer-2.5[fast=false]"
 readonly: false
 ---
 # Documentation & Codemap Specialist

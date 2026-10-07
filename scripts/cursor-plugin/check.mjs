@@ -37,8 +37,15 @@ if (fs.existsSync(agentsDir)) {
     for (const key of Object.keys(fm)) {
       if (!config.agentKeys.includes(key)) errors.push(`agents/${f}: frontmatter key not allowed: ${key}`);
     }
-    if (!Object.values(config.modelTiers).includes(unquote(fm.model))) errors.push(`agents/${f}: model "${fm.model}" is not a modelTiers value`);
+    if ('model' in fm) errors.push(`agents/${f}: must not set model (chosen at Task time)`);
   }
+}
+
+if (!fs.existsSync(path.join(skillsDir, 'setup-harness/SKILL.md'))) errors.push('missing skills/setup-harness/SKILL.md');
+const conductorRule = path.join(out, 'rules/conductor.mdc');
+const conductorText = fs.existsSync(conductorRule) ? fs.readFileSync(conductorRule, 'utf8') : '';
+for (const slug of Object.values(config.defaultTierModels)) {
+  if (!conductorText.includes(slug)) errors.push(`rules/conductor.mdc: missing default slug ${slug}`);
 }
 
 const hooksPath = path.join(out, 'hooks/hooks.json');

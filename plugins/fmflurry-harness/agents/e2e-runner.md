@@ -1,7 +1,6 @@
 ---
 name: e2e-runner
 description: "MUST delegate for browser automation, Playwright work, and critical user-flow E2E tests. Generates, runs, and reports artifacts."
-model: "grok-4.7[effort=xhigh,fast=false]"
 readonly: false
 ---
 # E2E Test Runner — gc.platform

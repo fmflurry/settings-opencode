@@ -12,7 +12,7 @@ A conductor that routes every task to the matching specialist subagent (planner,
 | Component | Contents |
 | --- | --- |
 | Agents (25) | Specialist subagents the conductor delegates to |
-| Skills (71) | Reusable skills, including a `conductor` skill carrying the routing rules |
+| Skills (72) | Reusable skills, including a `conductor` skill carrying the routing rules |
 | Commands (62) | Slash commands for review, git, planning and verification |
 | Rules (24) | Always-on baseline plus the conductor routing rule; TypeScript rules apply on matching files |
 | Hooks | Pre-tool-use guards, command rewriting, code-memory preference, tool budget, stop checks |
@@ -20,21 +20,20 @@ A conductor that routes every task to the matching specialist subagent (planner,
 
 ## Models
 
-Each subagent pins its model by tier in its frontmatter.
+Model selection is dynamic. Subagents carry no `model` in their frontmatter; the conductor passes the tier's model on every `Task` call.
 
-| Tier | Model | Purpose |
-| --- | --- | --- |
-| coding | `grok-4.7[effort=xhigh,fast=false]` | Implementation, tests, build fixes |
-| smart | `claude-opus-5-5[effort=high]` | Planning, architecture, review, security (expensive) |
-| cheap | `composer-2.5[fast=false]` | Git, codebase search, docs, comment triage |
+After install, run `/setup-harness`. It detects the model slugs available to you, proposes one per tier, and writes `~/.cursor/rules/fmflurry-harness-models.mdc`. It applies to new chats. Without that rule the defaults below are used.
 
-- **coding**: coder, tdd-guide, build-error-resolver, refactor-cleaner, e2e-runner, api-spec-architect, gaudi
-- **smart**: planner, architect, code-reviewer, security-reviewer, angular-cop, dotnet-cop, database-reviewer, postgres-dba, gdpr-specialist, ecosystem-auditor, why-synthesizer
-- **cheap**: git-specialist, scout, writer, doc-updater, why-investigator, comment-judge, haruspex-commentorum
+| Tier | Default slug | Use | Agents |
+| --- | --- | --- | --- |
+| coding | `grok-4.7-xhigh` | implementation, tests, build fixes | coder, tdd-guide, build-error-resolver, refactor-cleaner, e2e-runner, api-spec-architect, gaudi |
+| smart | `claude-opus-5-5-high` | planning, architecture, review, security; expensive, so dispatch it only when needed | planner, architect, code-reviewer, security-reviewer, angular-cop, dotnet-cop, database-reviewer, postgres-dba, gdpr-specialist, ecosystem-auditor, why-synthesizer |
+| cheap | `composer-2.5` | git, codebase search, docs, comment triage | git-specialist, scout, writer, doc-updater, why-investigator, comment-judge, haruspex-commentorum |
 
-- Cursor falls back to a compatible model if a model is blocked by your plan or team.
 - `-fast` variants cost about 2x (Grok) to 6x (Composer) more, so they are deliberately avoided.
+- A tier value of `inherit` or `auto` runs on the parent model.
 - Pick Grok 4.7 xhigh in the model picker for the main chat; a plugin cannot set it.
+- Cloud agents and grokbot may not receive user rules, so they fall back to the defaults.
 
 ## Limitations
 

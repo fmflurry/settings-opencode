@@ -1,7 +1,6 @@
 ---
 name: ecosystem-auditor
 description: "MUST delegate for /ecosystem-audit or explicit audits of the repository-controlled OpenCode/Claude Code ecosystem, skill/agent parity, or harness coherence. Read-only — produces one evidence-first report and makes no changes."
-model: "claude-opus-5-5[effort=high]"
 readonly: true
 ---
 # Ecosystem Auditor

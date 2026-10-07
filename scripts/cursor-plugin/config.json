@@ -8,10 +8,10 @@
   "keywords": ["agents", "conductor", "subagents", "skills", "rules", "hooks", "mcp", "code-memory"],
   "category": "developer-tools",
   "tags": ["orchestration", "routing", "workflow"],
-  "modelTiers": {
-    "coding": "grok-4.7[effort=xhigh,fast=false]",
-    "smart": "claude-opus-5-5[effort=high]",
-    "cheap": "composer-2.5[fast=false]"
+  "defaultTierModels": {
+    "coding": "grok-4.7-xhigh",
+    "smart": "claude-opus-5-5-high",
+    "cheap": "composer-2.5"
   },
   "agentTiers": {
     "coding": ["coder", "tdd-guide", "build-error-resolver", "refactor-cleaner", "e2e-runner", "api-spec-architect", "gaudi"],

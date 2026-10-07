@@ -20,19 +20,16 @@ A conductor that routes every task to the matching specialist subagent (planner,
 
 ## Models
 
-Each subagent pins its model by tier in its frontmatter.
+Model selection is dynamic. Subagents carry no `model` in their frontmatter; the conductor passes the tier's model on every `Task` call.
 
-| Tier | Model | Purpose |
-| --- | --- | --- |
-| coding | `grok-4.7[effort=xhigh,fast=false]` | Implementation, tests, build fixes |
-| smart | `claude-opus-5-5[effort=high]` | Planning, architecture, review, security (expensive) |
-| cheap | `composer-2.5[fast=false]` | Git, codebase search, docs, comment triage |
+After install, run `/setup-harness`. It detects the model slugs available to you, proposes one per tier, and writes `~/.cursor/rules/fmflurry-harness-models.mdc`. It applies to new chats. Without that rule the defaults below are used.
 
-{{tierAgents}}
+{{tierTable}}
 
-- Cursor falls back to a compatible model if a model is blocked by your plan or team.
 - `-fast` variants cost about 2x (Grok) to 6x (Composer) more, so they are deliberately avoided.
+- A tier value of `inherit` or `auto` runs on the parent model.
 - Pick Grok 4.7 xhigh in the model picker for the main chat; a plugin cannot set it.
+- Cloud agents and grokbot may not receive user rules, so they fall back to the defaults.
 
 ## Limitations
 

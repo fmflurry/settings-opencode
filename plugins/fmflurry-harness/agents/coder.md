@@ -1,7 +1,6 @@
 ---
 name: coder
 description: "MUST delegate for any non-test implementation work: writing new code, applying spec, scaffolding modules, porting code, implementing fixes. Pure implementation only — caller owns planning, architecture, and review."
-model: "grok-4.7[effort=xhigh,fast=false]"
 readonly: false
 ---
 # Coder

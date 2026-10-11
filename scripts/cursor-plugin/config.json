@@ -20,7 +20,7 @@
   },
   "rules": {
     "always": [
-      "common/agents", "common/brief-contract", "common/code-comments", "common/codebase-exploration",
+      "common/agents", "common/autonomy", "common/brief-contract", "common/code-comments", "common/codebase-exploration",
       "common/coding-style", "common/git-workflow", "common/harness-parity", "common/hooks",
       "common/orchestration", "common/patterns", "common/performance", "common/question-handling",
       "common/security", "common/testing", "common/tool-budget", "common/verification-gate",

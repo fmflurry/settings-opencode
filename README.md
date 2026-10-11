@@ -108,6 +108,7 @@ The two halves stand alone. Use the OpenCode side, the Claude Code mirror, or bo
   - [Claude Code mirror](#claude-en)
   - [Sync & update](#sync-en)
   - [How it fits together](#flow-en)
+  - [Autonomous mode](#autonomy-en)
 - [Français](#francais)
   - [Objectif](#objectif-fr)
   - [Structure du repo](#structure-fr)
@@ -123,6 +124,7 @@ The two halves stand alone. Use the OpenCode side, the Claude Code mirror, or bo
   - [Mirror Claude Code](#claude-fr)
   - [Sync & mise a jour](#sync-fr)
   - [Comment tout s'emboite](#flow-fr)
+  - [Mode autonome](#autonomy-fr)
 
 ---
 
@@ -718,6 +720,77 @@ Two directories, one source of truth. The **lab** is wherever you cloned this re
 
 ---
 
+<a id="autonomy-en"></a>
+
+### Autonomous mode
+
+Autonomous mode lets the agent take one goal from clarification to a merged PR. Turn it on, then run `/ship <goal>`.
+With the flag off, the agent asks before each irreversible step, and a merge needs `--confirmed`.
+
+```bash
+agent-harness autonomy on|off|status     # toggle .claude/state/autonomy.on (gitignored, per machine)
+/ship <goal>                             # clarify, implement, PR, review, CI, merge
+agent-harness ship-merge <pr>            # the only merge path; add --confirmed in interactive mode
+agent-harness notify done "<msg>" <pr>   # notify on question, waiting, done, failure only
+```
+
+The `ship` skill (`skills/ship/`) owns the stages, and the `autonomous` skill runs the toggle. The behaviour rules are
+in `.claude/rules/common/autonomy.md` (Claude Code) and `instructions/autonomy.md` (OpenCode).
+
+**Per-repo config.** Each repo can set `.claude/agent-harness.json`. Every key is optional:
+
+| Key | Default when absent | Purpose |
+|---|---|---|
+| `base` | the repo default branch (`gh repo view`) | PR base and the only merge target |
+| `requiredChecks` | `[]` | check-run names that must conclude `success`, `skipped` or `neutral` on the head |
+| `reviewStatus` | unset (no rail) | optional. Set it only when the repo has an external status check. The commit status context that must be `success` on the head |
+| `reviewStatusCreator` | unset (any creator) | optional, used with `reviewStatus`. Login that must have posted the status |
+| `verify` | unset (verification-gate detection) | commands the ship verify step runs |
+| `protectedPaths` | unset (no rail) | optional regexes. When set, a PR touching a match needs a human merge (`--confirmed`, which prompts) |
+
+```json
+{
+  "base": "main",
+  "requiredChecks": ["build", "test"],
+  "reviewStatus": "ci-review",
+  "reviewStatusCreator": "github-actions[bot]",
+  "verify": ["npm run lint", "npm test"],
+  "protectedPaths": ["^\\.github/"]
+}
+```
+
+**Merge gate.** `agent-harness ship-merge` refuses unless all of these hold:
+
+- the autonomy flag is on, or `--confirmed` is passed
+- the PR targets the base branch and is not a draft
+- every `requiredChecks` entry passed on the head
+- zero unresolved review threads
+- the branch is up to date with the base branch
+- no changed path matches `protectedPaths`, unless `--confirmed` is passed (a human merges such a PR)
+- only when `reviewStatus` is configured: the newest status with that context on the head is `success`, and its creator matches `reviewStatusCreator` when set
+
+It then squash-merges pinned to the head SHA and deletes the branch.
+
+**Review.** Ship stage 8 runs a thorough local review: `code-reviewer`, `security-reviewer`, and the stack cop
+(`angular-cop` or `dotnet-cop`) on the PR diff. The agent fixes confirmed CRITICAL and HIGH findings, re-runs the
+review (max 3 rounds), and posts one summary comment for a human to audit. That review is a quality step, not a merge
+rail. No GitHub status is created, and `ship-merge` does not trust the comment.
+
+**Push rules.** Pushes to the base branch are forbidden in every mode, with or without force. `git push --mirror`, `--all`, and `--no-verify` are forbidden too. Force pushes (`--force`, `--force-with-lease`, `-f`, `+refspec`) are allowed on other branches.
+
+**Notifications.** The run notifies only when a human needs to act, or when the goal ends: `question` when it must stop for an answer, `waiting` on a permission or idle prompt, `failure` on escalation, and `done` when the PR is merged. No progress notifications.
+
+**Limits.**
+
+- These are client-side guardrails, not a security boundary. An agent with shell access can call `gh` directly.
+- Branch protection on the base branch (required reviews, required checks, restricted pushes) is the real enforcement. Set it on the host.
+- A PR that matches `protectedPaths` needs a human merge (`--confirmed`), when that key is set. Without the key, autonomous mode merges every PR that passes the gate.
+- OpenCode has no git-guard or stop-gate hooks. Its rules are enforced by the instruction and the merge gate only.
+
+**Parity.** The autonomy-status mod (`.claude/mods/`, status line and band) is Claude Code only. OpenCode has no equivalent.
+
+---
+
 <a id="francais"></a>
 
 ## Français
@@ -961,3 +1034,67 @@ Deux repertoires, une source de verite: le **lab** (ton clone de ce repo) et le 
 2. Dev: `conductor` execute — il n'a pas le droit d'ecrire; il dispatche des Task vers les specialistes. `secret-file-guard` bloque l'acces `.env`; `tool-budget` pousse la verification.
 3. Workflow: routage via Task (impose par permissions); `/plan`, `/tdd`, `/security`, etc. forcent explicitement le meme routage. Brief contract, question protocol et verification gate encadrent chaque passage.
 4. Idle/completion: `llm-metrics` persiste les metriques par appel; `notification` envoie les alertes.
+
+<a id="autonomy-fr"></a>
+
+### Mode autonome
+
+Le mode autonome permet à l'agent de mener un objectif de la clarification jusqu'à une PR fusionnée. Activez-le, puis lancez `/ship <goal>`. Avec le flag désactivé, l'agent demande avant chaque étape irréversible, et une fusion nécessite `--confirmed`.
+
+```bash
+agent-harness autonomy on|off|status     # bascule .claude/state/autonomy.on (gitignored, par machine)
+/ship <goal>                             # clarifier, implémenter, PR, revue, CI, fusion
+agent-harness ship-merge <pr>            # seul chemin de fusion; ajouter --confirmed en mode interactif
+agent-harness notify done "<msg>" <pr>   # notifier uniquement sur question, waiting, done, failure
+```
+
+Le skill `ship` (`skills/ship/`) gère les étapes, et le skill `autonomous` pilote la bascule. Les règles de comportement sont dans `.claude/rules/common/autonomy.md` (Claude Code) et `instructions/autonomy.md` (OpenCode).
+
+**Configuration par repo.** Chaque repo peut définir `.claude/agent-harness.json`. Toutes les clés sont optionnelles :
+
+| Clé | Valeur par défaut (absente) | Rôle |
+|---|---|---|
+| `base` | la branche par défaut du repo (`gh repo view`) | branche cible de la PR, et seule cible de fusion |
+| `requiredChecks` | `[]` | noms de check-runs qui doivent conclure `success`, `skipped` ou `neutral` sur la tête |
+| `reviewStatus` | non défini (pas de garde-fou) | optionnel. À définir seulement si le repo a un status check externe. Contexte du commit status qui doit valoir `success` sur la tête |
+| `reviewStatusCreator` | non défini (tout créateur) | optionnel, utilisé avec `reviewStatus`. Login qui doit avoir publié le status |
+| `verify` | non défini (détection verification-gate) | commandes lancées par l'étape verify du ship |
+| `protectedPaths` | non défini (pas de garde-fou) | expressions régulières optionnelles. Quand la clé est définie, une PR qui touche une correspondance nécessite une fusion humaine (`--confirmed`, qui demande confirmation) |
+
+```json
+{
+  "base": "main",
+  "requiredChecks": ["build", "test"],
+  "reviewStatus": "ci-review",
+  "reviewStatusCreator": "github-actions[bot]",
+  "verify": ["npm run lint", "npm test"],
+  "protectedPaths": ["^\\.github/"]
+}
+```
+
+**Garde-fous de fusion.** `agent-harness ship-merge` refuse, sauf si toutes ces conditions sont vraies :
+
+- le flag autonome est activé, ou `--confirmed` est passé
+- la PR cible la branche de base et n'est pas un brouillon
+- chaque entrée de `requiredChecks` a réussi sur la tête
+- zéro fil de revue non résolu
+- la branche est à jour par rapport à la branche de base
+- aucun chemin modifié ne correspond à `protectedPaths`, sauf si `--confirmed` est passé (un humain fusionne alors la PR)
+- seulement si `reviewStatus` est défini : le status le plus récent portant ce contexte sur la tête est `success`, et son créateur correspond à `reviewStatusCreator` si la clé est définie
+
+Ensuite, la fusion se fait en squash, épinglée au SHA de la tête, puis la branche est supprimée.
+
+**Règles de push.** Les pushes vers la branche de base sont interdits dans tous les modes, avec ou sans force. `git push --mirror`, `--all` et `--no-verify` sont aussi interdits. Les force pushes (`--force`, `--force-with-lease`, `-f`, `+refspec`) sont autorisés sur les autres branches.
+
+**Revue.** L'étape 8 du ship lance une revue locale approfondie : `code-reviewer`, `security-reviewer`, et le cop du stack (`angular-cop` ou `dotnet-cop`) sur le diff de la PR. L'agent corrige les findings CRITICAL et HIGH confirmés, relance la revue (3 tours maximum), et publie un commentaire de synthèse que l'humain peut auditer. Cette revue est une étape de qualité, pas un garde-fou de fusion. Aucun status GitHub n'est créé, et `ship-merge` ne fait pas confiance à ce commentaire.
+
+**Notifications.** Le run notifie seulement quand un humain doit agir, ou quand l'objectif se termine : `question` quand il doit s'arrêter pour une réponse, `waiting` sur un prompt de permission ou d'inactivité, `failure` en cas d'escalade, et `done` quand la PR est fusionnée. Aucune notification de progression.
+
+**Limites.**
+
+- Ce sont des garde-fous côté client, pas une frontière de sécurité. Un agent avec accès shell peut appeler `gh` directement.
+- La protection de branche sur la branche de base (reviews requises, checks requis, push restreints) est le vrai mécanisme d'application. À configurer sur l'hébergeur.
+- Une PR qui correspond à `protectedPaths` nécessite une fusion humaine (`--confirmed`), quand la clé est définie. Sans cette clé, le mode autonome fusionne toute PR qui passe les garde-fous.
+- OpenCode n'a pas de hooks git-guard ni de stop-gate. Ses règles sont appliquées par l'instruction et le garde-fou de fusion seulement.
+
+**Parité.** Le mod de statut autonome (`.claude/mods/`, barre d'état et bandeau) est réservé à Claude Code. OpenCode n'a pas d'équivalent.

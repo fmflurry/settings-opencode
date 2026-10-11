@@ -9,6 +9,7 @@
     "~/.config/opencode/instructions/verification-gate.md",
     "~/.config/opencode/instructions/harness-parity.md",
     "~/.config/opencode/instructions/brief-contract.md",
+    "~/.config/opencode/instructions/autonomy.md",
     "~/.config/opencode/instructions/tool-budget.md",
     "~/.config/opencode/instructions/code-comments.md",
     "~/.config/opencode/instructions/git-workflow.md",
@@ -547,6 +548,16 @@
     },
   },
   "command": {
+    "ship": {
+      "description": "Run one goal from clarify to merge in autonomous mode",
+      "template": "{file:commands/ship.md}\n\n$ARGUMENTS",
+      "agent": "conductor",
+    },
+    "autonomous": {
+      "description": "Toggle autonomous mode on, off, or show status",
+      "template": "{file:commands/autonomous.md}\n\n$ARGUMENTS",
+      "agent": "conductor",
+    },
     "git": {
       "description": "Handle git operations with enforced branch and commit conventions",
       "template": "{file:commands/git.md}\n\n$ARGUMENTS",
@@ -787,6 +798,7 @@
     "./plugins/llm-metrics.ts",
     "./plugins/secret-file-guard.ts",
     "./plugins/tool-budget.ts",
+    "./plugins/autonomy.ts",
   ],
   "provider": {
     "llama.cpp": {

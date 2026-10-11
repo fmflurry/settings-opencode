@@ -1,0 +1,7 @@
+{
+  "name": "autonomy-status",
+  "version": "0.1.0",
+  "description": "Shows the autonomous-mode and ship-goal status in the status line, above the prompt, and via /autonomy-status, in Cursor Dark colors.",
+  "author": { "name": "fmflurry" },
+  "types": "./types/index.d.ts"
+}

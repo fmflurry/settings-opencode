@@ -2,7 +2,6 @@
 name: why-synthesizer
 description: "Spawned by the why skill only. Merges investigator findings into one evidence-weighted answer per synthesizer-prompt.md. Read-only."
 readonly: true
-tier: smart
 ---
 # why-synthesizer
 

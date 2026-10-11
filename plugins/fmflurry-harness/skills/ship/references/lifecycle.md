@@ -109,9 +109,9 @@ Then record the PR: `agent-harness goal pr <n>`.
   - `/code-review high` is optional, if available.
 - Verify each finding against the code. Drop the findings you cannot confirm.
 - Fix every confirmed CRITICAL and HIGH finding, push through `git-specialist`, run
-  `agent-harness goal sha <new-sha>`, and re-run the review on the new diff.
-- Max 3 review rounds. If a CRITICAL or HIGH finding is still open after round 3, record the reason with
-  `agent-harness goal escalate "<reason>"`, post the concerns summary, and notify failure.
+  `agent-harness goal sha <new-sha>`, and re-run the review on the new diff. Repeat until no confirmed CRITICAL or
+  HIGH finding remains. There is no round cap. Escalate only on the no-progress rule in SKILL.md (the same finding
+  survives a full loop iteration).
 - When the review ends, post one summary PR comment in the format of [review-format.md](review-format.md):
 
   ```bash
@@ -146,6 +146,9 @@ gh pr ready <n>
   `## Non-blocking follow-ups`.
 - Before each fix round: `agent-harness goal bump`. Exit 3 means escalate. Run `agent-harness notify failure`.
 - Flaky check: re-run the failed job once with `gh run rerun <run-id> --failed`. A second failure is real.
+- Blocker classification (which CI failures the agent fixes, and which are human-only) is in the SKILL.md "Blockers"
+  section. A CI failure caused by repo code or repo config, including workflow files, is fixed by the agent. A missing
+  secret, a billing or quota limit, or an outage is escalated.
 
 ## 11. Comments
 
@@ -191,5 +194,6 @@ agent-harness goal status
 
 It squash-merges pinned to the head SHA, then deletes the branch.
 
-If it refuses, read the reason, fix the cause, and re-run. Do not add labels, post comments or create statuses to
-get past a refusal you did not earn.
+If it refuses, the refusal is input to the loop. Read the reason, fix the cause (rebase or update the branch, resolve a
+thread, fix a check, re-review), push, and retry the merge. The run only stops when the PR merges or a human-only
+blocker stops it. Do not add labels, post comments or create statuses to get past a refusal you did not earn.

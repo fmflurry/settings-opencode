@@ -422,6 +422,9 @@ python3 -c "open('.claude/settings.json','w').write('x')"
 perl -e 'open F,">.claude/settings.json"'
 node -e "require('fs').writeFileSync('.opencode/x','y')"
 ruby -e 'File.write(".claude/hooks/a.sh","x")'
+python3 -c "open('.claude/settings.local.json','w')"
+node -e "require('fs').writeFileSync('.claude/x','')"
+perl -e 'open F,">tools/agent-harness/x"'
 dd if=/tmp/x of=.claude/settings.json
 git checkout -- .claude/settings.json
 git restore -- .github/workflows/ci.yml
@@ -467,6 +470,10 @@ git commit -m "never git push to master"
 grep -rn mv tools
 git push origin feature/master-fix
 python3 -c "print(1)"
+node tools/agent-harness/gen-cursor.mjs
+bash tools/agent-harness/check.sh
+python3 tools/x.py
+node tools/agent-harness/gen-cursor.mjs > .cursor/x
 node build.js
 dd if=/dev/zero of=/tmp/x count=1
 git checkout -- src/a.ts

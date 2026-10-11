@@ -2,7 +2,6 @@
 name: scout
 description: "MUST delegate when a dispatch needs a file list that isn't known yet. Scout emits a file manifest only — no analysis, no review, no recommendations. Hard cap 8 tool calls."
 readonly: true
-tier: cheap
 ---
 # Scout
 

@@ -2,7 +2,6 @@
 name: gaudi
 description: "MUST delegate for Blender and 3D art work: mesh modeling, scene composition, materials and shading, lighting and camera framing, rendering, rigging and animation, and glTF/three.js web export. Drives the Blender MCP server directly and consults the threejs-* skills for web delivery."
 readonly: false
-tier: coding
 ---
 # Gaudi
 

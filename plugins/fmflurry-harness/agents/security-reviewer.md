@@ -2,7 +2,6 @@
 name: security-reviewer
 description: "MUST delegate for auth, user input, API endpoints, secrets, payments, PII, or sensitive data. Read-only — reports vulnerabilities; orchestrator dispatches fixes to coder."
 readonly: true
-tier: smart
 ---
 # Security Reviewer
 

@@ -2,7 +2,6 @@
 name: refactor-cleaner
 description: "MUST delegate for dead code, unused exports, duplication, and consolidation cleanup. Preserves behavior and verifies safety."
 readonly: false
-tier: coding
 ---
 # Refactor & Dead Code Cleaner
 

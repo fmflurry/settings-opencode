@@ -109,6 +109,18 @@ check_redirects() {
   done
 }
 
+interpreter_inline_hits_protected() {
+  local a
+  for a in "$@"; do
+    case "$a" in
+      - | '<'*) grep -Eq -- "$LOOSE_RE" <<<"$cmd" && return 0; return 1 ;;
+      --eval | --eval=* | --print | -[ceEp] | -[!-]*[ceEp]) grep -Eq -- "$LOOSE_RE" <<<"$*" && return 0; return 1 ;;
+      *.py | *.js | *.mjs | *.cjs | *.rb | *.pl) return 1 ;;
+    esac
+  done
+  return 1
+}
+
 ASKED=0
 check_ship_merge() {
   local has_assign="$1" c0="$2"; shift 2
@@ -162,7 +174,7 @@ while IFS= read -r seg; do
         if [[ "$a" =~ ^-[A-Za-z]*i || "$a" = --in-place* ]]; then any_protected "${ct[@]:1}" && deny; break; fi
       done ;;
     dd) any_protected "${ct[@]:1}" && deny ;;
-    python | python[0-9]* | perl | node | ruby) grep -Eq -- "$LOOSE_RE" <<<"${ct[*]}" && deny ;;
+    python | python[0-9]* | perl | node | ruby) interpreter_inline_hits_protected "${ct[@]:1}" && deny ;;
   esac
 done <<<"$segments"
 

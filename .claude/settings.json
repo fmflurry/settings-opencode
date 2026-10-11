@@ -3,7 +3,8 @@
     "API_TIMEOUT_MS": "3000000",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "80",
-    "CI": "true"
+    "CI": "true",
+    "CLAUDE_CODE_PLUGIN_DIRS": "~/.claude/mods/autonomy-status"
   },
   "attribution": {
     "commit": "",
@@ -22,7 +23,8 @@
       "TaskCreate",
       "TaskGet",
       "TaskUpdate",
-      "TaskList"
+      "TaskList",
+      "Bash(agent-harness *)"
     ],
     "deny": [
       "Write(*.env)",
@@ -77,6 +79,24 @@
             "command": "~/.claude/hooks/tool-budget.sh"
           }
         ]
+      },
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/autonomy-ask-guard.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/autonomy-git-guard.sh"
+          }
+        ]
       }
     ],
     "Stop": [
@@ -88,6 +108,14 @@
             "command": "~/.claude/hooks/stop.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/ship-stop-gate.sh"
+          }
+        ]
       }
     ],
     "Notification": [
@@ -97,6 +125,15 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/notification.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "permission_prompt|idle_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/orca-notify.sh"
           }
         ]
       }
@@ -111,6 +148,26 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/autonomy-context.sh"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/autonomy-context.sh"
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {
@@ -119,6 +176,8 @@
   "skipDangerousModePermissionPrompt": true,
   "model": "claude-opus-4-8",
   "deniedMcpServers": [
-    { "serverName": "blender" }
+    {
+      "serverName": "blender"
+    }
   ]
 }

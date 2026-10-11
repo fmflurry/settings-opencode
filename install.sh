@@ -416,7 +416,7 @@ copy_tree_with_seed() {
 
 # Claude Code stores conversation and runtime data alongside configuration. Never
 # mirror that tree wholesale: only canonical, repository-owned assets are copied.
-CLAUDE_MANAGED_ALLOWLIST=("CLAUDE.md" "RTK.md" "agents" "commands" "hooks" "rules" "skills" "policy-limits.json")
+CLAUDE_MANAGED_ALLOWLIST=("CLAUDE.md" "RTK.md" "agents" "commands" "hooks" "mods" "rules" "skills" "policy-limits.json")
 
 copy_claude_allowlist() {
     local src="$1" dst="$2" managed
@@ -1084,6 +1084,89 @@ install_notify_scripts() {
     fi
 }
 
+install_agent_harness_scripts() {
+    local src_dir="$REPO_DIR/scripts/agent-harness"
+    [ -f "$src_dir/agent-harness.sh" ] || return 0
+
+    local dest script
+    local dests=()
+    [ "$CLAUDE_TARGET_READY" = "1" ] && dests+=("$TARGET_CLAUDE/scripts/agent-harness")
+    [ "$OPENCODE_TARGET_READY" = "1" ] && [ "$OPENCODE_TARGET_IS_SOURCE" != "1" ] && dests+=("$TARGET_OPENCODE/scripts/agent-harness")
+
+    for dest in "${dests[@]+"${dests[@]}"}"; do
+        mkdir -p "$dest"
+        for script in "$src_dir"/*.sh; do
+            cp "$script" "$dest/$(basename "$script")"
+            chmod +x "$dest/$(basename "$script")"
+        done
+        ok "installed agent-harness scripts into $dest"
+    done
+
+    [ "$LOCAL_MODE" = "1" ] && return 0
+    [ "$CLAUDE_TARGET_READY" = "1" ] || return 0
+
+    # A wrapper, not a symlink: agent-harness.sh resolves its siblings from its own dirname.
+    local bin_dir="$HOME/.local/bin"
+    local link="$bin_dir/agent-harness"
+    mkdir -p "$bin_dir"
+    [ -L "$link" ] && rm -f "$link"
+    printf '#!/usr/bin/env bash\nexec bash "%s/scripts/agent-harness/agent-harness.sh" "$@"\n' "$TARGET_CLAUDE" > "$link"
+    chmod +x "$link"
+    ok "installed $link"
+}
+
+merge_agent_harness_settings() {
+    [ "$CLAUDE_TARGET_READY" = "1" ] || return 0
+    local settings="$TARGET_CLAUDE/settings.json"
+    [ -f "$settings" ] || return 0
+
+    if ! command -v jq >/dev/null 2>&1; then
+        warn "jq not found — skipping agent-harness settings merge into $settings"
+        return 0
+    fi
+
+    local hooks_dir="~/.claude/hooks" mod_dir="$TARGET_CLAUDE/mods/autonomy-status"
+    [ "$LOCAL_MODE" = "1" ] && hooks_dir="./.claude/hooks"
+
+    local tmp
+    tmp="$(mktemp "$settings.XXXXXX")"
+    cp -p "$settings" "$tmp"
+    if ! jq --arg h "$hooks_dir" --arg mod "$mod_dir" --arg modTilde "~/.claude/mods/autonomy-status" '
+        def addhook($ev; $m; $cmd):
+            if ([.hooks[$ev][]?.hooks[]?.command] | index($cmd)) then .
+            else .hooks[$ev] = ((.hooks[$ev] // []) + [
+                (if $m == "" then {} else {matcher: $m} end) + {hooks: [{type: "command", command: $cmd}]}
+            ]) end;
+        addhook("SessionStart"; ""; $h + "/autonomy-context.sh")
+        | addhook("UserPromptSubmit"; ""; $h + "/autonomy-context.sh")
+        | addhook("PreToolUse"; "AskUserQuestion"; $h + "/autonomy-ask-guard.sh")
+        | addhook("PreToolUse"; "Bash"; $h + "/autonomy-git-guard.sh")
+        | addhook("Notification"; "permission_prompt|idle_prompt"; $h + "/orca-notify.sh")
+        | addhook("Stop"; ""; $h + "/ship-stop-gate.sh")
+        | .permissions.allow = (if ((.permissions.allow // []) | index("Bash(agent-harness *)")) then .permissions.allow else ((.permissions.allow // []) + ["Bash(agent-harness *)"]) end)
+        | .env.CLAUDE_CODE_PLUGIN_DIRS = (
+            (.env.CLAUDE_CODE_PLUGIN_DIRS // "") as $cur
+            | ($cur | split(":")) as $parts
+            | if ($parts | index($mod)) or ($parts | index($modTilde)) then $cur
+              elif $cur == "" then $mod
+              else $cur + ":" + $mod end)
+    ' "$settings" > "$tmp"; then
+        rm -f "$tmp"
+        warn "could not merge agent-harness entries into $settings (invalid JSON?) — left unchanged"
+        return 0
+    fi
+
+    if cmp -s "$settings" "$tmp"; then
+        rm -f "$tmp"
+        ok "agent-harness settings already present in $settings"
+        return 0
+    fi
+
+    cp -p "$settings" "$settings.agent-harness.bak"
+    mv "$tmp" "$settings"
+    ok "merged agent-harness hooks, permission and plugin dir into $settings (backup: $settings.agent-harness.bak)"
+}
+
 print_next_steps() {
     step "Next steps"
     if [ "$LOCAL_MODE" = "1" ]; then
@@ -1377,6 +1460,8 @@ if [ "$SKIP_OPENCODE" != "1" ]; then
 fi
 install_claude_mirror
 install_notify_scripts
+install_agent_harness_scripts
+merge_agent_harness_settings
 
 # The repo-path export, model/reasoning defaults, and the global settings-sync
 # command are harness-independent — install them in global mode regardless of

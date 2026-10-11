@@ -198,13 +198,13 @@ check "autonomy-context prints goal" grep -q 'Goal: ctx goal' <<<"$out"
 reset
 bash "$H/goal.sh" set "ship it" "crit a" "crit b"
 check "goal criteria array" test "$(jq '.criteria | length' "$TMP/state/goal.json")" = 2
-jq '.max_fix_iterations = 1' "$TMP/state/goal.json" >"$TMP/g" && mv "$TMP/g" "$TMP/state/goal.json"
+jq '.max_fix_iterations = 2' "$TMP/state/goal.json" >"$TMP/g" && mv "$TMP/g" "$TMP/state/goal.json"
 bash "$H/goal.sh" bump; check "bump within max" test $? -eq 0
 ORCA_WORKTREE_ID='repo::/p' bash "$H/goal.sh" bump; rc=$?
 check "bump past max exits 3" test $rc -eq 3
 check "bump past max escalates" test "$(jq -r .status "$TMP/state/goal.json")" = escalated
 check "bump past max notifies" grep -q 'failure:' "$FX/orca.log"
-check "bump past max records reason" test "$(jq -r .reason "$TMP/state/goal.json")" = "fix iterations exhausted (1)"
+check "bump past max records reason" test "$(jq -r .reason "$TMP/state/goal.json")" = "fix iterations exhausted (2)"
 reset
 bash "$H/goal.sh" bump; check "bump with no goal file exits 0" test $? -eq 0
 bash "$H/goal.sh" set g2

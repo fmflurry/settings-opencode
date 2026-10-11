@@ -198,13 +198,13 @@ check "autonomy-context prints goal" grep -q 'Goal: ctx goal' <<<"$out"
 reset
 bash "$H/goal.sh" set "ship it" "crit a" "crit b"
 check "goal criteria array" test "$(jq '.criteria | length' "$TMP/state/goal.json")" = 2
-jq '.max_fix_iterations = 1' "$TMP/state/goal.json" >"$TMP/g" && mv "$TMP/g" "$TMP/state/goal.json"
+jq '.max_fix_iterations = 2' "$TMP/state/goal.json" >"$TMP/g" && mv "$TMP/g" "$TMP/state/goal.json"
 bash "$H/goal.sh" bump; check "bump within max" test $? -eq 0
 ORCA_WORKTREE_ID='repo::/p' bash "$H/goal.sh" bump; rc=$?
 check "bump past max exits 3" test $rc -eq 3
 check "bump past max escalates" test "$(jq -r .status "$TMP/state/goal.json")" = escalated
 check "bump past max notifies" grep -q 'failure:' "$FX/orca.log"
-check "bump past max records reason" test "$(jq -r .reason "$TMP/state/goal.json")" = "fix iterations exhausted (1)"
+check "bump past max records reason" test "$(jq -r .reason "$TMP/state/goal.json")" = "fix iterations exhausted (2)"
 reset
 bash "$H/goal.sh" bump; check "bump with no goal file exits 0" test $? -eq 0
 bash "$H/goal.sh" set g2
@@ -425,7 +425,16 @@ ruby -e 'File.write(".claude/hooks/a.sh","x")'
 python3 -c "open('.claude/settings.local.json','w')"
 node -e "require('fs').writeFileSync('.claude/x','')"
 perl -e 'open F,">tools/agent-harness/x"'
+node -r ./x.js -e "require('fs').writeFileSync('.claude/x','')"
+perl -I lib.pl -e 'open F,">.claude/x"'
+python3 -W ignore.py -c 'open(".claude/x","w")'
+echo "open('.claude/x','w')" | python3
+echo "require('fs').writeFileSync('.claude/x','')" | node
 dd if=/tmp/x of=.claude/settings.json
+xargs -I{} python3 -c "open('.claude/settings.json','w')"
+xargs -n1 bash -c "echo x > .claude/settings.json"
+nice -n 5 python3 -c "open('.claude/settings.json','w')"
+timeout 5 node -e "require('fs').writeFileSync('.claude/settings.json','')"
 git checkout -- .claude/settings.json
 git restore -- .github/workflows/ci.yml
 git checkout origin/master -- AGENTS.md
@@ -473,9 +482,11 @@ python3 -c "print(1)"
 node tools/agent-harness/gen-cursor.mjs
 bash tools/agent-harness/check.sh
 python3 tools/x.py
+echo hi | python3 tools/x.py
 node tools/agent-harness/gen-cursor.mjs > .cursor/x
 node build.js
 dd if=/dev/zero of=/tmp/x count=1
+xargs -n1 echo
 git checkout -- src/a.ts
 git restore -- docs/a.md
 touch /tmp/x

@@ -22,7 +22,7 @@ case "$cmd" in
   bump)
     [ -f "$GOAL_FILE" ] || exit 0
     goal_update '.fix_iterations += 1'
-    if [ "$(goal_get '.fix_iterations')" -gt "$(goal_get '.max_fix_iterations')" ]; then
+    if [ "$(goal_get '.fix_iterations')" -ge "$(goal_get '.max_fix_iterations')" ]; then
       reason="fix iterations exhausted ($(goal_get '.max_fix_iterations'))"
       goal_update --arg r "$reason" '.status = "escalated" | .reason = $r'
       bash "$NOTIFY" failure "$reason: $(goal_get '.goal')" "$(goal_get '.pr // empty')"

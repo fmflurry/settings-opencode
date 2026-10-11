@@ -110,15 +110,18 @@ check_redirects() {
 }
 
 interpreter_inline_hits_protected() {
-  local a
+  local a inline=0 script=0 stdin=0
+  [ "$#" -eq 0 ] && stdin=1
   for a in "$@"; do
     case "$a" in
-      - | '<'*) grep -Eq -- "$LOOSE_RE" <<<"$cmd" && return 0; return 1 ;;
-      --eval | --eval=* | --print | -[ceEp] | -[!-]*[ceEp]) grep -Eq -- "$LOOSE_RE" <<<"$*" && return 0; return 1 ;;
-      *.py | *.js | *.mjs | *.cjs | *.rb | *.pl) return 1 ;;
+      - | '<'*) stdin=1 ;;
+      --eval | --eval=* | --print | --print=* | -[ceEp] | -[!-]*[ceEp]*) inline=1 ;;
+      *.py | *.js | *.mjs | *.cjs | *.rb | *.pl) script=1 ;;
     esac
   done
-  return 1
+  [ "$inline" = 0 ] && [ "$script" = 1 ] && [ "$stdin" = 0 ] && return 1
+  [ "$inline" = 1 ] || [ "$stdin" = 1 ] || return 1
+  grep -Eq -- "$LOOSE_RE" <<<"$cmd"
 }
 
 ASKED=0
@@ -154,6 +157,12 @@ while IFS= read -r seg; do
     t="${toks[$i]}"; b="${t##*/}"
     if [[ "$t" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then has_assign=1; i=$((i + 1))
     elif [[ "$b" =~ ^(env|sudo|command|exec|time|nohup|builtin|eval)$ ]]; then i=$((i + 1))
+    elif [[ "$b" =~ ^(xargs|nice|timeout)$ ]]; then
+      i=$((i + 1))
+      while [[ "${toks[$i]:-}" == -* ]]; do
+        if [[ "${toks[$i]}" =~ ^-[nILPsk]$ ]]; then i=$((i + 2)); else i=$((i + 1)); fi
+      done
+      [ "$b" = timeout ] && i=$((i + 1))
     elif [[ "$b" =~ ^(bash|sh|zsh|dash)$ ]] && [[ "${toks[$((i + 1))]:-}" =~ ^-[a-z]*c$ ]]; then i=$((i + 2))
     else break
     fi

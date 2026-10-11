@@ -25,6 +25,8 @@ This repo is the **single source of truth** for both OpenCode and Claude Code ha
 | **Agents (Claude)** | `.claude/agents/` | ✗ | ✓ | `.claude/agents/` | Claude-only agent definitions. |
 | **Rules** | `.claude/rules/` | ✗ | ✓ | `.claude/rules/` | Claude-only rules (e.g., orchestration.md, verification-gate.md, codebase-exploration.md). |
 | **Hooks** | `.claude/hooks/` | ✗ | ✓ | `.claude/hooks/` | Claude-only runtime hooks (e.g., installed by learning runtime). |
+| **Harness scripts** | `scripts/agent-harness/` | ✓ | ⚠ | `scripts/agent-harness/` | Autonomy CLI (`agent-harness`) and helpers. OpenCode gets it through the tree copy. Claude hooks that call it need the installer to expose it; confirm in `install.sh` before relying on it. |
+| **Claude mods** | `.claude/mods/` | ✗ | ⚠ | `.claude/mods/` | Claude-only status line and UI mods. Reaches Claude only if the `.claude/` allowlist in `install.sh` includes it; confirm there. |
 | **Commands** | `commands/` | ✓ | ✗ | `commands/` | OpenCode-only slash commands. |
 | **Prompts** | `prompts/` | ✓ | ✗ | `prompts/` (including `prompts/agents/` for agent prompts) | OpenCode-only prompt templates. |
 | **Contexts** | `contexts/` | ✓ | ✗ | `contexts/` | OpenCode-only context definitions. |

@@ -20,7 +20,9 @@ Do not notify for progress.
 
 **(c) Autonomous mode: decide, log, never ask.** With the flag on, decide from the repo and the evidence.
 Log each assumption with `show-your-work`, and pin it under `## Locked decisions` in the PR. Do not call
-AskUserQuestion. If a blocker stops you, escalate with `agent-harness notify failure` and stop.
+AskUserQuestion. Fix every blocker the agent can fix (review findings, failing checks, conflicts, a stale branch,
+unresolved threads, a `ship-merge` refusal) and loop. Escalate only a human-only blocker, with
+`agent-harness notify failure` (or `waiting`) and stop. The `ship` skill lists both classes.
 
 **(d) The one documented exception.** "Irreversible actions need explicit confirmation" (see
 [question-handling.md](question-handling.md)) does not apply to these actions while the flag is on:
@@ -39,16 +41,20 @@ These stay forbidden in every mode:
 - commands on the deny list in `.claude/settings.json`, and the Bash commands the git guard hook denies (merges
   other than `agent-harness ship-merge`, pushes to the base branch, `reset --hard`, `branch -D`, shell writes to
   the harness paths)
-- `--no-verify`, disabling a test, or editing a workflow file
+- `--no-verify`, or weakening a check: disabling or skipping a test, job or required check, `continue-on-error`, deleting a check, lowering thresholds
 - merging a PR that matches `protectedPaths` (in `.claude/agent-harness.json`). A human merges it with `--confirmed`.
 
 The flag does not authorise any action not listed above, and it does not authorise a merge that the gate refused.
 
-**(e) Continue until done or escalated.** The run ends in one of two states: the goal is `done` (PR merged), or it
-is escalated (`agent-harness goal bump` exits 3, the no-progress escalation fires, or a human-only decision blocks
-it). Record the reason with `agent-harness goal escalate "<reason>"`. The Stop hook (`ship-stop-gate`) blocks an
-early stop while the goal is active and the PR is unmerged. It escalates after five no-progress blocks or 30 blocks
-in total, and it fails open when the host cannot be read. Do not work around it by ending the turn.
+**(e) Loop until done or escalated.** The run is a loop: ship, review, fix blockers, review again, merge, repeat. Each
+iteration runs implement, verify, push, review, CI, then `agent-harness ship-merge`. A refusal or a blocker sends the
+run back to fix, then review again, then retry the merge. The run ends in one of two states: the goal is `done` (PR
+merged), or it is escalated. Escalate only when a human-only blocker stops it, or when a full loop iteration makes no
+progress (the same blocker and the same failure as the one before). Record the reason with
+`agent-harness goal escalate "<reason>"`. The Stop hook (`ship-stop-gate`) blocks an early stop while the goal is
+active and the PR is unmerged. It escalates after five no-progress blocks or 30 blocks in total, and it fails open
+when the host cannot be read. `agent-harness goal bump` exits 3 at its round ceiling, which also counts as an
+escalation. Do not work around the loop by ending the turn.
 
 ## Scope
 

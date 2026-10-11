@@ -727,6 +727,11 @@ Two directories, one source of truth. The **lab** is wherever you cloned this re
 Autonomous mode lets the agent take one goal from clarification to a merged PR. Turn it on, then run `/ship <goal>`.
 With the flag off, the agent asks before each irreversible step, and a merge needs `--confirmed`.
 
+The run is a loop: implement, verify, push, local review, CI, then `ship-merge`. A blocker the agent can fix (a
+review finding, a failing check, a conflict, a stale branch, a thread, a merge refusal) sends it back to fix, then
+review again, then merge. It stops only when the PR merges or a human-only blocker needs a person (credentials,
+billing or quota, an outage, a product decision, a forbidden action).
+
 ```bash
 agent-harness autonomy on|off|status     # toggle .claude/state/autonomy.on (gitignored, per machine)
 /ship <goal>                             # clarify, implement, PR, review, CI, merge
@@ -759,7 +764,8 @@ in `.claude/rules/common/autonomy.md` (Claude Code) and `instructions/autonomy.m
 }
 ```
 
-**Merge gate.** `agent-harness ship-merge` refuses unless all of these hold:
+**Merge gate.** `agent-harness ship-merge` is the merge step of the loop and the only merge path. It checks hard facts,
+not opinions. A refusal is input to the loop: the agent fixes the cause and retries. It refuses unless all of these hold:
 
 - the autonomy flag is on, or `--confirmed` is passed
 - the PR targets the base branch and is not a draft
@@ -773,7 +779,7 @@ It then squash-merges pinned to the head SHA and deletes the branch.
 
 **Review.** Ship stage 8 runs a thorough local review: `code-reviewer`, `security-reviewer`, and the stack cop
 (`angular-cop` or `dotnet-cop`) on the PR diff. The agent fixes confirmed CRITICAL and HIGH findings, re-runs the
-review (max 3 rounds), and posts one summary comment for a human to audit. That review is a quality step, not a merge
+review after each fix (no round cap; the no-progress rule decides when to escalate), and posts one summary comment for a human to audit. That review is a quality step, not a merge
 rail. No GitHub status is created, and `ship-merge` does not trust the comment.
 
 **Push rules.** Pushes to the base branch are forbidden in every mode, with or without force. `git push --mirror`, `--all`, and `--no-verify` are forbidden too. Force pushes (`--force`, `--force-with-lease`, `-f`, `+refspec`) are allowed on other branches.
@@ -1041,6 +1047,8 @@ Deux repertoires, une source de verite: le **lab** (ton clone de ce repo) et le 
 
 Le mode autonome permet à l'agent de mener un objectif de la clarification jusqu'à une PR fusionnée. Activez-le, puis lancez `/ship <goal>`. Avec le flag désactivé, l'agent demande avant chaque étape irréversible, et une fusion nécessite `--confirmed`.
 
+Le run est une boucle : implémenter, vérifier, pousser, revue locale, CI, puis `ship-merge`. Un blocage que l'agent peut corriger (un finding de revue, un check en échec, un conflit, une branche en retard, un fil de discussion, un refus de fusion) le renvoie vers la correction, puis vers une nouvelle revue, puis vers la fusion. Il s'arrête seulement quand la PR est fusionnée ou quand un blocage réservé à un humain exige une personne (identifiants, facturation ou quota, panne externe, décision produit, action interdite).
+
 ```bash
 agent-harness autonomy on|off|status     # bascule .claude/state/autonomy.on (gitignored, par machine)
 /ship <goal>                             # clarifier, implémenter, PR, revue, CI, fusion
@@ -1072,7 +1080,7 @@ Le skill `ship` (`skills/ship/`) gère les étapes, et le skill `autonomous` pil
 }
 ```
 
-**Garde-fous de fusion.** `agent-harness ship-merge` refuse, sauf si toutes ces conditions sont vraies :
+**Garde-fous de fusion.** `agent-harness ship-merge` est l'étape de fusion de la boucle et le seul chemin de fusion. Il vérifie des faits concrets, pas des avis. Un refus est une entrée de la boucle : l'agent corrige la cause et relance. Il refuse, sauf si toutes ces conditions sont vraies :
 
 - le flag autonome est activé, ou `--confirmed` est passé
 - la PR cible la branche de base et n'est pas un brouillon
@@ -1086,7 +1094,7 @@ Ensuite, la fusion se fait en squash, épinglée au SHA de la tête, puis la bra
 
 **Règles de push.** Les pushes vers la branche de base sont interdits dans tous les modes, avec ou sans force. `git push --mirror`, `--all` et `--no-verify` sont aussi interdits. Les force pushes (`--force`, `--force-with-lease`, `-f`, `+refspec`) sont autorisés sur les autres branches.
 
-**Revue.** L'étape 8 du ship lance une revue locale approfondie : `code-reviewer`, `security-reviewer`, et le cop du stack (`angular-cop` ou `dotnet-cop`) sur le diff de la PR. L'agent corrige les findings CRITICAL et HIGH confirmés, relance la revue (3 tours maximum), et publie un commentaire de synthèse que l'humain peut auditer. Cette revue est une étape de qualité, pas un garde-fou de fusion. Aucun status GitHub n'est créé, et `ship-merge` ne fait pas confiance à ce commentaire.
+**Revue.** L'étape 8 du ship lance une revue locale approfondie : `code-reviewer`, `security-reviewer`, et le cop du stack (`angular-cop` ou `dotnet-cop`) sur le diff de la PR. L'agent corrige les findings CRITICAL et HIGH confirmés, relance la revue après chaque correction (sans plafond de tours ; la règle d'absence de progrès décide de l'escalade), et publie un commentaire de synthèse que l'humain peut auditer. Cette revue est une étape de qualité, pas un garde-fou de fusion. Aucun status GitHub n'est créé, et `ship-merge` ne fait pas confiance à ce commentaire.
 
 **Notifications.** Le run notifie seulement quand un humain doit agir, ou quand l'objectif se termine : `question` quand il doit s'arrêter pour une réponse, `waiting` sur un prompt de permission ou d'inactivité, `failure` en cas d'escalade, et `done` quand la PR est fusionnée. Aucune notification de progression.
 

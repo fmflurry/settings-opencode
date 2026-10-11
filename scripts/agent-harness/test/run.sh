@@ -425,7 +425,16 @@ ruby -e 'File.write(".claude/hooks/a.sh","x")'
 python3 -c "open('.claude/settings.local.json','w')"
 node -e "require('fs').writeFileSync('.claude/x','')"
 perl -e 'open F,">tools/agent-harness/x"'
+node -r ./x.js -e "require('fs').writeFileSync('.claude/x','')"
+perl -I lib.pl -e 'open F,">.claude/x"'
+python3 -W ignore.py -c 'open(".claude/x","w")'
+echo "open('.claude/x','w')" | python3
+echo "require('fs').writeFileSync('.claude/x','')" | node
 dd if=/tmp/x of=.claude/settings.json
+xargs -I{} python3 -c "open('.claude/settings.json','w')"
+xargs -n1 bash -c "echo x > .claude/settings.json"
+nice -n 5 python3 -c "open('.claude/settings.json','w')"
+timeout 5 node -e "require('fs').writeFileSync('.claude/settings.json','')"
 git checkout -- .claude/settings.json
 git restore -- .github/workflows/ci.yml
 git checkout origin/master -- AGENTS.md
@@ -473,9 +482,11 @@ python3 -c "print(1)"
 node tools/agent-harness/gen-cursor.mjs
 bash tools/agent-harness/check.sh
 python3 tools/x.py
+echo hi | python3 tools/x.py
 node tools/agent-harness/gen-cursor.mjs > .cursor/x
 node build.js
 dd if=/dev/zero of=/tmp/x count=1
+xargs -n1 echo
 git checkout -- src/a.ts
 git restore -- docs/a.md
 touch /tmp/x

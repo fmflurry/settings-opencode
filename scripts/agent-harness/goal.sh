@@ -14,7 +14,7 @@ case "$cmd" in
     branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
     jq -n --arg goal "$goal" --arg branch "$branch" \
       '{goal:$goal, criteria:$ARGS.positional, branch:$branch, pr:null, head_sha:"",
-        fix_iterations:0, max_fix_iterations:5, stop_blocks:0, total_blocks:0, status:"active", reason:""}' \
+        fix_iterations:0, max_fix_iterations:30, stop_blocks:0, total_blocks:0, status:"active", reason:""}' \
       --args "$@" >"$GOAL_FILE"
     ;;
   pr) goal_update --argjson n "${1:?pr number}" '.pr = $n' ;;

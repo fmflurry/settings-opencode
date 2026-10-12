@@ -377,7 +377,7 @@ If a new plugin shows up, OpenCode picks it up on the next restart. If an env va
 
 ## English
 
-Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primary `conductor` agent (no write/edit perms — must delegate), **25 specialist sub-agents**, always-on instructions, slash commands, OpenCode plugins (secret-file guard, notifications, llm-metrics, tool-budget), custom tools, and a Claude Code mirror.
+Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primary `conductor` agent (no write/edit perms — must delegate), **25 specialist sub-agents**, always-on instructions, slash commands, OpenCode plugins (secret-file guard, notifications, llm-metrics, tool-budget, autonomy), custom tools, and a Claude Code mirror.
 
 <a id="goals-en"></a>
 
@@ -397,7 +397,7 @@ Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primar
 - Agent prompts: `prompts/agents/*.txt` (26 files).
 - Slash commands: `commands/*.md` (37 templates).
 - OpenCode plugins: `plugins/*.{ts,js}` + `plugins/kdco-primitives/` + `plugins/llm-metrics-lib/` + `plugins/code-memory-lib/` + `plugins/lib/`.
-- TUI plugins: `tui-plugins/*.tsx`.
+- TUI plugins: `tui-plugins/*.tsx` (registered in `tui.json`; `autonomy-status.tsx` is the autonomy sidebar panel).
 - Custom tools: `tools/*.ts`.
 - Mode notes: `contexts/*.md`.
 - Global instructions: `instructions/*.md` (12 loaded at session start; `caveman-ultra.md` is present but not loaded).
@@ -742,6 +742,10 @@ agent-harness notify done "<msg>" <pr>   # notify on question, waiting, done, fa
 The `ship` skill (`skills/ship/`) owns the stages, and the `autonomous` skill runs the toggle. The behaviour rules are
 in `.claude/rules/common/autonomy.md` (Claude Code) and `instructions/autonomy.md` (OpenCode).
 
+**OpenCode.** `plugins/autonomy.ts` enforces the flag: it blocks the `question` tool, injects autonomy context, denies forbidden git commands, and re-prompts the session when the stop gate blocks. The toggle state (`.claude/state/autonomy.on`, `goal.json`) is shared with Claude Code, so toggling in either harness toggles both. Toggle from the command palette ("Toggle autonomous mode"), with `/autonomy-toggle`, or with `<leader>u`.
+
+**Status panel.** `tui-plugins/autonomy-status.tsx` (registered in `tui.json`) shows `● AUTO` or `○ manual` in the session sidebar, with the active goal, PR, fix iterations, and escalation reason. It refreshes every 3 s and raises a toast on each transition.
+
 **Per-repo config.** Each repo can set `.claude/agent-harness.json`. Every key is optional:
 
 | Key | Default when absent | Purpose |
@@ -823,7 +827,7 @@ Chiffres (au **2026-10-02**) : **26 agents** (1 conductor + 25 specialistes) · 
 - Prompts agents: `prompts/agents/*.txt`.
 - Commandes slash: `commands/*.md`.
 - Plugins OpenCode: `plugins/*.{ts,js}` (+ `plugins/kdco-primitives/` + `plugins/llm-metrics-lib/` + `plugins/code-memory-lib/` + `plugins/lib/`).
-- TUI plugins: `tui-plugins/*.tsx`.
+- TUI plugins: `tui-plugins/*.tsx` (registered in `tui.json`; `autonomy-status.tsx` is the autonomy sidebar panel).
 - Outils custom: `tools/*.ts`.
 - Contextes (memos de mode): `contexts/*.md`.
 - Instructions globales: `instructions/*.md` (12 chargees au demarrage; `caveman-ultra.md` n'est pas charge).

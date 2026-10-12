@@ -53,6 +53,8 @@ Check the mode with `agent-harness autonomy status`. The rules behind both modes
 2. **Set the goal.** `agent-harness goal set "$ARGUMENTS" <criteria...>`. Criteria: PR merged to the base branch,
    every `requiredChecks` entry green, the `verify` commands green, the `reviewStatus` status successful on the head
    (when configured), zero open review threads.
+2b. **Check open PRs.** Follow [open-pr-check.md](../../.claude/rules/common/open-pr-check.md) before planning or
+    implementing. Record each overlapping PR's decision; a `Wait or cancel` outcome escalates.
 3. **Plan.** Dispatch the `planner` agent. Keep the plan in the log, not in chat.
 4. **Branch or worktree.** The branch MUST be named `claude/<slug>`. See lifecycle step 4 for the commands.
    Never remove a worktree; see the worktree destruction rule (`.claude/rules/common/worktree-destruction-safety.md`).

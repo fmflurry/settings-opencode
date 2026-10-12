@@ -5,6 +5,7 @@
   "instructions": [
     "~/.config/opencode/instructions/subagent-routing.md",
     "~/.config/opencode/instructions/question-handling.md",
+    "~/.config/opencode/instructions/open-pr-check.md",
     "~/.config/opencode/instructions/codememory-first.md",
     "~/.config/opencode/instructions/verification-gate.md",
     "~/.config/opencode/instructions/harness-parity.md",

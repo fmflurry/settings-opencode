@@ -3,6 +3,7 @@
 
 @rules/common/orchestration.md
 @rules/common/question-handling.md
+@rules/common/open-pr-check.md
 @rules/common/verification-gate.md
 @rules/common/codebase-exploration.md
 @rules/common/harness-parity.md

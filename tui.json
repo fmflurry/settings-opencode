@@ -3,10 +3,12 @@
   "theme": "cursor",
   "plugin": [
     "./tui-plugins/llm-metrics.tsx",
-    "./tui-plugins/panda-banner.tsx"
+    "./tui-plugins/panda-banner.tsx",
+    "./tui-plugins/autonomy-status.tsx"
   ],
   "plugin_enabled": {
     "llm-metrics": true,
-    "panda-banner": true
+    "panda-banner": true,
+    "autonomy-status": true
   }
 }

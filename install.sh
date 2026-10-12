@@ -1102,15 +1102,32 @@ install_agent_harness_scripts() {
         ok "installed agent-harness scripts into $dest"
     done
 
+    if [ "$OPENCODE_TARGET_READY" = "1" ] && [ "$OPENCODE_TARGET_IS_SOURCE" != "1" ]; then
+        local hook_dest="$TARGET_OPENCODE/scripts/agent-harness/hooks" hook
+        mkdir -p "$hook_dest"
+        for hook in autonomy-context autonomy-git-guard ship-stop-gate; do
+            cp "$REPO_DIR/.claude/hooks/$hook.sh" "$hook_dest/$hook.sh"
+            chmod +x "$hook_dest/$hook.sh"
+        done
+        ok "installed autonomy hooks into $hook_dest"
+    fi
+
     [ "$LOCAL_MODE" = "1" ] && return 0
-    [ "$CLAUDE_TARGET_READY" = "1" ] || return 0
+
+    local harness_root=""
+    if [ "$CLAUDE_TARGET_READY" = "1" ]; then
+        harness_root="$TARGET_CLAUDE"
+    elif [ "$OPENCODE_TARGET_READY" = "1" ] && [ "$OPENCODE_TARGET_IS_SOURCE" != "1" ]; then
+        harness_root="$TARGET_OPENCODE"
+    fi
+    [ -n "$harness_root" ] || return 0
 
     # A wrapper, not a symlink: agent-harness.sh resolves its siblings from its own dirname.
     local bin_dir="$HOME/.local/bin"
     local link="$bin_dir/agent-harness"
     mkdir -p "$bin_dir"
     [ -L "$link" ] && rm -f "$link"
-    printf '#!/usr/bin/env bash\nexec bash "%s/scripts/agent-harness/agent-harness.sh" "$@"\n' "$TARGET_CLAUDE" > "$link"
+    printf '#!/usr/bin/env bash\nexec bash "%s/scripts/agent-harness/agent-harness.sh" "$@"\n' "$harness_root" > "$link"
     chmod +x "$link"
     ok "installed $link"
 }

@@ -1,7 +1,7 @@
 # Autonomy (mandatory)
 
 Applies to every task. The toggle is `agent-harness autonomy on|off|status`. The state file is
-`.claude/state/autonomy.on` in Claude Code, and the `ship` skill owns the workflow in both harnesses.
+`.claude/state/autonomy.on`, shared with OpenCode along with `goal.json`. The `ship` skill owns the workflow in both harnesses.
 
 ## Rules
 
@@ -52,9 +52,14 @@ progress (the same blocker and the same failure as the one before). Record the r
 
 ## OpenCode enforcement
 
-OpenCode has no git guard hook and no stop gate. Rules (d) and (e) are enforced by this instruction and by the
-merge gate in `agent-harness ship-merge`, not by a runtime hook. Keep the deny list tight, and check the branch
-before every push.
+`plugins/autonomy.ts` enforces the flag at runtime:
+
+- Blocks the `question` tool while the flag is on (rules a and c).
+- Injects autonomy context into the system prompt through `experimental.chat.system.transform`, using the shared `autonomy-context.sh` hook.
+- Runs `autonomy-git-guard.sh` before each bash call and denies forbidden git commands (rule d).
+- On `session.idle` of a root session, runs `ship-stop-gate.sh`. If the gate blocks, the plugin re-prompts the session with the gate's reason. OpenCode has no stop hook, so the turn ends and a new one starts. The gate's caps escalate after 5 no-progress blocks or 30 in total.
+
+`install.sh` deploys the three hooks to `~/.config/opencode/scripts/agent-harness/hooks/`. OpenCode-only installs also get the `~/.local/bin/agent-harness` wrapper.
 
 ## Scope
 

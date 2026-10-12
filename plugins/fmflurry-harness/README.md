@@ -14,7 +14,7 @@ A conductor that routes every task to the matching specialist subagent (planner,
 | Agents (25) | Specialist subagents the conductor delegates to |
 | Skills (74) | Reusable skills, including a `conductor` skill carrying the routing rules |
 | Commands (64) | Slash commands for review, git, planning and verification |
-| Rules (25) | Always-on baseline plus the conductor routing rule; TypeScript rules apply on matching files |
+| Rules (26) | Always-on baseline plus the conductor routing rule; TypeScript rules apply on matching files |
 | Hooks | Pre-tool-use guards, command rewriting, code-memory preference, tool budget, stop checks |
 | MCP | `code-memory` |
 

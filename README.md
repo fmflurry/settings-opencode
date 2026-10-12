@@ -412,9 +412,10 @@ Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primar
 
 Six concerns wired in one file:
 
-1. `instructions`: always-on docs loaded at session start. Currently **12**:
+1. `instructions`: always-on docs loaded at session start. Currently **13**:
    - `instructions/subagent-routing.md` — Task-first subagent delegation gate.
    - `instructions/question-handling.md` — blocking vs non-blocking question protocol.
+   - `instructions/open-pr-check.md` — check for an open PR before starting work.
    - `instructions/codememory-first.md` — prefer [CodeMemory](https://github.com/fmflurry/code-memory) MCP (`code-memory_*` tools) for repo orientation before `grep`/`read`.
    - `instructions/verification-gate.md` — independent build/test verification before "done".
    - `instructions/harness-parity.md` — keep `.claude/` and `.opencode/` in parity.

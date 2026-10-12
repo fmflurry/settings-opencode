@@ -37,16 +37,21 @@ each with one verifiable check. Keep the plan in the decision log, not in chat.
 
 ## 4. Branch or worktree
 
-The branch name is `claude/<slug>` in every case. Never reuse a branch that already has an open PR you did not create.
+The branch name follows the branch convention `<type>/<scope>-<short-description>` from the git-workflow skill (Branch Convention) in every case:
+
+- `<type>`: the conventional commit type (`feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`).
+- `<scope>`: one lowercase alphanumeric token.
+- `<short-description>`: short kebab-case.
+
+Example: `fix/ship-branch-naming`. `git-specialist` names the branch. Never reuse a branch that already has an open PR you did not create.
 
 | Situation | Command |
 |---|---|
 | Repo managed by Orca (`orca` on PATH) | `orca worktree create --name <slug> --base-branch origin/<base>`, then check the branch |
-| Anywhere else | `git switch -c claude/<slug>` |
+| Anywhere else | `git switch -c <type>/<scope>-<short-description>` |
 
 The installed `orca worktree create` may have no `--branch` flag (run `orca worktree create --help` to confirm for
-your version). After creating the worktree, run `git branch --show-current`. If it is not `claude/<slug>`, run
-`git branch -m claude/<slug>`. This is safe because the branch is local and not pushed yet.
+your version). After creating the worktree, run `git branch --show-current`. If it does not match `<type>/<scope>-<short-description>`, rename it with `git branch -m <type>/<scope>-<short-description>`. This is safe because the branch is local and not pushed yet.
 
 Worktree creation is allowed while the autonomy flag is on (see the autonomy rule, rule d). Removing a worktree is
 never allowed.
@@ -77,7 +82,7 @@ Dispatch `git-specialist` with the branch name, the base (`<base>`), an English 
 a body file. It runs these commands:
 
 ```bash
-git push -u origin claude/<slug>
+git push -u origin <type>/<scope>-<short-description>
 gh pr create --draft --base <base> --title "<type>: <description>" --body-file <body-file>
 ```
 

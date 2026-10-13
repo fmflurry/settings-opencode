@@ -136,18 +136,25 @@ const tui: TuiPlugin = async (api) => {
         const theme = ctx.theme.current;
         return (
           <box flexDirection="column" paddingLeft={1} paddingRight={1}>
-            <text fg={snapshot().isOn ? theme.success : theme.textMuted}>
-              {snapshot().isOn ? "● AUTO" : "○ manual"}
+            <text
+              fg={theme.background}
+              bg={snapshot().isOn ? theme.success : theme.textMuted}
+            >
+              {snapshot().isOn ? " ● AUTONOMOUS " : " ○ manual "}
             </text>
             <Show when={snapshot().goal}>
               {(goal) => (
                 <>
-                  <text fg={theme.textMuted}>{clip(goal().goal)}</text>
+                  <text fg={theme.textMuted}>{`${clip(goal().goal)}${prLabel(goal()) === "" ? "" : ` PR${prLabel(goal())}`}`}</text>
                   <text fg={theme.textMuted}>
-                    {`${goal().status === "active" ? "ship" : goal().status}${prLabel(goal())} · fix ${goal().fixIterations}/${goal().maxFixIterations}`}
+                    {`fix ${goal().fixIterations}/${goal().maxFixIterations}`}
                   </text>
-                  <Show when={goal().status === "escalated" && goal().reason !== ""}>
-                    <text fg={theme.error}>{goal().reason}</text>
+                  <Show when={goal().status !== "active"}>
+                    <text fg={goal().status === "escalated" ? theme.error : theme.textMuted}>
+                      {goal().status === "escalated" && goal().reason !== ""
+                        ? `escalated: ${goal().reason}`
+                        : goal().status}
+                    </text>
                   </Show>
                 </>
               )}

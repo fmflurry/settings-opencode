@@ -745,7 +745,7 @@ in `.claude/rules/common/autonomy.md` (Claude Code) and `instructions/autonomy.m
 
 **OpenCode.** `plugins/autonomy.ts` enforces the flag: it blocks the `question` tool, injects autonomy context, denies forbidden git commands, and re-prompts the session when the stop gate blocks. The toggle state (`.claude/state/autonomy.on`, `goal.json`) is shared with Claude Code, so toggling in either harness toggles both. Toggle from the command palette ("Toggle autonomous mode"), with `/autonomy-toggle`, or with `<leader>u`.
 
-**Status panel.** `tui-plugins/autonomy-status.tsx` (registered in `tui.json`) shows `● AUTO` or `○ manual` in the session sidebar, with the active goal, PR, fix iterations, and escalation reason. It refreshes every 3 s and raises a toast on each transition.
+**Status panel.** `tui-plugins/autonomy-status.tsx` (registered in `tui.json`) shows an ` ● AUTONOMOUS ` or ` ○ manual ` capsule in the session sidebar, then the goal with `PR #n`, `fix i/max`, and the status (`escalated: <reason>`; omitted while active). It refreshes every 3 s and raises a toast on each transition.
 
 **Per-repo config.** Each repo can set `.claude/agent-harness.json`. Every key is optional:
 

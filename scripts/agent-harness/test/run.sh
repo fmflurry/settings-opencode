@@ -25,6 +25,7 @@ case "$*" in
     exit "$(cat "$FX/merge.rc" 2>/dev/null || echo 0)" ;;
   "pr ready"*) ;;
   "repo view"*) echo "o/r" ;;
+  "api repos/o/r --jq"*) cat "$FX/merge_settings.txt" 2>/dev/null || echo "true true true" ;;
   *check-runs*) jq -c '.[]' "$FX/checks.json" ;;
   *statuses*) jq -c '.[]' "$FX/statuses.json" ;;
   *compare*) cat "$FX/behind.txt" ;;
@@ -42,7 +43,7 @@ H="$HERE/scripts/agent-harness"; HOOKS="$HERE/.claude/hooks"
 CFG="$TMP/proj/.claude/agent-harness.json"
 export FX GH_BIN="$TMP/gh" ORCA_BIN="$TMP/orca" AGENT_STATE_DIR="$TMP/state" CLAUDE_PROJECT_DIR="$TMP/proj" AGENT_HARNESS_DIR="$H" AGENT_HARNESS_TEST=1
 unset ORCA_WORKTREE_ID GITHUB_ACTIONS TLTB_STATE_DIR
-reset() { rm -f "$FX"/*.log "$FX"/merge.* "$FX"/default_branch "$TMP/state"/* "$CFG"; }
+reset() { rm -f "$FX"/*.log "$FX"/merge.* "$FX"/merge_settings.txt "$FX"/default_branch "$TMP/state"/* "$CFG"; }
 flag_on() { : >"$TMP/state/autonomy.on"; }
 cfg_ci() { echo '{"base":"master","requiredChecks":["gate","export"],"reviewStatus":"tltb-review","reviewStatusCreator":"github-actions[bot]"}' >"$CFG"; }
 
@@ -298,6 +299,27 @@ check "ship-merge --confirmed works with flag off" test $rc -eq 0
 fresh; echo 1 >"$FX/merge.rc"; merge 5; rc=$?
 check "ship-merge succeeds when merge exits non-zero but PR is MERGED" test $rc -eq 0
 
+# ---- ship-merge: merge method
+fresh; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5
+echo "false true false" >"$FX/merge_settings.txt"; merge 5; rc=$?
+check "merge method: auto picks rebase when squash is disallowed" test $rc -eq 0
+check "merge method: auto passes --rebase" grep -qx "pr merge 5 --rebase --match-head-commit $HEAD_SHA" "$FX/gh.log"
+fresh; echo "false false true" >"$FX/merge_settings.txt"; merge 5 --method merge; rc=$?
+check "merge method: explicit merge allowed" test $rc -eq 0
+check "merge method: explicit passes --merge" grep -qx "pr merge 5 --merge --match-head-commit $HEAD_SHA" "$FX/gh.log"
+fresh; echo "false true false" >"$FX/merge_settings.txt"; refuses "method squash not allowed" 5 --method squash
+check "merge method: refusal names allowed methods" grep -q 'allowed: rebase' "$FX/out"
+fresh; refuses "unknown method" 5 --method fast-forward
+fresh; refuses "method without value" 5 --method
+fresh; echo "false true false" >"$FX/merge_settings.txt"; merge --method=rebase 5; rc=$?
+check "merge method: --method=value and arg order" test $rc -eq 0
+fresh; jq '.mergeMethod="merge"' "$CFG" >"$CFG.t" && mv "$CFG.t" "$CFG"; merge 5; rc=$?
+check "merge method: config mergeMethod used" test $rc -eq 0
+check "merge method: config passes --merge" grep -q "pr merge 5 --merge " "$FX/gh.log"
+fresh; jq '.mergeMethod="merge"' "$CFG" >"$CFG.t" && mv "$CFG.t" "$CFG"; merge 5 --method squash; rc=$?
+check "merge method: flag overrides config" grep -q "pr merge 5 --squash " "$FX/gh.log"
+fresh; jq '.mergeMethod="octopus"' "$CFG" >"$CFG.t" && mv "$CFG.t" "$CFG"; refuses "invalid config mergeMethod" 5
+
 # ---- ship-merge: no config (base = repo default branch, all checks green, review rail skipped)
 nocfg() { reset; green_fixtures; flag_on; }
 nocfg; echo '[]' >"$FX/statuses.json"; merge 5; rc=$?
@@ -496,12 +518,15 @@ ASK_CMDS="$(cat <<'CMDS'
 agent-harness ship-merge 12 --confirmed
 bash /Users/someone/.claude/scripts/agent-harness/ship-merge.sh 12 --confirmed
 bash tools/agent-harness/ship-merge.sh 5 --confirmed
+agent-harness ship-merge 12 --method rebase --confirmed
 CMDS
 )"
 SHIP_ALLOW_CMDS="$(cat <<'CMDS'
 agent-harness ship-merge 12
 bash /Users/someone/.claude/scripts/agent-harness/ship-merge.sh 12
 bash tools/agent-harness/ship-merge.sh 12
+agent-harness ship-merge 12 --method rebase
+agent-harness ship-merge 12 --method=merge
 CMDS
 )"
 reset; flag_on
@@ -509,6 +534,8 @@ while IFS= read -r c; do check "git-guard denies: $c" denied "$c"; done <<<"$DEN
 while IFS= read -r c; do check "git-guard allows: $c" allowed "$c"; done <<<"$ALLOW_CMDS"
 while IFS= read -r c; do check "git-guard allows: $c" allowed "$c"; done <<<"$SHIP_ALLOW_CMDS"
 while IFS= read -r c; do check "git-guard asks: $c" asked "$c"; done <<<"$ASK_CMDS"
+check "git-guard denies unknown merge method" denied "agent-harness ship-merge 12 --method octopus"
+check "git-guard denies --method without value" denied "agent-harness ship-merge 12 --method"
 echo '{"base":"trunk"}' >"$CFG"
 check "git-guard denies push to configured base" denied "git push origin trunk"
 check "git-guard denies absolute-path push to configured base" denied "/usr/bin/git push origin trunk"

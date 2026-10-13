@@ -8,7 +8,7 @@ description: >-
 
 # Ship
 
-`/ship <goal>` drives one goal from clarification to a squash-merged PR on the base branch. The goal state lives
+`/ship <goal>` drives one goal from clarification to a merged PR (method per repo) on the base branch. The goal state lives
 in `.claude/state/goal.json`. In Claude Code, the Stop hook keeps the session working until the PR is merged or the
 goal escalates.
 
@@ -82,7 +82,8 @@ Check the mode with `agent-harness autonomy status`. The rules behind both modes
 11. **Comments.** Run the `get-pr-comments` skill to list open threads. Address each one with a fix or a reply that
     says why not, then resolve the threads you addressed. See lifecycle step 11.
 12. **Merge.** Autonomous mode: `agent-harness ship-merge <pr>`. Interactive mode: add `--confirmed` after the user
-    says yes. It enforces the merge rails listed in the README. On success, `agent-harness notify done "<msg>" <pr>`
+    says yes. The merge method is chosen with `--method squash|rebase|merge`; without it the script uses `mergeMethod`
+    from `.claude/agent-harness.json`, else the repo's first allowed method (squash, rebase, merge). It enforces the merge rails listed in the README. On success, `agent-harness notify done "<msg>" <pr>`
     and `agent-harness goal status`. On a refusal, read the reason and go back to the loop (see
     [Blockers](#blockers)).
 

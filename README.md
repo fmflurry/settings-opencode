@@ -736,7 +736,7 @@ billing or quota, an outage, a product decision, a forbidden action).
 ```bash
 agent-harness autonomy on|off|status     # toggle .claude/state/autonomy.on (gitignored, per machine)
 /ship <goal>                             # clarify, implement, PR, review, CI, merge
-agent-harness ship-merge <pr>            # the only merge path; add --confirmed in interactive mode
+agent-harness ship-merge <pr> [--method squash|rebase|merge]  # the only merge path; add --confirmed in interactive mode
 agent-harness notify done "<msg>" <pr>   # notify on question, waiting, done, failure only
 ```
 
@@ -757,6 +757,7 @@ in `.claude/rules/common/autonomy.md` (Claude Code) and `instructions/autonomy.m
 | `reviewStatusCreator` | unset (any creator) | optional, used with `reviewStatus`. Login that must have posted the status |
 | `verify` | unset (verification-gate detection) | commands the ship verify step runs |
 | `protectedPaths` | unset (no rail) | optional regexes. When set, a PR touching a match needs a human merge (`--confirmed`, which prompts) |
+| `mergeMethod` | unset (repo's first allowed: squash, rebase, merge) | optional `squash`, `rebase` or `merge`; overridden by `ship-merge --method` |
 
 ```json
 {
@@ -780,7 +781,7 @@ not opinions. A refusal is input to the loop: the agent fixes the cause and retr
 - no changed path matches `protectedPaths`, unless `--confirmed` is passed (a human merges such a PR)
 - only when `reviewStatus` is configured: the newest status with that context on the head is `success`, and its creator matches `reviewStatusCreator` when set
 
-It then squash-merges pinned to the head SHA and deletes the branch.
+It then merges pinned to the head SHA and deletes the branch. The merge method is chosen with `--method squash|rebase|merge`; without it the script uses `mergeMethod` from `.claude/agent-harness.json`, else the repo's first allowed method (squash, rebase, merge). A method the repo disallows is refused.
 
 **Review.** Ship stage 8 runs a thorough local review: `code-reviewer`, `security-reviewer`, and the stack cop
 (`angular-cop` or `dotnet-cop`) on the PR diff. The agent fixes confirmed CRITICAL and HIGH findings, re-runs the
@@ -1057,7 +1058,7 @@ Le run est une boucle : implémenter, vérifier, pousser, revue locale, CI, puis
 ```bash
 agent-harness autonomy on|off|status     # bascule .claude/state/autonomy.on (gitignored, par machine)
 /ship <goal>                             # clarifier, implémenter, PR, revue, CI, fusion
-agent-harness ship-merge <pr>            # seul chemin de fusion; ajouter --confirmed en mode interactif
+agent-harness ship-merge <pr> [--method squash|rebase|merge]  # seul chemin de fusion; ajouter --confirmed en mode interactif
 agent-harness notify done "<msg>" <pr>   # notifier uniquement sur question, waiting, done, failure
 ```
 
@@ -1073,6 +1074,7 @@ Le skill `ship` (`skills/ship/`) gère les étapes, et le skill `autonomous` pil
 | `reviewStatusCreator` | non défini (tout créateur) | optionnel, utilisé avec `reviewStatus`. Login qui doit avoir publié le status |
 | `verify` | non défini (détection verification-gate) | commandes lancées par l'étape verify du ship |
 | `protectedPaths` | non défini (pas de garde-fou) | expressions régulières optionnelles. Quand la clé est définie, une PR qui touche une correspondance nécessite une fusion humaine (`--confirmed`, qui demande confirmation) |
+| `mergeMethod` | non défini (première méthode autorisée par le dépôt : squash, rebase, merge) | `squash`, `rebase` ou `merge` optionnel ; remplacé par `ship-merge --method` |
 
 ```json
 {
@@ -1095,7 +1097,7 @@ Le skill `ship` (`skills/ship/`) gère les étapes, et le skill `autonomous` pil
 - aucun chemin modifié ne correspond à `protectedPaths`, sauf si `--confirmed` est passé (un humain fusionne alors la PR)
 - seulement si `reviewStatus` est défini : le status le plus récent portant ce contexte sur la tête est `success`, et son créateur correspond à `reviewStatusCreator` si la clé est définie
 
-Ensuite, la fusion se fait en squash, épinglée au SHA de la tête, puis la branche est supprimée.
+Ensuite, la fusion est épinglée au SHA de la tête, puis la branche est supprimée. La méthode se choisit avec `--method squash|rebase|merge` ; sans option, le script utilise `mergeMethod` de `.claude/agent-harness.json`, sinon la première méthode autorisée par le dépôt (squash, rebase, merge). Une méthode interdite par le dépôt est refusée.
 
 **Règles de push.** Les pushes vers la branche de base sont interdits dans tous les modes, avec ou sans force. `git push --mirror`, `--all` et `--no-verify` sont aussi interdits. Les force pushes (`--force`, `--force-with-lease`, `-f`, `+refspec`) sont autorisés sur les autres branches.
 

@@ -32,6 +32,7 @@ emit() {
   exit 0
 }
 deny() { emit deny "Blocked by git-guard: merge via agent-harness ship-merge, push feature branches normally, do not edit harness files from the shell."; }
+deny_branch_delete() { emit deny "Blocked by git-guard: branch deletion only via agent-harness cleanup <pr> after merge."; }
 is_protected_token() {
   local t="${1//[<>]/}"
   t="${t#of=}"
@@ -46,11 +47,13 @@ check_push() {
     case "$a" in
       *'$'*) deny ;;
       --mirror | --all | --no-verify) deny ;;
+      --delete | -d) deny_branch_delete ;;
       --* | -*) ;;
       *) pos+=("$a") ;;
     esac
   done
   for a in "${pos[@]}"; do
+    [[ "${a#+}" == :* ]] && deny_branch_delete
     ref="${a##*:}"
     ref="${ref#+}"
     ref="${ref#refs/heads/}"
@@ -94,8 +97,12 @@ check_gh() {
   grep -Eq 'pulls/[0-9]+/merge|mergePullRequest|repos/[^ ]*/merges|query=@' <<<"$line" && deny
   grep -Eqi '(-X|--method)[ =]*(PUT|PATCH|DELETE)' <<<"$line" && method=1
   [ "$method" = 1 ] || return 0
+  local del=0
+  grep -Eqi '(-X|--method)[ =]*DELETE' <<<"$line" && del=1
   for t in "$@"; do
-    [[ "$t" =~ refs/heads/(.+)$ ]] && is_base "${BASH_REMATCH[1]}" && deny
+    [[ "$t" =~ refs/heads/(.+)$ ]] || continue
+    [ "$del" = 1 ] && deny_branch_delete
+    is_base "${BASH_REMATCH[1]}" && deny
   done
 }
 
@@ -136,10 +143,11 @@ check_ship_merge() {
   esac
   [ "$has_assign" = 0 ] || deny
   [[ "${rest[0]:-}" =~ ^[0-9]+$ ]] || deny
-  local i=1 seen_confirmed=0 seen_method=0
+  local i=1 seen_confirmed=0 seen_method=0 seen_keep=0
   while [ "$i" -lt "${#rest[@]}" ]; do
     case "${rest[$i]}" in
       --confirmed) [ "$seen_confirmed" = 0 ] || deny; seen_confirmed=1; ASKED=1 ;;
+      --keep-branch) [ "$seen_keep" = 0 ] || deny; seen_keep=1 ;;
       --method) [ "$seen_method" = 0 ] || deny; seen_method=1; i=$((i + 1))
         [[ "${rest[$i]:-}" =~ ^(squash|rebase|merge)$ ]] || deny ;;
       --method=*) [ "$seen_method" = 0 ] || deny; seen_method=1
@@ -148,6 +156,22 @@ check_ship_merge() {
     esac
     i=$((i + 1))
   done
+  return 0
+}
+
+check_cleanup() {
+  local has_assign="$1" c0="$2"; shift 2
+  local rest=()
+  case "$c0" in
+    bash | sh | zsh | dash) [[ "${1:-}" =~ cleanup\.sh$ ]] || return 1; shift; rest=("$@") ;;
+    agent-harness | agent-harness.sh) [ "${1:-}" = cleanup ] || return 1; shift; rest=("$@") ;;
+    cleanup.sh) rest=("$@") ;;
+    *) return 1 ;;
+  esac
+  [ "$has_assign" = 0 ] || deny
+  [[ "${rest[0]:-}" =~ ^[0-9]+$ ]] || deny
+  [ "${#rest[@]}" -le 2 ] || deny
+  [ "${#rest[@]}" -lt 2 ] || [ "${rest[1]}" = --keep-branch ] || deny
   return 0
 }
 
@@ -180,6 +204,7 @@ while IFS= read -r seg; do
   ct[0]="$c0"
 
   if check_ship_merge "$has_assign" "$c0" "${ct[@]:1}"; then continue; fi
+  if check_cleanup "$has_assign" "$c0" "${ct[@]:1}"; then continue; fi
 
   case "$c0" in
     git) check_git "${ct[@]}" ;;
@@ -194,5 +219,5 @@ while IFS= read -r seg; do
   esac
 done <<<"$segments"
 
-[ "$ASKED" = 1 ] && emit ask "ship-merge --confirmed merges with autonomy rails relaxed: confirm with the user."
+[ "$ASKED" = 1 ] && emit ask "ship-merge --confirmed merges with autonomy rails relaxed and deletes the merged branch: confirm with the user."
 exit 0

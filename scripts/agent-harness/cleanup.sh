@@ -29,10 +29,11 @@ cross="$(jq -r .isCrossRepository <<<"$view")"
 { [ -n "$branch" ] && [ "$branch" != null ] && [ "$branch" != "$base" ]; } || refuse "PR #$pr head branch is empty or the base branch"
 if autonomy_on; then
   gpr="$(goal_get '.pr // empty' || true)"
-  [ -z "$gpr" ] || [ "$gpr" = "$pr" ] || refuse "goal tracks PR #$gpr, not #$pr"
+  [ -n "$gpr" ] || refuse "goal does not track a PR; autonomous cleanup needs goal pr #$pr"
+  [ "$gpr" = "$pr" ] || refuse "goal tracks PR #$gpr, not #$pr"
 fi
 
-if [ -z "$keep" ] && [ "$cross" != true ]; then
+if [ -z "$keep" ] && [ "$cross" = false ]; then
   repo="$("$GH" repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)" || repo=""
   if [ -z "$repo" ]; then
     say "remote $branch skipped (repo unknown)"
@@ -40,9 +41,13 @@ if [ -z "$keep" ] && [ "$cross" != true ]; then
     say "remote $branch absent"
   elif [ "$(jq -r '.protected // false' <<<"$info")" = true ]; then
     say "remote $branch kept (protected)"
-  elif [ -n "$("$GH" pr list --state open --base "$branch" --json number --jq '.[].number' 2>/dev/null)" ] ||
-    [ -n "$("$GH" pr list --state open --head "$branch" --json number --jq '.[].number' 2>/dev/null)" ]; then
+  elif ! by_base="$("$GH" pr list --state open --base "$branch" --json number --jq '.[].number' 2>/dev/null)" ||
+    ! by_head="$("$GH" pr list --state open --head "$branch" --json number --jq '.[].number' 2>/dev/null)"; then
+    say "remote $branch kept (cannot list open PRs)"
+  elif [ -n "$by_base" ] || [ -n "$by_head" ]; then
     say "remote $branch kept (open PR uses it)"
+  elif [ "$(jq -r '.commit.sha // empty' <<<"$info")" != "$oid" ]; then
+    say "remote $branch kept (tip moved since merge)"
   elif "$GH" api -X DELETE "repos/$repo/git/refs/heads/$branch" >/dev/null 2>&1; then
     say "remote $branch deleted"
   else
@@ -50,8 +55,12 @@ if [ -z "$keep" ] && [ "$cross" != true ]; then
   fi
 fi
 
+dirty=""
+[ -z "$(g status --porcelain 2>/dev/null)" ] || dirty=1
 if [ "${GITHUB_ACTIONS:-}" = true ]; then
   say "checkout skipped (ci)"
+elif [ -n "$dirty" ]; then
+  say "checkout skipped (dirty tree)"
 else
   g fetch --prune origin >/dev/null 2>&1 || say "fetch skipped"
   if err="$(g switch "$base" 2>&1)"; then
@@ -75,8 +84,10 @@ current="$(g rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 
 if [ -z "$keep" ] && [ "$branch" != "$current" ] && g show-ref --verify --quiet "refs/heads/$branch"; then
   tip="$(g rev-parse "refs/heads/$branch")"
-  if [ "$tip" = "$oid" ] || g merge-base --is-ancestor "$tip" "$oid" 2>/dev/null; then
-    g branch -D "$branch" >/dev/null && say "local $branch deleted"
+  if [ -n "$dirty" ]; then
+    say "local $branch kept (dirty tree)"
+  elif [ "$tip" = "$oid" ] || g merge-base --is-ancestor "$tip" "$oid" 2>/dev/null; then
+    if g branch -D "$branch" >/dev/null 2>&1; then say "local $branch deleted"; else say "local $branch kept (delete failed)"; fi
   else
     say "local $branch kept (unpushed commits)"
   fi
@@ -88,7 +99,11 @@ if [ "$(goal_get '.pr // empty')" = "$pr" ]; then
     [[ "$b" =~ ^backup/[a-z0-9]+(-[a-z0-9]+)*$ ]] || continue
     { [ "$b" != "$base" ] && [ "$b" != "$current" ]; } || continue
     g show-ref --verify --quiet "refs/heads/$b" || continue
-    if g branch -D "$b" >/dev/null; then say "backup $b deleted"; deleted+=("$b"); fi
+    btip="$(g rev-parse "refs/heads/$b")"
+    if ! g merge-base --is-ancestor "$btip" "$oid" 2>/dev/null && ! g merge-base --is-ancestor "$btip" "origin/$base" 2>/dev/null; then
+      say "backup $b kept (not merged)"; continue
+    fi
+    if g branch -D "$b" >/dev/null 2>&1; then say "backup $b deleted"; deleted+=("$b"); else say "backup $b kept (delete failed)"; fi
   done < <(goal_get '(.backup_branches // [])[]')
   if [ "${#deleted[@]}" -gt 0 ]; then
     goal_update --argjson d "$(printf '%s\n' "${deleted[@]}" | jq -R . | jq -sc .)" \

@@ -25,13 +25,14 @@ case "$*" in
     exit "$(cat "$FX/merge.rc" 2>/dev/null || echo 0)" ;;
   "pr ready"*) ;;
   "pr list"*)
+    [ -e "$FX/list.fail" ] && exit 1
     base=""; head=""; expr=""; set -- $*
     while [ $# -gt 0 ]; do case "$1" in --base) base="$2";; --head) head="$2";; -q|--jq) expr="$2";; esac; shift; done
     list="$(jq -c --arg b "$base" --arg h "$head" 'map(select(($b==""or .baseRefName==$b) and ($h==""or .headRefName==$h)))' "$FX/open_prs.json" 2>/dev/null || echo '[]')"
     if [ -n "$expr" ]; then echo "$list" | jq -r "$expr"; else echo "$list"; fi ;;
   "api repos/o/r/branches/"*)
     [ -e "$FX/branch.gone" ] && exit 1
-    body="$(cat "$FX/branch.json" 2>/dev/null || echo '{"protected":false}')"
+    body="$(cat "$FX/branch.json" 2>/dev/null || jq -c '{protected:false,commit:{sha:.headRefOid}}' "$FX/view.json")"
     expr=""; set -- $*
     while [ $# -gt 0 ]; do case "$1" in -q|--jq) expr="$2";; esac; shift; done
     if [ -n "$expr" ]; then echo "$body" | jq -r "$expr"; else echo "$body"; fi ;;
@@ -54,7 +55,7 @@ H="$HERE/scripts/agent-harness"; HOOKS="$HERE/.claude/hooks"
 CFG="$TMP/proj/.claude/agent-harness.json"
 export FX GH_BIN="$TMP/gh" ORCA_BIN="$TMP/orca" AGENT_STATE_DIR="$TMP/state" CLAUDE_PROJECT_DIR="$TMP/proj" AGENT_HARNESS_DIR="$H" AGENT_HARNESS_TEST=1
 unset ORCA_WORKTREE_ID GITHUB_ACTIONS TLTB_STATE_DIR
-reset() { rm -f "$FX"/*.log "$FX"/merge.* "$FX"/merge_settings.txt "$FX"/open_prs.json "$FX"/branch.json "$FX"/branch.gone "$FX"/default_branch "$TMP/state"/* "$CFG"; }
+reset() { rm -f "$FX"/*.log "$FX"/merge.* "$FX"/merge_settings.txt "$FX"/open_prs.json "$FX"/branch.json "$FX"/branch.gone "$FX"/list.fail "$FX"/default_branch "$TMP/state"/* "$CFG"; }
 flag_on() { : >"$TMP/state/autonomy.on"; }
 cfg_ci() { echo '{"base":"master","requiredChecks":["gate","export"],"reviewStatus":"tltb-review","reviewStatusCreator":"github-actions[bot]"}' >"$CFG"; }
 
@@ -416,11 +417,11 @@ nocfg; echo trunk >"$FX/default_branch"; mutate '.baseRefName="trunk" | .headRef
 
 # ---- ship-merge runs cleanup
 merge() { ( cd "$TMP/work" && CLAUDE_PROJECT_DIR="$TMP/work" bash "$H/ship-merge.sh" "$@" ) >"$FX/out" 2>&1; }
-fresh; merge 5; rc=$?
+fresh; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5; merge 5; rc=$?
 check "ship-merge success runs cleanup (remote)" grep -q 'api -X DELETE repos/o/r/git/refs/heads/feat' "$FX/gh.log"
 check "ship-merge success runs cleanup (local branch gone)" bash -c '! git -C "$1" show-ref --verify --quiet refs/heads/feat' _ "$TMP/work"
 check "ship-merge success prints cleanup lines" grep -q '^cleanup: remote feat deleted' "$FX/out"
-fresh; merge 5 --keep-branch; rc=$?
+fresh; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5; merge 5 --keep-branch; rc=$?
 check "ship-merge --keep-branch exits 0" test $rc -eq 0
 check "ship-merge --keep-branch no remote delete" bash -c '! grep -q "api -X DELETE" "$1"' _ "$FX/gh.log"
 check "ship-merge --keep-branch keeps local branch" git -C "$TMP/work" show-ref --verify --quiet refs/heads/feat
@@ -500,8 +501,48 @@ check "cleanup autonomy on with other goal PR: nothing deleted" no_delete
 check "cleanup autonomy on with other goal PR: local feat kept" local_exists feat
 
 cfresh; flag_on; cleanup 5; rc=$?
-check "cleanup autonomy on without goal file: exits 0" test $rc -eq 0
-check "cleanup autonomy on without goal file: deletes remote feat" remote_deleted
+check "cleanup autonomy on without goal file: refused" test $rc -eq 1
+check "cleanup autonomy on without goal file: nothing deleted" no_delete
+
+cfresh; flag_on; bash "$H/goal.sh" set g; cleanup 5; rc=$?
+check "cleanup autonomy on with empty goal pr: refused" test $rc -eq 1
+check "cleanup autonomy on with empty goal pr: nothing deleted" no_delete
+
+cfresh; flag_on; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5; cleanup 5; rc=$?
+check "cleanup autonomy on with matching goal pr: exits 0" test $rc -eq 0
+check "cleanup autonomy on with matching goal pr: deletes remote feat" remote_deleted
+
+cfresh; : >"$FX/list.fail"; cleanup 5; rc=$?
+check "cleanup PR list failure: exits 0" test $rc -eq 0
+check "cleanup PR list failure: remote kept" no_delete
+check "cleanup PR list failure: reports kept" grep -q '^cleanup: remote feat kept (cannot list open PRs)' "$FX/out"
+
+cfresh; echo '{"protected":false,"commit":{"sha":"0000000000000000000000000000000000000000"}}' >"$FX/branch.json"; cleanup 5; rc=$?
+check "cleanup remote tip moved: remote kept" no_delete
+check "cleanup remote tip moved: reports kept" grep -q '^cleanup: remote feat kept (tip moved since merge)' "$FX/out"
+
+cfresh; mutate '.isCrossRepository=null' view.json; cleanup 5; rc=$?
+check "cleanup isCrossRepository null: exits 0" test $rc -eq 0
+check "cleanup isCrossRepository null: remote kept" no_delete
+
+cfresh; git -C "$TMP/work" checkout -q master; echo dirty >"$TMP/work/dirty.txt"; cleanup 5; rc=$?
+check "cleanup dirty tree: exits 0" test $rc -eq 0
+check "cleanup dirty tree: reports checkout skipped" grep -q '^cleanup: checkout skipped (dirty tree)' "$FX/out"
+check "cleanup dirty tree: reports local kept" grep -q '^cleanup: local feat kept (dirty tree)' "$FX/out"
+check "cleanup dirty tree: local feat kept" local_exists feat
+check "cleanup dirty tree: dirty file untouched" test -f "$TMP/work/dirty.txt"
+rm -f "$TMP/work/dirty.txt"
+
+cfresh; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5
+git -C "$TMP/work" branch -q backup/merged
+git -C "$TMP/work" checkout -q -b backup/unmerged && ( cd "$TMP/work" && echo u >u && git add u && git commit -qm U ) >/dev/null 2>&1
+git -C "$TMP/work" checkout -q feat
+jq '.backup_branches=["backup/merged","backup/unmerged"]' "$TMP/state/goal.json" >"$FX/t" && mv "$FX/t" "$TMP/state/goal.json"
+cleanup 5; rc=$?
+check "cleanup unmerged backup: exits 0" test $rc -eq 0
+check "cleanup unmerged backup: merged backup deleted" bash -c '! git -C "$1" show-ref --verify --quiet refs/heads/backup/merged' _ "$TMP/work"
+check "cleanup unmerged backup: unmerged backup kept" local_exists backup/unmerged
+check "cleanup unmerged backup: reports kept" grep -q '^cleanup: backup backup/unmerged kept (not merged)' "$FX/out"
 
 cfresh; mutate '.state="OPEN"' view.json; cleanup 5; rc=$?
 check "cleanup not merged: refused" test $rc -eq 1

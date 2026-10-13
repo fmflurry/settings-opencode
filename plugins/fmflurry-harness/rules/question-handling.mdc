@@ -68,7 +68,7 @@ Before surfacing ANY blocking question to user:
 
 Reversible work (edits on a branch, read-only checks) proceeds on the stated default; irreversible actions (push, delete, worktree removal, live-config sync, prod/DB mutation) need explicit user confirmation.
 
-Exception: in autonomous mode (`agent-harness autonomy on`), the actions listed in [autonomy.md](autonomy.md) (`agent-harness ship-merge <pr>`, pushes to non-base branches, worktree creation) proceed without asking. Ask is replaced by logging the assumption.
+Exception: in autonomous mode (`agent-harness autonomy on`), the actions listed in [autonomy.md](autonomy.md) (`agent-harness ship-merge <pr>`, pushes to non-base branches, worktree creation, `agent-harness cleanup` after merge) proceed without asking. Ask is replaced by logging the assumption.
 
 ## Subagent Gate
 

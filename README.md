@@ -738,6 +738,7 @@ agent-harness autonomy on|off|status     # toggle .claude/state/autonomy.on (git
 /ship <goal>                             # clarify, implement, PR, review, CI, merge
 agent-harness ship-merge <pr> [--method squash|rebase|merge]  # the only merge path; add --confirmed in interactive mode
 agent-harness notify done "<msg>" <pr>   # notify on question, waiting, done, failure only
+agent-harness cleanup <pr> [--keep-branch]  # after MERGED: delete the PR's head branch and goal backups (also run by ship-merge)
 ```
 
 The `ship` skill (`skills/ship/`) owns the stages, and the `autonomous` skill runs the toggle. The behaviour rules are
@@ -781,7 +782,7 @@ not opinions. A refusal is input to the loop: the agent fixes the cause and retr
 - no changed path matches `protectedPaths`, unless `--confirmed` is passed (a human merges such a PR)
 - only when `reviewStatus` is configured: the newest status with that context on the head is `success`, and its creator matches `reviewStatusCreator` when set
 
-It then merges pinned to the head SHA and deletes the branch. The merge method is chosen with `--method squash|rebase|merge`; without it the script uses `mergeMethod` from `.claude/agent-harness.json`, else the repo's first allowed method (squash, rebase, merge). A method the repo disallows is refused.
+It then merges pinned to the head SHA and runs `agent-harness cleanup <pr>`. Cleanup deletes the PR's head branch on the remote and locally (the local branch only when fully merged), deletes the goal's recorded backup branches, and switches the checkout to the updated base. It never removes a worktree; it reports one that holds the branch. `--keep-branch` keeps the head branch. The merge method is chosen with `--method squash|rebase|merge`; without it the script uses `mergeMethod` from `.claude/agent-harness.json`, else the repo's first allowed method (squash, rebase, merge). A method the repo disallows is refused.
 
 **Review.** Ship stage 8 runs a thorough local review: `code-reviewer`, `security-reviewer`, and the stack cop
 (`angular-cop` or `dotnet-cop`) on the PR diff. The agent fixes confirmed CRITICAL and HIGH findings, re-runs the
@@ -1060,6 +1061,7 @@ agent-harness autonomy on|off|status     # bascule .claude/state/autonomy.on (gi
 /ship <goal>                             # clarifier, implémenter, PR, revue, CI, fusion
 agent-harness ship-merge <pr> [--method squash|rebase|merge]  # seul chemin de fusion; ajouter --confirmed en mode interactif
 agent-harness notify done "<msg>" <pr>   # notifier uniquement sur question, waiting, done, failure
+agent-harness cleanup <pr> [--keep-branch]  # après MERGED : supprime la branche de la PR et les backups du goal (aussi lancé par ship-merge)
 ```
 
 Le skill `ship` (`skills/ship/`) gère les étapes, et le skill `autonomous` pilote la bascule. Les règles de comportement sont dans `.claude/rules/common/autonomy.md` (Claude Code) et `instructions/autonomy.md` (OpenCode).
@@ -1097,7 +1099,7 @@ Le skill `ship` (`skills/ship/`) gère les étapes, et le skill `autonomous` pil
 - aucun chemin modifié ne correspond à `protectedPaths`, sauf si `--confirmed` est passé (un humain fusionne alors la PR)
 - seulement si `reviewStatus` est défini : le status le plus récent portant ce contexte sur la tête est `success`, et son créateur correspond à `reviewStatusCreator` si la clé est définie
 
-Ensuite, la fusion est épinglée au SHA de la tête, puis la branche est supprimée. La méthode se choisit avec `--method squash|rebase|merge` ; sans option, le script utilise `mergeMethod` de `.claude/agent-harness.json`, sinon la première méthode autorisée par le dépôt (squash, rebase, merge). Une méthode interdite par le dépôt est refusée.
+Ensuite, la fusion est épinglée au SHA de la tête, puis `agent-harness cleanup <pr>` s'exécute. Le nettoyage supprime la branche de la PR sur le remote et en local (la branche locale seulement si elle est entièrement fusionnée), supprime les branches de backup enregistrées pour le goal, et place le checkout sur la base mise à jour. Il ne retire jamais de worktree ; il signale celui qui porte la branche. `--keep-branch` conserve la branche de la PR. La méthode se choisit avec `--method squash|rebase|merge` ; sans option, le script utilise `mergeMethod` de `.claude/agent-harness.json`, sinon la première méthode autorisée par le dépôt (squash, rebase, merge). Une méthode interdite par le dépôt est refusée.
 
 **Règles de push.** Les pushes vers la branche de base sont interdits dans tous les modes, avec ou sans force. `git push --mirror`, `--all` et `--no-verify` sont aussi interdits. Les force pushes (`--force`, `--force-with-lease`, `-f`, `+refspec`) sont autorisés sur les autres branches.
 

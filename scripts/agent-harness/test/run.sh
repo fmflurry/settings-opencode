@@ -24,6 +24,18 @@ case "$*" in
     [ -e "$FX/merge.noop" ] || { jq '.state="MERGED"' "$FX/view.json" >"$FX/t" && mv "$FX/t" "$FX/view.json"; }
     exit "$(cat "$FX/merge.rc" 2>/dev/null || echo 0)" ;;
   "pr ready"*) ;;
+  "pr list"*)
+    [ -e "$FX/list.fail" ] && exit 1
+    base=""; head=""; expr=""; set -- $*
+    while [ $# -gt 0 ]; do case "$1" in --base) base="$2";; --head) head="$2";; -q|--jq) expr="$2";; esac; shift; done
+    list="$(jq -c --arg b "$base" --arg h "$head" 'map(select(($b==""or .baseRefName==$b) and ($h==""or .headRefName==$h)))' "$FX/open_prs.json" 2>/dev/null || echo '[]')"
+    if [ -n "$expr" ]; then echo "$list" | jq -r "$expr"; else echo "$list"; fi ;;
+  "api repos/o/r/branches/"*)
+    [ -e "$FX/branch.gone" ] && exit 1
+    body="$(cat "$FX/branch.json" 2>/dev/null || jq -c '{protected:false,commit:{sha:.headRefOid}}' "$FX/view.json")"
+    expr=""; set -- $*
+    while [ $# -gt 0 ]; do case "$1" in -q|--jq) expr="$2";; esac; shift; done
+    if [ -n "$expr" ]; then echo "$body" | jq -r "$expr"; else echo "$body"; fi ;;
   "repo view"*) echo "o/r" ;;
   "api repos/o/r --jq"*) cat "$FX/merge_settings.txt" 2>/dev/null || echo "true true true" ;;
   *check-runs*) jq -c '.[]' "$FX/checks.json" ;;
@@ -43,7 +55,7 @@ H="$HERE/scripts/agent-harness"; HOOKS="$HERE/.claude/hooks"
 CFG="$TMP/proj/.claude/agent-harness.json"
 export FX GH_BIN="$TMP/gh" ORCA_BIN="$TMP/orca" AGENT_STATE_DIR="$TMP/state" CLAUDE_PROJECT_DIR="$TMP/proj" AGENT_HARNESS_DIR="$H" AGENT_HARNESS_TEST=1
 unset ORCA_WORKTREE_ID GITHUB_ACTIONS TLTB_STATE_DIR
-reset() { rm -f "$FX"/*.log "$FX"/merge.* "$FX"/merge_settings.txt "$FX"/default_branch "$TMP/state"/* "$CFG"; }
+reset() { rm -f "$FX"/*.log "$FX"/merge.* "$FX"/merge_settings.txt "$FX"/open_prs.json "$FX"/branch.json "$FX"/branch.gone "$FX"/list.fail "$FX"/default_branch "$TMP/state"/* "$CFG"; }
 flag_on() { : >"$TMP/state/autonomy.on"; }
 cfg_ci() { echo '{"base":"master","requiredChecks":["gate","export"],"reviewStatus":"tltb-review","reviewStatusCreator":"github-actions[bot]"}' >"$CFG"; }
 
@@ -253,6 +265,15 @@ jq '.stop_blocks = 3' "$TMP/state/goal.json" >"$TMP/g" && mv "$TMP/g" "$TMP/stat
 mutate '.headRefOid="newhead"' view.json; stop >/dev/null
 check "stop-gate keeps stop_blocks across head change" test "$(jq -r .stop_blocks "$TMP/state/goal.json")" = 3
 
+fresh_work() {
+  ( cd "$TMP/work" && git worktree prune && git checkout -q -f master && git reset -q --hard origin/master \
+    && git branch -q --set-upstream-to=origin/master master \
+    && { git branch -q -D feat || true; } \
+    && for b in $(git for-each-ref --format='%(refname:short)' refs/heads/backup); do git branch -q -D "$b"; done \
+    && git checkout -q -b feat && echo "b$RANDOM" >b && git add b && git commit -qm B ) >/dev/null 2>&1
+  HEAD_SHA="$(git -C "$TMP/work" rev-parse HEAD)"
+}
+
 # ---- ship-merge (configured: base master, required gate+export, tltb-review by the bot)
 merge() { ( cd "$TMP/work" && bash "$H/ship-merge.sh" "$@" ) >"$FX/out" 2>&1; }
 refuses() {
@@ -261,7 +282,7 @@ refuses() {
   check "ship-merge refuses: $name" test $rc -ne 0
   check "ship-merge no merge call: $name" bash -c '! grep -q "pr merge" "$1" 2>/dev/null' _ "$FX/gh.log"
 }
-fresh() { reset; green_fixtures; flag_on; cfg_ci; }
+fresh() { reset; fresh_work; green_fixtures; flag_on; cfg_ci; }
 
 fresh; mutate 'map(select(.name != "gate"))' checks.json; refuses "required gate missing" 5
 fresh; echo '[]' >"$FX/checks.json"; refuses "no checks" 5
@@ -288,7 +309,7 @@ merge 5; rc=$?
 check "ship-merge succeeds when green" test $rc -eq 0
 check "ship-merge exact flags" grep -qx "pr merge 5 --squash --match-head-commit $HEAD_SHA" "$FX/gh.log"
 check "ship-merge never deletes via gh" bash -c '! grep -q -- "--delete-branch" "$1"' _ "$FX/gh.log"
-check "ship-merge deletes remote branch via API" grep -q 'api -X DELETE repos/o/r/git/refs/heads/feat' "$FX/gh.log"
+check "ship-merge cleanup deletes remote branch via API" grep -q 'api -X DELETE repos/o/r/git/refs/heads/feat' "$FX/gh.log"
 check "ship-merge marks goal done" test "$(jq -r .status "$TMP/state/goal.json")" = "done"
 fresh; ORCA_WORKTREE_ID='repo::/p' merge 5
 check "ship-merge notifies done with PR number" grep -q -- 'done: PR #5 merged' "$FX/orca.log"
@@ -321,7 +342,7 @@ check "merge method: flag overrides config" grep -q "pr merge 5 --squash " "$FX/
 fresh; jq '.mergeMethod="octopus"' "$CFG" >"$CFG.t" && mv "$CFG.t" "$CFG"; refuses "invalid config mergeMethod" 5
 
 # ---- ship-merge: no config (base = repo default branch, all checks green, review rail skipped)
-nocfg() { reset; green_fixtures; flag_on; }
+nocfg() { reset; fresh_work; green_fixtures; flag_on; }
 nocfg; echo '[]' >"$FX/statuses.json"; merge 5; rc=$?
 check "no config: merges with all checks green and no review status" test $rc -eq 0
 check "no config: asks GitHub for the default branch" grep -q 'defaultBranchRef' "$FX/gh.log"
@@ -393,6 +414,184 @@ nocfg; mutate '.isCrossRepository=true' view.json; refuses "cross-repository PR 
 fresh; mutate '.headRefName="master"' view.json; refuses "head branch equals base (config)" 5
 nocfg; mutate '.headRefName="master"' view.json; refuses "head branch equals base (no config)" 5
 nocfg; echo trunk >"$FX/default_branch"; mutate '.baseRefName="trunk" | .headRefName="trunk"' view.json; refuses "head branch equals default branch" 5
+
+# ---- ship-merge runs cleanup
+merge() { ( cd "$TMP/work" && CLAUDE_PROJECT_DIR="$TMP/work" bash "$H/ship-merge.sh" "$@" ) >"$FX/out" 2>&1; }
+fresh; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5; merge 5; rc=$?
+check "ship-merge success runs cleanup (remote)" grep -q 'api -X DELETE repos/o/r/git/refs/heads/feat' "$FX/gh.log"
+check "ship-merge success runs cleanup (local branch gone)" bash -c '! git -C "$1" show-ref --verify --quiet refs/heads/feat' _ "$TMP/work"
+check "ship-merge success prints cleanup lines" grep -q '^cleanup: remote feat deleted' "$FX/out"
+fresh; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5; merge 5 --keep-branch; rc=$?
+check "ship-merge --keep-branch exits 0" test $rc -eq 0
+check "ship-merge --keep-branch no remote delete" bash -c '! grep -q "api -X DELETE" "$1"' _ "$FX/gh.log"
+check "ship-merge --keep-branch keeps local branch" git -C "$TMP/work" show-ref --verify --quiet refs/heads/feat
+fresh; mutate '.isDraft=true' view.json; refuses "draft (no cleanup)" 5
+check "ship-merge refusal never deletes" bash -c '! grep -q "DELETE" "$1" 2>/dev/null' _ "$FX/gh.log"
+merge() { ( cd "$TMP/work" && bash "$H/ship-merge.sh" "$@" ) >"$FX/out" 2>&1; }
+
+# ---- cleanup.sh
+cleanup() { ( cd "${CLEAN_CWD:-$TMP/work}" && CLAUDE_PROJECT_DIR="${CLEAN_CWD:-$TMP/work}" bash "$H/cleanup.sh" "$@" ) >"$FX/out" 2>&1; }
+cfresh() { reset; fresh_work; green_fixtures; mutate '.state="MERGED"' view.json; }
+no_delete() { ! grep -q 'DELETE' "$FX/gh.log" 2>/dev/null; }
+remote_deleted() { grep -q 'api -X DELETE repos/o/r/git/refs/heads/feat' "$FX/gh.log"; }
+local_exists() { git -C "$TMP/work" show-ref --verify --quiet "refs/heads/$1"; }
+cur_branch() { git -C "${1:-$TMP/work}" rev-parse --abbrev-ref HEAD; }
+origin_master() { git --git-dir="$TMP/origin.git" rev-parse master; }
+
+cfresh; before="$(origin_master)"; cleanup 5; rc=$?
+check "cleanup merged: exits 0" test $rc -eq 0
+check "cleanup merged: deletes remote feat" remote_deleted
+check "cleanup merged: never deletes base on remote" bash -c '! grep -q "DELETE.*heads/master" "$1"' _ "$FX/gh.log"
+check "cleanup merged: deletes local feat" bash -c '! git -C "$1" show-ref --verify --quiet refs/heads/feat' _ "$TMP/work"
+check "cleanup merged: checks out base" test "$(cur_branch)" = master
+check "cleanup merged: origin base untouched" test "$(origin_master)" = "$before"
+check "cleanup merged: reports remote deleted" grep -q '^cleanup: remote feat deleted' "$FX/out"
+check "cleanup merged: reports local deleted" grep -q '^cleanup: local feat deleted' "$FX/out"
+check "cleanup merged: reports checkout" grep -q '^cleanup: checkout master @ ' "$FX/out"
+
+cfresh; echo '[{"number":9,"baseRefName":"feat","headRefName":"child"}]' >"$FX/open_prs.json"; cleanup 5; rc=$?
+check "cleanup open child PR: exits 0" test $rc -eq 0
+check "cleanup open child PR: remote kept" no_delete
+check "cleanup open child PR: reports kept" grep -q '^cleanup: remote feat kept' "$FX/out"
+check "cleanup open child PR: local deleted" bash -c '! git -C "$1" show-ref --verify --quiet refs/heads/feat' _ "$TMP/work"
+
+cfresh; echo '[{"number":9,"baseRefName":"master","headRefName":"feat"}]' >"$FX/open_prs.json"; cleanup 5; rc=$?
+check "cleanup other open PR from head: exits 0" test $rc -eq 0
+check "cleanup other open PR from head: remote kept" no_delete
+check "cleanup other open PR from head: reports kept" grep -q '^cleanup: remote feat kept' "$FX/out"
+
+cfresh; echo '{"protected":true}' >"$FX/branch.json"; cleanup 5; rc=$?
+check "cleanup protected: exits 0" test $rc -eq 0
+check "cleanup protected: remote kept" no_delete
+check "cleanup protected: reports kept" grep -q '^cleanup: remote feat kept' "$FX/out"
+
+cfresh; : >"$FX/branch.gone"; cleanup 5; rc=$?
+check "cleanup remote already gone: exits 0" test $rc -eq 0
+check "cleanup remote already gone: no DELETE" no_delete
+check "cleanup remote already gone: reports absent" grep -q '^cleanup: remote feat absent' "$FX/out"
+
+cfresh; cleanup 5 --keep-branch; rc=$?
+check "cleanup --keep-branch: exits 0" test $rc -eq 0
+check "cleanup --keep-branch: no remote delete" no_delete
+check "cleanup --keep-branch: local feat kept" local_exists feat
+check "cleanup --keep-branch: checks out base" test "$(cur_branch)" = master
+
+cfresh; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5
+git -C "$TMP/work" branch -q backup/old; git -C "$TMP/work" branch -q backup/unrecorded
+jq '.backup_branches=["backup/old"]' "$TMP/state/goal.json" >"$FX/t" && mv "$FX/t" "$TMP/state/goal.json"
+cleanup 5; rc=$?
+check "cleanup backups: exits 0" test $rc -eq 0
+check "cleanup backups: recorded backup deleted" bash -c '! git -C "$1" show-ref --verify --quiet refs/heads/backup/old' _ "$TMP/work"
+check "cleanup backups: unrecorded backup kept" local_exists backup/unrecorded
+check "cleanup backups: recorded list emptied" test "$(jq -c '.backup_branches' "$TMP/state/goal.json")" = "[]"
+check "cleanup backups: reports deletion" grep -q '^cleanup: backup backup/old deleted' "$FX/out"
+
+cfresh; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 6
+git -C "$TMP/work" branch -q backup/old
+jq '.backup_branches=["backup/old"]' "$TMP/state/goal.json" >"$FX/t" && mv "$FX/t" "$TMP/state/goal.json"
+cleanup 5; rc=$?
+check "cleanup foreign goal PR (autonomy off): exits 0" test $rc -eq 0
+check "cleanup foreign goal PR (autonomy off): backup untouched" local_exists backup/old
+check "cleanup foreign goal PR (autonomy off): list untouched" test "$(jq -c '.backup_branches' "$TMP/state/goal.json")" = '["backup/old"]'
+
+cfresh; flag_on; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 6
+cleanup 5; rc=$?
+check "cleanup autonomy on with other goal PR: refused" test $rc -eq 1
+check "cleanup autonomy on with other goal PR: nothing deleted" no_delete
+check "cleanup autonomy on with other goal PR: local feat kept" local_exists feat
+
+cfresh; flag_on; cleanup 5; rc=$?
+check "cleanup autonomy on without goal file: refused" test $rc -eq 1
+check "cleanup autonomy on without goal file: nothing deleted" no_delete
+
+cfresh; flag_on; bash "$H/goal.sh" set g; cleanup 5; rc=$?
+check "cleanup autonomy on with empty goal pr: refused" test $rc -eq 1
+check "cleanup autonomy on with empty goal pr: nothing deleted" no_delete
+
+cfresh; flag_on; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5; cleanup 5; rc=$?
+check "cleanup autonomy on with matching goal pr: exits 0" test $rc -eq 0
+check "cleanup autonomy on with matching goal pr: deletes remote feat" remote_deleted
+
+cfresh; : >"$FX/list.fail"; cleanup 5; rc=$?
+check "cleanup PR list failure: exits 0" test $rc -eq 0
+check "cleanup PR list failure: remote kept" no_delete
+check "cleanup PR list failure: reports kept" grep -q '^cleanup: remote feat kept (cannot list open PRs)' "$FX/out"
+
+cfresh; echo '{"protected":false,"commit":{"sha":"0000000000000000000000000000000000000000"}}' >"$FX/branch.json"; cleanup 5; rc=$?
+check "cleanup remote tip moved: remote kept" no_delete
+check "cleanup remote tip moved: reports kept" grep -q '^cleanup: remote feat kept (tip moved since merge)' "$FX/out"
+
+cfresh; mutate '.isCrossRepository=null' view.json; cleanup 5; rc=$?
+check "cleanup isCrossRepository null: exits 0" test $rc -eq 0
+check "cleanup isCrossRepository null: remote kept" no_delete
+
+cfresh; git -C "$TMP/work" checkout -q master; echo dirty >"$TMP/work/dirty.txt"; cleanup 5; rc=$?
+check "cleanup dirty tree: exits 0" test $rc -eq 0
+check "cleanup dirty tree: reports checkout skipped" grep -q '^cleanup: checkout skipped (dirty tree)' "$FX/out"
+check "cleanup dirty tree: reports local kept" grep -q '^cleanup: local feat kept (dirty tree)' "$FX/out"
+check "cleanup dirty tree: local feat kept" local_exists feat
+check "cleanup dirty tree: dirty file untouched" test -f "$TMP/work/dirty.txt"
+rm -f "$TMP/work/dirty.txt"
+
+cfresh; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5
+git -C "$TMP/work" branch -q backup/merged
+git -C "$TMP/work" checkout -q -b backup/unmerged && ( cd "$TMP/work" && echo u >u && git add u && git commit -qm U ) >/dev/null 2>&1
+git -C "$TMP/work" checkout -q feat
+jq '.backup_branches=["backup/merged","backup/unmerged"]' "$TMP/state/goal.json" >"$FX/t" && mv "$FX/t" "$TMP/state/goal.json"
+cleanup 5; rc=$?
+check "cleanup unmerged backup: exits 0" test $rc -eq 0
+check "cleanup unmerged backup: merged backup deleted" bash -c '! git -C "$1" show-ref --verify --quiet refs/heads/backup/merged' _ "$TMP/work"
+check "cleanup unmerged backup: unmerged backup kept" local_exists backup/unmerged
+check "cleanup unmerged backup: reports kept" grep -q '^cleanup: backup backup/unmerged kept (not merged)' "$FX/out"
+
+cfresh; mutate '.state="OPEN"' view.json; cleanup 5; rc=$?
+check "cleanup not merged: refused" test $rc -eq 1
+check "cleanup not merged: nothing deleted" no_delete
+check "cleanup not merged: local feat kept" local_exists feat
+
+cfresh; ( cd "$TMP/work" && echo extra >extra && git add extra && git commit -qm extra ) >/dev/null 2>&1
+cleanup 5; rc=$?
+check "cleanup local ahead of head: exits 0" test $rc -eq 0
+check "cleanup local ahead of head: local kept" local_exists feat
+check "cleanup local ahead of head: reports kept" grep -q '^cleanup: local feat kept' "$FX/out"
+
+cfresh; mutate '.headRefName="master"' view.json; cleanup 5; rc=$?
+check "cleanup head equals base: refused" test $rc -eq 1
+check "cleanup head equals base: nothing deleted" no_delete
+
+cfresh; cleanup; rc=$?
+check "cleanup without PR number: usage exit 2" test $rc -eq 2
+
+cfresh; git -C "$TMP/work" checkout -q master
+git -C "$TMP/work" worktree add -q "$TMP/wt" feat >/dev/null 2>&1
+CLEAN_CWD="$TMP/wt" cleanup 5; rc=$?
+check "cleanup linked worktree: exits 0" test $rc -eq 0
+check "cleanup linked worktree: detached at origin base" grep -q '^cleanup: checkout detached at origin/master' "$FX/out"
+check "cleanup linked worktree: HEAD detached" test "$(cur_branch "$TMP/wt")" = HEAD
+check "cleanup linked worktree: feat deleted" bash -c '! git -C "$1" show-ref --verify --quiet refs/heads/feat' _ "$TMP/work"
+check "cleanup linked worktree: reports kept" grep -q '^cleanup: worktree .* kept' "$FX/out"
+check "cleanup linked worktree: directory still exists" test -d "$TMP/wt"
+rm -rf "$TMP/wt"; git -C "$TMP/work" worktree prune
+
+# ---- goal backup-add
+reset; fresh_work
+goalw() { ( cd "$TMP/work" && bash "$H/goal.sh" "$@" ) >"$FX/out" 2>&1; }
+goalw backup-add backup/feat-1; rc=$?
+check "goal backup-add without goal: no-op exit 0" test $rc -eq 0
+check "goal backup-add without goal: creates no goal file" test ! -e "$TMP/state/goal.json"
+goalw set g
+check "goal set initialises backup_branches" test "$(jq -c '.backup_branches' "$TMP/state/goal.json")" = "[]"
+git -C "$TMP/work" branch -q backup/feat-1
+goalw backup-add backup/feat-1; rc=$?
+check "goal backup-add records branch" test "$rc" -eq 0 -a "$(jq -c '.backup_branches' "$TMP/state/goal.json")" = '["backup/feat-1"]'
+goalw backup-add backup/feat-1
+check "goal backup-add deduplicates" test "$(jq -c '.backup_branches' "$TMP/state/goal.json")" = '["backup/feat-1"]'
+goalw backup-add feat/x; rc=$?
+check "goal backup-add rejects non-backup name" test $rc -eq 2
+goalw backup-add backup/missing; rc=$?
+check "goal backup-add rejects missing branch" test $rc -eq 2
+check "goal backup-add rejected names not recorded" test "$(jq -c '.backup_branches' "$TMP/state/goal.json")" = '["backup/feat-1"]'
+reset; fresh_work
 
 # ---- git-guard
 GUARD_CWD="$TMP/work"
@@ -478,6 +677,24 @@ git push --force-with-lease origin master
 git push -uf origin main
 git push --force --no-verify origin feature/x
 git push --force --mirror origin
+git push origin -d x
+git push origin -fd x
+git push origin -df x
+git push --prune origin
+git push origin --delete x
+git branch -d x
+git branch --delete --force x
+git branch -df x
+git update-ref -d refs/heads/x
+git update-ref --stdin
+git send-pack origin :refs/heads/x
+git -c alias.p=push p origin --delete x
+gh api graphql -f query='mutation{deleteRef(input:{refId:"x"})}'
+gh api graphql --input /tmp/q.json
+gh api -X DELETE repos/o/r/git/refs/heads%2Fx
+gh api --method DELETE repos/o/r/git/refs/heads/x
+gh api --method=DELETE repos/o/r/git/refs/$REF
+bash /tmp/cleanup.sh 5
 CMDS
 )"
 ALLOW_CMDS="$(cat <<'CMDS'
@@ -490,6 +707,8 @@ git push --force-with-lease=feat:abc123 origin feat
 git push -f origin feat/x
 git push -uf origin feat/x
 git push -fu origin feat/x
+git push -u origin feat/x
+git push --force-with-lease=feat/x:abc origin feat/x
 git push origin +feat/x
 git push origin +x:y
 git push origin +HEAD:feat/x
@@ -529,11 +748,33 @@ agent-harness ship-merge 12 --method rebase
 agent-harness ship-merge 12 --method=merge
 CMDS
 )"
+CLEAN_ALLOW_CMDS="$(cat <<'CMDS'
+agent-harness cleanup 5
+agent-harness cleanup 5 --keep-branch
+bash /Users/someone/.claude/scripts/agent-harness/cleanup.sh 5
+bash ~/.claude/scripts/agent-harness/cleanup.sh 5
+agent-harness ship-merge 5 --keep-branch
+agent-harness goal backup-add backup/feat-1
+CMDS
+)"
+CLEAN_DENY_CMDS="$(cat <<'CMDS'
+GH_BIN=/tmp/gh agent-harness cleanup 5
+env AGENT_HARNESS_TEST=1 agent-harness cleanup 5
+agent-harness cleanup 5 --force
+agent-harness cleanup feat
+git branch -D backup/x
+git push origin --delete feat
+git push origin :feat
+gh api -X DELETE repos/o/r/git/refs/heads/feat
+CMDS
+)"
 reset; flag_on
 while IFS= read -r c; do check "git-guard denies: $c" denied "$c"; done <<<"$DENY_CMDS"
 while IFS= read -r c; do check "git-guard allows: $c" allowed "$c"; done <<<"$ALLOW_CMDS"
 while IFS= read -r c; do check "git-guard allows: $c" allowed "$c"; done <<<"$SHIP_ALLOW_CMDS"
 while IFS= read -r c; do check "git-guard asks: $c" asked "$c"; done <<<"$ASK_CMDS"
+while IFS= read -r c; do check "git-guard allows: $c" allowed "$c"; done <<<"$CLEAN_ALLOW_CMDS"
+while IFS= read -r c; do check "git-guard denies: $c" denied "$c"; done <<<"$CLEAN_DENY_CMDS"
 check "git-guard denies unknown merge method" denied "agent-harness ship-merge 12 --method octopus"
 check "git-guard denies --method without value" denied "agent-harness ship-merge 12 --method"
 echo '{"base":"trunk"}' >"$CFG"
@@ -560,6 +801,8 @@ rm -f "$TMP/state/autonomy.on"
 while IFS= read -r c; do check "git-guard (flag off) allows: $c" allowed "$c"; done <<<"$DENY_CMDS"
 while IFS= read -r c; do check "git-guard (flag off) allows: $c" allowed "$c"; done <<<"$ALLOW_CMDS"
 while IFS= read -r c; do check "git-guard (flag off) allows: $c" allowed "$c"; done <<<"$ASK_CMDS"
+while IFS= read -r c; do check "git-guard (flag off) allows: $c" allowed "$c"; done <<<"$CLEAN_DENY_CMDS"
+while IFS= read -r c; do check "git-guard (flag off) allows: $c" allowed "$c"; done <<<"$CLEAN_ALLOW_CMDS"
 git -C "$TMP/work" checkout -q master
 check "git-guard (flag off) allows bare push on the base branch" allowed "git push"
 git -C "$TMP/work" checkout -q feat

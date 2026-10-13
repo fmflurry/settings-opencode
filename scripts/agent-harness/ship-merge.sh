@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2016
-# ship-merge.sh <pr> [--confirmed] [--method squash|rebase|merge]: merges only when GitHub-side rails pass; not a security boundary without branch protection.
+# ship-merge.sh <pr> [--confirmed] [--method squash|rebase|merge] [--keep-branch]: merges only when GitHub-side rails pass; not a security boundary without branch protection.
 set -euo pipefail
 # shellcheck source=scripts/agent-harness/lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
-usage="usage: ship-merge.sh <pr> [--confirmed] [--method squash|rebase|merge]"
-pr="" confirmed="" method=""
+usage="usage: ship-merge.sh <pr> [--confirmed] [--method squash|rebase|merge] [--keep-branch]"
+pr="" confirmed="" method="" keep=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --confirmed) confirmed=--confirmed ;;
+    --keep-branch) keep=1 ;;
     --method) [ $# -ge 2 ] || { echo "$usage" >&2; exit 2; }; method="$2"; shift ;;
     --method=*) method="${1#--method=}" ;;
     -*) echo "$usage" >&2; exit 2 ;;
@@ -65,9 +66,6 @@ method="$(resolve_merge_method "${method:-$(cfg_get '.mergeMethod // empty')}")"
 state="$("$GH" pr view "$pr" --json state | jq -r .state)" || state=unknown
 [ "$state" = MERGED ] || refuse "merge failed (exit $merge_rc); PR state is $state"
 
-repo="$("$GH" repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)" || repo=""
-if [ -n "$repo" ] && [ -n "$branch" ]; then
-  "$GH" api -X DELETE "repos/$repo/git/refs/heads/$branch" >/dev/null 2>&1 || true
-fi
 goal_update '.status = "done"'
 bash "$NOTIFY" "done" "PR #$pr merged" "$pr"
+bash "$HARNESS_DIR/cleanup.sh" "$pr" ${keep:+--keep-branch} || echo "cleanup incomplete; rerun: agent-harness cleanup $pr" >&2

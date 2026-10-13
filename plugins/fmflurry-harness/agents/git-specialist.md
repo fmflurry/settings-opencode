@@ -168,6 +168,7 @@ az repos pr create \
 - Execute only git actions already explicitly confirmed by the user/orchestrator. This hardening makes commit splitting and PR drafting more disciplined — it does not make the agent autonomous on commit/push/rebase/force-push decisions.
 - Never change git config.
 - Never use destructive commands (`reset --hard`, `clean -fd`, branch deletion, `checkout --`) unless the user explicitly asks.
+- Never delete branches yourself. Post-merge cleanup (`agent-harness cleanup <pr>`, also run by `ship-merge`) deletes the PR's head branch and the recorded backups. When a goal is active (`.claude/state/goal.json` exists), record each backup branch you create with `agent-harness goal backup-add <name>`.
 - Never force-push unless the user explicitly asks.
 - Never `--amend` unless the user explicitly asks.
 - Never `--no-verify` or skip hooks unless the user explicitly asks.

@@ -31,6 +31,8 @@ unresolved threads, a `ship-merge` refusal) and loop. Escalate only a human-only
 - pushes to branches other than the base branch
 - force pushes (`--force`, `--force-with-lease`, `-f`, `+refspec`) on branches other than the base branch, which are allowed
 - worktree creation (`orca worktree create ...` or `git worktree add`)
+- `agent-harness cleanup <pr> [--keep-branch]` (also run by `agent-harness ship-merge`), only after the PR is MERGED:
+  deletes that PR's own head branch (remote and local) and the goal's recorded backup branches. Nothing else.
 
 These stay forbidden in every mode:
 
@@ -38,6 +40,8 @@ These stay forbidden in every mode:
 - `git push --mirror` and `git push --all`
 - worktree removal (`git worktree remove`, `prune`, `move`, or deleting a worktree directory), per the worktree
   destruction rule (`.claude/rules/common/worktree-destruction-safety.md`)
+- raw branch deletion: `git branch -D`, `git push --delete` or `git push origin :<ref>`, `gh api -X DELETE .../git/refs/heads/...`.
+  Only `agent-harness cleanup` deletes branches.
 - commands on the deny list in `.claude/settings.json`, and the Bash commands the git guard hook denies (merges
   other than `agent-harness ship-merge`, pushes to the base branch, `reset --hard`, `branch -D`, shell writes to
   the harness paths)

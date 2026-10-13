@@ -83,9 +83,13 @@ Check the mode with `agent-harness autonomy status`. The rules behind both modes
     says why not, then resolve the threads you addressed. See lifecycle step 11.
 12. **Merge.** Autonomous mode: `agent-harness ship-merge <pr>`. Interactive mode: add `--confirmed` after the user
     says yes. The merge method is chosen with `--method squash|rebase|merge`; without it the script uses `mergeMethod`
-    from `.claude/agent-harness.json`, else the repo's first allowed method (squash, rebase, merge). It enforces the merge rails listed in the README. On success, `agent-harness notify done "<msg>" <pr>`
-    and `agent-harness goal status`. On a refusal, read the reason and go back to the loop (see
+    from `.claude/agent-harness.json`, else the repo's first allowed method (squash, rebase, merge). It enforces the merge rails listed in the README. On a refusal, read the reason and go back to the loop (see
     [Blockers](#blockers)).
+13. **Post-merge cleanup.** After a successful merge, `ship-merge` runs `agent-harness cleanup <pr>`. Read the
+    `cleanup:` lines it prints (`remote`, `local`, `checkout`, `backup`, `worktree`). For an item kept for a fixable
+    reason (for example a checkout switch that failed on a dirty tree), fix the cause without discarding changes, then
+    run `agent-harness cleanup <pr>` once more. Never remove a worktree; cleanup only reports it. Then
+    `agent-harness notify done "<msg>" <pr>` and `agent-harness goal status`.
 
 ## Blockers
 
@@ -125,7 +129,7 @@ The agent cannot resolve these. Run `agent-harness goal escalate "<reason>"`, th
 The run ends in one of two states: **done** or **escalated**. Do not stop early while the goal is active and the PR
 is unmerged. Do not end the turn to wait for a fix you can make yourself.
 
-- **Done.** The PR is merged. Run `agent-harness notify done`.
+- **Done.** The PR is merged and `agent-harness cleanup` has run (stage 13). Run `agent-harness notify done`.
 - **Human-only blocker.** Escalate as described above. Stop.
 - **No progress.** A full loop iteration (fix, review, CI, merge) produces no progress: the same blocker and the same
   failure as the iteration before. Escalate with `agent-harness goal escalate "<reason>"` and notify failure. A new
@@ -141,6 +145,7 @@ is unmerged. Do not end the turn to wait for a fix you can make yourself.
 - Never a push to the base branch, with or without force. Never `git push --mirror` or `--all`, never `--no-verify`.
   Never weaken a check: disabling or skipping a test, job or required check, `continue-on-error`, deleting a check, or lowering thresholds. Force pushes on the PR branch are allowed.
 - No worktree removal. No deny-list commands (see the autonomy rule).
+- Branches are deleted only by `agent-harness cleanup`, never by raw `git branch -D`, `git push --delete`, or the API.
 - A PR that matches `protectedPaths` is refused by `ship-merge` in autonomous mode. A human merges it with `--confirmed`.
 - Never add a label, post a comment, or create a status to get past a refusal. Gates read only what the host and
   the workflows wrote.
@@ -150,4 +155,5 @@ is unmerged. Do not end the turn to wait for a fix you can make yourself.
 ## Output
 
 Report the PR URL, the goal status from `agent-harness goal status`, the loop iteration count, the verification output
-tails, and any assumptions that the user should check. Keep it short.
+tails, and any assumptions that the user should check. Report what cleanup removed or kept: the remote and local head
+branch, the backups, the base checkout, and any worktree kept. Keep it short.

@@ -34,7 +34,7 @@ Before starting the rebase:
 
 1. Generate backup branch name: `backup/<branch-name-with-slashes-as-hyphens>-<YYYYMMDDHHMM>` (lowercase).
 2. Validate against regex `^backup/[a-z0-9]+(-[a-z0-9]+)*$`.
-3. Create backup: `git branch backup/<name>`. Confirm it matches the regex.
+3. Create backup: `git branch backup/<name>`. Confirm it matches the regex. When a goal is active (`.claude/state/goal.json` exists), record it with `agent-harness goal backup-add <name>`.
 
 ## Rebase
 
@@ -77,7 +77,7 @@ Once all conflicts are resolved and verification passes:
 2. **Show the changes:** Run `git range-diff origin/<base> backup/<x> HEAD` to display how each commit's diff was preserved through the rebase.
 3. **Present the push command:** `git push --force-with-lease=<branch>:<recorded @{u} sha> origin <branch>`. Show this command to the human and await explicit consent before running it.
 4. **After push:** Verify with `git status` that the remote-tracking branch updated.
-5. **Delete backup (on request only):** Ask the human before deleting the backup branch; if approved, run `git branch -d backup/<name>`.
+5. **Delete backup:** Recorded backups are deleted by post-merge cleanup (`agent-harness cleanup <pr>`). Otherwise ask the human before deleting the backup branch; if approved, run `git branch -d backup/<name>`.
 
 ## Roles
 

@@ -47,8 +47,10 @@ check_push() {
     case "$a" in
       *'$'*) deny ;;
       --mirror | --all | --no-verify) deny ;;
-      --delete | -d) deny_branch_delete ;;
-      --* | -*) ;;
+      --delete | --prune) deny_branch_delete ;;
+      --*) ;;
+      -*d*) deny_branch_delete ;;
+      -*) ;;
       *) pos+=("$a") ;;
     esac
   done
@@ -74,7 +76,7 @@ check_git() {
       -C) kv="${args[$j]:-}"; case "$kv" in /*) gdir="$kv" ;; *) gdir="$gdir/$kv" ;; esac; j=$((j + 2)) ;;
       -c)
         kv="${args[$j]:-}"
-        grep -Eqi '^alias\.[^=]*=!|^core\.(hookspath|pager|sshcommand)' <<<"$kv" && deny
+        grep -Eqi '^alias\.|^core\.(hookspath|pager|sshcommand)' <<<"$kv" && deny
         j=$((j + 2)) ;;
       -*) j=$((j + 1)) ;;
       *) sub="$a"; j=$((j + 1)); break ;;
@@ -84,7 +86,16 @@ check_git() {
   case "$sub" in
     push) check_push "$gdir" "${rest[@]}" ;;
     reset) for a in "${rest[@]}"; do [ "$a" = --hard ] && deny; done ;;
-    branch) for a in "${rest[@]}"; do [[ "$a" =~ ^-[A-Za-z]*D ]] && deny; done ;;
+    branch)
+      for a in "${rest[@]}"; do
+        case "$a" in
+          --delete) deny_branch_delete ;;
+          --*) ;;
+          -*[dD]*) deny_branch_delete ;;
+        esac
+      done ;;
+    update-ref) for a in "${rest[@]}"; do [[ "$a" =~ ^(-d|--delete|--stdin)$ ]] && deny_branch_delete; done ;;
+    send-pack) deny_branch_delete ;;
     commit) for a in "${rest[@]}"; do [ "$a" = --no-verify ] && deny; done ;;
     checkout | restore) any_protected "${rest[@]}" && deny ;;
   esac
@@ -95,11 +106,14 @@ check_gh() {
   grep -Eq ' pr( .*)? merge( |$)' <<<"$line" && deny
   grep -Eq ' api( |$)' <<<"$line" || return 0
   grep -Eq 'pulls/[0-9]+/merge|mergePullRequest|repos/[^ ]*/merges|query=@' <<<"$line" && deny
+  grep -Eq 'deleteRef' <<<"$line" && deny_branch_delete
+  grep -Eq ' graphql( .*)? --input( |=|$)' <<<"$line" && deny
   grep -Eqi '(-X|--method)[ =]*(PUT|PATCH|DELETE)' <<<"$line" && method=1
   [ "$method" = 1 ] || return 0
   local del=0
   grep -Eqi '(-X|--method)[ =]*DELETE' <<<"$line" && del=1
   for t in "$@"; do
+    [ "$del" = 1 ] && [[ "$t" == *%2[Ff]* || "$t" == *'$'* ]] && deny_branch_delete
     [[ "$t" =~ refs/heads/(.+)$ ]] || continue
     [ "$del" = 1 ] && deny_branch_delete
     is_base "${BASH_REMATCH[1]}" && deny
@@ -163,9 +177,12 @@ check_cleanup() {
   local has_assign="$1" c0="$2"; shift 2
   local rest=()
   case "$c0" in
-    bash | sh | zsh | dash) [[ "${1:-}" =~ cleanup\.sh$ ]] || return 1; shift; rest=("$@") ;;
+    bash | sh | zsh | dash)
+      [[ "${1:-}" =~ cleanup\.sh$ ]] || return 1
+      [[ "$1" == */scripts/agent-harness/cleanup.sh ]] || deny
+      shift; rest=("$@") ;;
     agent-harness | agent-harness.sh) [ "${1:-}" = cleanup ] || return 1; shift; rest=("$@") ;;
-    cleanup.sh) rest=("$@") ;;
+    cleanup.sh) [[ "$RAW0" == */scripts/agent-harness/cleanup.sh ]] || deny; rest=("$@") ;;
     *) return 1 ;;
   esac
   [ "$has_assign" = 0 ] || deny
@@ -200,6 +217,7 @@ while IFS= read -r seg; do
   done
   ct=("${toks[@]:$i}")
   [ "${#ct[@]}" -gt 0 ] || continue
+  RAW0="${ct[0]}"
   c0="${ct[0]##*/}"
   ct[0]="$c0"
 

@@ -677,6 +677,24 @@ git push --force-with-lease origin master
 git push -uf origin main
 git push --force --no-verify origin feature/x
 git push --force --mirror origin
+git push origin -d x
+git push origin -fd x
+git push origin -df x
+git push --prune origin
+git push origin --delete x
+git branch -d x
+git branch --delete --force x
+git branch -df x
+git update-ref -d refs/heads/x
+git update-ref --stdin
+git send-pack origin :refs/heads/x
+git -c alias.p=push p origin --delete x
+gh api graphql -f query='mutation{deleteRef(input:{refId:"x"})}'
+gh api graphql --input /tmp/q.json
+gh api -X DELETE repos/o/r/git/refs/heads%2Fx
+gh api --method DELETE repos/o/r/git/refs/heads/x
+gh api --method=DELETE repos/o/r/git/refs/$REF
+bash /tmp/cleanup.sh 5
 CMDS
 )"
 ALLOW_CMDS="$(cat <<'CMDS'
@@ -689,6 +707,8 @@ git push --force-with-lease=feat:abc123 origin feat
 git push -f origin feat/x
 git push -uf origin feat/x
 git push -fu origin feat/x
+git push -u origin feat/x
+git push --force-with-lease=feat/x:abc origin feat/x
 git push origin +feat/x
 git push origin +x:y
 git push origin +HEAD:feat/x
@@ -731,6 +751,7 @@ CMDS
 CLEAN_ALLOW_CMDS="$(cat <<'CMDS'
 agent-harness cleanup 5
 agent-harness cleanup 5 --keep-branch
+bash /Users/someone/.claude/scripts/agent-harness/cleanup.sh 5
 bash ~/.claude/scripts/agent-harness/cleanup.sh 5
 agent-harness ship-merge 5 --keep-branch
 agent-harness goal backup-add backup/feat-1

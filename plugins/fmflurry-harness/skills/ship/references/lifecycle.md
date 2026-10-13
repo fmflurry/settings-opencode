@@ -181,8 +181,6 @@ gh pr ready <n>
 ```bash
 agent-harness ship-merge <n>              # autonomous mode
 agent-harness ship-merge <n> --confirmed  # interactive mode, after the user says yes
-agent-harness notify done "<msg>" <n>
-agent-harness goal status
 ```
 
 `ship-merge` is the only merge path. It refuses unless all of these hold (the full rail list is in the
@@ -197,8 +195,28 @@ agent-harness goal status
 - only when `reviewStatus` is configured: the newest status with that context on the head is `success`, created by
   `reviewStatusCreator` when that key is set
 
-It merges pinned to the head SHA (method: `--method`, else `mergeMethod` in the config, else the repo's first allowed of squash, rebase, merge), then deletes the branch.
+It merges pinned to the head SHA (method: `--method`, else `mergeMethod` in the config, else the repo's first allowed of squash, rebase, merge), then runs cleanup (step 13). `--keep-branch` keeps the head branch.
 
 If it refuses, the refusal is input to the loop. Read the reason, fix the cause (rebase or update the branch, resolve a
 thread, fix a check, re-review), push, and retry the merge. The run only stops when the PR merges or a human-only
 blocker stops it. Do not add labels, post comments or create statuses to get past a refusal you did not earn.
+
+## 13. Post-merge cleanup
+
+`ship-merge` runs `agent-harness cleanup <n>` after the merge. Run it by hand only to retry an item it kept:
+
+```bash
+agent-harness cleanup <n>
+```
+
+Each line starts with `cleanup:` and names one item:
+
+- `remote`: the PR's head branch on the remote.
+- `local`: the local head branch. Deleted only when fully merged (its tip is an ancestor of the PR head).
+- `checkout`: the base branch, updated. If the base is checked out in another worktree, the checkout detaches at `origin/<base>`.
+- `backup`: a backup branch recorded in `goal.json`.
+- `worktree`: a worktree that still holds a branch. Reported only, never removed.
+
+For an item kept for a fixable reason (for example a checkout switch that failed on a dirty tree), fix the cause without
+discarding changes, then run `agent-harness cleanup <n>` once more. Never delete branches with `git branch -D`,
+`git push --delete`, or the GitHub API.

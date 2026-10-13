@@ -136,11 +136,18 @@ check_ship_merge() {
   esac
   [ "$has_assign" = 0 ] || deny
   [[ "${rest[0]:-}" =~ ^[0-9]+$ ]] || deny
-  case "${#rest[@]}" in
-    1) ;;
-    2) [ "${rest[1]}" = --confirmed ] || deny; ASKED=1 ;;
-    *) deny ;;
-  esac
+  local i=1 seen_confirmed=0 seen_method=0
+  while [ "$i" -lt "${#rest[@]}" ]; do
+    case "${rest[$i]}" in
+      --confirmed) [ "$seen_confirmed" = 0 ] || deny; seen_confirmed=1; ASKED=1 ;;
+      --method) [ "$seen_method" = 0 ] || deny; seen_method=1; i=$((i + 1))
+        [[ "${rest[$i]:-}" =~ ^(squash|rebase|merge)$ ]] || deny ;;
+      --method=*) [ "$seen_method" = 0 ] || deny; seen_method=1
+        [[ "${rest[$i]#--method=}" =~ ^(squash|rebase|merge)$ ]] || deny ;;
+      *) deny ;;
+    esac
+    i=$((i + 1))
+  done
   return 0
 }
 

@@ -53,20 +53,9 @@ export const parseGoal = (text: string): Goal | null => {
 export const shownGoal = (s: Snapshot): Goal | null =>
   s.goal !== null && (s.goal.status !== 'done' || s.isGoalFresh) ? s.goal : null
 
-export const isBandVisible = (s: Snapshot): boolean => s.isOn || shownGoal(s) !== null
+export const isBandVisible = (s: Snapshot): boolean => s.hasHarness || s.isOn || shownGoal(s) !== null
 
 const prLabel = (goal: Goal): string => (goal.pr === null ? '' : ` #${goal.pr}`)
-
-export const statusLine = (s: Snapshot): string | undefined => {
-  const goal = shownGoal(s)
-  if (!s.hasHarness && !s.isOn && goal === null) return undefined
-  const parts = [s.isOn ? '● AUTO' : '○ manual']
-  if (goal !== null) {
-    parts.push(`${goal.status === 'active' ? 'ship' : goal.status}${prLabel(goal)}`)
-    parts.push(`fix ${goal.fixIterations}/${goal.maxFixIterations}`)
-  }
-  return parts.join(' · ')
-}
 
 export const summary = (s: Snapshot): string => {
   if (!s.hasHarness && !s.isOn && s.goal === null) {

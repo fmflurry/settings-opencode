@@ -6,15 +6,13 @@ import {
   AUTONOMY_FLAG,
   GOAL_FILE,
   HARNESS_MARKERS,
-  PALETTE,
-  clip,
   isBandVisible,
   parseGoal,
   shownGoal,
-  statusLine,
   summary,
   toastsFor,
 } from './model'
+import { countersView, goalHeaderView, modeView, statusView } from './views'
 
 const POLL_MS = 3000
 const COMMAND = 'autonomy-status'
@@ -41,7 +39,6 @@ const refreshOnce = async ($: EngineInterface): Promise<Snapshot | null> => {
     const next = await readSnapshot($, await read($, startedAtAtom))
     const prev = await read($, snapshotAtom)
     await update($, snapshotAtom, () => next)
-    $.ui.status(statusLine(next))
     if (prev !== null) toastsFor(prev, next).forEach(text => $.ui.toast(text))
     return next
   } catch (error) {
@@ -96,33 +93,30 @@ export const register: Register = on => {
     const snapshot = await read($, snapshotAtom)
     if (e.props.hasSurvey || snapshot === null || !isBandVisible(snapshot)) return next(e)
 
-    const { Box, Text } = $.ui.resolve(e)
-    const goal = shownGoal(snapshot)
-    const badgeColor = snapshot.isOn ? PALETTE.accent : PALETTE.muted
-    const statusColor =
-      goal?.status === 'done'
-        ? PALETTE.done
-        : goal?.status === 'escalated'
-          ? PALETTE.escalated
-          : PALETTE.accent
+    const table = $.ui.resolve(e)
+    const { Box } = table
 
     return (
-      <Box>
-        <Text backgroundColor={badgeColor} color={PALETTE.onAccent} bold>
-          {snapshot.isOn ? ' AUTONOMOUS ' : ' GOAL '}
-        </Text>
-        {goal !== null && goal.goal !== '' && <Text>{` ${clip(goal.goal)}`}</Text>}
-        {goal?.pr != null && <Text color={PALETTE.accent}>{` PR #${goal.pr}`}</Text>}
-        {goal !== null && (
-          <Text color={statusColor} bold>
-            {` ${goal.status}${goal.status === 'escalated' && goal.reason !== '' ? `: ${goal.reason}` : ''}`}
-          </Text>
-        )}
-        {goal !== null && (
-          <Text color={PALETTE.muted}>
-            {` fix ${goal.fixIterations}/${goal.maxFixIterations} · stop blocks ${goal.stopBlocks}`}
-          </Text>
-        )}
+      <Box flexDirection="column">
+        <Box>{modeView(table, snapshot)}</Box>
+        {goalHeaderView(table, snapshot)}
+      </Box>
+    )
+  })
+
+  on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
+    const snapshot = await read($, snapshotAtom)
+    const engineHint = await next(e)
+    if (snapshot === null || shownGoal(snapshot) === null) return engineHint
+
+    const table = $.ui.resolve(e)
+    const { Box } = table
+
+    return (
+      <Box flexDirection="column">
+        {countersView(table, snapshot)}
+        {engineHint}
+        {statusView(table, snapshot)}
       </Box>
     )
   })

@@ -14,8 +14,9 @@ Outside a harness-aware repo (none of the three exist) the mod shows nothing.
 
 ## Surfaces
 
-- Status line: `● AUTO · ship #48 · fix 2/5`, or `○ manual`.
-- Band above the prompt, shown while autonomy is on, or a goal is active or escalated, or a goal finished during this session: `AUTONOMOUS` badge, clipped goal, `PR #n`, status (with the reason when escalated), `fix i/max`, `stop blocks n`.
+- No status line: `$.ui.status` renders as plain text under the prompt and the host offers no footer component for styled output, so the capsule lives in the band.
+- Band above the prompt, shown in any harness-aware repo: the capsule ` ● AUTONOMOUS ` (accent background, bold dark text) while autonomy is on, ` ○ manual ` (muted background) otherwise; when a goal exists, a second row with the clipped goal and `PR #n`.
+- Below the prompt: a `PromptHint` hook shows `fix i/max · stop blocks n` just under the textarea, then the engine's own hint line (pills stay live), then the status (`escalated: <reason>` in the escalated color, or `done`; omitted while active). Nothing is added when there is no goal to show.
 - `/autonomy-status`: multi-line summary of every field.
 - Toasts on transition: escalated, done, autonomy toggled on or off.
 

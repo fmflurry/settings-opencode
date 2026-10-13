@@ -197,7 +197,7 @@ agent-harness goal status
 - only when `reviewStatus` is configured: the newest status with that context on the head is `success`, created by
   `reviewStatusCreator` when that key is set
 
-It squash-merges pinned to the head SHA, then deletes the branch.
+It merges pinned to the head SHA (method: `--method`, else `mergeMethod` in the config, else the repo's first allowed of squash, rebase, merge), then deletes the branch.
 
 If it refuses, the refusal is input to the loop. Read the reason, fix the cause (rebase or update the branch, resolve a
 thread, fix a check, re-review), push, and retry the merge. The run only stops when the PR merges or a human-only

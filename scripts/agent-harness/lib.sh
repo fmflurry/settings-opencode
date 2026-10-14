@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Helpers for goal.sh, autonomy.sh, notify.sh, ship-merge.sh and cleanup.sh. Source it; do not execute it.
+# Helpers for goal.sh, autonomy.sh, notify.sh, ship-merge.sh, cleanup.sh and worktree-rm.sh. Source it; do not execute it.
 # Hooks must not source this file: it lives in the repo-independent install and hooks run it unattended.
 HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"

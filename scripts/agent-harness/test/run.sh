@@ -630,8 +630,6 @@ mv x .claude/state/goal.json
 \gh pr merge 1
 git push --mirror origin
 git push --all origin
-git -c alias.p=!sh status
-git -c alias.x=!echo status
 git -c core.hooksPath=/tmp/h commit -m x
 git -c core.pager=less log
 git -c core.sshCommand=evil push origin feature/x
@@ -688,13 +686,18 @@ git branch -df x
 git update-ref -d refs/heads/x
 git update-ref --stdin
 git send-pack origin :refs/heads/x
-git -c alias.p=push p origin --delete x
 gh api graphql -f query='mutation{deleteRef(input:{refId:"x"})}'
 gh api graphql --input /tmp/q.json
 gh api -X DELETE repos/o/r/git/refs/heads%2Fx
 gh api --method DELETE repos/o/r/git/refs/heads/x
 gh api --method=DELETE repos/o/r/git/refs/$REF
 bash /tmp/cleanup.sh 5
+CMDS
+)"
+ALIAS_DENY_CMDS="$(cat <<'CMDS'
+git -c alias.p=!sh status
+git -c alias.x=!echo status
+git -c alias.p=push p origin --delete x
 CMDS
 )"
 ALLOW_CMDS="$(cat <<'CMDS'
@@ -770,6 +773,7 @@ CMDS
 )"
 reset; flag_on
 while IFS= read -r c; do check "git-guard denies: $c" denied "$c"; done <<<"$DENY_CMDS"
+while IFS= read -r c; do check "git-guard denies: $c" denied "$c"; done <<<"$ALIAS_DENY_CMDS"
 while IFS= read -r c; do check "git-guard allows: $c" allowed "$c"; done <<<"$ALLOW_CMDS"
 while IFS= read -r c; do check "git-guard allows: $c" allowed "$c"; done <<<"$SHIP_ALLOW_CMDS"
 while IFS= read -r c; do check "git-guard asks: $c" asked "$c"; done <<<"$ASK_CMDS"
@@ -799,6 +803,7 @@ check "git-guard allows push origin HEAD on a feature branch" allowed "git push 
 check "git-guard fails open on empty input" bash -c 'echo "{}" | bash "$1" | test -z "$(cat)"' _ "$HOOKS/autonomy-git-guard.sh"
 rm -f "$TMP/state/autonomy.on"
 while IFS= read -r c; do check "git-guard (flag off) allows: $c" allowed "$c"; done <<<"$DENY_CMDS"
+while IFS= read -r c; do check "git-guard (flag off) denies: $c" denied "$c"; done <<<"$ALIAS_DENY_CMDS"
 while IFS= read -r c; do check "git-guard (flag off) allows: $c" allowed "$c"; done <<<"$ALLOW_CMDS"
 while IFS= read -r c; do check "git-guard (flag off) allows: $c" allowed "$c"; done <<<"$ASK_CMDS"
 while IFS= read -r c; do check "git-guard (flag off) allows: $c" allowed "$c"; done <<<"$CLEAN_DENY_CMDS"
@@ -806,6 +811,253 @@ while IFS= read -r c; do check "git-guard (flag off) allows: $c" allowed "$c"; d
 git -C "$TMP/work" checkout -q master
 check "git-guard (flag off) allows bare push on the base branch" allowed "git push"
 git -C "$TMP/work" checkout -q feat
+
+WGF="$(mktemp -d)"; WGF="$(cd -P "$WGF" && pwd)"
+mkdir -p "$WGF/main" "$WGF/st"
+git -C "$WGF/main" init -q . && git -C "$WGF/main" -c user.email=a@b -c user.name=n commit -q --allow-empty -m i
+git -C "$WGF/main" worktree add -q "$WGF/sib" -b sib
+git -C "$WGF/main" worktree add -q "$WGF/orca/workspaces/r/w" -b w
+mkdir -p "$WGF/sib/node_modules" "$WGF/sib/build"
+wg_decision() { # mode cwd cmd
+  rm -f "$WGF/st/autonomy.on"; [ "$1" = on ] && : >"$WGF/st/autonomy.on"
+  local out
+  out="$(jq -n --arg c "$3" --arg w "$2" '{tool_input:{command:$c},cwd:$w}' \
+    | AGENT_HARNESS_TEST=1 AGENT_STATE_DIR="$WGF/st" CLAUDE_PROJECT_DIR="$WGF/main" bash "$HOOKS/autonomy-git-guard.sh")"
+  [ -n "$out" ] || { echo allow; return; }
+  jq -r '.hookSpecificOutput.permissionDecision // "allow"' <<<"$out"
+}
+wg() { local exp="$1" cwd="$2" m; shift 2; for m in off on; do check "git-guard worktree ($m) $exp: $*" test "$(wg_decision "$m" "$cwd" "$*")" = "$exp"; done; }
+WM="$WGF/main"; WS="$WGF/sib"
+wg deny "$WM" "if true; then git worktree remove /p; fi"
+wg deny "$WM" "! git worktree remove /p"
+wg deny "$WM" "env -i git worktree remove /p"
+wg deny "$WM" "sudo -u me rm -rf $WS"
+wg deny "$WM" "bash -x -c 'git worktree remove /p'"
+wg deny "$WM" "git --git-dir .git worktree remove /p"
+wg deny "$WM" "git -c alias.x='worktree remove' x /p"
+wg deny "$WM" "git config alias.wr 'worktree remove'"
+wg deny "$WM" "rm -rf ../sib"
+wg deny "$WS" "rm -rf ."
+wg deny "$WS" "rm -rf *"
+wg deny "$WM" "cd $WGF/orca/workspaces/r && rm -rf w"
+wg deny "$WM" "mv $WS /tmp/x"
+wg deny "$WM" "trash $WS"
+wg deny "$WM" "find $WS -delete"
+wg deny "$WS" "find . -delete"
+wg deny "$WM" "echo /p | xargs rm -rf"
+wg deny "$WM" "python3 -c 'import shutil; shutil.rmtree(\"/Users/x/orca/workspaces/r/w\")'"
+wg deny "$WM" "orca --json worktree rm --worktree path:/x"
+wg deny "$WM" "export ORCA_BIN=/t; agent-harness worktree-rm /x --confirmed"
+wg ask "$WM" "bash -x scripts/agent-harness/worktree-rm.sh /p --confirmed"
+wg ask "$WM" "agent-harness worktree-rm /x --confirmed"
+wg allow "$WM" "git worktree prune -n"
+wg allow "$WM" "git worktree list"
+wg allow "$WM" "git worktree add ../y -b feat/y"
+wg allow "$WM" "orca worktree list --json"
+wg allow "$WS" "rm -rf node_modules"
+wg allow "$WM" "cd $WS && rm -rf build"
+wg allow "$WM" "rm -rf build"
+wg allow "$WM" "mv a.txt b.txt"
+wg allow "$WM" "agent-harness worktree-rm /x"
+wg allow "$WGF/st" "find . -name x -delete"
+wg allow "$WM" "git commit -m 'doc git worktree remove'"
+rm -rf "$WGF"
+
+# ---- worktree-rm
+cat >"$TMP/orcawt" <<'STUB'
+#!/usr/bin/env bash
+echo "$*" >>"$FX/orcawt.log"
+case "${1:-} ${2:-}" in
+  "worktree list")
+    if [ -f "$FX/orca_wt.json" ]; then cat "$FX/orca_wt.json"; else echo '{"ok":true,"result":{"worktrees":[]}}'; fi ;;
+  "worktree rm")
+    [ -f "$FX/orca_rm_hook" ] && bash "$FX/orca_rm_hook"
+    p=""; for a in "$@"; do case "$a" in path:*) p="${a#path:}" ;; esac; done
+    git -C "$WMAIN" worktree remove --force "$p" >/dev/null 2>&1
+    echo '{"ok":true,"result":{"removed":true,"removing":true}}' ;;
+esac
+STUB
+chmod +x "$TMP/orcawt"
+export AGENT_HARNESS_WORKTREE_RM_WAIT=3 AGENT_HARNESS_WORKTREE_RM_SETTLE=0
+
+WTN=0
+wtfx() {
+  WTN=$((WTN + 1)); WB="$TMP/wtfx$WTN"; mkdir -p "$WB"; WB="$(cd "$WB" && pwd -P)"
+  git init -q --bare "$WB/origin.git"
+  git clone -q "$WB/origin.git" "$WB/main" 2>/dev/null
+  ( cd "$WB/main" && git config user.email t@t && git config user.name t && git checkout -q -b master \
+    && echo a >a && echo t >tracked && git add a tracked && git commit -qm A && git push -q origin master \
+    && git worktree add -q -b feat-x "$WB/wt" origin/master && git worktree add -q -b feat-sib "$WB/sib" origin/master ) >/dev/null 2>&1
+  export WMAIN="$WB/main"; WT="$WB/wt"; SIB="$WB/sib"
+  reset; rm -f "$FX"/orca_wt.json "$FX"/orca_rm_hook; echo '{"base":"master"}' >"$CFG"
+  WCWD="$WMAIN"
+}
+wtrm() { ( cd "$WCWD" && env ORCA_BIN="$TMP/orcawt" bash "$H/worktree-rm.sh" "$@" ); }
+nrefs() { git -C "$WMAIN" for-each-ref 'refs/harness/snapshots/' | wc -l | tr -d ' '; }
+listed() { git -C "$WMAIN" worktree list --porcelain | grep -qxF "worktree $1"; }
+orca_activity() { jq -n --arg p "$WT" --argjson t "$1" '{ok:true,result:{worktrees:[{path:$p,lastActivityAt:$t}]}}' >"$FX/orca_wt.json"; }
+now_ms() { echo $(($(date +%s) * 1000)); }
+dirty_main() { echo "edit" >>"$WMAIN/tracked"; echo u >"$WMAIN/untracked.txt"; }
+DESTROY_HOOK='git -C "$WMAIN" reset -q --hard && git -C "$WMAIN" clean -qfd'
+
+wtfx; out="$(wtrm "$WT" 2>&1)"; rc=$?
+check "worktree-rm: dry run exits 3" test $rc -eq 3
+check "worktree-rm: dry run leaves target in place" test -d "$WT"
+check "worktree-rm: dry run leaves target listed" listed "$WT"
+
+wtfx; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: clean git route exits 0" test $rc -eq 0
+check "worktree-rm: clean git route removes directory" test ! -e "$WT"
+check "worktree-rm: clean git route unlists worktree" bash -c '! git -C "$1" worktree list --porcelain | grep -qxF "worktree $2"' _ "$WMAIN" "$WT"
+check "worktree-rm: clean git route reports route git" grep -q 'worktree-rm: route git' <<<"$out"
+check "worktree-rm: clean git route reports removed" grep -q "worktree-rm: removed $WT" <<<"$out"
+check "worktree-rm: clean git route leaves no snapshot refs" test "$(nrefs)" = 0
+
+wtfx; orca_activity 0; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: orca route exits 0" test $rc -eq 0
+check "worktree-rm: orca route reports route orca" grep -q 'worktree-rm: route orca' <<<"$out"
+check "worktree-rm: orca route calls orca worktree rm with path and json" grep -qF "worktree rm --worktree path:$WT --json" "$FX/orcawt.log"
+check "worktree-rm: orca route never passes --force" bash -c '! grep "worktree rm" "$1" | grep -q -- "--force"' _ "$FX/orcawt.log"
+check "worktree-rm: orca route never passes --run-hooks" bash -c '! grep "worktree rm" "$1" | grep -q -- "--run-hooks"' _ "$FX/orcawt.log"
+check "worktree-rm: orca route removes directory" test ! -e "$WT"
+
+wtfx; orca_activity "$(now_ms)"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: recent orca activity exits 1" test $rc -eq 1
+check "worktree-rm: recent orca activity prints STOP" grep -q 'STOP' <<<"$out"
+check "worktree-rm: recent orca activity keeps target" test -d "$WT"
+check "worktree-rm: recent orca activity never calls orca rm" bash -c '! grep -q "worktree rm" "$1" 2>/dev/null' _ "$FX/orcawt.log"
+
+wtfx; git -C "$WT" commit -q --allow-empty -m ahead; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: target ahead of origin exits 1" test $rc -eq 1
+check "worktree-rm: target ahead keeps target" test -d "$WT"
+check "worktree-rm: target ahead prints STOP" grep -q 'STOP' <<<"$out"
+
+wtfx; echo "mine" >"$WT/tracked"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: dirty target exits 1" test $rc -eq 1
+check "worktree-rm: dirty target keeps edit intact" grep -q mine "$WT/tracked"
+
+wtfx; out="$(wtrm "$WMAIN" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: main checkout exits 1" test $rc -eq 1
+check "worktree-rm: main checkout survives" test -d "$WMAIN/.git"
+wtfx; WCWD="$WT"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: cwd as target exits 1" test $rc -eq 1
+check "worktree-rm: cwd as target survives" test -d "$WT"
+wtfx; mkdir -p "$WB/stray"; out="$(wtrm "$WB/stray" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: unregistered path exits 1" test $rc -eq 1
+check "worktree-rm: unregistered path survives" test -d "$WB/stray"
+
+wtfx; dirty_main; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: dirty main exits 0" test $rc -eq 0
+check "worktree-rm: dirty main prints snapshot line" grep -q 'worktree-rm: snapshot ' <<<"$out"
+check "worktree-rm: dirty main prints intact line" grep -q "worktree-rm: intact $WMAIN" <<<"$out"
+check "worktree-rm: dirty main tracked edit intact" grep -q edit "$WMAIN/tracked"
+check "worktree-rm: dirty main untracked file intact" test -f "$WMAIN/untracked.txt"
+check "worktree-rm: dirty main releases snapshot ref" test "$(nrefs)" = 0
+check "worktree-rm: dirty main prints snapshot released" grep -q 'worktree-rm: snapshot released ' <<<"$out"
+
+wtfx; orca_activity 0; dirty_main; echo "$DESTROY_HOOK" >"$FX/orca_rm_hook"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: restore after destructive removal exits 0" test $rc -eq 0
+check "worktree-rm: restore prints restored line" grep -q "worktree-rm: restored $WMAIN from " <<<"$out"
+check "worktree-rm: restore brings tracked edit back" grep -q edit "$WMAIN/tracked"
+check "worktree-rm: restore brings untracked file back" test -f "$WMAIN/untracked.txt"
+check "worktree-rm: restore releases snapshot ref" test "$(nrefs)" = 0
+
+wtfx; orca_activity 0
+echo seed >>"$WMAIN/tracked"; git -C "$WMAIN" stash push -q -m other-session
+dirty_main; echo "$DESTROY_HOOK" >"$FX/orca_rm_hook"
+stash_before="$(git -C "$WMAIN" stash list --format=%H)"
+out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: stash seeded run exits 0" test $rc -eq 0
+check "worktree-rm: stash stack identical after restore" test "$(git -C "$WMAIN" stash list --format=%H)" = "$stash_before"
+check "worktree-rm: pre-seeded stash is non-empty" test -n "$stash_before"
+
+wtfx; orca_activity 0; dirty_main; echo "$DESTROY_HOOK"' && echo new >"$WMAIN/new.txt"' >"$FX/orca_rm_hook"
+out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: unrestorable damage exits 4" test $rc -eq 4
+check "worktree-rm: unrestorable damage prints damaged line" grep -q "worktree-rm: damaged $WMAIN (HEAD moved/unclean; inspect: git -C $WMAIN diff HEAD " <<<"$out"
+check "worktree-rm: unrestorable damage keeps snapshot ref" test "$(nrefs)" = 1
+check "worktree-rm: unrestorable damage keeps unknown edit" test -f "$WMAIN/new.txt"
+
+wtfx; dirty_main; git init -q "$WMAIN/nested"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: nested repo in dirty main exits 0" test $rc -eq 0
+check "worktree-rm: nested repo notes not snapshotted" grep -q "worktree-rm: note $WMAIN nested repo nested not snapshotted" <<<"$out"
+check "worktree-rm: nested repo run reports intact" grep -q "worktree-rm: intact $WMAIN" <<<"$out"
+
+wtfx; orca_activity 0; chmod +x "$WMAIN/a"; echo 'chmod -x "$WMAIN/a"' >"$FX/orca_rm_hook"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: chmod-only damage exits 0" test $rc -eq 0
+check "worktree-rm: chmod-only damage restored" grep -q "worktree-rm: restored $WMAIN from " <<<"$out"
+check "worktree-rm: chmod-only damage executable bit back" test -x "$WMAIN/a"
+
+wtfx; orca_activity 0; echo s >>"$WMAIN/tracked"; git -C "$WMAIN" add tracked; echo "$DESTROY_HOOK" >"$FX/orca_rm_hook"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: staged-only loss exits 0" test $rc -eq 0
+check "worktree-rm: staged-only loss restored" grep -q "worktree-rm: restored $WMAIN from " <<<"$out"
+check "worktree-rm: staged-only loss keeps change staged" test "$(git -C "$WMAIN" diff --cached --name-only)" = tracked
+
+wtfx; orca_activity 0; echo s >>"$WMAIN/tracked"; git -C "$WMAIN" add tracked; echo 'git -C "$WMAIN" reset -q' >"$FX/orca_rm_hook"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: index-only loss exits 4" test $rc -eq 4
+check "worktree-rm: index-only loss keeps snapshot ref" test "$(nrefs)" = 1
+
+wtfx; orca_activity 0; dirty_main; echo "$DESTROY_HOOK"' && git -C "$WMAIN" commit -q --allow-empty -m moved' >"$FX/orca_rm_hook"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: HEAD moved with damage exits 4" test $rc -eq 4
+check "worktree-rm: HEAD moved prints damaged line" grep -q "worktree-rm: damaged $WMAIN (HEAD moved/unclean" <<<"$out"
+check "worktree-rm: HEAD moved reports change" grep -q "worktree-rm: changed during removal $WMAIN" <<<"$out"
+check "worktree-rm: HEAD moved keeps snapshot ref" test "$(nrefs)" = 1
+
+wtfx; echo '{ "ok": true, "result": { "worktrees": [{ "path": "'"$WT"'", "lastActivityAt": null }] } }' >"$FX/orca_wt.json"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: null activity exits 1" test $rc -eq 1
+check "worktree-rm: null activity prints activity unknown" grep -q 'activity unknown' <<<"$out"
+check "worktree-rm: null activity keeps target" test -d "$WT"
+
+wtfx; orca_activity $(( $(now_ms) - 1800000 )); echo '{"base":"master","worktreeIdleMinutes":"abc"}' >"$CFG"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: non-numeric idle config falls back to 60" grep -q 'active within 60 min' <<<"$out"
+check "worktree-rm: non-numeric idle config exits 1" test $rc -eq 1
+
+wtfx; mkdir -p "$WMAIN/.git/info"; echo ign >>"$WMAIN/.git/info/exclude"; echo x >"$WT/ign"; out="$(wtrm "$WT" 2>&1)"; rc=$?
+check "worktree-rm: ignored files note in dry run" grep -q "worktree-rm: note $WT has ignored files that will be deleted: ign" <<<"$out"
+
+wtfx; dirty_main; out="$(wtrm "$WT" --confirmed 2>&1)"
+check "worktree-rm: release line prints sha" grep -Eq 'worktree-rm: snapshot refs/harness/snapshots/[0-9]+-1 = [0-9a-f]{40} \(recoverable until gc\)' <<<"$out"
+
+wtfx; flag_on; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: autonomy on refuses" test $rc -eq 1
+check "worktree-rm: autonomy on keeps target" test -d "$WT"
+wtfx; wtrm >/dev/null 2>&1; check "worktree-rm: no args exits 2" test $? -eq 2
+wtrm "$WT" --bogus >/dev/null 2>&1; check "worktree-rm: unknown flag exits 2" test $? -eq 2
+wtrm "$WT" "$SIB" --confirmed >/dev/null 2>&1; check "worktree-rm: two paths exits 2" test $? -eq 2
+check "worktree-rm: usage errors change nothing" test -d "$WT"
+
+wtfx; out="$( cd "$WMAIN" && ORCA_BIN="$TMP/orcawt" bash "$DISP" worktree-rm "$WT" 2>&1 )"; rc=$?
+check "dispatcher: worktree-rm forwards (dry run exits 3)" test $rc -eq 3
+check "dispatcher: worktree-rm forwarded target intact" test -d "$WT"
+
+# ---- worktree guard (every mode)
+wtfx; reset; GUARD_CWD="$WMAIN"
+G_DENY=(
+  "orca worktree rm --worktree path:$WT --json"
+  "orca worktree remove x"
+  "orca worktree delete x"
+  "git worktree remove $WT"
+  "git -C $WMAIN worktree remove --force $WT"
+  "git worktree prune"
+  "git worktree move $WT $WB/moved"
+  "rm -rf $WT"
+  "rm -r $WT"
+  "rm -R $WT"
+  "rm --recursive $WT"
+  "rm -rf $SIB"
+  "rm -rf /Users/x/orca/workspaces/gc.platform/feat-y"
+  "ORCA_BIN=/x agent-harness worktree-rm $WT"
+  "agent-harness worktree-rm /x --force"
+)
+G_ASK=("agent-harness worktree-rm /x --confirmed")
+G_ALLOW=("agent-harness worktree-rm /x" "git worktree list" "orca worktree list --json" "rm -rf build")
+for mode in off on; do
+  reset; [ "$mode" = on ] && flag_on
+  for c in "${G_DENY[@]}"; do check "worktree guard (flag $mode) denies: $c" denied "$c"; done
+  for c in "${G_ASK[@]}"; do check "worktree guard (flag $mode) asks: $c" asked "$c"; done
+  for c in "${G_ALLOW[@]}"; do check "worktree guard (flag $mode) allows: $c" allowed "$c"; done
+done
+GUARD_CWD="$TMP/work"
 
 echo "tests: $pass passed, $failn failed"
 [ "$failn" -eq 0 ]

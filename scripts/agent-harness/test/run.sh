@@ -630,8 +630,6 @@ mv x .claude/state/goal.json
 \gh pr merge 1
 git push --mirror origin
 git push --all origin
-git -c alias.p=!sh status
-git -c alias.x=!echo status
 git -c core.hooksPath=/tmp/h commit -m x
 git -c core.pager=less log
 git -c core.sshCommand=evil push origin feature/x
@@ -688,13 +686,18 @@ git branch -df x
 git update-ref -d refs/heads/x
 git update-ref --stdin
 git send-pack origin :refs/heads/x
-git -c alias.p=push p origin --delete x
 gh api graphql -f query='mutation{deleteRef(input:{refId:"x"})}'
 gh api graphql --input /tmp/q.json
 gh api -X DELETE repos/o/r/git/refs/heads%2Fx
 gh api --method DELETE repos/o/r/git/refs/heads/x
 gh api --method=DELETE repos/o/r/git/refs/$REF
 bash /tmp/cleanup.sh 5
+CMDS
+)"
+ALIAS_DENY_CMDS="$(cat <<'CMDS'
+git -c alias.p=!sh status
+git -c alias.x=!echo status
+git -c alias.p=push p origin --delete x
 CMDS
 )"
 ALLOW_CMDS="$(cat <<'CMDS'
@@ -770,6 +773,7 @@ CMDS
 )"
 reset; flag_on
 while IFS= read -r c; do check "git-guard denies: $c" denied "$c"; done <<<"$DENY_CMDS"
+while IFS= read -r c; do check "git-guard denies: $c" denied "$c"; done <<<"$ALIAS_DENY_CMDS"
 while IFS= read -r c; do check "git-guard allows: $c" allowed "$c"; done <<<"$ALLOW_CMDS"
 while IFS= read -r c; do check "git-guard allows: $c" allowed "$c"; done <<<"$SHIP_ALLOW_CMDS"
 while IFS= read -r c; do check "git-guard asks: $c" asked "$c"; done <<<"$ASK_CMDS"
@@ -799,6 +803,7 @@ check "git-guard allows push origin HEAD on a feature branch" allowed "git push 
 check "git-guard fails open on empty input" bash -c 'echo "{}" | bash "$1" | test -z "$(cat)"' _ "$HOOKS/autonomy-git-guard.sh"
 rm -f "$TMP/state/autonomy.on"
 while IFS= read -r c; do check "git-guard (flag off) allows: $c" allowed "$c"; done <<<"$DENY_CMDS"
+while IFS= read -r c; do check "git-guard (flag off) denies: $c" denied "$c"; done <<<"$ALIAS_DENY_CMDS"
 while IFS= read -r c; do check "git-guard (flag off) allows: $c" allowed "$c"; done <<<"$ALLOW_CMDS"
 while IFS= read -r c; do check "git-guard (flag off) allows: $c" allowed "$c"; done <<<"$ASK_CMDS"
 while IFS= read -r c; do check "git-guard (flag off) allows: $c" allowed "$c"; done <<<"$CLEAN_DENY_CMDS"
@@ -806,6 +811,57 @@ while IFS= read -r c; do check "git-guard (flag off) allows: $c" allowed "$c"; d
 git -C "$TMP/work" checkout -q master
 check "git-guard (flag off) allows bare push on the base branch" allowed "git push"
 git -C "$TMP/work" checkout -q feat
+
+WGF="$(mktemp -d)"; WGF="$(cd -P "$WGF" && pwd)"
+mkdir -p "$WGF/main" "$WGF/st"
+git -C "$WGF/main" init -q . && git -C "$WGF/main" -c user.email=a@b -c user.name=n commit -q --allow-empty -m i
+git -C "$WGF/main" worktree add -q "$WGF/sib" -b sib
+git -C "$WGF/main" worktree add -q "$WGF/orca/workspaces/r/w" -b w
+mkdir -p "$WGF/sib/node_modules" "$WGF/sib/build"
+wg_decision() { # mode cwd cmd
+  rm -f "$WGF/st/autonomy.on"; [ "$1" = on ] && : >"$WGF/st/autonomy.on"
+  local out
+  out="$(jq -n --arg c "$3" --arg w "$2" '{tool_input:{command:$c},cwd:$w}' \
+    | AGENT_HARNESS_TEST=1 AGENT_STATE_DIR="$WGF/st" CLAUDE_PROJECT_DIR="$WGF/main" bash "$HOOKS/autonomy-git-guard.sh")"
+  [ -n "$out" ] || { echo allow; return; }
+  jq -r '.hookSpecificOutput.permissionDecision // "allow"' <<<"$out"
+}
+wg() { local exp="$1" cwd="$2" m; shift 2; for m in off on; do check "git-guard worktree ($m) $exp: $*" test "$(wg_decision "$m" "$cwd" "$*")" = "$exp"; done; }
+WM="$WGF/main"; WS="$WGF/sib"
+wg deny "$WM" "if true; then git worktree remove /p; fi"
+wg deny "$WM" "! git worktree remove /p"
+wg deny "$WM" "env -i git worktree remove /p"
+wg deny "$WM" "sudo -u me rm -rf $WS"
+wg deny "$WM" "bash -x -c 'git worktree remove /p'"
+wg deny "$WM" "git --git-dir .git worktree remove /p"
+wg deny "$WM" "git -c alias.x='worktree remove' x /p"
+wg deny "$WM" "git config alias.wr 'worktree remove'"
+wg deny "$WM" "rm -rf ../sib"
+wg deny "$WS" "rm -rf ."
+wg deny "$WS" "rm -rf *"
+wg deny "$WM" "cd $WGF/orca/workspaces/r && rm -rf w"
+wg deny "$WM" "mv $WS /tmp/x"
+wg deny "$WM" "trash $WS"
+wg deny "$WM" "find $WS -delete"
+wg deny "$WS" "find . -delete"
+wg deny "$WM" "echo /p | xargs rm -rf"
+wg deny "$WM" "python3 -c 'import shutil; shutil.rmtree(\"/Users/x/orca/workspaces/r/w\")'"
+wg deny "$WM" "orca --json worktree rm --worktree path:/x"
+wg deny "$WM" "export ORCA_BIN=/t; agent-harness worktree-rm /x --confirmed"
+wg ask "$WM" "bash -x scripts/agent-harness/worktree-rm.sh /p --confirmed"
+wg ask "$WM" "agent-harness worktree-rm /x --confirmed"
+wg allow "$WM" "git worktree prune -n"
+wg allow "$WM" "git worktree list"
+wg allow "$WM" "git worktree add ../y -b feat/y"
+wg allow "$WM" "orca worktree list --json"
+wg allow "$WS" "rm -rf node_modules"
+wg allow "$WM" "cd $WS && rm -rf build"
+wg allow "$WM" "rm -rf build"
+wg allow "$WM" "mv a.txt b.txt"
+wg allow "$WM" "agent-harness worktree-rm /x"
+wg allow "$WGF/st" "find . -name x -delete"
+wg allow "$WM" "git commit -m 'doc git worktree remove'"
+rm -rf "$WGF"
 
 # ---- worktree-rm
 cat >"$TMP/orcawt" <<'STUB'

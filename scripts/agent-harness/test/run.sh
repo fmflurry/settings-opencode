@@ -934,5 +934,34 @@ wtfx; out="$( cd "$WMAIN" && ORCA_BIN="$TMP/orcawt" bash "$DISP" worktree-rm "$W
 check "dispatcher: worktree-rm forwards (dry run exits 3)" test $rc -eq 3
 check "dispatcher: worktree-rm forwarded target intact" test -d "$WT"
 
+# ---- worktree guard (every mode)
+wtfx; reset; GUARD_CWD="$WMAIN"
+G_DENY=(
+  "orca worktree rm --worktree path:$WT --json"
+  "orca worktree remove x"
+  "orca worktree delete x"
+  "git worktree remove $WT"
+  "git -C $WMAIN worktree remove --force $WT"
+  "git worktree prune"
+  "git worktree move $WT $WB/moved"
+  "rm -rf $WT"
+  "rm -r $WT"
+  "rm -R $WT"
+  "rm --recursive $WT"
+  "rm -rf $SIB"
+  "rm -rf /Users/x/orca/workspaces/gc.platform/feat-y"
+  "ORCA_BIN=/x agent-harness worktree-rm $WT"
+  "agent-harness worktree-rm /x --force"
+)
+G_ASK=("agent-harness worktree-rm /x --confirmed")
+G_ALLOW=("agent-harness worktree-rm /x" "git worktree list" "orca worktree list --json" "rm -rf build")
+for mode in off on; do
+  reset; [ "$mode" = on ] && flag_on
+  for c in "${G_DENY[@]}"; do check "worktree guard (flag $mode) denies: $c" denied "$c"; done
+  for c in "${G_ASK[@]}"; do check "worktree guard (flag $mode) asks: $c" asked "$c"; done
+  for c in "${G_ALLOW[@]}"; do check "worktree guard (flag $mode) allows: $c" allowed "$c"; done
+done
+GUARD_CWD="$TMP/work"
+
 echo "tests: $pass passed, $failn failed"
 [ "$failn" -eq 0 ]

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse (Bash): while autonomous, deny merges, pushes to a base branch (forced or not) and shell edits of protected paths. Fails open.
+# PreToolUse (Bash): in every mode, deny worktree removal (orca/git/rm) except via agent-harness worktree-rm; while autonomous, also deny merges, pushes to a base branch (forced or not) and shell edits of protected paths. Fails open.
 # Quotes are stripped before tokenising so a quoted argument cannot hide a refspec; the cost is over-denying odd quoting.
 input="$(cat)"
 command -v jq >/dev/null 2>&1 || exit 0
@@ -11,7 +11,8 @@ cwd="${cwd:-$PWD}"
 ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 STATE_DIR="$ROOT/.claude/state"
 [ "${AGENT_HARNESS_TEST:-}" = 1 ] && STATE_DIR="${AGENT_STATE_DIR:-${TLTB_STATE_DIR:-$STATE_DIR}}"
-[ -f "$STATE_DIR/autonomy.on" ] || exit 0
+AUTO=0
+[ -f "$STATE_DIR/autonomy.on" ] && AUTO=1
 
 CONFIG_FILE="$ROOT/.claude/agent-harness.json"
 cfg() { [ -f "$CONFIG_FILE" ] || return 0; jq -r "$1" "$CONFIG_FILE" 2>/dev/null || true; }
@@ -32,6 +33,7 @@ emit() {
   exit 0
 }
 deny() { emit deny "Blocked by git-guard: merge via agent-harness ship-merge, push feature branches normally, do not edit harness files from the shell."; }
+deny_worktree() { emit deny "Blocked by git-guard: remove worktrees only via \`agent-harness worktree-rm <path> --confirmed\`."; }
 deny_branch_delete() { emit deny "Blocked by git-guard: branch deletion only via agent-harness cleanup <pr> after merge."; }
 is_protected_token() {
   local t="${1//[<>]/}"
@@ -76,13 +78,15 @@ check_git() {
       -C) kv="${args[$j]:-}"; case "$kv" in /*) gdir="$kv" ;; *) gdir="$gdir/$kv" ;; esac; j=$((j + 2)) ;;
       -c)
         kv="${args[$j]:-}"
-        grep -Eqi '^alias\.|^core\.(hookspath|pager|sshcommand)' <<<"$kv" && deny
+        [ "$AUTO" = 1 ] && grep -Eqi '^alias\.|^core\.(hookspath|pager|sshcommand)' <<<"$kv" && deny
         j=$((j + 2)) ;;
       -*) j=$((j + 1)) ;;
       *) sub="$a"; j=$((j + 1)); break ;;
     esac
   done
   local rest=("${args[@]:$((j - 1))}")
+  [ "$sub" = worktree ] && [[ "${rest[0]:-}" =~ ^(remove|prune|move)$ ]] && deny_worktree
+  [ "$AUTO" = 1 ] || return 0
   case "$sub" in
     push) check_push "$gdir" "${rest[@]}" ;;
     reset) for a in "${rest[@]}"; do [ "$a" = --hard ] && deny; done ;;
@@ -145,7 +149,58 @@ interpreter_inline_hits_protected() {
   grep -Eq -- "$LOOSE_RE" <<<"$cmd"
 }
 
+is_worktree_path() {
+  local a="${1/#\~/$HOME}" wt
+  case "$a" in /*) ;; *) a="$cwd/$a" ;; esac
+  a="${a%/}"
+  [[ "$a/" =~ /orca/workspaces/[^/]+(/[^/]+)?/$ ]] && return 0
+  while IFS= read -r wt; do
+    wt="${wt#worktree }"
+    [ -n "$a" ] && { [ "$wt" = "$a" ] || [[ "$wt" == "$a"/* ]]; } && return 0
+  done < <(git -C "$cwd" worktree list --porcelain 2>/dev/null | grep '^worktree ')
+  return 1
+}
+
+check_rm_worktree() {
+  local a rec=0 args=()
+  for a in "$@"; do
+    case "$a" in
+      --recursive) rec=1 ;;
+      --*) ;;
+      -*[rR]*) rec=1 ;;
+      -*) ;;
+      *) args+=("$a") ;;
+    esac
+  done
+  [ "$rec" = 1 ] || return 0
+  for a in "${args[@]}"; do is_worktree_path "$a" && deny_worktree; done
+  return 0
+}
+
 ASKED=0
+ASKED_WT=0
+check_worktree_rm() {
+  local has_assign="$1" c0="$2"; shift 2
+  local rest=()
+  case "$c0" in
+    bash | sh | zsh | dash) [[ "${1:-}" =~ worktree-rm\.sh$ ]] || return 1; shift; rest=("$@") ;;
+    agent-harness | agent-harness.sh) [ "${1:-}" = worktree-rm ] || return 1; shift; rest=("$@") ;;
+    worktree-rm.sh) rest=("$@") ;;
+    *) return 1 ;;
+  esac
+  [ "$has_assign" = 0 ] || deny_worktree
+  local a paths=0 confirmed=0
+  for a in "${rest[@]}"; do
+    case "$a" in
+      --confirmed) [ "$confirmed" = 0 ] || deny_worktree; confirmed=1; ASKED_WT=1 ;;
+      -*) deny_worktree ;;
+      *) paths=$((paths + 1)) ;;
+    esac
+  done
+  [ "$paths" = 1 ] || deny_worktree
+  return 0
+}
+
 check_ship_merge() {
   local has_assign="$1" c0="$2"; shift 2
   local rest=()
@@ -198,7 +253,7 @@ while IFS= read -r seg; do
   [ -n "$seg" ] || continue
   read -ra toks <<<"$seg"
   [ "${#toks[@]}" -gt 0 ] || continue
-  check_redirects "${toks[@]}"
+  [ "$AUTO" = 1 ] && check_redirects "${toks[@]}"
 
   i=0 has_assign=0
   while [ "$i" -lt "${#toks[@]}" ]; do
@@ -221,6 +276,13 @@ while IFS= read -r seg; do
   c0="${ct[0]##*/}"
   ct[0]="$c0"
 
+  if check_worktree_rm "$has_assign" "$c0" "${ct[@]:1}"; then continue; fi
+  case "$c0" in
+    orca) [ "${ct[1]:-}" = worktree ] && [[ "${ct[2]:-}" =~ ^(rm|remove|delete)$ ]] && deny_worktree ;;
+    rm) check_rm_worktree "${ct[@]:1}" ;;
+  esac
+  [ "$AUTO" = 1 ] || { [ "$c0" = git ] && check_git "${ct[@]}"; continue; }
+
   if check_ship_merge "$has_assign" "$c0" "${ct[@]:1}"; then continue; fi
   if check_cleanup "$has_assign" "$c0" "${ct[@]:1}"; then continue; fi
 
@@ -237,5 +299,6 @@ while IFS= read -r seg; do
   esac
 done <<<"$segments"
 
+[ "$ASKED_WT" = 1 ] && emit ask "worktree-rm --confirmed removes a worktree: confirm the human named this removal."
 [ "$ASKED" = 1 ] && emit ask "ship-merge --confirmed merges with autonomy rails relaxed and deletes the merged branch: confirm with the user."
 exit 0

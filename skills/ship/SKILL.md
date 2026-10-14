@@ -144,7 +144,7 @@ is unmerged. Do not end the turn to wait for a fix you can make yourself.
 - Merge only through `agent-harness ship-merge`. Never `gh pr merge`, never a push to the base branch.
 - Never a push to the base branch, with or without force. Never `git push --mirror` or `--all`, never `--no-verify`.
   Never weaken a check: disabling or skipping a test, job or required check, `continue-on-error`, deleting a check, or lowering thresholds. Force pushes on the PR branch are allowed.
-- No worktree removal. No deny-list commands (see the autonomy rule).
+- No worktree removal, including `agent-harness worktree-rm` (see the worktree destruction rule, `.claude/rules/common/worktree-destruction-safety.md`). No deny-list commands (see the autonomy rule).
 - Branches are deleted only by `agent-harness cleanup`, never by raw `git branch -D`, `git push --delete`, or the API.
 - A PR that matches `protectedPaths` is refused by `ship-merge` in autonomous mode. A human merges it with `--confirmed`.
 - Never add a label, post a comment, or create a status to get past a refusal. Gates read only what the host and

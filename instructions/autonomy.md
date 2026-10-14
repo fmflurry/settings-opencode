@@ -38,7 +38,7 @@ These stay forbidden in every mode:
 
 - any push to the base branch, with or without force
 - `git push --mirror` and `git push --all`
-- worktree removal (`git worktree remove`, `prune`, `move`, or deleting a worktree directory)
+- worktree removal in any form, including `agent-harness worktree-rm` (it refuses while the flag is on)
 - raw branch deletion: `git branch -D`, `git push --delete` or `git push origin :<ref>`, `gh api -X DELETE .../git/refs/heads/...`.
   Only `agent-harness cleanup` deletes branches.
 - commands on the deny list, and any merge other than `agent-harness ship-merge`

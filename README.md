@@ -423,7 +423,7 @@ Six concerns wired in one file:
    - `instructions/tool-budget.md` — verification-vs-exploration budget.
    - `instructions/code-comments.md` — comment truthfulness + forbidden classes.
    - `instructions/git-workflow.md` — commit cohesion, staging discipline, English commit messages.
-   - `instructions/worktree-destruction-safety.md` — pre-removal checks before destroying a worktree.
+   - `instructions/worktree-destruction-safety.md` — pre-removal checks, snapshots, and the `agent-harness worktree-rm` removal path.
    - `instructions/coding-style.md` — immutability, file size, naming, error handling.
    - `instructions/testing.md` — 80%+ coverage, RED-GREEN-REFACTOR, test types.
    > `instructions/caveman-ultra.md` sits in the repo but is **not** in the `instructions` array, so it isn't loaded at session start.
@@ -499,7 +499,7 @@ Nobody says "done" without fresh evidence (`instructions/verification-gate.md`).
 
 #### 8. Worktree destruction safety
 
-Removing a worktree is treated like `rm -rf`, not bookkeeping (`instructions/worktree-destruction-safety.md`). Before any removal the agent runs `git status --porcelain`, checks for commits not on the base branch, and — in Orca-managed repos — routes through `orca worktree rm` so the trash step runs. Any dirty tree or unpushed commit is a hard stop reported to the human.
+Removing a worktree is treated like `rm -rf`, not bookkeeping (`instructions/worktree-destruction-safety.md`). The only removal path is `agent-harness worktree-rm <path> --confirmed`; without `--confirmed` it is a dry run that exits 3. It runs the pre-removal checks: `git status --porcelain`, commits not on the base branch, and every other checkout of the repo (main and sibling worktrees) clean or snapshotted. Snapshots are recoverable refs under `refs/harness/snapshots/<ts>-<n>` and include untracked files; ignored files are not covered. In Orca-managed repos the removal goes through Orca, never with `--force`. The command then waits for the removal to finish, verifies each checkout, and restores from snapshot. Exit 4 means removal failed or damage could not be restored; the refs are kept and printed. Any failed check is a hard stop reported to the human. The guard denies raw `orca worktree rm`, `git worktree remove|prune|move`, and `rm -r` on a worktree directory in every mode. Worktree removal is forbidden in autonomous mode, and `worktree-rm` refuses while autonomy is on.
 
 #### 9. Codememory-first
 
@@ -901,7 +901,7 @@ Definis dans `opencode.jsonc` (champ `agent`) — **26 entrees**: le primary plu
 - **Questions:** chaque ambiguite taggee `[BLOCKING]` ou `[NON-BLOCKING]`; le conductor tente de resoudre depuis le repo avant de demander.
 - **Verification gate:** aucun "done" sans preuve fraiche (build/lint/tests executes, sortie collee).
 - **Tool budget:** commandes de verification illimitees; exploration shell limitee (defaut 3/dispatch).
-- **Worktree safety:** checks pre-suppression obligatoires (status, commits non pousses); en repo Orca, passer par `orca worktree rm`.
+- **Worktree safety:** seul chemin de suppression `agent-harness worktree-rm <path> --confirmed` (sans `--confirmed` : dry run, exit 3). Checks obligatoires : status, commits non pousses, autres checkouts du dépôt propres ou snapshotés (refs `refs/harness/snapshots/`, fichiers ignorés non couverts). Les `git worktree remove|prune|move`, `orca worktree rm` direct et `rm -r` sur un dossier worktree sont refusés par le guard, dans tous les modes.
 - **Codememory-first:** les outils `code-memory_*` d'abord; `grep`/`read` en repli seulement.
 
 ### Orchestration durcie des sous-agents

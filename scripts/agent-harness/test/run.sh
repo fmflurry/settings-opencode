@@ -918,9 +918,49 @@ check "worktree-rm: pre-seeded stash is non-empty" test -n "$stash_before"
 wtfx; orca_activity 0; dirty_main; echo "$DESTROY_HOOK"' && echo new >"$WMAIN/new.txt"' >"$FX/orca_rm_hook"
 out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
 check "worktree-rm: unrestorable damage exits 4" test $rc -eq 4
-check "worktree-rm: unrestorable damage prints damaged line" grep -q "worktree-rm: damaged $WMAIN (restore manually: git -C $WMAIN stash apply --index " <<<"$out"
+check "worktree-rm: unrestorable damage prints damaged line" grep -q "worktree-rm: damaged $WMAIN (HEAD moved/unclean; inspect: git -C $WMAIN diff HEAD " <<<"$out"
 check "worktree-rm: unrestorable damage keeps snapshot ref" test "$(nrefs)" = 1
 check "worktree-rm: unrestorable damage keeps unknown edit" test -f "$WMAIN/new.txt"
+
+wtfx; dirty_main; git init -q "$WMAIN/nested"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: nested repo in dirty main exits 0" test $rc -eq 0
+check "worktree-rm: nested repo notes not snapshotted" grep -q "worktree-rm: note $WMAIN nested repo nested not snapshotted" <<<"$out"
+check "worktree-rm: nested repo run reports intact" grep -q "worktree-rm: intact $WMAIN" <<<"$out"
+
+wtfx; orca_activity 0; chmod +x "$WMAIN/a"; echo 'chmod -x "$WMAIN/a"' >"$FX/orca_rm_hook"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: chmod-only damage exits 0" test $rc -eq 0
+check "worktree-rm: chmod-only damage restored" grep -q "worktree-rm: restored $WMAIN from " <<<"$out"
+check "worktree-rm: chmod-only damage executable bit back" test -x "$WMAIN/a"
+
+wtfx; orca_activity 0; echo s >>"$WMAIN/tracked"; git -C "$WMAIN" add tracked; echo "$DESTROY_HOOK" >"$FX/orca_rm_hook"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: staged-only loss exits 0" test $rc -eq 0
+check "worktree-rm: staged-only loss restored" grep -q "worktree-rm: restored $WMAIN from " <<<"$out"
+check "worktree-rm: staged-only loss keeps change staged" test "$(git -C "$WMAIN" diff --cached --name-only)" = tracked
+
+wtfx; orca_activity 0; echo s >>"$WMAIN/tracked"; git -C "$WMAIN" add tracked; echo 'git -C "$WMAIN" reset -q' >"$FX/orca_rm_hook"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: index-only loss exits 4" test $rc -eq 4
+check "worktree-rm: index-only loss keeps snapshot ref" test "$(nrefs)" = 1
+
+wtfx; orca_activity 0; dirty_main; echo "$DESTROY_HOOK"' && git -C "$WMAIN" commit -q --allow-empty -m moved' >"$FX/orca_rm_hook"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: HEAD moved with damage exits 4" test $rc -eq 4
+check "worktree-rm: HEAD moved prints damaged line" grep -q "worktree-rm: damaged $WMAIN (HEAD moved/unclean" <<<"$out"
+check "worktree-rm: HEAD moved reports change" grep -q "worktree-rm: changed during removal $WMAIN" <<<"$out"
+check "worktree-rm: HEAD moved keeps snapshot ref" test "$(nrefs)" = 1
+
+wtfx; echo '{ "ok": true, "result": { "worktrees": [{ "path": "'"$WT"'", "lastActivityAt": null }] } }' >"$FX/orca_wt.json"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: null activity exits 1" test $rc -eq 1
+check "worktree-rm: null activity prints activity unknown" grep -q 'activity unknown' <<<"$out"
+check "worktree-rm: null activity keeps target" test -d "$WT"
+
+wtfx; orca_activity $(( $(now_ms) - 1800000 )); echo '{"base":"master","worktreeIdleMinutes":"abc"}' >"$CFG"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: non-numeric idle config falls back to 60" grep -q 'active within 60 min' <<<"$out"
+check "worktree-rm: non-numeric idle config exits 1" test $rc -eq 1
+
+wtfx; mkdir -p "$WMAIN/.git/info"; echo ign >>"$WMAIN/.git/info/exclude"; echo x >"$WT/ign"; out="$(wtrm "$WT" 2>&1)"; rc=$?
+check "worktree-rm: ignored files note in dry run" grep -q "worktree-rm: note $WT has ignored files that will be deleted: ign" <<<"$out"
+
+wtfx; dirty_main; out="$(wtrm "$WT" --confirmed 2>&1)"
+check "worktree-rm: release line prints sha" grep -Eq 'worktree-rm: snapshot refs/harness/snapshots/[0-9]+-1 = [0-9a-f]{40} \(recoverable until gc\)' <<<"$out"
 
 wtfx; flag_on; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
 check "worktree-rm: autonomy on refuses" test $rc -eq 1

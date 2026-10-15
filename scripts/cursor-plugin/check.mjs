@@ -34,10 +34,14 @@ const agentsDir = path.join(out, 'agents');
 if (fs.existsSync(agentsDir)) {
   for (const f of fs.readdirSync(agentsDir).filter((x) => x.endsWith('.md'))) {
     const { fm } = splitFrontmatter(fs.readFileSync(path.join(agentsDir, f), 'utf8'));
+    const name = unquote(fm.name);
+    const tier = unquote(fm.tier);
     for (const key of Object.keys(fm)) {
       if (!config.agentKeys.includes(key)) errors.push(`agents/${f}: frontmatter key not allowed: ${key}`);
     }
     if ('model' in fm) errors.push(`agents/${f}: must not set model (chosen at Task time)`);
+    if (!tier) errors.push(`agents/${f}: missing tier (agents use tier:, not model:)`);
+    else if (!config.agentTiers[tier]?.includes(name)) errors.push(`agents/${f}: tier "${tier}" does not list ${name}`);
   }
 }
 
@@ -47,6 +51,51 @@ const conductorText = fs.existsSync(conductorRule) ? fs.readFileSync(conductorRu
 for (const slug of Object.values(config.defaultTierModels)) {
   if (!conductorText.includes(slug)) errors.push(`rules/conductor.mdc: missing default slug ${slug}`);
 }
+for (const [tier, slugs] of Object.entries(config.tierFallbacks ?? {})) {
+  for (const slug of slugs) {
+    if (!conductorText.includes(slug)) errors.push(`rules/conductor.mdc: missing ${tier} fallback ${slug}`);
+  }
+}
+for (const family of config.cursorModelFamilies ?? []) {
+  if (!conductorText.includes(family)) errors.push(`rules/conductor.mdc: missing Cursor family ${family}`);
+}
+if (!/third-party/.test(conductorText) || !/-fast/.test(conductorText)) {
+  errors.push('rules/conductor.mdc: missing Cursor-only model hard rule');
+}
+const setupText = fs.existsSync(path.join(skillsDir, 'setup-harness/SKILL.md'))
+  ? fs.readFileSync(path.join(skillsDir, 'setup-harness/SKILL.md'), 'utf8')
+  : '';
+for (const needle of ['~/.cursor/rules/fmflurry-harness-models.mdc', '~/.agents/fmflurry-harness-models.md', ...Object.values(config.defaultTierModels)]) {
+  if (!setupText.includes(needle)) errors.push(`skills/setup-harness/SKILL.md: missing ${needle}`);
+}
+
+const TEXT_EXT = new Set(['.md', '.mdc', '.json', '.txt', '.yml', '.yaml', '.mjs', '.js', '.py', '.sh']);
+const allowedSlug = new RegExp(`^(?:${(config.cursorModelFamilies ?? []).map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?:-(?:none|minimal|low|medium|high|xhigh|max))?$`);
+const MODEL_SLUG = /\b(?:claude-(?:opus|sonnet|haiku|fable)[a-z0-9.-]*|gpt-[a-z0-9.-]+|gemini-[a-z0-9.-]+|kimi-[a-z0-9.-]+|glm-[a-z0-9.-]+|fable-[a-z0-9.-]+|muse-[a-z0-9.-]+|mistral-[a-z0-9.-]+|llama-[a-z0-9.-]+|grok-[a-z0-9.-]+|composer-[a-z0-9.-]+)\b/gi;
+const BARE_ALIAS = /`(opus|sonnet|haiku)`/g;
+
+function scanModels(rel, text) {
+  for (const match of text.matchAll(MODEL_SLUG)) {
+    const slug = match[0];
+    if (slug.endsWith('-fast') || !allowedSlug.test(slug)) {
+      const line = text.slice(0, match.index).split('\n').length;
+      errors.push(`${rel}:${line}: disallowed model slug ${slug}`);
+    }
+  }
+  for (const match of text.matchAll(BARE_ALIAS)) {
+    const line = text.slice(0, match.index).split('\n').length;
+    errors.push(`${rel}:${line}: disallowed model slug ${match[1]}`);
+  }
+}
+
+function scanTree(dir) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) scanTree(p);
+    else if (e.isFile() && TEXT_EXT.has(path.extname(e.name))) scanModels(path.relative(out, p), fs.readFileSync(p, 'utf8'));
+  }
+}
+if (fs.existsSync(out)) scanTree(out);
 
 const hooksPath = path.join(out, 'hooks/hooks.json');
 if (fs.existsSync(hooksPath)) {

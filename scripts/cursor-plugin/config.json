@@ -10,9 +10,15 @@
   "tags": ["orchestration", "routing", "workflow"],
   "defaultTierModels": {
     "coding": "grok-4.7-xhigh",
-    "smart": "claude-opus-5-5-high",
-    "cheap": "composer-2.5"
+    "smart": "grok-4.7-xhigh",
+    "cheap": "grok-4.7-medium"
   },
+  "tierFallbacks": {
+    "coding": ["grok-4.7-xhigh", "grok-4.6-xhigh", "composer-2.5"],
+    "smart": ["grok-4.7-xhigh", "grok-4.6-xhigh", "composer-2.5"],
+    "cheap": ["grok-4.7-medium", "grok-4.6-medium", "composer-2.5"]
+  },
+  "cursorModelFamilies": ["grok-4.7", "grok-4.6", "grok-4.5", "composer-2.5"],
   "agentTiers": {
     "coding": ["coder", "tdd-guide", "build-error-resolver", "refactor-cleaner", "e2e-runner", "api-spec-architect", "gaudi"],
     "smart": ["planner", "architect", "code-reviewer", "security-reviewer", "angular-cop", "dotnet-cop", "database-reviewer", "postgres-dba", "gdpr-specialist", "ecosystem-auditor", "why-synthesizer"],

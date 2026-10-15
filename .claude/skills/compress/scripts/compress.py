@@ -22,13 +22,14 @@ MAX_RETRIES = 2
 
 def call_claude(prompt: str) -> str:
     api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if api_key:
+    model = os.environ.get("CAVEMAN_MODEL")
+    if api_key and model:
         try:
             import anthropic
 
             client = anthropic.Anthropic(api_key=api_key)
             msg = client.messages.create(
-                model=os.environ.get("CAVEMAN_MODEL", "claude-sonnet-4-5"),
+                model=model,
                 max_tokens=8096,
                 messages=[{"role": "user", "content": prompt}],
             )

@@ -1,40 +1,60 @@
 ---
 name: setup-harness
-description: "Detect the model slugs available to Task subagents and write the per-tier model rule used by the conductor."
+description: "Write the per-tier Cursor model files used by the conductor. Defaults are Grok 4.7."
 disable-model-invocation: true
 ---
 
 # Setup harness
 
-Choose one model per tier and persist the choice in `~/.cursor/rules/fmflurry-harness-models.mdc`.
+Write one Cursor model per tier to both:
+
+- `~/.cursor/rules/fmflurry-harness-models.mdc`
+- `~/.agents/fmflurry-harness-models.md`
 
 ## Tiers
 
-| Tier | Default slug | Use | Agents |
-| --- | --- | --- | --- |
-| coding | `grok-4.7-xhigh` | implementation, tests, build fixes | coder, tdd-guide, build-error-resolver, refactor-cleaner, e2e-runner, api-spec-architect, gaudi |
-| smart | `claude-opus-5-5-high` | planning, architecture, review, security; expensive, so dispatch it only when needed | planner, architect, code-reviewer, security-reviewer, angular-cop, dotnet-cop, database-reviewer, postgres-dba, gdpr-specialist, ecosystem-auditor, why-synthesizer |
-| cheap | `composer-2.5` | git, codebase search, docs, comment triage | git-specialist, scout, writer, doc-updater, why-investigator, comment-judge, haruspex-commentorum |
+| Tier | Default slug | Fallbacks | Use | Agents |
+| --- | --- | --- | --- | --- |
+| coding | `grok-4.7-xhigh` | `grok-4.7-xhigh` -> `grok-4.6-xhigh` -> `composer-2.5` | implementation, tests, build fixes | coder, tdd-guide, build-error-resolver, refactor-cleaner, e2e-runner, api-spec-architect, gaudi |
+| smart | `grok-4.7-xhigh` | `grok-4.7-xhigh` -> `grok-4.6-xhigh` -> `composer-2.5` | planning, architecture, review, security; expensive, so dispatch it only when needed | planner, architect, code-reviewer, security-reviewer, angular-cop, dotnet-cop, database-reviewer, postgres-dba, gdpr-specialist, ecosystem-auditor, why-synthesizer |
+| cheap | `grok-4.7-medium` | `grok-4.7-medium` -> `grok-4.6-medium` -> `composer-2.5` | git, codebase search, docs, comment triage | git-specialist, scout, writer, doc-updater, why-investigator, comment-judge, haruspex-commentorum |
+
+## Allowed models
+
+Only Cursor models: `grok-4.7`, `grok-4.6`, `grok-4.5`, and `composer-2.5`, with an optional effort suffix (`max`, `xhigh`, `high`, `medium`, `low`). Never third-party models. Never `-fast` variants. `inherit` and `auto` are allowed aliases: they run on the parent model and omit `model`.
+
+If a slug is not in that set, ignore it and use the tier default. Log why: the slug, the tier, and that it is not a Cursor model.
 
 ## Procedure
 
-1. Enumerate the model slugs you can pass to a `Task` subagent in this session (see the Task tool's `model` parameter). If Cursor exposes a models list, prefer it. If none are detectable, ask the user to paste the slugs. Never write a slug you have not confirmed is available. The aliases `inherit` and `auto` are always valid; they run on the parent model and omit `model`.
-2. Propose one slug per tier:
-   - coding: implementation, tests, build fixes. Default `grok-4.7-xhigh`, the non-fast variant; `-fast` costs about 2x.
-   - smart: planning, architecture, review, security. Expensive. Default `claude-opus-5-5-high`.
-   - cheap: git, codebase search, docs, comment triage. Pick the cheapest detected model, preferring non-fast `composer-*`. Never use `-fast` variants or the `fast` alias for cheap.
-   If a default is not detected, use the same family's detected slug at the highest effort at or below the target, on the ladder max > xhigh > high > medium > low. Families go by prefix (`claude-*`, `gpt-*`, `grok-*`, `composer-*`). If nothing fits, ask the user.
-3. Show the proposal; the user may edit it. Then write `~/.cursor/rules/fmflurry-harness-models.mdc`. Overwrite the whole file so re-runs are idempotent, and keep any custom lines the user already had in it. Format:
+1. Use these defaults. Do not pick a third-party slug even if one is advertised:
+   - coding: `grok-4.7-xhigh`. Fallbacks: `grok-4.7-xhigh` -> `grok-4.6-xhigh` -> `composer-2.5`.
+   - smart: `grok-4.7-xhigh`. Fallbacks: `grok-4.7-xhigh` -> `grok-4.6-xhigh` -> `composer-2.5`.
+   - cheap: `grok-4.7-medium`. Fallbacks: `grok-4.7-medium` -> `grok-4.6-medium` -> `composer-2.5`.
+   If the user asks for a different slug, accept it only when it is an allowed Cursor model or `inherit`/`auto`. Otherwise ignore it, keep the tier default, and log why.
+2. Show the three slugs. Then write both files. Overwrite the tier lines so re-runs are idempotent. Keep custom lines that are not model assignments. If an existing tier line names a third-party or `-fast` slug, replace it with the tier default and log why.
+
+   `~/.cursor/rules/fmflurry-harness-models.mdc`:
 
    ```
    ---
    description: fmflurry-harness per-tier model choices (overrides plugin defaults)
    alwaysApply: true
    ---
-   # Re-run /setup-harness to change. Values: a Task slug, or `inherit`/`auto` (omit Task model).
-   coding: <slug>
-   smart: <slug>
-   cheap: <slug>
+   # Re-run /setup-harness to change. Cursor models only, or `inherit`/`auto` (omit Task model).
+   coding: grok-4.7-xhigh
+   smart: grok-4.7-xhigh
+   cheap: grok-4.7-medium
    ```
 
-4. Tell the user the rule applies to new chats, and to pick Grok 4.7 xhigh in the model picker for the main (conductor) chat, because a plugin cannot set the parent model.
+   `~/.agents/fmflurry-harness-models.md`:
+
+   ```
+   # fmflurry-harness per-tier model choices. Cursor models only.
+   # Re-run /setup-harness to change. `inherit` or `auto` omits the Task model.
+   coding: grok-4.7-xhigh
+   smart: grok-4.7-xhigh
+   cheap: grok-4.7-medium
+   ```
+
+3. Tell the user both files apply to new chats, and to pick Grok 4.7 xhigh in the model picker for the main (conductor) chat, because a plugin cannot set the parent model.

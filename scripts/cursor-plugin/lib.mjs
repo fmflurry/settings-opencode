@@ -66,21 +66,30 @@ export function isReadonly({ tools, disallowedTools }) {
   return allowed !== null && !MUTATING_TOOLS.some((t) => allowed.includes(t));
 }
 
-export function emitAgent({ name, description, readonly }, body) {
+export function emitAgent({ name, description, readonly, tier }, body) {
+  const cursorBody = body.replace(
+    /Your declared model is `[^`]+`, set in this file's frontmatter\./g,
+    `Your tier is \`${tier}\`. This file sets \`tier:\` and no \`model:\`; the conductor passes the Cursor model on Task.`,
+  );
   return [
     '---',
     `name: ${name}`,
     `description: ${JSON.stringify(description)}`,
     `readonly: ${readonly}`,
+    `tier: ${tier}`,
     '---',
     '',
-  ].join('\n') + body;
+  ].join('\n') + cursorBody;
 }
 
 export function tierGuard(config) {
   const byAgent = new Map();
   for (const [tier, names] of Object.entries(config.agentTiers)) {
     if (!(tier in config.defaultTierModels)) throw new Error(`agentTiers: unknown tier "${tier}"`);
+    const fallbacks = config.tierFallbacks?.[tier];
+    if (!fallbacks?.length || fallbacks[0] !== config.defaultTierModels[tier]) {
+      throw new Error(`tierFallbacks.${tier} must start with the default slug`);
+    }
     for (const name of names) {
       if (byAgent.has(name)) throw new Error(`agent "${name}" is in several tiers (${byAgent.get(name)}, ${tier})`);
       byAgent.set(name, tier);
@@ -88,16 +97,18 @@ export function tierGuard(config) {
   }
   return (name) => {
     if (!byAgent.has(name)) throw new Error(`agent "${name}" is in no tier of agentTiers`);
+    return byAgent.get(name);
   };
 }
 
 export function claudeAgent(text, assertTiered) {
   const { fm, body } = splitFrontmatter(text);
-  assertTiered(unquote(fm.name));
+  const name = unquote(fm.name);
+  const tier = assertTiered(name);
   return {
-    name: unquote(fm.name),
+    name,
     out: emitAgent(
-      { name: unquote(fm.name), description: unquote(fm.description), readonly: isReadonly(fm) },
+      { name, description: unquote(fm.description), readonly: isReadonly(fm), tier },
       body,
     ),
   };
@@ -117,13 +128,14 @@ function resolvePrompt(repoDir, placeholder) {
 export function opencodeAgent(repoDir, name, def, assertTiered) {
   const promptPath = resolvePrompt(repoDir, def.prompt);
   if (!promptPath) throw new Error(`opencode agent ${name}: prompt not found (${def.prompt})`);
-  assertTiered(name);
+  const tier = assertTiered(name);
   const tools = def.tools ?? {};
   return emitAgent(
     {
       name,
       description: def.description ?? '',
       readonly: tools.write === false && tools.edit === false,
+      tier,
     },
     fs.readFileSync(promptPath, 'utf8'),
   );
@@ -172,12 +184,17 @@ const TIER_USE = {
   cheap: 'git, codebase search, docs, comment triage',
 };
 
+export function fallbackChain(config, tier) {
+  const slugs = config.tierFallbacks?.[tier] ?? [config.defaultTierModels[tier]];
+  return slugs.map((slug) => `\`${slug}\``).join(' -> ');
+}
+
 export function tierTable(config) {
   return [
-    '| Tier | Default slug | Use | Agents |',
-    '| --- | --- | --- | --- |',
+    '| Tier | Default slug | Fallbacks | Use | Agents |',
+    '| --- | --- | --- | --- | --- |',
     ...Object.entries(config.agentTiers).map(
-      ([tier, names]) => `| ${tier} | \`${config.defaultTierModels[tier]}\` | ${TIER_USE[tier]} | ${names.join(', ')} |`,
+      ([tier, names]) => `| ${tier} | \`${config.defaultTierModels[tier]}\` | ${fallbackChain(config, tier)} | ${TIER_USE[tier]} | ${names.join(', ')} |`,
     ),
   ].join('\n');
 }
@@ -187,14 +204,15 @@ export function modelsSection(config) {
   return [
     '## Models',
     '',
-    `- Every \`Task\` dispatch MUST pass \`model\` = the slug for the target agent's tier. Subagents carry no model of their own.`,
-    `- Read the tier slugs from the \`${SETUP_RULE_FILE.replace('.mdc', '')}\` rule if present. Otherwise use the defaults (coding \`${d.coding}\`, smart \`${d.smart}\`, cheap \`${d.cheap}\`).`,
+    '- Hard rule: only Cursor models (`grok-4.7`, `grok-4.6`, `grok-4.5`, `composer-2.5`), plus an optional effort suffix (`max`, `xhigh`, `high`, `medium`, `low`). Never third-party models. Never `-fast` variants. If a user override file names a third-party or `-fast` slug, ignore it, use the tier default, and log why.',
+    '- Every `Task` dispatch MUST pass `model` = the slug for the target agent\'s tier. Subagents set `tier:` and no `model:`.',
+    `- Read the tier slugs from the \`${SETUP_RULE_FILE.replace('.mdc', '')}\` rule if present and the slug is an allowed Cursor model. Otherwise use the defaults (coding \`${d.coding}\`, smart \`${d.smart}\`, cheap \`${d.cheap}\`).`,
+    `- Fallback order when a slug is missing or \`Task\` rejects it: coding ${fallbackChain(config, 'coding')}; smart ${fallbackChain(config, 'smart')}; cheap ${fallbackChain(config, 'cheap')}. Say which slug you used.`,
     '- When a tier value is `inherit` or `auto`, omit `model` from the `Task` call.',
-    '- If `Task` rejects a slug, retry with the tier default and say so. If the default is rejected too, use the closest valid slug of the same family from the error message, preferring the highest effort.',
     '- Escalation: you may dispatch a cheap- or coding-tier agent with the smart slug when a task proves harder than expected; say so.',
-    "- The primary agent's model is chosen by the user in Cursor's model picker (Grok 4.7 xhigh recommended); a plugin can't set it.",
+    "- The primary agent's model is chosen by the user in Cursor's model picker (Grok 4.7 xhigh). A plugin can't set it.",
     '- Cloud agents and grokbot may not receive user rules, in which case the defaults apply.',
-    '- Suggest running `/setup-harness` once after install to detect available models and write the tier rule.',
+    '- Suggest running `/setup-harness` once after install to write the tier rule.',
     '',
     tierTable(config),
     '',
@@ -209,8 +227,14 @@ export function setupSkill(template, config) {
     codingDefault: d.coding,
     smartDefault: d.smart,
     cheapDefault: d.cheap,
+    codingFallbacks: fallbackChain(config, 'coding'),
+    smartFallbacks: fallbackChain(config, 'smart'),
+    cheapFallbacks: fallbackChain(config, 'cheap'),
   };
-  return template.replace(/\{\{(\w+)\}\}/g, (_, k) => values[k]);
+  return template.replace(/\{\{(\w+)\}\}/g, (_, k) => {
+    if (!(k in values)) throw new Error(`setup-harness template: unknown placeholder {{${k}}}`);
+    return values[k];
+  });
 }
 
 export function conductorRuleBody(conductorMd, config) {

@@ -160,8 +160,8 @@ For each prompt (classify, draft), show ranked table. Example format with classi
 ```
 Model & Settings        | Schema Valid | Intention Match | Latency (s) | Cost
 ------------------------|--------------|-----------------|-------------|---------------------------
-gpt-5-mini (t=0.5)      |    94%       |     90%         |    0.6      | €0.0069 (≈$0.0080)
-mistral-small-2503 (t=0.7) |  88%      |     84%         |    0.5      | €0.0034 (≈$0.0040)
+grok-4.7-medium (t=0.5)      |    94%       |     90%         |    0.6      | €0.0069 (≈$0.0080)
+composer-2.5 (t=0.7) |  88%      |     84%         |    0.5      | €0.0034 (≈$0.0040)
 ```
 
 (Draft prompts would show: schema_valid, verbatim_montant, verbatim_numeroFacture, verbatim_echeance criteria.)
@@ -175,9 +175,9 @@ For each criterion, identify:
 Example (classify prompt):
 ```
 WEAK SPOTS:
-- schema_valid: mistral-small-2503 at 82% (1 validation error in case #5)
-- intention_match: gpt-5-mini at 85% (misclassified intent in case #7)
-- confidence_calibration: mistral-small-2503 at 79% (overconfident on edge cases)
+- schema_valid: composer-2.5 at 82% (1 validation error in case #5)
+- intention_match: grok-4.7-medium at 85% (misclassified intent in case #7)
+- confidence_calibration: composer-2.5 at 79% (overconfident on edge cases)
 ```
 
 #### Failures Summary
@@ -268,7 +268,7 @@ npm run arena -- --suggest [--eu] [--reps N]
   "generatedAt": "2026-01-22T14:30:00Z",
   "candidates": [
     {
-      "model": "openrouter/openai/gpt-5-mini",
+      "model": "grok-4.7-medium",
       "provider": "OpenRouter",
       "costPer1kTokens": { "input": 0.05, "output": 0.15 },
       "estimatedLatencyMs": 250,
@@ -359,12 +359,12 @@ Manually apply `<runId>.verdict.json` ordering to `litellm/config.yaml` fallback
 ```json
 {
   "draft": [
-    { "model": "gpt-5-mini", "settings": { "temperature": 0.5 } },
-    { "model": "mistral-small-2503", "settings": { "temperature": 0.7 } }
+    { "model": "grok-4.7-medium", "settings": { "temperature": 0.5 } },
+    { "model": "composer-2.5", "settings": { "temperature": 0.7 } }
   ],
   "classify": [
-    { "model": "mistral-small-2503", "settings": { "temperature": 0.6 } },
-    { "model": "gpt-5-mini", "settings": { "temperature": 0.4 } }
+    { "model": "composer-2.5", "settings": { "temperature": 0.6 } },
+    { "model": "grok-4.7-medium", "settings": { "temperature": 0.4 } }
   ]
 }
 ```
@@ -373,11 +373,11 @@ Update `litellm/config.yaml` fallbacks to match the ordered (rank 1, rank 2, ...
 ```yaml
 litellm_settings:
   fallbacks:
-    # Draft: gpt-5-mini primary (rank 1), mistral-small-2503 fallback (rank 2)
-    - gpt-5-mini-draft: ["mistral-small-2503-draft"]
-    # Classify: mistral-small-2503 primary (rank 1), gpt-5-mini fallback (rank 2)
-    - mistral-small-2503-classify: ["gpt-5-mini-classify"]
-    - gpt-5-mini-classify: []  # no further fallback
+    # Draft: grok-4.7-medium primary (rank 1), composer-2.5 fallback (rank 2)
+    - grok-4.7-medium: ["composer-2.5"]
+    # Classify: composer-2.5 primary (rank 1), grok-4.7-medium fallback (rank 2)
+    - composer-2.5: ["grok-4.7-medium"]
+    - grok-4.7-medium: []  # no further fallback
 ```
 
 Wire temperature overrides into arena-pricing.ts per-model config or add them to litellm_params if they vary per alias.
@@ -446,12 +446,12 @@ Ranking priority (Stage 1 output in `<runId>.ranking.json`):
 **Example ranking output** (classify, after quality gates applied):
 ```
 PASS:
-1. mistral-small-2503 (t=0.7)   — schema_valid: 97%, intention_match: 82%, €0.0034/call, p50: 0.5s
-2. gpt-5-mini (t=0.5)           — schema_valid: 96%, intention_match: 89%, €0.0069/call, p50: 0.6s
+1. composer-2.5 (t=0.7)   — schema_valid: 97%, intention_match: 82%, €0.0034/call, p50: 0.5s
+2. grok-4.7-medium (t=0.5)           — schema_valid: 96%, intention_match: 89%, €0.0069/call, p50: 0.6s
 
 FAIL (below configured thresholds):
-- llama-2-70b (t=0.9)           — schema_valid: 92% (threshold: 98%), intention_match: 0.72 (threshold: 0.8) [near-miss on intention_match: margin 0.08]
-- grok-4-20 (t=0.6)             — verbatim_echeance: 0.60 (threshold: 0.95) [far from threshold]
+- grok-4.5-medium (t=0.9)           — schema_valid: 92% (threshold: 98%), intention_match: 0.72 (threshold: 0.8) [near-miss on intention_match: margin 0.08]
+- grok-4.6-medium (t=0.6)             — verbatim_echeance: 0.60 (threshold: 0.95) [far from threshold]
 ```
 
 ---

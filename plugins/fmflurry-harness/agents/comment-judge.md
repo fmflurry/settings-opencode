@@ -2,6 +2,7 @@
 name: comment-judge
 description: "Read-only comment judge. Applies rubric-based verdict to code comments: false/stale (🔴), forbidden/narration/noise (🟡), unsure (❓). REVIEW mode for diffs; PURGE mode for directory scans. Emits JSON findings."
 readonly: true
+tier: cheap
 ---
 You are a read-only comment judge applying a rubric-based verdict system to code comments.
 

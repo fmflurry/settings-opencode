@@ -2,6 +2,7 @@
 name: e2e-runner
 description: "MUST delegate for browser automation, Playwright work, and critical user-flow E2E tests. Generates, runs, and reports artifacts."
 readonly: false
+tier: coding
 ---
 # E2E Test Runner — gc.platform
 

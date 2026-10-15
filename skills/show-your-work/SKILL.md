@@ -71,14 +71,14 @@ Correct the log, not the story. The audit never edits or removes a row, even an 
 
 ## Cross-model review of the trail
 
-Before handing back, spawn a reviewer subagent, on a different model than the one that did the work when the harness allows it. Self-review is not a substitute. Claude Code only spawns Claude models, so the reviewer there is the same family. OpenCode can use an agent bound to a different `OPENCODE_MODEL_*`. The subagent reads the audit trail and the run's transcript, then flags what the user should pay attention to. Not a redo of the work, a scan for what's suboptimal or risky.
+Before handing back, spawn a reviewer subagent on a different model than the one that did the work. Self-review is not a substitute. Cross-family diversity is unavailable on Cursor: only Cursor models (`grok-4.7-xhigh`, `grok-4.6-xhigh`, `composer-2.5`). Pick a different one of those than the worker. Never a third-party slug and never a `-fast` variant. If the harness cannot pass a model, say so and review on the parent model. The subagent reads the audit trail and the run's transcript, then flags what the user should pay attention to. Not a redo of the work, a scan for what's suboptimal or risky.
 
 - Decisions logged with weak or absent evidence.
 - Verification steps skipped or claimed without proof in the transcript.
 - Choices that look risky in hindsight (premature, scope-creeping, papering over a symptom).
 - Gaps the user would otherwise miss on a casual skim.
 
-Every reply for a run that produced a trail ends with an "Attention" section. Lead with the reviewer's model on its own line (`reviewed by <model>`, or `reviewed by <model> (same family)` when it matches the worker), then list each flag pointing to specific rows or moments. "No flags" is a valid value. The model name is not: never fake it.
+Every reply for a run that produced a trail ends with an "Attention" section. Lead with the reviewer's model on its own line (`reviewed by <model>`, or `reviewed by <model> (same Cursor family)` when it matches the worker), then list each flag pointing to specific rows or moments. "No flags" is a valid value. The model name is not: never fake it.
 
 ## Reviewing the trail
 

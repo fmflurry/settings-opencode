@@ -20,17 +20,19 @@ A conductor that routes every task to the matching specialist subagent (planner,
 
 ## Models
 
-Model selection is dynamic. Subagents carry no `model` in their frontmatter; the conductor passes the tier's model on every `Task` call.
+Subagents carry `tier:` and no `model:` in their frontmatter. The conductor passes the tier's Cursor model on every `Task` call.
 
-After install, run `/setup-harness`. It detects the model slugs available to you, proposes one per tier, and writes `~/.cursor/rules/fmflurry-harness-models.mdc`. It applies to new chats. Without that rule the defaults below are used.
+Only Cursor models (`grok-4.7`, `grok-4.6`, `grok-4.5`, `composer-2.5`). Never third-party models. Never `-fast` variants. If an override names a third-party or `-fast` slug, ignore it, use the tier default, and log why.
 
-| Tier | Default slug | Use | Agents |
-| --- | --- | --- | --- |
-| coding | `grok-4.7-xhigh` | implementation, tests, build fixes | coder, tdd-guide, build-error-resolver, refactor-cleaner, e2e-runner, api-spec-architect, gaudi |
-| smart | `claude-opus-5-5-high` | planning, architecture, review, security; expensive, so dispatch it only when needed | planner, architect, code-reviewer, security-reviewer, angular-cop, dotnet-cop, database-reviewer, postgres-dba, gdpr-specialist, ecosystem-auditor, why-synthesizer |
-| cheap | `composer-2.5` | git, codebase search, docs, comment triage | git-specialist, scout, writer, doc-updater, why-investigator, comment-judge, haruspex-commentorum |
+After install, run `/setup-harness`. It writes `~/.cursor/rules/fmflurry-harness-models.mdc` and `~/.agents/fmflurry-harness-models.md` with the defaults below. They apply to new chats. Without those files the same defaults are used.
 
-- `-fast` variants cost about 2x (Grok) to 6x (Composer) more, so they are deliberately avoided.
+| Tier | Default slug | Fallbacks | Use | Agents |
+| --- | --- | --- | --- | --- |
+| coding | `grok-4.7-xhigh` | `grok-4.7-xhigh` -> `grok-4.6-xhigh` -> `composer-2.5` | implementation, tests, build fixes | coder, tdd-guide, build-error-resolver, refactor-cleaner, e2e-runner, api-spec-architect, gaudi |
+| smart | `grok-4.7-xhigh` | `grok-4.7-xhigh` -> `grok-4.6-xhigh` -> `composer-2.5` | planning, architecture, review, security; expensive, so dispatch it only when needed | planner, architect, code-reviewer, security-reviewer, angular-cop, dotnet-cop, database-reviewer, postgres-dba, gdpr-specialist, ecosystem-auditor, why-synthesizer |
+| cheap | `grok-4.7-medium` | `grok-4.7-medium` -> `grok-4.6-medium` -> `composer-2.5` | git, codebase search, docs, comment triage | git-specialist, scout, writer, doc-updater, why-investigator, comment-judge, haruspex-commentorum |
+
+- Walk the fallback list when a slug is missing or rejected, and say which slug you used.
 - A tier value of `inherit` or `auto` runs on the parent model.
 - Pick Grok 4.7 xhigh in the model picker for the main chat; a plugin cannot set it.
 - Cloud agents and grokbot may not receive user rules, so they fall back to the defaults.

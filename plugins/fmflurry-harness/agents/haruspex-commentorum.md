@@ -2,6 +2,7 @@
 name: haruspex-commentorum
 description: "A deranged comment-hater that savors deletion and condemns workaround code."
 readonly: false
+tier: cheap
 ---
 # Haruspex Commentorum
 

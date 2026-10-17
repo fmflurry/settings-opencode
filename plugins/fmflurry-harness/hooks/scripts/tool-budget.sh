@@ -94,8 +94,20 @@ EDIT_COUNT="$(grep -c -- $'\tedit$' "$BUDGET_FILE" 2>/dev/null || true)"
 
 CONTEXT=""
 
+CODEMEMORY_ON=1
+MODE_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/codememory-mode.sh"
+if [[ -f "$MODE_SH" ]]; then
+  # shellcheck source=codememory-mode.sh
+  . "$MODE_SH"
+  codememory_enabled || CODEMEMORY_ON=0
+fi
+
 if [[ "$CATEGORY" == "exploratory" && "$EXPLORATORY_COUNT" -eq 3 && "$EDIT_COUNT" -eq 0 ]]; then
-  CONTEXT="Exploratory budget hit (3, 0 edits). Next call must be code-memory, Glob, or an Edit. If the repo is not indexed, say so explicitly and continue."
+  if [[ "$CODEMEMORY_ON" == "1" ]]; then
+    CONTEXT="Exploratory budget hit (3, 0 edits). Next call must be code-memory, Glob, or an Edit. If the repo is not indexed, say so explicitly and continue."
+  else
+    CONTEXT="Exploratory budget hit (3, 0 edits). Next call must be Glob or an Edit. If the repo is not indexed, say so explicitly and continue."
+  fi
 elif [[ "$EDIT_COUNT" -ge 5 ]] && (( EXPLORATORY_COUNT > EDIT_COUNT * 3 )); then
   CONTEXT="Exploratory:edit ratio exceeds 3 at ${EDIT_COUNT} edits (${EXPLORATORY_COUNT} exploratory calls). Your next assistant message must contain one line: bash-budget: <why exploratory shell is still necessary>"
 fi

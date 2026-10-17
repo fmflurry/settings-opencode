@@ -59,7 +59,7 @@ edits ≤ 5 | exploratory bash ≤ 3 | turns ≤ 25
 | Scenario | Action |
 | --- | --- |
 | Files are known, all fields present | Emit brief directly, dispatch coder/writer/tdd-guide |
-| Files unknown but ≤2 code-memory calls resolve it | Conductor resolves inline (within 2 calls), then emits brief and dispatches |
+| Files unknown but ≤2 code-memory calls resolve it, and CodeMemory is on | Conductor resolves inline (within 2 calls), then emits brief and dispatches. When CodeMemory is off, dispatch `scout` or use grep/read. Do not call CodeMemory |
 | Files unknown and broad OR ≥2 coders will be dispatched | Dispatch `scout` once, embed manifest, then dispatch coder/writer/tdd-guide |
 | Same task rejected twice by same specialist | Conductor MUST dispatch `scout` to resolve ambiguity, not re-dispatch coder |
 

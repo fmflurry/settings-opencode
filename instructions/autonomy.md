@@ -56,6 +56,8 @@ run back to fix, then review again, then retry the merge. The run ends in one of
 merged), or it is escalated. Escalate only when a human-only blocker stops it, or when a full loop iteration makes no
 progress (the same blocker and the same failure as the one before). Record the reason with
 `agent-harness goal escalate "<reason>"`. Do not end the turn early while the goal is active and the PR is unmerged.
+Review/fix rounds stop at 3. `agent-harness goal bump` exits 3 at that ceiling. Stop and tell the user the remaining
+findings. Do not start another fix round. The no-progress rule still escalates earlier.
 
 ## OpenCode enforcement
 

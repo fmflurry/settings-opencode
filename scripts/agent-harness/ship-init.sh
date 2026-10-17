@@ -108,7 +108,7 @@ if [ -f "$GOAL_FILE" ] && [ "$(jq -r '.status // empty' "$GOAL_FILE" 2>/dev/null
 else
   jq -n --arg goal "${goal:-$branch}" --arg branch "$branch" --arg slug "$slug" --argjson pr "$pr" \
     '{goal:$goal, criteria:[], branch:$branch, slug:$slug, pr:$pr, head_sha:"",
-      fix_iterations:0, max_fix_iterations:30, stop_blocks:0, total_blocks:0, status:"active", reason:"", backup_branches:[]}' >"$GOAL_FILE"
+      fix_iterations:0, max_fix_iterations:3, stop_blocks:0, total_blocks:0, status:"active", reason:"", backup_branches:[]}' >"$GOAL_FILE"
 fi
 echo "$path"
 echo "slug=$slug" >&2

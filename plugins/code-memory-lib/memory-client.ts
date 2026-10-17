@@ -13,6 +13,8 @@
 import { execFile as execFileCb, spawn } from "node:child_process";
 import { promisify } from "node:util";
 
+import { resolveCodememory } from "./mode.ts";
+
 const execFile = promisify(execFileCb);
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
@@ -96,10 +98,17 @@ export async function createMemoryClient(
   const mutateTimeout = opts.mutateTimeoutMs ?? 20000;
   const project = opts.project;
 
-  const available = await detectBinary(binary, log);
-
-  if (!available) {
-    log("warn", `code-memory binary not found on PATH (looked for: ${binary})`);
+  let available = false;
+  try {
+    available = (await resolveCodememory()).enabled;
+  } catch {
+    available = false;
+  }
+  if (available) {
+    available = await detectBinary(binary, log);
+    if (!available) {
+      log("warn", `code-memory binary not found on PATH (looked for: ${binary})`);
+    }
   }
 
   const baseArgs = (): string[] => (project ? ["--project", project] : []);

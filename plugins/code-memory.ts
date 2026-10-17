@@ -7,6 +7,8 @@
 
 import type { Plugin } from "@opencode-ai/plugin";
 
+import { resolveCodememory } from "./code-memory-lib/mode.ts";
+
 const GATED_READ_TOOLS: ReadonlySet<string> = new Set(["read", "bash", "grep", "glob"]);
 const MEMORY_TOOL_PREFIXES: readonly string[] = ["codememory_", "code-memory_", "code_memory_", "mcp__code-memory__"];
 
@@ -26,6 +28,14 @@ function isMemoryTool(tool: string): boolean {
 }
 
 const CodeMemoryPlugin: Plugin = async ({ client }) => {
+  let enabled = false;
+  try {
+    enabled = (await resolveCodememory()).enabled;
+  } catch {
+    enabled = false;
+  }
+  if (!enabled) return {};
+
   const explicitBySession = new Set<string>();
   return {
     "tool.execute.after": async (input: ToolInput): Promise<void> => {

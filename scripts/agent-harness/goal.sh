@@ -18,7 +18,7 @@ case "$cmd" in
     branch="${keep_branch:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")}"
     jq -n --arg goal "$goal" --arg branch "$branch" --arg slug "${keep_slug:-$(reg_slug "$branch")}" --argjson pr "$keep_pr" \
       '{goal:$goal, criteria:$ARGS.positional, branch:$branch, slug:$slug, pr:$pr, head_sha:"",
-        fix_iterations:0, max_fix_iterations:30, stop_blocks:0, total_blocks:0, status:"active", reason:"", backup_branches:[]}' \
+        fix_iterations:0, max_fix_iterations:3, stop_blocks:0, total_blocks:0, status:"active", reason:"", backup_branches:[]}' \
       --args "$@" >"$GOAL_FILE"
     ;;
   pr)

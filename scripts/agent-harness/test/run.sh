@@ -212,6 +212,7 @@ check "autonomy-context prints goal" grep -q 'Goal: ctx goal' <<<"$out"
 reset
 bash "$H/goal.sh" set "ship it" "crit a" "crit b"
 check "goal criteria array" test "$(jq '.criteria | length' "$TMP/state/goal.json")" = 2
+check "goal default fix cap is 3" test "$(jq -r .max_fix_iterations "$TMP/state/goal.json")" = 3
 jq '.max_fix_iterations = 2' "$TMP/state/goal.json" >"$TMP/g" && mv "$TMP/g" "$TMP/state/goal.json"
 bash "$H/goal.sh" bump; check "bump within max" test $? -eq 0
 ORCA_WORKTREE_ID='repo::/p' bash "$H/goal.sh" bump; rc=$?
@@ -1173,6 +1174,7 @@ check "ship-init git: registry schema" test "$(lreg $LS '[.v, .goal, .branch, .p
 check "ship-init git: registry has a creation time" test -n "$(lreg $LS '.created_at // empty')"
 check "ship-init git: nothing tracked or untracked in main" test -z "$(git -C "$LM" status --porcelain)"
 check "ship-init git: registry file is not tracked" test -z "$(git -C "$LM" ls-files agent-harness .git)"
+check "ship-init git: fix cap is 3" test "$(jq -r .max_fix_iterations "$LM/.claude/state/goal.json")" = 3
 LH ship-init fix ui other-goal >"$FX/out" 2>&1; rc=$?
 LT2="$LROOT/main-wt/fix-ui-other-goal"
 check "two concurrent goals: second ship-init succeeds" test $rc -eq 0

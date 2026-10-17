@@ -42,7 +42,7 @@ Require a one-line justification in the next message: `bash-budget: <why explora
 
 ## Anti-Displacement Rule
 
-**CRITICAL**: Do NOT reroute a blocked exploratory call into a full-file Read. A 900-line Read costs more tokens than the `grep` it replaced.
+**Important**: Do NOT reroute a blocked exploratory call into a full-file Read. A 900-line Read costs more tokens than the `grep` it replaced.
 
 - Use `Read` with line ranges (e.g., `offset`, `limit`).
 - When CodeMemory is on, use code-memory topology tools (`definitions`, `callers`, `callees`, `importers`, `dependencies`).

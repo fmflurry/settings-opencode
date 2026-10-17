@@ -95,7 +95,6 @@ One finding per judged block, JSON:
   "start_line": 42,
   "end_line": 45,
   "category": "comment",
-  "severity": "high",
   "tier": "🔴",
   "rule_ref": "code-comments.md#forbidden-class",
   "source": "llm",
@@ -112,10 +111,12 @@ One finding per judged block, JSON:
 - `rewrite` — replace with suggestion_code (≤1 line, English, no narration).
 - `false` — assertion proven false; must quote evidence.
 
-**Tier** (severity mapping):
-- 🔴 false/stale: severity `critical`, tier `🔴`.
-- 🟡 forbidden/narration/noise: severity `medium`, tier `🟡`.
-- ❓ unsure: severity `low`, tier `❓`.
+**Tier** (category marker, not a finding tag):
+- 🔴 false/stale.
+- 🟡 forbidden/narration/noise.
+- ❓ unsure.
+
+Blocking is decided by the code-reviewer finding tags, not by this tier. A forbidden comment is Important. A false comment is Important only when the reviewer confirms it by quoting a contradicting line. These emoji stay category markers.
 
 **Summary line format:**
 ```

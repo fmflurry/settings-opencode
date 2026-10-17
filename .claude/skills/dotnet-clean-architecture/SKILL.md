@@ -115,7 +115,7 @@ backend/
 (e.g. Invoices) fold the use cases into the Domain project and ship Domain + Infrastructure +
 Presentation only. Match the neighbouring subdomain in the bounded context you are extending.
 
-## Hexagon Rules (CRITICAL)
+## Hexagon Rules (Important)
 
 ```
 Domain (pure logic)

@@ -1,6 +1,6 @@
 # dotnet-cop / output format
 
-Two modes: `senior` (default, terse) and `junior` (verbose + teaching). CRITICAL findings (🔴 / 🟠) always include rationale regardless of mode.
+Two modes: `senior` (default, terse) and `junior` (verbose + teaching). Important findings (🔴 / 🟠) always include rationale regardless of mode. The emoji are category markers. The tag rules are in the code-reviewer agent.
 
 ## Header (both modes)
 
@@ -96,7 +96,7 @@ app.MapPost("/orders", async (CreateOrderRequest req, ICreateOrder useCase) =>
 - Pattern: dotnet-clean-architecture / SoT minimal-API / opt-in CQRS
 ```
 
-CRITICAL findings (🔴 / 🟠) always rendered in this block format even in senior mode.
+Important findings (🔴 / 🟠) always rendered in this block format even in senior mode.
 
 ## Verdict logic
 

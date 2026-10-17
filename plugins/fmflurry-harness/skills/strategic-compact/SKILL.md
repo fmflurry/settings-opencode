@@ -9,7 +9,7 @@ description: Make compaction safe for fully autonomous multi-phase work. The age
 
 This skill ensures that automatic compaction does not break an agent’s flow.
 
-CRITICAL: compaction is treated as a **background checkpoint**:
+Important: compaction is treated as a **background checkpoint**:
 
 - It can happen at any time near phase boundaries or context pressure.
 - The agent must proactively encode durable state so compaction is always safe.
@@ -68,7 +68,7 @@ MUST at minimum, record:
 - What worked / didn’t work
 - Next steps checklist (concrete, executable)
 
-CRITICAL: this is not optional; it is how the agent remains autonomous across compaction.
+Important: this is not optional; it is how the agent remains autonomous across compaction.
 
 ---
 

@@ -19,14 +19,14 @@ When invoked:
 
 1. **Gather context** — Run `git diff --staged` and `git diff` to see all changes. If no diff, check recent commits with `git log --oneline -5`.
 2. **Run lint** — Detect project type first, then run the matching lint command:
-   - **TypeScript / Angular**: if `package.json` has a `scripts.lint` entry, detect the package manager (`bun.lock`/`bun.lockb` → `bun`; `pnpm-lock.yaml` → `pnpm`; `yarn.lock` → `yarn`; else `npm`) and run `<pm> run lint`. Treat any lint error as a **[HIGH] Lint** blocking finding. If `package.json` is absent or has no `scripts.lint`, skip silently — do not invent a lint command.
-   - **.NET / C#**: if `*.sln`/`*.csproj`/`global.json` is present but no `package.json`, run `dotnet format --verify-no-changes`. Treat any format violation as a **[HIGH] Lint** blocking finding. Alternatively, defer to the `dotnet-cop` agent for deep C# style review.
+   - **TypeScript / Angular**: if `package.json` has a `scripts.lint` entry, detect the package manager (`bun.lock`/`bun.lockb` → `bun`; `pnpm-lock.yaml` → `pnpm`; `yarn.lock` → `yarn`; else `npm`) and run `<pm> run lint`. Treat any lint error as an **[Important] Lint** blocking finding. If `package.json` is absent or has no `scripts.lint`, skip silently — do not invent a lint command.
+   - **.NET / C#**: if `*.sln`/`*.csproj`/`global.json` is present but no `package.json`, run `dotnet format --verify-no-changes`. Treat any format violation as an **[Important] Lint** blocking finding. Alternatively, defer to the `dotnet-cop` agent for deep C# style review.
    - If neither applies, skip lint and note `n/a — no recognized lint target`.
 3. **Understand scope** — Identify which files changed, what feature/fix they relate to, and how they connect.
 4. **Read surrounding code** — Don't review changes in isolation. Read the full file and understand imports, dependencies, and call sites. Deleted or renamed public symbols, or changes to contracts between modules (ports, integration events, DTOs, DB schema/migrations, shared kernel, harness registries) — load `blast-radius` to map impact.
-5. **Apply review checklist** — Work through each category below, from CRITICAL to LOW.
+5. **Apply review checklist** — Work through each category below, from Important to Nit.
 6. **Report findings** — Use the output format below. Only report issues you are confident about (>80% sure it is a real problem). For each issue, include a clear "Fix" recommendation that `coder` can act on without further interpretation.
-7. **Behavior claim verification** — A CRITICAL or HIGH finding about runtime behavior that a cheap local command can disprove → load `verify-this`; NOT VERIFIED → drop it or downgrade to `❓`.
+7. **Behavior claim verification** — An Important finding about runtime behavior that a cheap local command can disprove → load `verify-this`; NOT VERIFIED → drop it or downgrade to `❓`.
 
 ## Confidence-Based Filtering
 
@@ -34,13 +34,32 @@ When invoked:
 
 - **Report** if you are >80% confident it is a real issue
 - **Skip** stylistic preferences unless they violate project conventions
-- **Skip** issues in unchanged code unless they are CRITICAL security issues
+- **Skip** issues in unchanged code. Tag them Pre-existing. They do not block. A serious pre-existing security issue is still reported (tag Pre-existing, and say that it is a security issue) and raised to Florian.
 - **Consolidate** similar issues (e.g., "5 functions missing error handling" not 5 separate findings)
 - **Prioritize** issues that could cause bugs, security vulnerabilities, or data loss
 
+## Finding tags
+
+These are the tag rules. Other review agents, the cops, and `ship` follow this section. They do not restate it.
+
+| Tag | Blocks merge | When |
+| --- | --- | --- |
+| Important | yes | The checklist heading says (Important). Also a change to observable behavior, a contract (API, DTO, schema, port, event), or persisted data; a measurable or exploitable drop in performance, security, or accessibility; a BLOCK rule of the cops or a hard rule of `AGENTS.md` or `REVIEW.md`; a broken or weakened test; a lint error; a failing format check. |
+| Nit | no | The checklist heading says (Nit). Also style, naming, readability, an unmeasured micro-optimization, a preference, or a WARN rule of the cops. Fix a Nit only when it is trivial in the same change. |
+| Pre-existing | no | On the base, not introduced by the diff, at any gravity. Still report a serious pre-existing security issue, tag it Pre-existing, say that it is a security issue, and raise it to Florian. It does not block. |
+
+A performance checklist item has no heading tag. A measurable or exploitable slowdown is Important. An unmeasured micro-optimization is a Nit.
+
+Cop emoji (🔴 🟠 🟡 🟢 🔵 ❓) are category markers, not tags. BLOCK is Important. WARN is a Nit.
+
+The verdict is **Approve** or **Block**. There is no Warning verdict.
+
+- **Approve** — no Important finding, lint passes, and no forbidden comments. Unconfirmed false or stale comments (❓) may remain.
+- **Block** — one or more Important findings, a lint error, a forbidden comment, or a false comment confirmed by quoting a contradicting line from the repo.
+
 ## Review Checklist
 
-### Security (CRITICAL)
+### Security (Important)
 
 These MUST be flagged — they can cause real damage:
 
@@ -70,7 +89,7 @@ const result = await db.query(query, [userId]);
 <div>{userComment}</div>
 ```
 
-### Code Quality (HIGH)
+### Code Quality (Important)
 
 - **Large functions** (>50 lines) — Split into smaller, focused functions
 - **Large files** (>800 lines) — Extract modules by responsibility
@@ -81,7 +100,7 @@ const result = await db.query(query, [userId]);
 - **Missing tests** — New code paths without test coverage
 - **Dead code** — Commented-out code, unused imports, unreachable branches. (See Comments section for comment auditing — never filtered as noise.)
 - **Import hygiene** — Duplicate imports from the same module, repeated specifiers, or split type/value imports that can be merged safely. Treat TypeScript/Sonar warnings like `typescript:S3863` as auto-fix candidates.
-- **Changed/added tests:** Load the `test-behavior-not-implementation` skill; mock-only, weak, self-referential, and constant-pin tests are HIGH.
+- **Changed/added tests:** Load the `test-behavior-not-implementation` skill; mock-only, weak, self-referential, and constant-pin tests are Important.
 
 ```typescript
 // BAD: Deep nesting + mutation
@@ -108,7 +127,7 @@ function processUsers(users) {
 }
 ```
 
-### Comments (HIGH — never filtered as noise)
+### Comments (Important — never filtered as noise)
 
 For every added or changed comment in the diff:
 
@@ -119,15 +138,15 @@ For every added or changed comment in the diff:
    - **false-or-stale**: Comment asserts behavior the code does not perform (e.g., "thread-safe" without locking). (tier 🔴, but ❓ advisory — only BLOCK when YOU confirm by quoting a contradicting line from the repo itself, per Trust limits).
 3. Also flag pre-existing comments made false or misleading by the diff's code changes (truthfulness clause).
 
-**Noise-filter exception:** Comment findings are NEVER dropped as noise or style issues, even if other MEDIUM issues are consolidated.
+**Noise-filter exception:** Comment findings are NEVER dropped as noise or style issues, even if other Nit findings are consolidated.
 
 - Dead-code item (above) points to this section.
 - Summary line includes: `Comments: added N · verified V · forbidden X · false F · ❓ Q`.
 - Approval: BLOCK if `forbidden > 0` OR (`false > 0` AND you have quoted repo line contradicting the comment). ❓ = advisory unless confirmed by you.
 
-### Angular Patterns (HIGH)
+### Angular Patterns (Important)
 
-When reviewing Angular code, you MUST load `skills/angular-cop/enforcement.md` and classify findings by its BLOCK/WARN model. BLOCK = architecture + correctness violations (review fails); WARN = style/naming (advisory). Deterministic rules should ideally be enforced by the repo's ESLint config (see `skills/angular-cop/enforcement-tooling.md`); if absent, flag the gap as a [MEDIUM] recommendation to add it.
+When reviewing Angular code, you MUST load `skills/angular-cop/enforcement.md` and classify findings by its BLOCK/WARN model. BLOCK = architecture + correctness violations (Important; the review fails); WARN = style/naming (Nit; does not block). Deterministic rules should ideally be enforced by the repo's ESLint config (see `skills/angular-cop/enforcement-tooling.md`); if absent, flag the gap as a [Nit] recommendation to add it.
 
 Also check:
 
@@ -158,7 +177,7 @@ Also check:
   - Reading mutable state inside async callbacks without a stable source → “why did it use the old value?”
   - Prefer composing streams (withLatestFrom, combineLatest, signals), and pick correct flattening operator (switchMap/exhaustMap/concatMap)
 
-### Node.js/Backend Patterns (HIGH)
+### Node.js/Backend Patterns (Important)
 
 When reviewing backend code:
 
@@ -192,9 +211,9 @@ const usersWithPosts = await db.query(`
 
 When reviewing code that adds or modifies a tenant-scoped entity (has `tenant_id` column or FK chain to a tenant-scoped table), defer to the **database-reviewer** agent for the RLS checklist: ENABLE+FORCE ROW LEVEL SECURITY, USING+WITH CHECK clauses, fail-closed `current_setting('app.tenant_id', true)`, GRANT to gc_kourou_app_login, EF Core HasQueryFilter, isolation test.
 
-### .NET / Minimal API Patterns (HIGH)
+### .NET / Minimal API Patterns (Important)
 
-When reviewing .NET / C# code, you MUST load `skills/dotnet-cop/enforcement.md` and classify findings by its BLOCK/WARN model. BLOCK = architecture + correctness violations (review fails); treat as blocking. WARN = style (advisory). Also load the `dotnet-clean-architecture` skill for full conventions, and the `dotnet-ddd` skill — specifically its `review-checklist.md` — for DDD tactical-pattern checks on domain-layer code. DDD scope is auto-enabled when the diff touches domain code (`**/*.Domain/**`, `**/Domain/**`, or `**/Core/**`). Deterministic rules should ideally be enforced by the repo's analyzer/.editorconfig config (see `skills/dotnet-cop/enforcement-tooling.md`); if absent, flag the gap as a [MEDIUM] recommendation to add it.
+When reviewing .NET / C# code, you MUST load `skills/dotnet-cop/enforcement.md` and classify findings by its BLOCK/WARN model. BLOCK = architecture + correctness violations (Important; the review fails). WARN = style (Nit; does not block). Also load the `dotnet-clean-architecture` skill for full conventions, and the `dotnet-ddd` skill — specifically its `review-checklist.md` — for DDD tactical-pattern checks on domain-layer code. DDD scope is auto-enabled when the diff touches domain code (`**/*.Domain/**`, `**/Domain/**`, or `**/Core/**`). Deterministic rules should ideally be enforced by the repo's analyzer/.editorconfig config (see `skills/dotnet-cop/enforcement-tooling.md`); if absent, flag the gap as a [Nit] recommendation to add it.
 
 Also check:
 
@@ -242,7 +261,9 @@ var users = await context.Users
     .ToListAsync(cancellationToken);
 ```
 
-### Performance (MEDIUM)
+### Performance
+
+Tag each item with [Finding tags](#finding-tags). A measurable or exploitable slowdown is Important. An unmeasured micro-optimization is a Nit.
 
 - **Inefficient algorithms** — O(n^2) when O(n log n) or O(n) is possible
 - **Unnecessary re-renders** — Using methods inside templates
@@ -251,7 +272,7 @@ var users = await context.Users
 - **Unoptimized images** — Large images without compression or lazy loading
 - **Synchronous I/O** — Blocking operations in async contexts
 
-### Best Practices (LOW)
+### Best Practices (Nit)
 
 - **TODO/FIXME without tickets** — TODOs should reference issue numbers
 - **Missing JSDoc for public APIs** — Exported functions without documentation
@@ -261,10 +282,10 @@ var users = await context.Users
 
 ## Review Output Format
 
-Organize findings by severity. For each issue:
+Organize findings by tag: Important, then Nit, then Pre-existing. For each issue:
 
 ```
-[CRITICAL] Hardcoded API key in source
+[Important] Hardcoded API key in source
 File: src/api/client.ts:42
 Issue: API key "sk-abc..." exposed in source code. This will be committed to git history.
 Fix: Move to environment variable and add to .gitignore/.env.example
@@ -282,21 +303,18 @@ End every review with:
 
 Comments: added 5 · verified 4 · forbidden 0 · false 1
 
-| Severity | Count | Status |
-|----------|-------|--------|
-| CRITICAL | 0     | pass   |
-| HIGH     | 2     | warn   |
-| MEDIUM   | 3     | info   |
-| LOW      | 1     | note   |
+| Tag          | Count | Blocks |
+|--------------|-------|--------|
+| Important    | 2     | yes    |
+| Nit          | 3     | no     |
+| Pre-existing | 1     | no     |
 
-Verdict: WARNING — 2 HIGH issues should be resolved before merge.
+Verdict: Block — 2 Important issues must be resolved before merge.
 ```
 
 ## Approval Criteria
 
-- **Approve**: No CRITICAL or HIGH issues, lint passes, and no forbidden comments; false/stale comments OK if unconfirmed (❓)
-- **Warning**: HIGH issues only (can merge with caution); false/stale flagged but not confirmed
-- **Block**: CRITICAL issues found, lint errors present, forbidden comments detected, or false comments confirmed by you (with quoted contradicting repo line) — must fix before merge
+Apply the verdict in [Finding tags](#finding-tags). Approve when no Important finding is open. Block when any Important finding is open. There is no Warning verdict.
 
 ## Project-Specific Guidelines
 

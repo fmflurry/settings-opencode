@@ -265,7 +265,7 @@ function generateRecommendations(results: AuditResults): string[] {
   for (const check of results.checks) {
     if (check.status === "failed" && check.name === "Secret Detection") {
       recommendations.push(
-        "CRITICAL: Remove hardcoded secrets and use environment variables instead",
+        "Important: Remove hardcoded secrets and use environment variables instead",
       );
       recommendations.push(
         "Add a .env file (gitignored) for local development",
@@ -294,7 +294,7 @@ function generateRecommendations(results: AuditResults): string[] {
 
   if (recommendations.length === 0) {
     recommendations.push(
-      "No critical security issues found. Continue following security best practices.",
+      "No Important security issues found. Continue following security best practices.",
     );
   }
 

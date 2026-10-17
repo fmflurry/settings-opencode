@@ -69,7 +69,7 @@ cd <directory_containing_this_SKILL.md> && python3 -m scripts <absolute_filepath
 - Merge redundant bullets that say the same thing differently
 - Keep one example where multiple examples show the same pattern
 
-CRITICAL RULE:
+Important RULE:
 Anything inside ``` ... ``` must be copied EXACTLY.
 Do not:
 - remove comments

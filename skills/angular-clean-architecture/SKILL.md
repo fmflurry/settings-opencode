@@ -59,7 +59,7 @@ src/app/modules/{moduleName}/
 
 Full layout with worked example: [module-template.md](module-template.md).
 
-## Dependency Rules (CRITICAL)
+## Dependency Rules (Important)
 
 ```
 Component --> Facade --> UseCase --> [Port] <-- Adapter --> Endpoint --> HttpClient

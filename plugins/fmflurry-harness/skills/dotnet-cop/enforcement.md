@@ -1,6 +1,8 @@
-# dotnet-cop / enforcement — BLOCK vs WARN severity checklist
+# dotnet-cop / enforcement — BLOCK vs WARN tag checklist
 
-Canonical severity list for dotnet-cop and the coder self-check. **BLOCK** findings fail review; the `.editorconfig`/analyzer + ArchUnitNET template makes the deterministic subset fail the build.
+BLOCK is Important. WARN is a Nit. The tag rules live in the code-reviewer agent and are not repeated here.
+
+Canonical list for dotnet-cop and the coder self-check. **BLOCK** findings fail review; the `.editorconfig`/analyzer + ArchUnitNET template makes the deterministic subset fail the build.
 
 **Structure**: SoT BLOCK rules first (mandatory for all modules); optional-addon BLOCK rules clearly separated (CQRS/event-sourcing only when module opts in).
 

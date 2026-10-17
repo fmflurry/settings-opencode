@@ -38,7 +38,7 @@ When CodeMemory is off, skip this section and do not call it. When CodeMemory is
 # Check for vulnerable dependencies
 npm audit
 
-# High severity only
+# npm audit level: high and above
 npm audit --audit-level=high
 
 # Check for secrets in files
@@ -103,7 +103,7 @@ For each category, check:
 
 ## Vulnerability Patterns to Detect
 
-### 1. Hardcoded Secrets (CRITICAL)
+### 1. Hardcoded Secrets (Important)
 
 ```javascript
 // BAD: Hardcoded secrets
@@ -117,7 +117,7 @@ if (!apiKey) {
 }
 ```
 
-### 2. SQL Injection (CRITICAL)
+### 2. SQL Injection (Important)
 
 ```javascript
 // BAD: SQL injection vulnerability
@@ -130,7 +130,7 @@ const { data } = await supabase
   .eq('id', userId)
 ```
 
-### 3. Cross-Site Scripting (XSS) (HIGH)
+### 3. Cross-Site Scripting (XSS) (Important)
 
 ```javascript
 // BAD: XSS vulnerability - never set inner HTML directly with user input
@@ -138,7 +138,7 @@ document.body.textContent = userInput  // Safe for text
 // For HTML content, always sanitize with DOMPurify first
 ```
 
-### 4. Race Conditions in Financial Operations (CRITICAL)
+### 4. Race Conditions in Financial Operations (Important)
 
 ```javascript
 // BAD: Race condition in balance check
@@ -166,6 +166,8 @@ await db.transaction(async (trx) => {
 
 ## Security Review Report Format
 
+Finding tags are defined in the code-reviewer agent. Use them in this report. The Risk Level line is an overall rating, not a finding tag.
+
 ```markdown
 # Security Review Report
 
@@ -175,16 +177,15 @@ await db.transaction(async (trx) => {
 
 ## Summary
 
-- **Critical Issues:** X
-- **High Issues:** Y
-- **Medium Issues:** Z
-- **Low Issues:** W
+- **Important:** X
+- **Nit:** Y
+- **Pre-existing:** Z
 - **Risk Level:** HIGH / MEDIUM / LOW
 
-## Critical Issues (Fix Immediately)
+## Important
 
 ### 1. [Issue Title]
-**Severity:** CRITICAL
+**Tag:** Important
 **Category:** SQL Injection / XSS / Authentication / etc.
 **Location:** `file.ts:123`
 

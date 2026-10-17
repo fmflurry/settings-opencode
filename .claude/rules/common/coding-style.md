@@ -1,6 +1,6 @@
 # Coding Style
 
-## Immutability (CRITICAL)
+## Immutability (Important)
 
 ALWAYS create new objects, NEVER mutate existing ones:
 

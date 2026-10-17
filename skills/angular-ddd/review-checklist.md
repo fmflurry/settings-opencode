@@ -2,7 +2,7 @@
 
 Terse, file:line-oriented checklist for the `code-reviewer` agent. One item per pattern/concept. Cite the offending `file:line` in findings.
 
-Severity taxonomy matches [[angular-cop]]: 🔴 bug (breaks invariants), 🟠 sec (security/access), 🟡 risk (architectural risk), 🟢 arch (pattern/design), 🔵 nit (style).
+Category markers match [[angular-cop]]: 🔴 bug (breaks invariants), 🟠 sec (security/access), 🟡 risk (architectural risk), 🟢 arch (pattern/design), 🔵 nit (style).
 
 ---
 

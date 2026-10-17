@@ -65,14 +65,12 @@ describe('functionName', () => {
 
 ## Coverage Improvement Plan
 
-1. **Critical** (add immediately)
+1. **Important** (blocks; add before merge)
    - [ ] file1.ts - Auth logic
    - [ ] file2.ts - Payment handling
-
-2. **High** (add this sprint)
    - [ ] file3.ts - Core business logic
 
-3. **Medium** (add when touching file)
+2. **Nit** (add when touching the file)
    - [ ] file4.ts - Utilities
 
 ---

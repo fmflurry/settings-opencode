@@ -138,13 +138,15 @@ For each error:
 - Optimize performance or style
 - Add comments explaining the fix. No `@ts-ignore` / `#pragma warning disable` / `eslint-disable` alone — always include inline reason. See `~/.claude/rules/common/code-comments.md` (or the repo's copy).
 
-## Priority Levels
+## Finding tags
 
-| Level    | Symptoms                                  | Action            |
-| -------- | ----------------------------------------- | ----------------- |
-| CRITICAL | Build completely broken, no dev server    | Fix immediately   |
-| HIGH     | Single file failing, new code type errors | Fix soon          |
-| MEDIUM   | Linter warnings, deprecated APIs          | Fix when possible |
+Follow the code-reviewer finding tags. Do not restate them.
+
+| Tag       | Symptoms                                  | Action                 |
+| --------- | ----------------------------------------- | ---------------------- |
+| Important | Build completely broken, no dev server    | Fix immediately        |
+| Important | Single file failing, new code type errors | Fix before continuing  |
+| Nit       | Linter warnings, deprecated APIs          | Fix when trivial       |
 
 ## Quick Recovery
 

@@ -6,7 +6,7 @@ Focus: Quality, security, maintainability
 ## Behavior
 
 - Read thoroughly before commenting
-- Prioritize issues by severity (critical > high > medium > low)
+- Prioritize issues by tag (Important, then Nit). Pre-existing findings do not block.
 - Suggest fixes, don't just point out problems
 - Check for security vulnerabilities
 
@@ -22,4 +22,4 @@ Focus: Quality, security, maintainability
 
 ## Output Format
 
-Group findings by file, severity first
+Group findings by file, tag first (Important, Nit, Pre-existing)

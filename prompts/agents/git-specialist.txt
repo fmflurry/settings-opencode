@@ -144,4 +144,4 @@ Return a short, practical summary with:
 - `PR`: URL when a pull request exists or was created, otherwise `n/a`
 - `Notes`: any relevant warning or blocker
 
-CRITICAL: never ever add a co-author to the PR unless I specifically ask you to do so.
+Important: never ever add a co-author to the PR unless I specifically ask you to do so.

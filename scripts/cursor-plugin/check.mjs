@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { splitFrontmatter, unquote } from './lib.mjs';
+import { scanReviewSeverities } from './review-tags.mjs';
 import {
   assessPluginVersion,
   changelogHasVersion,
@@ -192,6 +193,10 @@ const guard = assessPluginVersion({
 });
 for (const notice of guard.notices) console.log(notice);
 errors.push(...guard.errors);
+
+for (const hit of scanReviewSeverities(path.resolve(here, '../..'))) {
+  errors.push(`${hit.file}:${hit.line}: review severity ${hit.word} is not a finding tag: ${hit.text.slice(0, 160)}`);
+}
 
 if (errors.length) {
   console.error(errors.join('\n'));

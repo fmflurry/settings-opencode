@@ -2,7 +2,7 @@
 
 Terse, file:line-oriented checklist for the `code-reviewer` agent. One item per pattern/concept. Cite the offending `file:line` in findings.
 
-Severity follows [[dotnet-cop]] conventions: 🟢 arch (fix before merge), 🟡 risk, 🔵 nit.
+Category markers follow [[dotnet-cop]] conventions: 🟢 arch (fix before merge), 🟡 risk, 🔵 nit.
 
 ---
 

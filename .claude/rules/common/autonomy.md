@@ -30,16 +30,19 @@ unresolved threads, a `ship-merge` refusal) and loop. Escalate only a human-only
 - `agent-harness ship-merge <pr>` (it still enforces its own gate)
 - pushes to branches other than the base branch
 - force pushes (`--force`, `--force-with-lease`, `-f`, `+refspec`) on branches other than the base branch, which are allowed
-- worktree creation (`orca worktree create ...` or `git worktree add`)
-- `agent-harness cleanup <pr> [--keep-branch]` (also run by `agent-harness ship-merge`), only after the PR is MERGED:
+- goal worktree creation through `agent-harness ship-init` (the init step of `/ship`; `orca worktree create ...` in an Orca-managed repo)
+- `agent-harness cleanup <pr> [--keep-branch]` (also run by `agent-harness ship-merge` for an unregistered PR), only after the PR is MERGED:
   deletes that PR's own head branch (remote and local) and the goal's recorded backup branches. Nothing else.
+- `agent-harness teardown-merged-worktree <pr>` (run by `agent-harness ship-merge` for a registered goal), only after the PR is MERGED:
+  removes the registered goal worktree of that PR, then its remote and local head branch, then its registry file. It runs
+  only when every check in the worktree destruction rule passes, and it never touches the main checkout. Nothing else.
 
 These stay forbidden in every mode:
 
 - any push to the base branch, with or without force
 - `git push --mirror` and `git push --all`
 - worktree removal in any form, including `agent-harness worktree-rm` (it refuses while the flag is on), per the worktree
-  destruction rule (`.claude/rules/common/worktree-destruction-safety.md`)
+  destruction rule (`.claude/rules/common/worktree-destruction-safety.md`). The one exception is the teardown in rule (d).
 - raw branch deletion: `git branch -D`, `git push --delete` or `git push origin :<ref>`, `gh api -X DELETE .../git/refs/heads/...`.
   Only `agent-harness cleanup` deletes branches.
 - commands on the deny list in `.claude/settings.json`, and the Bash commands the git guard hook denies (merges

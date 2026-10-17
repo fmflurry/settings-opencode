@@ -47,7 +47,7 @@ Verify that an implementation matches the change artifacts (specs, tasks, design
    - **Correctness**: Track requirement implementation and scenario coverage
    - **Coherence**: Track design adherence and pattern consistency
 
-   Each dimension can have CRITICAL, WARNING, or SUGGESTION issues.
+   Each dimension can have Important, WARNING, or SUGGESTION issues.
 
 5. **Verify Completeness**
 
@@ -56,7 +56,7 @@ Verify that an implementation matches the change artifacts (specs, tasks, design
    - Parse checkboxes: `- [ ]` (incomplete) vs `- [x]` (complete)
    - Count complete vs total tasks
    - If incomplete tasks exist:
-     - Add CRITICAL issue for each incomplete task
+     - Add Important issue for each incomplete task
      - Recommendation: "Complete task: <description>" or "Mark as done if already implemented"
 
    **Spec Coverage**:
@@ -66,7 +66,7 @@ Verify that an implementation matches the change artifacts (specs, tasks, design
        - Search codebase for keywords related to the requirement
        - Assess if implementation likely exists
      - If requirements appear unimplemented:
-       - Add CRITICAL issue: "Requirement not found: <requirement name>"
+       - Add Important issue: "Requirement not found: <requirement name>"
        - Recommendation: "Implement requirement X: <description>"
 
 6. **Verify Correctness**
@@ -122,7 +122,7 @@ Verify that an implementation matches the change artifacts (specs, tasks, design
 
    **Issues by Priority**:
 
-   1. **CRITICAL** (Must fix before archive):
+   1. **Important** (Must fix before archive):
       - Incomplete tasks
       - Missing requirement implementations
       - Each with specific, actionable recommendation
@@ -138,7 +138,7 @@ Verify that an implementation matches the change artifacts (specs, tasks, design
       - Each with specific recommendation
 
    **Final Assessment**:
-   - If CRITICAL issues: "X critical issue(s) found. Fix before archiving."
+   - If Important issues: "X Important issue(s) found. Fix before archiving."
    - If only warnings: "No critical issues. Y warning(s) to consider. Ready for archive (with noted improvements)."
    - If all clear: "All checks passed. Ready for archive."
 
@@ -147,7 +147,7 @@ Verify that an implementation matches the change artifacts (specs, tasks, design
 - **Completeness**: Focus on objective checklist items (checkboxes, requirements list)
 - **Correctness**: Use keyword search, file path analysis, reasonable inference - don't require perfect certainty
 - **Coherence**: Look for glaring inconsistencies, don't nitpick style
-- **False Positives**: When uncertain, prefer SUGGESTION over WARNING, WARNING over CRITICAL
+- **False Positives**: When uncertain, prefer SUGGESTION over WARNING, WARNING over Important
 - **Actionability**: Every issue must have a specific recommendation with file/line references where applicable
 
 **Graceful Degradation**
@@ -161,7 +161,7 @@ Verify that an implementation matches the change artifacts (specs, tasks, design
 
 Use clear markdown with:
 - Table for summary scorecard
-- Grouped lists for issues (CRITICAL/WARNING/SUGGESTION)
+- Grouped lists for issues (Important/WARNING/SUGGESTION)
 - Code references in format: `file.ts:123`
 - Specific, actionable recommendations
 - No vague suggestions like "consider reviewing"

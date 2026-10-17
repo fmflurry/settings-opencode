@@ -1,6 +1,8 @@
-# angular-cop / enforcement — BLOCK vs warn severity checklist
+# angular-cop / enforcement — BLOCK vs WARN tag checklist
 
-Canonical severity list for `angular-cop` and the coder self-check.
+BLOCK is Important. WARN is a Nit. The tag rules live in the code-reviewer agent and are not repeated here.
+
+Canonical list for `angular-cop` and the coder self-check.
 
 **BLOCK findings fail review.** The ESLint template (see [[angular-cop-enforcement-tooling]]) makes the deterministic subset fail the build/CI. Rules that cannot be expressed as lint rules are enforced by angular-cop's static review pass only.
 

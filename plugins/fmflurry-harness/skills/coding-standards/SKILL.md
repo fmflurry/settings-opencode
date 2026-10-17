@@ -92,7 +92,7 @@ function similarity(a, b) {}
 function email(e) {}
 ```
 
-### Immutability Pattern (CRITICAL)
+### Immutability Pattern (Important)
 
 ```typescript
 // ✅ ALWAYS use spread operator

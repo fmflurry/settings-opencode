@@ -53,4 +53,4 @@ Create a detailed implementation plan for: $ARGUMENTS
 
 ---
 
-**CRITICAL**: Do NOT write any code until the user explicitly confirms with "yes", "proceed", or similar affirmative response.
+**Important**: Do NOT write any code until the user explicitly confirms with "yes", "proceed", or similar affirmative response.

@@ -132,7 +132,7 @@ CREATE TABLE orders (
 **Pattern:**
 ```sql
 ALTER TABLE <table> ENABLE ROW LEVEL SECURITY;
-ALTER TABLE <table> FORCE ROW LEVEL SECURITY;  -- Critical: prevents table owner bypass
+ALTER TABLE <table> FORCE ROW LEVEL SECURITY;  -- Important: prevents table owner bypass
 
 CREATE POLICY <table>_tenant_isolation ON <table>
   USING  (tenant_id = (SELECT current_setting('app.tenant_id', true)))

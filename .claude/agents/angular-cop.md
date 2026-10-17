@@ -80,7 +80,7 @@ For each changed file:
 - Read the changed file for context. For files ≤ 400 lines read the full file; for larger files read only the changed hunks plus ~30 lines of surrounding context, so the working set stays small and the report renders before context grows unwieldy.
 - Apply checklists from loaded sub-pages.
 - For every added/changed comment: verify it (truthfulness, allowed class per `~/.claude/rules/common/code-comments.md`, or the repo's copy). Flag false or forbidden comments as 🔴 [comment].
-- Record `(severity, file, line, category, problem, fix, citation)` tuples.
+- Record `(tag, file, line, category, problem, fix, citation)` tuples.
 - Confidence < 80% -> downgrade to `❓ q:`.
 
 ### 6. Tooling (unless `notools`)
@@ -99,7 +99,7 @@ npm run -s lint -- --quiet 2>&1 | tail -100 || npx eslint --quiet $(git diff --n
 
 If a command is unavailable (script missing, tsc, or lint), note it in the Tooling section but don't fail the review.
 
-Map script exit codes to severity: forbidden/false comments -> 🔴 [comment]. Tsc error codes -> 🔴 bug per `typescript-strict.md`. Lint -> errors 🔴, warnings aggregated.
+Map script exit codes to tag: forbidden/false comments -> 🔴 [comment]. Tsc error codes -> 🔴 bug per `typescript-strict.md`. Lint -> errors 🔴, warnings aggregated.
 
 ### 7. Render report
 Use `skills/angular-cop/output-format.md` templates.
@@ -118,14 +118,14 @@ elif only 🔵 / ❓          -> APPROVE
 else                      -> APPROVE
 ```
 
-**Severity mapping from `enforcement.md`:**
-- BLOCK rules (architecture + correctness violations from `skills/angular-cop/enforcement.md`) → emit as 🔴 blocking findings → verdict BLOCK.
-- WARN rules (style/naming from `skills/angular-cop/enforcement.md`) → emit as 🟡 advisory findings → does not block alone.
+**Tag mapping from `enforcement.md`:** BLOCK is Important and WARN is a Nit. See the code-reviewer finding tags.
+- BLOCK rules (architecture + correctness violations from `skills/angular-cop/enforcement.md`) → Important, emitted as 🔴 → verdict BLOCK.
+- WARN rules (style/naming from `skills/angular-cop/enforcement.md`) → Nit, emitted as 🟡 → does not block alone.
 - False/stale comments → 🔴 [bug] (asserts behavior code does not perform). Forbidden comment class → 🔴 [comment].
 
 If `--no-tools`: append `(tooling skipped — verdict does not reflect build state)` to the verdict line. Do not silently produce APPROVE when the build was never run.
 
-**Tooling gap note:** If the repo lacks ESLint rules covering the BLOCK checks from `enforcement.md`, add a finding: `🟡 [MEDIUM] Recommend adopting enforcement-tooling.md ESLint config to enforce BLOCK rules automatically at CI.`
+**Tooling gap note:** If the repo lacks ESLint rules covering the BLOCK checks from `enforcement.md`, add a finding: `🟡 [Nit] Recommend adopting enforcement-tooling.md ESLint config to enforce BLOCK rules automatically at CI.`
 
 ## Edge cases
 
@@ -146,7 +146,7 @@ Keep it compact: one finding per line in senior mode, cap per-file findings at 1
 - [ ] Did I cite line numbers for every finding?
 - [ ] Did I downgrade speculative findings to `❓ q:`?
 - [ ] Did I include the Tooling section (or note why skipped)?
-- [ ] Does the Verdict match the severity logic?
+- [ ] Does the Verdict match the tag logic?
 - [ ] No "great work" / "looks good overall" filler?
 - [ ] No restating what the diff already shows?
 - [ ] Comments count line present in header (added N · verified V · forbidden X · false F)?

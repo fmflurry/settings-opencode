@@ -1,6 +1,6 @@
 ---
 name: get-pr-comments
-description: Fetch and summarize review comments from the active pull request. Group by severity and actionability.
+description: Fetch and summarize review comments from the active pull request. Group by tag and actionability.
 ---
 
 # Get PR comments
@@ -70,23 +70,25 @@ Apply these filters:
 - **Flag outdated comments:** Comments on outdated code (lines changed after the comment was posted) are marked `isOutdated: true`. Flag these but include them (the author may intend a re-review after changes).
 - **Filter bots:** Exclude comments from bot accounts (e.g., `dependabot`, `github-actions[bot]`, `renovate[bot]`). These are usually automated and do not require human response.
 
-### 5. Group by Severity
+### 5. Group by tag
 
-Organize feedback into these buckets:
+Organize feedback with the code-reviewer finding tags. Do not invent a second scale.
 
-| Severity | Condition | Action |
-|----------|-----------|--------|
-| **Blocking** | Review decision is "CHANGES_REQUESTED" or a comment contains explicit security concern (auth, secrets, XSS, SQL injection, PII) | Must be addressed before merge |
-| **High** | Architectural concern, performance issue, test coverage gap, or API-breaking change | Strong preference to address |
-| **Medium** | Code style, minor refactor suggestion, or non-breaking improvement | Nice to have; OK to defer if immaterial |
-| **Question** | Unresolved question or clarification request | Needs a reply, may not require code change |
+| Tag | Condition | Action |
+| --- | --- | --- |
+| **Important** | Security (auth, secrets, XSS, SQL injection, PII), an architecture or contract break, a measurable performance regression, or a test gap | Blocks merge. Address it. |
+| **Nit** | Style, naming, a minor refactor, or a non-breaking preference | Does not block. Fix only when trivial in this change. |
+| **Pre-existing** | The comment is about code the diff did not introduce | Does not block. Report it. |
+| **Question** | Unresolved question or clarification request | Needs a reply. May not require a code change. |
+
+A GitHub `CHANGES_REQUESTED` review still needs a fix or a reply on each open thread. That host state is not a tag.
 
 ### 6. Create Action List
 
 For each non-resolved, non-bot, non-outdated comment, record:
 
 ```
-[file:line] [severity] — Comment summary (1 line)
+[file:line] [tag] — Comment summary (1 line)
 → Author: @username
 → URL: <link to comment>
 → Action: <what's needed (code change, reply, etc.)>
@@ -99,7 +101,7 @@ Resolved: briefly summarize if notable (e.g., "Conflict resolved in commit XYZ")
 ### 7. Output
 
 Report:
-- **Grouped feedback summary:** by severity, ordered blocking → high → medium → questions
+- **Grouped feedback summary:** by tag, ordered Important → Nit → Pre-existing → questions
 - **Action list:** file:line + owner agent, plus open questions that need clarification
 - **Outdated threads:** count and brief summary
 - **Bot activity:** filtered-out count (e.g., "5 bot comments excluded")
@@ -114,6 +116,6 @@ Report:
 
 - PR URL, number, and title
 - Reviewer decision status (approved, changes requested, or pending)
-- Grouped action list (blocking, high, medium, questions)
+- Grouped action list (Important, Nit, Pre-existing, questions)
 - Outdated and resolved thread summaries
 - Bot activity summary

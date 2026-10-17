@@ -86,7 +86,7 @@ After static review, run:
 ```bash
 npx tsc --noEmit --pretty false
 ```
-Map each error code to severity:
+Map each error code to tag:
 - `TS2322`, `TS2345`, `TS2532`, `TS2531`, `TS2540` -> 🔴 bug
 - `TS6133` (unused), `TS6196` -> 🔵 nit
 - Others -> 🟡 risk by default

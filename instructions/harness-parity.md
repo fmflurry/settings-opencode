@@ -4,7 +4,7 @@ When you add, edit, rename, or delete **ANY artifact** under `.claude/` or `.ope
 
 Consult the `harness-parity` skill for the translation table and replication checklist. The skill shows how artifact types map between Claude and OpenCode (path translation, frontmatter changes, registration differences).
 
-**Critical**: Adding a file without wiring its registry/load-path entry (e.g., omitting the `@`-import in `.claude/CLAUDE.md` or the entry in `opencode.jsonc`) counts as incomplete — the artifact is orphaned.
+**Important**: Adding a file without wiring its registry/load-path entry (e.g., omitting the `@`-import in `.claude/CLAUDE.md` or the entry in `opencode.jsonc`) counts as incomplete — the artifact is orphaned.
 
 ---
 

@@ -1,18 +1,18 @@
 # angular-cop / design-system — Kourou v0 Token Enforcement
 
-Canonical severity mapping for design-system violations in component templates, styles, and generated classes.
+Canonical category markers for design-system violations in component templates, styles, and generated classes.
 
 **Scope:** Applied to `*.component.html`, `*.component.ts`, `*.component.css`, and any file containing Tailwind classes or inline styles.
 
 ---
 
-## Token Inventory — Severity & Detection
+## Token Inventory — Markers & Detection
 
 ### BLOCK (🟢 fix-before-merge)
 
 > Any single finding here must be fixed before the PR merges. Likely an oversight or auto-generated mistake.
 
-| Violation | Detection | Why | Severity |
+| Violation | Detection | Why | Marker |
 |-----------|-----------|-----|----------|
 | Raw `--k-*` base-scale color in class/style | `grep -nE 'var\(--k-' *.html *.ts *.css` · `style=".*var\(--k-` | Base scale is internal; semantic aliases exist for all cases. Mixing base scale and semantic breaks consistency and dark-mode overrides. | 🟢 |
 | Stock Tailwind palette literal (`lime-*` / `stone-*` / `violet-*`) | `grep -nE 'class="[^"]*\b(violet|green|lime|stone|amber)-[0-9]' *.html` | These colors are NOT in the Kourou palette. Use semantic aliases: `bg-primary` (brand green), `bg-accent` (deep brand green, AI only), `bg-foreground` (warm near-black). | 🟢 |
@@ -25,7 +25,7 @@ Canonical severity mapping for design-system violations in component templates, 
 
 > Advisory. Fix when practical; do not block the PR on these alone unless AGENTS.md flags the category as mandatory.
 
-| Violation | Detection | Why | Severity |
+| Violation | Detection | Why | Marker |
 |-----------|-----------|-----|----------|
 | Arbitrary value w/ EXACT token equivalent | `grep -nE 'class="[^"]*\b(text-\[15px\]|text-\[18px\]|text-\[24px\]|text-\[32px\]|max-w-\[1200px\]|p-\[24px\]|p-\[16px\]|h-\[36px\]|h-\[28px\]|h-\[44px\])' *.html` | Token exists and is semantic; arbitrary syntax adds noise and blocks dark-mode overrides. | 🔵 fix-in-polish |
 | Off-grid spacing (no exact token) | `grep -nE 'class="[^"]*\b(px?\|m)\-\[[0-9]+px\]' *.html` where value ∉ {4,8,12,16,20,24,32,40,48,64} | One-off sizing without a token is acceptable if justified. Mark as ❓ q for reviewer decision. | ❓ q |

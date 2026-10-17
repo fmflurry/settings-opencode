@@ -115,7 +115,7 @@ CREATE TABLE orders (
 
 ### 1. Enable RLS for Multi-Tenant Data
 
-**Impact:** CRITICAL - Database-enforced tenant isolation
+**Impact:** Important - Database-enforced tenant isolation
 
 ```sql
 -- BAD: Application-only filtering

@@ -102,7 +102,7 @@ Full mapping with domain-event lifecycle and purity rules: [event-sourcing-mappi
 
 ## Review Checklist
 
-The `code-reviewer` agent applies [review-checklist.md](review-checklist.md) when reviewing domain code. It uses a 5-level severity taxonomy aligned with [[angular-cop]]: 🔴 bug (hard violations), 🟠 sec (security/access), 🟡 risk (architectural risk), 🟢 arch (pattern enforcement), 🔵 nit (style/naming). Load on demand during review.
+The `code-reviewer` agent applies [review-checklist.md](review-checklist.md) when reviewing domain code. It uses category markers aligned with [[angular-cop]]: 🔴 bug (hard violations), 🟠 sec (security/access), 🟡 risk (architectural risk), 🟢 arch (pattern enforcement), 🔵 nit (style/naming). Load on demand during review.
 
 ## Relationship to Other Skills
 

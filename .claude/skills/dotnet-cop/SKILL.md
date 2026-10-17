@@ -94,7 +94,7 @@ Promote to BLOCK if AGENTS.md flags the category as mandatory.
 - [[dotnet-cop-optional-cqrs]] (opt-in) — commands/queries, handlers, CQRS pattern. Only when module signals use.
 - [[dotnet-cop-optional-event-sourcing]] (opt-in) — event-sourced aggregates, immutable events, append-only event store. Only when module signals use.
 - [[dotnet-cop-output-format]] — junior vs senior render templates.
-- [[dotnet-cop-enforcement]] — BLOCK vs WARN severity checklist (load always). SoT rules listed first; opt-in rules clearly marked.
+- [[dotnet-cop-enforcement]] — BLOCK vs WARN tag checklist (load always). SoT rules listed first; opt-in rules clearly marked.
 
 ## AGENTS.md Loading
 
@@ -111,8 +111,8 @@ Parse rule blocks. Where this skill and AGENTS.md disagree, AGENTS.md wins. Cite
 
 Single markdown document, sections in fixed order:
 
-1. **Summary** — target, base SHA, head SHA, files changed, finding counts by severity.
-2. **Blockers** (🔴 / 🟠 / 🟢-when-AGENTS-mandates) — sorted by severity, then file path.
+1. **Summary** — target, base SHA, head SHA, files changed, finding counts by tag.
+2. **Blockers** (🔴 / 🟠 / 🟢-when-AGENTS-mandates) — sorted by tag, then file path.
 3. **Should-fix** (🟡) — same sort.
 4. **Optional** (🔵 / ❓) — collapsible.
 5. **Tooling** — dotnet build summary, dotnet format summary.

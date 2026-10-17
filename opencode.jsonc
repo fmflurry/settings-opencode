@@ -734,7 +734,7 @@
       "agent": "conductor",
     },
     "get-pr-comments": {
-      "description": "Fetch and summarize review comments from the active pull request, grouped by severity and actionability. Usage: /get-pr-comments [PR]",
+      "description": "Fetch and summarize review comments from the active pull request, grouped by tag and actionability. Usage: /get-pr-comments [PR]",
       "template": "{file:commands/get-pr-comments.md}\n\n$ARGUMENTS",
       "agent": "git-specialist",
       "subtask": true,

@@ -77,14 +77,14 @@ Promote to BLOCK if AGENTS.md flags the category as mandatory.
 
 ## Sub-pages (read on demand)
 
-- [[angular-cop-enforcement]] — BLOCK vs warn severity checklist (load always)
+- [[angular-cop-enforcement]] — BLOCK vs WARN tag checklist (load always)
 - [[angular-cop-enforcement-tooling]] — ESLint flat config + architecture plugins for app repos
 - [[angular-cop-signals]] — Angular signals, change detection, OnPush, computed, no-method-in-template
 - [[angular-cop-rxjs]] — RxJS hygiene, takeUntilDestroyed, async pipe, leak patterns
 - [[angular-cop-clean-architecture]] — facade / use-case / port / adapter / store boundaries
 - [[angular-cop-flurryx]] — flurryx-specific rules (decorator order, keyed stores, no manual Record updates)
 - [[angular-cop-typescript-strict]] — no `any`, immutability, narrowing, no `!`, readonly
-- [[angular-cop-design-system]] — Kourou v0 design-token / color / spacing / typography bypass severity (load for *.html and template-bearing files)
+- [[angular-cop-design-system]] — Kourou v0 design-token / color / spacing / typography category markers (load for *.html and template-bearing files)
 - [[angular-ddd]] — DDD tactical patterns (entities, value objects, aggregates, repositories) and strategic design (bounded contexts, ubiquitous language, ACL) for domain-layer code
 - [[angular-cop-output-format]] — junior vs senior render templates
 
@@ -103,8 +103,8 @@ Parse rule blocks. Where this skill and AGENTS.md disagree, AGENTS.md wins. Cite
 
 Single markdown document, sections in fixed order:
 
-1. **Summary** — target, base SHA, head SHA, files changed, finding counts by severity.
-2. **Blockers** (🔴 / 🟠 / 🟢-when-AGENTS-mandates) — sorted by severity, then file path.
+1. **Summary** — target, base SHA, head SHA, files changed, finding counts by tag.
+2. **Blockers** (🔴 / 🟠 / 🟢-when-AGENTS-mandates) — sorted by tag, then file path.
 3. **Should-fix** (🟡) — same sort.
 4. **Optional** (🔵 / ❓) — collapsible.
 5. **Tooling** — lint summary, tsc summary, test status if available.

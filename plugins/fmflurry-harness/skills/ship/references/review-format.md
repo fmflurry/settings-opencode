@@ -13,8 +13,8 @@ The agent posts the comment once, when the review ends (after the last round), w
 | Pass | `✅ Review: no blocking concerns` | `<!-- agent-review sha=<head-sha> verdict=pass -->` |
 | Concerns | `⚠️ Review: concerns` | `<!-- agent-review sha=<head-sha> verdict=concerns -->` |
 
-- `pass` only when no CRITICAL or HIGH finding is open at the head SHA.
-- `concerns` is posted when a CRITICAL or HIGH finding is still open after round 3. Escalate at the same time.
+- `pass` only when no Important finding is open at the head SHA.
+- `concerns` is posted when an Important finding is still open after round 3. Escalate at the same time.
 - `<head-sha>` is the SHA the review read, taken with `git rev-parse HEAD` at the start of the last round.
 
 ## Body
@@ -39,7 +39,7 @@ Keep each reviewer line to one line. Put `file:line` pointers in the follow-up l
 
 ## Rules
 
-- Each finding is one line: severity (CRITICAL, HIGH, MEDIUM or LOW), `file:line`, and the problem.
+- Each finding is one line: tag (Important, Nit, or Pre-existing), `file:line`, and the problem.
 - Only confirmed findings appear. Findings dropped during verification are not listed.
 - Non-blocking items go in the follow-up list. They never change the verdict.
 - A new head gets its own review and its own comment. Do not edit an old comment. Push a fix, then review the new diff.

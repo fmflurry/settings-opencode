@@ -117,8 +117,8 @@ In all cases:
 
 3. **Code Review**
    - Delegate to `code-reviewer` immediately after writing code
-   - Address CRITICAL and HIGH issues
-   - Fix MEDIUM issues when possible
+   - Address Important issues
+   - Fix Nit issues when they are trivial in the same change
 
 4. **Commit & Push**
    - Detailed commit messages

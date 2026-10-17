@@ -72,7 +72,7 @@ def build_fix_prompt(original: str, compressed: str, errors: List[str]) -> str:
     errors_str = "\n".join(f"- {e}" for e in errors)
     return f"""You are fixing a caveman-compressed markdown file. Specific validation errors were found.
 
-CRITICAL RULES:
+Important RULES:
 - DO NOT recompress or rephrase the file
 - ONLY fix the listed errors — leave everything else exactly as-is
 - The ORIGINAL is provided as reference only (to restore missing content)

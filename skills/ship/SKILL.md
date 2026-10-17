@@ -95,11 +95,12 @@ Check the mode with `agent-harness autonomy status`. The rules behind both modes
    `git diff <base>...HEAD`: `code-reviewer` (correctness), `security-reviewer` (auth, secrets, input, CI,
    permissions), and the stack cop when it applies: `angular-cop` for Angular/TS, `dotnet-cop` for .NET.
    `database-reviewer` when SQL changed. Verify each finding against the code and drop the ones you cannot confirm.
-   Every confirmed CRITICAL and HIGH finding is a blocker: fix it, push through `git-specialist`, run
-   `agent-harness goal sha <sha>`, then review again on the new diff. The review/fix loop is capped at 3 rounds.
+   Every confirmed Important finding is a blocker: fix it, push through `git-specialist`, run
+   `agent-harness goal sha <sha>`, then review again on the new diff. Nit and Pre-existing findings do not block.
+   The tag rules are in the code-reviewer agent (Finding tags). The review/fix loop is capped at 3 rounds.
    Run `agent-harness goal bump` before each fix round. The no-progress rule below still applies and can escalate
    sooner. When `goal bump` exits 3, stop. The goal is already escalated. Tell the user the remaining confirmed
-   findings and do not start another fix round. When the review ends, post one summary PR comment in the format of
+   Important findings and do not start another fix round. When the review ends, post one summary PR comment in the format of
    [review-format.md](references/review-format.md). It is an audit trail for a human. It is not a GitHub status, and
    `ship-merge` does not read it.
 8. **Mark ready.** `gh pr ready <n>`. `ship-merge` refuses drafts and never marks a PR ready, so this step is required.
@@ -133,8 +134,8 @@ A blocker is anything that stops the merge or the review from going green. Class
 
 The agent fixes these itself, pushes, and runs the loop again. Do not notify for them.
 
-- **Review findings.** Confirmed CRITICAL and HIGH findings from stage 7. MEDIUM findings go under
-  `## Non-blocking follow-ups`.
+- **Review findings.** Confirmed Important findings from stage 7. Nit and Pre-existing findings go under
+  `## Non-blocking follow-ups`. Pre-existing findings never block.
 - **Failing tests, lint or build.** Fix the diff. Never skip or disable a test to get past it.
 - **CI failures caused by code or config in the repo.** This includes workflow and CI config when the cause lies
   there. Route each failure through `fix-ci`. Re-run a flaky job once with `gh run rerun <run-id> --failed`. A second
@@ -159,7 +160,7 @@ blocked path in [Stop conditions](#stop-conditions), and stop.
 - A product decision that the repo cannot answer.
 - An action on the forbidden list (see Hard limits).
 - The no-progress cap is reached (see Stop conditions).
-- The review/fix cap (3 rounds) is reached. Tell the user the remaining findings (see Stop conditions).
+- The review/fix cap (3 rounds) is reached. Tell the user the remaining Important findings (see Stop conditions).
 
 ## Stop conditions
 
@@ -170,13 +171,14 @@ active and the PR is unmerged. Do not end the turn to wait for a fix you can mak
   has been sent. The worktree, branch and registry are gone, unless teardown printed a partial result, which is kept
   until the rerun succeeds.
 - **Human-only blocker.** Escalate as described above, then the blocked path. Stop.
-- **No progress.** A full loop iteration (fix, review, CI, merge) produces no progress: the same blocker and the same
-  failure as the iteration before. Escalate with `agent-harness goal escalate "<reason>"` and notify failure, then the
-  blocked path. A new failure, a new finding, or a green check counts as progress.
+- **No progress.** A full loop iteration (fix, review, CI, merge) produces no progress: the same Important finding and the same
+  failure as the iteration before. The same non-review blocker with the same failure also counts. Escalate with
+  `agent-harness goal escalate "<reason>"` and notify failure, then the blocked path. A new failure, a new finding, or a
+  green check counts as progress.
 - **Review/fix cap.** `agent-harness goal bump` exits 3 when fix rounds reach 3. Stop. Tell the user the remaining
-  confirmed findings. Do not start another fix round. The no-progress rule above can still escalate earlier.
+  confirmed Important findings. Do not start another fix round. The no-progress rule above can still escalate earlier.
 - **Safety stop.** The Stop gate escalates after 5 NO-PROGRESS blocks or 30 blocks in total. Treat it as escalated, then
-  the blocked path. A `goal bump` exit 3 is the same kind of stop: the findings that remain go to the user, and the loop ends.
+  the blocked path. A `goal bump` exit 3 is the same kind of stop: the Important findings that remain go to the user, and the loop ends.
 - **Security.** A gitleaks finding or a secret exposure: stop, run `security-reviewer`, rotate. Never allowlist.
 
 ### Blocked path

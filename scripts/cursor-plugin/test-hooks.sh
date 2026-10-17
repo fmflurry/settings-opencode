@@ -76,4 +76,16 @@ out="$(adapter subagent-stop.sh subagentStop < "$fixtures/subagent-stop.json")";
 check "subagentStop exit" "$rc" "0"
 check "subagentStop output" "$(jq -c . <<<"$out")" '{}'
 
+cat > "$work/ask-hook.sh" <<'HOOK'
+#!/bin/sh
+cat >/dev/null
+printf '{"hookSpecificOutput":{"permissionDecision":"ask","permissionDecisionReason":"confirm this merge"}}'
+HOOK
+out="$("$scripts/cursor-adapter.sh" "$work/ask-hook.sh" beforeShellExecution < "$fixtures/before-shell-execution.json")"
+check "ask on beforeShellExecution -> ask (not allow)" "$(jq -r .permission <<<"$out")" "ask"
+check "ask on beforeShellExecution carries the reason" "$(jq -r .user_message <<<"$out")" "confirm this merge"
+out="$("$scripts/cursor-adapter.sh" "$work/ask-hook.sh" preToolUse < "$fixtures/pre-tool-use.json")"
+check "ask on preToolUse -> deny (Cursor preToolUse has no ask)" "$(jq -r .permission <<<"$out")" "deny"
+check "ask on preToolUse carries the reason" "$(jq -r .user_message <<<"$out")" "confirm this merge"
+
 exit "$fail"

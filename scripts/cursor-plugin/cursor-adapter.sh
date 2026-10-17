@@ -74,9 +74,11 @@ jq -nc --arg out "$OUT" --arg err "$ERR" --arg ev "$EVENT" '
   ($out | try fromjson catch {}) | if type == "object" then . else {} end
   | (.hookSpecificOutput // {}) as $h
   | ([$h.additionalContext, $err] | map(select(. != null and . != "")) | join("\n")) as $msg
-  | ($h.permissionDecision == "deny") as $deny
-  | {permission: (if $deny then "deny" else "allow" end)}
-    + (if $deny then {user_message: ($h.permissionDecisionReason // $msg)} else {} end)
+  | ($h.permissionDecision // "") as $pd
+  | ($pd == "deny" or ($pd == "ask" and $ev != "beforeShellExecution")) as $deny
+  | ($pd == "ask" and $ev == "beforeShellExecution") as $ask
+  | {permission: (if $deny then "deny" elif $ask then "ask" else "allow" end)}
+    + (if $deny or $ask then {user_message: ($h.permissionDecisionReason // $msg)} else {} end)
     + (if $msg != "" then {agent_message: $msg} else {} end)
     + (if $ev == "preToolUse" and ($h.updatedInput | type) == "object" then {updated_input: $h.updatedInput} else {} end)
 ' 2>/dev/null || allow_and_exit

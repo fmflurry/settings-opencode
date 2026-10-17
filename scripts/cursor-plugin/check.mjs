@@ -116,6 +116,21 @@ if (fs.existsSync(hooksPath)) {
   }
 }
 
+const TMP_EXEC = /\b(?:bash|sh|source|exec)\b[^\n]*(?:\$\{?TMPDIR|\/tmp\/)|(?:\$\{?TMPDIR[^}\s]*\}?|\/tmp)\/[^\s"']*\/(?:scripts|bin)\b/;
+const hookScriptsDir = path.join(out, 'hooks/scripts');
+if (fs.existsSync(hookScriptsDir)) {
+  for (const f of fs.readdirSync(hookScriptsDir)) {
+    const text = fs.readFileSync(path.join(hookScriptsDir, f), 'utf8');
+    text.split('\n').forEach((line, i) => {
+      if (TMP_EXEC.test(line)) errors.push(`hooks/scripts/${f}:${i + 1}: executes from TMPDIR or /tmp`);
+    });
+  }
+}
+if (fs.existsSync(hooksPath)) {
+  const raw = fs.readFileSync(hooksPath, 'utf8');
+  if (/TMPDIR|\/tmp\b/.test(raw)) errors.push('hooks.json: references TMPDIR or /tmp');
+}
+
 function scan(dir) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);

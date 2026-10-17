@@ -80,7 +80,7 @@ Any STOP means: report the finding to the human and wait. Do not reinterpret a g
 
 In every mode, not only autonomy, the harness guard denies:
 
-- raw `orca worktree rm`, and `git worktree remove|prune|move`, including forms with global options or aliases;
+- raw `orca worktree rm|remove|delete`, and `git worktree remove|prune|move`, including forms with global options or aliases;
 - recursive `rm`, `mv`, `trash`, `rsync --delete`, and `find -delete` aimed at a worktree directory or its parent;
 - interpreter-level `rmtree` calls.
 
@@ -90,8 +90,34 @@ The guard is heuristic text matching. It cannot catch a command assembled at run
 
 ## Autonomy
 
-Worktree removal stays forbidden in autonomous mode (see the autonomy rule). `worktree-rm` refuses while the flag is on.
+Worktree removal stays forbidden in autonomous mode (see the autonomy rule), with one exception: the goal teardown in [Goal worktrees](#goal-worktrees). `worktree-rm` refuses while the flag is on.
 
+## Goal worktrees
+
+`/ship` goal worktrees are created by `agent-harness ship-init` and registered in `<git-common-dir>/agent-harness/goals/<slug>.json`. Removing one is allowed in one case only:
+
+- `agent-harness teardown-merged-worktree <pr>`, in autonomous mode, for the registered worktree of a PR that is MERGED. Every other worktree removal stays forbidden to agents in every mode, including `agent-harness worktree-rm`.
+
+The teardown runs these checks, and re-runs them right before removal:
+
+1. The PR is MERGED.
+2. The worktree HEAD and the branch equal the PR head commit. This replaces the `origin/<base>..HEAD` count for goal worktrees, because a squash merge rewrites history.
+3. The path is a listed, real (non-symlink) worktree, and not the main checkout.
+4. The tree is clean, including untracked files (check 1 above).
+5. When Orca-managed, there is no Orca activity within `worktreeIdleMinutes` (default 60). Activity that cannot be read is a STOP.
+6. The ignored files are listed before removal. They are not snapshotted, and they are lost.
+7. The registry file name equals the slug of the PR head branch, and the recorded path has the ship-init layout
+   (`<main>-wt/<slug>`, or an Orca workspace path ending in `/<slug>` for an Orca-created goal). A registry status of
+   `escalated` or `blocked` is a STOP.
+8. Orca detection fails closed: a target under `*/orca/workspaces/*` in a repo Orca does not list, or an installed
+   `orca` whose repo list cannot be read, is a STOP. Paths are compared after `pwd -P` on both sides.
+
+The teardown does not touch the main checkout: no fetch, switch or pull, and a dirty main does not block it. The local
+branch is deleted once the worktree is gone because it is then checked out nowhere.
+
+The teardown never passes `--force`. With Orca, a refusal keeps the worktree and there is no git fallback. A partial result keeps the registry (status merged) and prints the rerun command. Rerunning it is the normal fix.
+
+A blocked or escalated goal is never torn down: its worktree, branch and registry stay in place.
 ## Escape hatch
 
 A human who wants a raw `git worktree` operation runs it themselves; the guard denies agents in every mode. Before running it:

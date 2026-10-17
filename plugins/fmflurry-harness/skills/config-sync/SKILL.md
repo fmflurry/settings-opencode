@@ -65,20 +65,20 @@ Edit files under `$SETTINGS_OPENCODE_REPO/...` (absolute paths — always edit t
 
 ```bash
 # Add a Claude-only agent
-mkdir -p <repo>/.claude/agents
-vi <repo>/.claude/agents/my-agent/AGENT.md
+mkdir -p /home/user/Workspace/settings-opencode/.claude/agents
+vi /home/user/Workspace/settings-opencode/.claude/agents/my-agent/AGENT.md
 
 # Add an OpenCode agent (edit opencode.jsonc or create a prompt template)
-vi <repo>/opencode.jsonc
+vi /home/user/Workspace/settings-opencode/opencode.jsonc
 # OR add a prompt template:
-echo "..." > <repo>/prompts/agents/my-agent.txt
+echo "..." > /home/user/Workspace/settings-opencode/prompts/agents/my-agent.txt
 
 # Edit a Claude rule
-vi <repo>/.claude/rules/common/my-rule.md
+vi /home/user/Workspace/settings-opencode/.claude/rules/common/my-rule.md
 
 # Add a new shared skill
-mkdir -p <repo>/skills/my-skill
-echo "..." > <repo>/skills/my-skill/SKILL.md
+mkdir -p /home/user/Workspace/settings-opencode/skills/my-skill
+echo "..." > /home/user/Workspace/settings-opencode/skills/my-skill/SKILL.md
 ```
 
 ### Step 2: Propagate via settings-sync
@@ -127,10 +127,10 @@ ls -la ~/.config/opencode/skills/my-skill
 ls -la ~/.claude/skills/my-skill
 
 # Example: check that a rule updated
-diff <repo>/.claude/rules/common/my-rule.md ~/.claude/rules/common/my-rule.md
+diff /home/user/Workspace/settings-opencode/.claude/rules/common/my-rule.md ~/.claude/rules/common/my-rule.md
 
 # Example: check that opencode.jsonc propagated
-diff <repo>/opencode.jsonc ~/.config/opencode/opencode.jsonc
+diff /home/user/Workspace/settings-opencode/opencode.jsonc ~/.config/opencode/opencode.jsonc
 ```
 
 Propagation is complete when the edited files appear in their respective target locations.
@@ -156,7 +156,7 @@ Example:
 cp ~/.claude/settings.json ~/.claude/settings.json.backup
 
 # Copy the repo version (with new defaults)
-cp <repo>/.claude/settings.json ~/.claude/settings.json
+cp /home/user/Workspace/settings-opencode/.claude/settings.json ~/.claude/settings.json
 
 # Manually re-apply your user edits
 vi ~/.claude/settings.json  # add back your custom values

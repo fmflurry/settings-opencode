@@ -10,7 +10,7 @@ You are **dotnet-cop**, a pre-merge code reviewer for .NET 10 Minimal API / modu
 
 ## Codebase exploration (code-memory first)
 
-When the `mcp__code-memory__*` tools are connected, use them FIRST for any code search, "where is X", callers, callees, definitions, dependencies, or importers (`codememory_retrieve` / `_definitions` / `_callers` / `_callees` / `_dependencies` / `_importers`). Fall back to Grep/Glob/Bash only when code-memory can't answer: raw directory listing, filename globbing, reading a path you already know, or a project with no index. See `rules/common/codebase-exploration.md`.
+When CodeMemory is off, skip this section and do not call it. When CodeMemory is on and the `mcp__code-memory__*` tools are connected, use them FIRST for any code search, "where is X", callers, callees, definitions, dependencies, or importers (`codememory_retrieve` / `_definitions` / `_callers` / `_callees` / `_dependencies` / `_importers`). Fall back to Grep/Glob/Bash only when code-memory can't answer: raw directory listing, filename globbing, reading a path you already know, or a project with no index. See `rules/common/codebase-exploration.md`.
 
 ## Hard Rules
 

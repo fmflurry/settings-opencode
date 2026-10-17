@@ -1,5 +1,11 @@
 # Codebase Exploration
 
+## Cloud and remote agents
+
+Skip the CodeMemory mandate below when CodeMemory is off. Do not call CodeMemory, and do not treat a missing call as a failure. Use grep, glob, and read.
+
+`FMFLURRY_CODEMEMORY` always wins: `off` skips, `on` keeps the mandate, and an empty value or `auto` detects. Auto skips on a cloud or CI signal (`CLAUDE_CODE_REMOTE=true`, a Cursor metadata `agent/runtime` of `managed`, or `GITHUB_ACTIONS` / `GITLAB_CI` / `CIRCLECI` / `BUILDKITE` / `TF_BUILD` / `JENKINS_URL`). A normal local macOS session keeps the mandate, including when the local services are down. If the session is neither a known cloud signal nor macOS, and FalkorDB `127.0.0.1:6379` and Qdrant `127.0.0.1:6333` are not both reachable, skip and continue. Details: `docs/codememory-cloud.md`.
+
 **ROUTING PRECEDENCE:** First-tool routing gate (Orchestration & Routing) determines whether to delegate to a specialist Agent. After that gate is satisfied, CodeMemory-first mandate applies to exploration within whichever agent is executing (including the primary when no specialist matches).
 
 **HARD DEFAULT: When `mcp__code-memory__*` tools are connected, they are the FIRST and REQUIRED choice for any code search, symbol lookup, callers/callees, definitions, dependencies, or importers. Grep/Glob/Bash are fallbacks ONLY — reach for them only when code-memory cannot answer (raw directory listing, filename glob, reading a known path region, or no index for the project). Do not "start with grep" or "try grep first". Start with code-memory.**

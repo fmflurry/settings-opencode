@@ -38,7 +38,7 @@ After install, run `/setup-harness`. It writes `~/.cursor/rules/fmflurry-harness
 - Cursor has no per-agent tool allowlist: agents can only be marked `readonly`.
 - Conductor routing is by instruction only; nothing enforces delegation.
 - Notification hooks are unsupported.
-- In cloud or grokbot environments the code-memory MCP needs `uvx` on the VM, and hook support is unverified. Hooks let actions through when a dependency is missing.
+- In cloud or grokbot environments CodeMemory is skipped. Set `FMFLURRY_CODEMEMORY=on` to force it. Hooks no-op quietly when it is off, and they let actions through when a dependency is missing.
 
 ## Versioning
 

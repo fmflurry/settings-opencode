@@ -96,15 +96,17 @@ Check the mode with `agent-harness autonomy status`. The rules behind both modes
    permissions), and the stack cop when it applies: `angular-cop` for Angular/TS, `dotnet-cop` for .NET.
    `database-reviewer` when SQL changed. Verify each finding against the code and drop the ones you cannot confirm.
    Every confirmed CRITICAL and HIGH finding is a blocker: fix it, push through `git-specialist`, run
-   `agent-harness goal sha <sha>`, then review again on the new diff. There is no round cap; the no-progress rule
-   below decides when to stop. When the review ends, post one summary PR comment in the format of
+   `agent-harness goal sha <sha>`, then review again on the new diff. The review/fix loop is capped at 3 rounds.
+   Run `agent-harness goal bump` before each fix round. The no-progress rule below still applies and can escalate
+   sooner. When `goal bump` exits 3, stop. The goal is already escalated. Tell the user the remaining confirmed
+   findings and do not start another fix round. When the review ends, post one summary PR comment in the format of
    [review-format.md](references/review-format.md). It is an audit trail for a human. It is not a GitHub status, and
    `ship-merge` does not read it.
 8. **Mark ready.** `gh pr ready <n>`. `ship-merge` refuses drafts and never marks a PR ready, so this step is required.
 9. **Wait for CI.** `gh pr checks <n> --watch`. On a failed check, use the `loop-on-ci` skill, which routes failures
    through the `fix-ci` skill. When the repo sets `reviewStatus`, also check that status on the head. On a failure,
    fix the cause, push through `git-specialist`, then `agent-harness goal sha <sha>`. Run `agent-harness goal bump`
-   before each fix round.
+   before each fix round. Exit 3 means the 3-round cap is hit: stop and tell the user the remaining findings.
 10. **Comments.** Run the `get-pr-comments` skill to list open threads. Address each one with a fix or a reply that
     says why not, then resolve the threads you addressed. See lifecycle step 10.
 11. **Report.** Generate the show-me HTML, render it with `agent-harness report <slug|branch> <html>` into the worktree at
@@ -157,6 +159,7 @@ blocked path in [Stop conditions](#stop-conditions), and stop.
 - A product decision that the repo cannot answer.
 - An action on the forbidden list (see Hard limits).
 - The no-progress cap is reached (see Stop conditions).
+- The review/fix cap (3 rounds) is reached. Tell the user the remaining findings (see Stop conditions).
 
 ## Stop conditions
 
@@ -170,9 +173,10 @@ active and the PR is unmerged. Do not end the turn to wait for a fix you can mak
 - **No progress.** A full loop iteration (fix, review, CI, merge) produces no progress: the same blocker and the same
   failure as the iteration before. Escalate with `agent-harness goal escalate "<reason>"` and notify failure, then the
   blocked path. A new failure, a new finding, or a green check counts as progress.
+- **Review/fix cap.** `agent-harness goal bump` exits 3 when fix rounds reach 3. Stop. Tell the user the remaining
+  confirmed findings. Do not start another fix round. The no-progress rule above can still escalate earlier.
 - **Safety stop.** The Stop gate escalates after 5 NO-PROGRESS blocks or 30 blocks in total. Treat it as escalated, then
-  the blocked path. `agent-harness goal bump` exits 3 at its own safety ceiling (30 fix rounds, a backstop, not a
-  target); treat that exit as an escalation too.
+  the blocked path. A `goal bump` exit 3 is the same kind of stop: the findings that remain go to the user, and the loop ends.
 - **Security.** A gitleaks finding or a secret exposure: stop, run `security-reviewer`, rotate. Never allowlist.
 
 ### Blocked path

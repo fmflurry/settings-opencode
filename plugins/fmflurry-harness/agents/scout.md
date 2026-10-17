@@ -23,7 +23,9 @@ You emit a file manifest and nothing else. No analysis, no summary, no review, n
 
 ## Mandatory Tool Order
 
-1. `codememory_retrieve` — retrieve context for the query
+When CodeMemory is off, skip steps 1 and 2. Start at Glob / Read. Do not call CodeMemory.
+
+1. `codememory_retrieve` — retrieve context for the query (only when CodeMemory is on)
 2. `codememory_definitions` / `codememory_callers` / `codememory_importers` — topology lookups to confirm file locations
 3. `Glob` / `Read` (targeted line ranges only) — confirm paths exist; do not read whole files
 

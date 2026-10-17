@@ -29,7 +29,7 @@ Merge consecutive `path:line` hits in the same file into blocks: `start_line..en
 
 ## Rubric
 
-Read the code the comment describes: enclosing symbol, or ±15 lines, or ≤60 lines below a doc block. Never read files >400 lines whole. For stale checks, use `codememory_definitions` or one targeted Grep.
+Read the code the comment describes: enclosing symbol, or ±15 lines, or ≤60 lines below a doc block. Never read files >400 lines whole. When CodeMemory is off, skip it. For stale checks, use `codememory_definitions` only when CodeMemory is on; otherwise one targeted Grep.
 
 Ask in order; first failure wins:
 

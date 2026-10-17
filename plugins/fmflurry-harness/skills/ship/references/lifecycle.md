@@ -44,7 +44,7 @@ by this stage.
   get touched or which path gets taken. Each question gets 2 to 3 options, with the recommended one first.
 - Questions must not depend on each other. If one answer would change whether another is needed, fold them
   into one question.
-- Answer from the repo first (CodeMemory, `codememory_claims`, then Read). Ask only what the repo cannot answer.
+- Answer from the repo first (CodeMemory when it is on, then Read). When CodeMemory is off, skip it and use Read. Ask only what the repo cannot answer.
 - Autonomous mode: skip the round. For each assumption, log a row with the `show-your-work` helper and pin it
   in the PR under `## Locked decisions`.
 
@@ -129,8 +129,9 @@ Then record the PR: `agent-harness goal pr <n>`.
 - Verify each finding against the code. Drop the findings you cannot confirm.
 - Fix every confirmed CRITICAL and HIGH finding, push through `git-specialist`, run
   `agent-harness goal sha <new-sha>`, and re-run the review on the new diff. Repeat until no confirmed CRITICAL or
-  HIGH finding remains. There is no round cap. Escalate only on the no-progress rule in SKILL.md (the same finding
-  survives a full loop iteration).
+  HIGH finding remains, up to 3 review/fix rounds. Run `agent-harness goal bump` before each fix round. The no-progress
+  rule in SKILL.md still applies (the same finding survives a full loop iteration). When `goal bump` exits 3, stop
+  and escalate to the user with the remaining findings. Do not start another fix round.
 - When the review ends, post one summary PR comment in the format of [review-format.md](review-format.md):
 
   ```bash
@@ -163,7 +164,7 @@ gh pr ready <n>
 - Review status failure (`reviewStatus` configured and not `success`): read the status description and the repo's
   check logs, fix the cause, push, then `agent-harness goal sha`. MEDIUM findings go under
   `## Non-blocking follow-ups`.
-- Before each fix round: `agent-harness goal bump`. Exit 3 means escalate. Run `agent-harness notify failure`.
+- Before each fix round: `agent-harness goal bump`. Exit 3 means the 3-round cap is hit: stop and tell the user the remaining findings. `goal bump` already escalates and notifies. Do not start another fix round.
 - Flaky check: re-run the failed job once with `gh run rerun <run-id> --failed`. A second failure is real.
 - Blocker classification (which CI failures the agent fixes, and which are human-only) is in the SKILL.md "Blockers"
   section. A CI failure caused by repo code or repo config, including workflow files, is fixed by the agent. A missing

@@ -25,7 +25,7 @@ Unknown commands default to NOT counted. Under-enforce rather than block real wo
 ## Exploratory Budget Rules
 
 - **Default**: 3 calls per dispatched task unless the brief raises it.
-- **Pre-requisite**: Before the 1st exploratory call, at least one code-memory call must have been made. Before the 4th, at least two code-memory calls.
+- **Pre-requisite**: When CodeMemory is on, before the 1st exploratory call, at least one code-memory call must have been made. Before the 4th, at least two code-memory calls. When CodeMemory is off, skip this prerequisite and do not call it. See `instructions/codememory-first.md`.
 - **Target ratio**: exploratory bash : edits ≤ 2 (proven achievable at 1.35).
 
 ## Trip Levels (L1 and L2 ONLY)
@@ -34,7 +34,7 @@ L3 deny is deliberately deferred; conduct L1 steer + L2 justify only.
 
 ### L1 Steer (at 3rd exploratory call with 0 edits)
 
-Conductor nudges toward code-memory or Read: "Before the 4th exploratory bash, show progress: either code-memory topology tool or a Read to a targeted line range."
+When CodeMemory is on, conductor nudges toward code-memory or Read: "Before the 4th exploratory bash, show progress: either code-memory topology tool or a Read to a targeted line range." When it is off, nudge toward a targeted Read or grep and do not call CodeMemory.
 
 ### L2 Justify (when ratio > 3 at ≥5 edits)
 
@@ -45,9 +45,9 @@ Require a one-line justification in the next message: `bash-budget: <why explora
 **CRITICAL**: Do NOT reroute a blocked exploratory call into a full-file Read. A 900-line Read costs more tokens than the `grep` it replaced.
 
 - Use `Read` with line ranges (e.g., `offset`, `limit`).
-- Use code-memory topology tools (`definitions`, `callers`, `callees`, `importers`, `dependencies`).
-- Fall back to targeted `grep` only when code-memory has no index.
+- When CodeMemory is on, use code-memory topology tools (`definitions`, `callers`, `callees`, `importers`, `dependencies`).
+- Fall back to targeted `grep` when CodeMemory is off or has no index.
 
 ## Code-Memory Graph Availability
 
-If code-memory topology tools return empty for a project, state so explicitly — exploratory shell is then legitimate to bootstrap the initial manifest.
+If CodeMemory is off, or its topology tools return empty for a project, state so explicitly — exploratory shell is then legitimate to bootstrap the initial manifest.

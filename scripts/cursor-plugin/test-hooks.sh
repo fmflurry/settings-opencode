@@ -62,9 +62,11 @@ check "empty stdin: allow" "$(jq -c . <<<"$out")" '{"permission":"allow"}'
 out="$("$scripts/cursor-adapter.sh" "$scripts/missing.sh" preToolUse < "$fixtures/pre-tool-use.json")"
 check "missing script: allow" "$(jq -c . <<<"$out")" '{"permission":"allow"}'
 
-out="$(adapter prefer-code-memory.sh preToolUse < "$fixtures/pre-tool-use.json")"
+out="$(FMFLURRY_CODEMEMORY=off adapter prefer-code-memory.sh preToolUse < "$fixtures/pre-tool-use.json")"
+check "prefer-code-memory quiet when off" "$(jq -c . <<<"$out")" '{"permission":"allow"}'
+out="$(FMFLURRY_CODEMEMORY=on adapter prefer-code-memory.sh preToolUse < "$fixtures/pre-tool-use.json")"
 check "prefer-code-memory nudges once" "$(jq -r '.agent_message | test("code-memory")' <<<"$out")" "true"
-out="$(adapter prefer-code-memory.sh preToolUse < "$fixtures/pre-tool-use.json")"
+out="$(FMFLURRY_CODEMEMORY=on adapter prefer-code-memory.sh preToolUse < "$fixtures/pre-tool-use.json")"
 check "prefer-code-memory silent on repeat" "$(jq -c . <<<"$out")" '{"permission":"allow"}'
 
 out="$(adapter tool-budget.sh preToolUse < "$fixtures/pre-tool-use.json")"

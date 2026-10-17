@@ -47,6 +47,13 @@ write('.cursor-plugin/plugin.json', JSON.stringify({
   mcpServers: './mcp.json',
 }, null, 2) + '\n');
 
+const changelog = path.join(repoDir, 'scripts/cursor-plugin/CHANGELOG.md');
+if (!fs.existsSync(changelog)) {
+  console.error('missing scripts/cursor-plugin/CHANGELOG.md');
+  process.exit(1);
+}
+fs.copyFileSync(changelog, path.join(out, 'CHANGELOG.md'));
+
 execFileSync('bash', [path.join(repoDir, 'scripts/sync-skills.sh'), path.join(out, 'skills')], { stdio: 'ignore' });
 for (const entry of fs.readdirSync(path.join(out, 'skills'), { withFileTypes: true })) {
   const skillFile = path.join(out, 'skills', entry.name, 'SKILL.md');
@@ -144,6 +151,7 @@ const counts = {
 const values = {
   ...counts,
   tierTable: tierTable(config),
+  version: config.version,
 };
 write('README.md', read(path.join(repoDir, 'scripts/cursor-plugin/README.template.md')).replace(/\{\{(\w+)\}\}/g, (_, k) => values[k]));
 console.log(Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(' '));

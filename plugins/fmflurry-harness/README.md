@@ -44,6 +44,12 @@ After install, run `/setup-harness`. It writes `~/.cursor/rules/fmflurry-harness
 - Notification hooks are unsupported.
 - In cloud or grokbot environments the code-memory MCP needs `uvx` on the VM, and hook support is unverified. Hooks let actions through when a dependency is missing.
 
+## Versioning
+
+Manifest version 0.2.0. The build reads it from `scripts/cursor-plugin/config.json` and writes `.cursor-plugin/plugin.json`. History is in `CHANGELOG.md`.
+
+bump the plugin version + changelog in any PR touching plugin sources.
+
 ## License
 
 MIT

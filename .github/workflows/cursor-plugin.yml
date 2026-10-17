@@ -10,6 +10,7 @@ on:
       - 'opencode.jsonc'
       - 'scripts/cursor-plugin/**'
       - 'scripts/build-cursor-plugin.mjs'
+      - 'scripts/sync-skills.sh'
       - 'plugins/**'
       - '.cursor-plugin/**'
   pull_request:
@@ -21,6 +22,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch base branch
+        run: git fetch --no-tags origin "refs/heads/${{ github.base_ref || 'master' }}:refs/remotes/origin/${{ github.base_ref || 'master' }}"
       - uses: actions/setup-node@v4
         with:
           node-version: 20

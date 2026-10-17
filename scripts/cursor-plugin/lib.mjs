@@ -271,8 +271,7 @@ export function stripAtImports(body) {
 }
 
 export function sanitize(text, repoDir) {
-  const repoName = repoDir.split('/').pop().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const authorCheckout = new RegExp(`/(?:Users|home)/[^/\\s"'\`)]+/Workspace/${repoName}(?![\\w-])`, 'g');
+  const authorCheckout = /\/(?:Users|home)\/[^/\s"'`)]+\/Workspace\/settings-opencode(?![\w-])/g;
   return text.split(repoDir).join('<repo>').replace(authorCheckout, '<repo>').replace(/\/Users\/[^/\s"'`)]+/g, '/home/user');
 }
 

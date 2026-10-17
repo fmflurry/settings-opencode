@@ -1,9 +1,9 @@
-#!/usr/bin/env bash
+#!/bin/bash -p
 # shellcheck disable=SC2016
 # ship-merge.sh <pr> [--confirmed] [--method squash|rebase|merge] [--keep-branch]: merges only when GitHub-side rails pass; not a security boundary without branch protection.
 set -euo pipefail
 # shellcheck source=scripts/agent-harness/lib.sh
-. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+. "${BASH_SOURCE[0]%/*}/lib.sh"
 usage="usage: ship-merge.sh <pr> [--confirmed] [--method squash|rebase|merge] [--keep-branch]"
 pr="" confirmed="" method="" keep=""
 while [ $# -gt 0 ]; do
@@ -67,5 +67,9 @@ state="$("$GH" pr view "$pr" --json state | jq -r .state)" || state=unknown
 [ "$state" = MERGED ] || refuse "merge failed (exit $merge_rc); PR state is $state"
 
 goal_update '.status = "done"'
-bash "$NOTIFY" "done" "PR #$pr merged" "$pr"
-bash "$HARNESS_DIR/cleanup.sh" "$pr" ${keep:+--keep-branch} || echo "cleanup incomplete; rerun: agent-harness cleanup $pr" >&2
+bash -p "$NOTIFY" "done" "PR #$pr merged" "$pr"
+if reg_find_by_pr "$pr" >/dev/null 2>&1; then
+  bash -p "$HARNESS_DIR/teardown-merged-worktree.sh" "$pr" ${keep:+--keep-branch} || echo "teardown incomplete; rerun: agent-harness teardown-merged-worktree $pr" >&2
+else
+  bash -p "$HARNESS_DIR/cleanup.sh" "$pr" ${keep:+--keep-branch} || echo "cleanup incomplete; rerun: agent-harness cleanup $pr" >&2
+fi

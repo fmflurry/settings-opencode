@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse (Bash): in every mode, deny worktree removal (orca/git/rm) except via agent-harness worktree-rm; while autonomous, also deny merges, pushes to a base branch (forced or not) and shell edits of protected paths. Fails open.
+# PreToolUse (Bash): in every mode, deny worktree removal (orca/git/rm) except via agent-harness worktree-rm or teardown-merged-worktree, and shell-function or env injection into agent-harness commands; while autonomous, also deny merges, pushes to a base branch (forced or not) and shell edits of protected paths. Fails open.
 # Quotes are stripped before tokenising so a quoted argument cannot hide a refspec; the cost is over-denying odd quoting.
 input="$(cat)"
 command -v jq >/dev/null 2>&1 || exit 0
@@ -8,7 +8,8 @@ cmd="$(jq -r '.tool_input.command // empty' <<<"$input" 2>/dev/null)"
 cwd="$(jq -r '.cwd // empty' <<<"$input" 2>/dev/null)"
 cwd="${cwd:-$PWD}"
 
-ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+ROOT="$(git -C "${CLAUDE_PROJECT_DIR:-$PWD}" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')"
+[ -n "$ROOT" ] || ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
 STATE_DIR="$ROOT/.claude/state"
 [ "${AGENT_HARNESS_TEST:-}" = 1 ] && STATE_DIR="${AGENT_STATE_DIR:-${TLTB_STATE_DIR:-$STATE_DIR}}"
 AUTO=0
@@ -34,6 +35,8 @@ emit() {
 }
 deny() { emit deny "Blocked by git-guard: merge via agent-harness ship-merge, push feature branches normally, do not edit harness files from the shell."; }
 deny_worktree() { emit deny "Blocked by git-guard: remove worktrees only via \`agent-harness worktree-rm <path> --confirmed\`."; }
+deny_harness_env() { emit deny "Blocked by git-guard: run agent-harness as one plain command; no env overrides, exported functions or shell startup files."; }
+deny_harness_cmd() { emit deny "Blocked by git-guard: agent-harness ship-init and teardown-merged-worktree take exactly their documented arguments as one plain command."; }
 deny_alias() { emit deny "Blocked by git-guard: git aliases can smuggle worktree removal; do not define or pass alias.* settings."; }
 deny_branch_delete() { emit deny "Blocked by git-guard: branch deletion only via agent-harness cleanup <pr> after merge."; }
 is_protected_token() {
@@ -224,15 +227,17 @@ is_worktree_path() {
   return 1
 }
 
+is_brace_pattern() { [[ "$1" == *'{'*,* || "$1" == *'{'*..* ]]; }
+
 glob_hits_worktree() {
   unknown_base_relative "$1" && return 0
-  local g="$1" pre="${1%%[\*\?\[]*}" d wt
+  local g="$1" pre="${1%%[\*\?\[\{]*}" d wt
   case "$pre" in */*) d="${pre%/*}"; [ -n "$d" ] || d=/ ;; *) d=. ;; esac
   d="$(norm_path "$d" "${CD_BASE:-$cwd}")"
   load_wts
   for wt in "${WTS[@]}"; do
     [[ "$wt" == "$d"/* ]] && return 0
-    [ "$wt" = "$d" ] && [[ "${g##*/}" =~ ^\.?\*$ ]] && return 0
+    [ "$wt" = "$d" ] && { [[ "${g##*/}" =~ ^\.?\*$ ]] || is_brace_pattern "$g"; } && return 0
   done
   [[ "$d/" =~ /orca/workspaces(/[^/]+)?/$ ]]
 }
@@ -252,7 +257,7 @@ check_rm_worktree() {
   [ "$XARGS" = 1 ] && deny_worktree
   for a in "${args[@]}"; do
     [[ "$a" == *'$'* ]] && deny_worktree
-    if [[ "$a" == *[\*\?\[]* ]]; then glob_hits_worktree "$a" && deny_worktree; continue; fi
+    if [[ "$a" == *[\*\?\[]* ]] || is_brace_pattern "$a"; then glob_hits_worktree "$a" && deny_worktree; continue; fi
     is_worktree_path "$a" && deny_worktree
   done
   return 0
@@ -301,6 +306,10 @@ prefix_value_flags() {
     time) echo "-f -o" ;;
   esac
 }
+
+HARNESS_ENV_RE='(^|[^A-Za-z0-9_])(AGENT_HARNESS_TEST|AGENT_HARNESS_DIR|AGENT_HARNESS_WORKTREE_RM_[A-Z]*|GH_BIN|ORCA_BIN|AGENT_STATE_DIR|TLTB_STATE_DIR|CLAUDE_PROJECT_DIR|BASH_ENV|PATH|HOME|SHELLOPTS|BASHOPTS|PS4|ENV|DYLD_[A-Z_]*|LD_[A-Z_]*)\+?=|--(rcfile|init-file)'
+HARNESS_SOURCE_RE='(^|[;&|({`]|\$\(|(^|[^[:alnum:]_])(then|do|else)[[:space:]])[[:space:]]*(\.|source)[[:space:]]+[^[:space:]]'
+HARNESS_FUNC_RE='(^|[^A-Za-z0-9_])(export[[:space:]]+-[A-Za-z]*f|(declare|typeset)[[:space:]]+-[A-Za-z]*[xf]|set[[:space:]]+-[A-Za-z]*a|set[[:space:]]+-o[[:space:]]+allexport)|BASH_FUNC_|allexport'
 
 ASKED=0
 ASKED_WT=0
@@ -372,6 +381,56 @@ check_cleanup() {
   return 0
 }
 
+# check_harness_cmd <name> <pr|init> <has_assign> <c0> args...: returns 1 when the command is not <name>; denies bad shapes
+# and any launcher other than the plain `agent-harness` wrapper (direct bash/sh script forms are denied).
+check_harness_cmd() {
+  local name="$1" shape="$2" has_assign="$3" c0="$4" a script=""; shift 4
+  case "$c0" in
+    bash | sh | zsh | dash)
+      while [[ "${1:-}" == -* ]]; do shift; done
+      script="${1:-}"
+      case "${script##*/}" in
+        "$name.sh") deny_harness_cmd ;;
+        agent-harness.sh) [ "${2:-}" = "$name" ] || return 1; deny_harness_cmd ;;
+        *) return 1 ;;
+      esac ;;
+    agent-harness)
+      [ "${1:-}" = "$name" ] || return 1
+      case "$RAW0" in agent-harness | "$HOME/.local/bin/agent-harness" | \~/.local/bin/agent-harness) ;; *) deny_harness_cmd ;; esac
+      shift ;;
+    agent-harness.sh)
+      [ "${1:-}" = "$name" ] || return 1
+      deny_harness_cmd ;;
+    "$name.sh") deny_harness_cmd ;;
+    *) return 1 ;;
+  esac
+  [ "$has_assign" = 0 ] || deny_harness_cmd
+  case "$shape" in
+    pr) { [ "$#" -eq 1 ] && [[ "$1" =~ ^[0-9]+$ ]]; } || deny_harness_cmd ;;
+    init)
+      if [ "${1:-}" = --adopt ]; then
+        { [ "$#" -ge 2 ] && [[ "$2" =~ ^[0-9]+$ ]]; } || deny_harness_cmd
+        shift 2
+      else
+        { [ "$#" -ge 3 ] && [[ "$1" =~ ^(feat|fix|refactor|docs|test|chore|perf|ci)$ ]] \
+          && [[ "$2" =~ ^[a-z0-9]+$ ]] && [[ "$3" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; } || deny_harness_cmd
+        shift 3
+      fi
+      if [ "$#" -gt 0 ]; then
+        { [ "$1" = --goal ] && [ "$#" -ge 2 ]; } || deny_harness_cmd
+        shift
+        for a in "$@"; do [[ "$a" == *'$'* ]] && deny_harness_cmd; done
+      fi ;;
+  esac
+  return 0
+}
+
+if [[ "$cmd" == *agent-harness* ]] && { [ "$AUTO" = 1 ] || [[ "$cmd" =~ worktree-rm|teardown-merged-worktree|ship-init ]]; }; then
+  unquoted="$(tr -d "'\"" <<<"$cmd")"
+  grep -Eq "$HARNESS_ENV_RE" <<<"$unquoted" && deny_harness_env
+  grep -Eq "$HARNESS_FUNC_RE" <<<"$unquoted" && deny_harness_env
+  grep -Eq "$HARNESS_SOURCE_RE" <<<"$unquoted" && deny_harness_env
+fi
 if [[ "$cmd" == *worktree-rm* ]] && grep -Eq '(^|[^[:alnum:]_])(export|declare +-x|set +-a)( |$)' <<<"$cmd"; then deny_worktree; fi
 [[ "$cmd" == *--confirmed* && "$cmd" == *worktree-rm* ]] && ASKED_WT=1
 
@@ -381,6 +440,9 @@ while IFS= read -r seg; do
   [ -n "$seg" ] || continue
   read -ra toks <<<"$seg"
   [ "${#toks[@]}" -gt 0 ] || continue
+  for ((i = 0; i < ${#toks[@]}; i++)); do
+    while [[ "${toks[i]}" == *[\)\}] ]]; do toks[i]="${toks[i]%?}"; done
+  done
   [ "$AUTO" = 1 ] && check_redirects "${toks[@]}"
 
   i=0 has_assign=0 XARGS=0 pref=0
@@ -437,6 +499,8 @@ while IFS= read -r seg; do
       else CD_BASE="$(norm_path "$tgt" "${CD_BASE:-$cwd}")"; CD_BASE="${CD_BASE:-/}"
       fi ;;
   esac
+  if check_harness_cmd teardown-merged-worktree pr "$has_assign" "$c0" "${ct[@]:1}"; then continue; fi
+  if check_harness_cmd ship-init init "$has_assign" "$c0" "${ct[@]:1}"; then continue; fi
   [ "$AUTO" = 1 ] || { [ "$c0" = git ] && check_git "${ct[@]}"; continue; }
 
   if check_ship_merge "$has_assign" "$c0" "${ct[@]:1}"; then continue; fi

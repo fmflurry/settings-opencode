@@ -1084,6 +1084,15 @@ install_notify_scripts() {
     fi
 }
 
+write_harness_marker() {
+    local tool var
+    : > "$1"
+    for tool in gh orca jq; do
+        var="$(printf '%s' "$tool" | tr '[:lower:]' '[:upper:]')"
+        printf '%s=%s\n' "$var" "$(type -P "$tool" || true)" >> "$1"
+    done
+}
+
 install_agent_harness_scripts() {
     local src_dir="$REPO_DIR/scripts/agent-harness"
     [ -f "$src_dir/agent-harness.sh" ] || return 0
@@ -1099,6 +1108,7 @@ install_agent_harness_scripts() {
             cp "$script" "$dest/$(basename "$script")"
             chmod +x "$dest/$(basename "$script")"
         done
+        write_harness_marker "$dest/.installed"
         ok "installed agent-harness scripts into $dest"
     done
 
@@ -1127,7 +1137,7 @@ install_agent_harness_scripts() {
     local link="$bin_dir/agent-harness"
     mkdir -p "$bin_dir"
     [ -L "$link" ] && rm -f "$link"
-    printf '#!/usr/bin/env bash\nexec bash "%s/scripts/agent-harness/agent-harness.sh" "$@"\n' "$harness_root" > "$link"
+    printf '#!/bin/bash -p\nbuiltin exec /bin/bash -p "%s/scripts/agent-harness/agent-harness.sh" "$@"\n' "$harness_root" > "$link"
     chmod +x "$link"
     ok "installed $link"
 }

@@ -31,7 +31,8 @@ case "$*" in
     list="$(jq -c --arg b "$base" --arg h "$head" 'map(select(($b==""or .baseRefName==$b) and ($h==""or .headRefName==$h)))' "$FX/open_prs.json" 2>/dev/null || echo '[]')"
     if [ -n "$expr" ]; then echo "$list" | jq -r "$expr"; else echo "$list"; fi ;;
   "api repos/o/r/branches/"*)
-    [ -e "$FX/branch.gone" ] && exit 1
+    [ -e "$FX/branch.gone" ] && { echo "gh: Not Found (HTTP 404)" >&2; exit 1; }
+    [ -e "$FX/branch.err" ] && { echo "gh: Bad Gateway (HTTP 502)" >&2; exit 1; }
     body="$(cat "$FX/branch.json" 2>/dev/null || jq -c '{protected:false,commit:{sha:.headRefOid}}' "$FX/view.json")"
     expr=""; set -- $*
     while [ $# -gt 0 ]; do case "$1" in -q|--jq) expr="$2";; esac; shift; done
@@ -55,7 +56,7 @@ H="$HERE/scripts/agent-harness"; HOOKS="$HERE/.claude/hooks"
 CFG="$TMP/proj/.claude/agent-harness.json"
 export FX GH_BIN="$TMP/gh" ORCA_BIN="$TMP/orca" AGENT_STATE_DIR="$TMP/state" CLAUDE_PROJECT_DIR="$TMP/proj" AGENT_HARNESS_DIR="$H" AGENT_HARNESS_TEST=1
 unset ORCA_WORKTREE_ID GITHUB_ACTIONS TLTB_STATE_DIR
-reset() { rm -f "$FX"/*.log "$FX"/merge.* "$FX"/merge_settings.txt "$FX"/open_prs.json "$FX"/branch.json "$FX"/branch.gone "$FX"/list.fail "$FX"/default_branch "$TMP/state"/* "$CFG"; }
+reset() { rm -f "$FX"/*.log "$FX"/merge.* "$FX"/merge_settings.txt "$FX"/open_prs.json "$FX"/branch.json "$FX"/branch.gone "$FX"/branch.err "$FX"/list.fail "$FX"/default_branch "$TMP/state"/* "$CFG"; }
 flag_on() { : >"$TMP/state/autonomy.on"; }
 cfg_ci() { echo '{"base":"master","requiredChecks":["gate","export"],"reviewStatus":"tltb-review","reviewStatusCreator":"github-actions[bot]"}' >"$CFG"; }
 
@@ -470,6 +471,12 @@ check "cleanup remote already gone: exits 0" test $rc -eq 0
 check "cleanup remote already gone: no DELETE" no_delete
 check "cleanup remote already gone: reports absent" grep -q '^cleanup: remote feat absent' "$FX/out"
 
+cfresh; : >"$FX/branch.err"; cleanup 5; rc=$?
+check "cleanup gh error other than 404: exits 0" test $rc -eq 0
+check "cleanup gh error other than 404: no DELETE" no_delete
+check "cleanup gh error other than 404: remote unknown, not absent" grep -q '^cleanup: remote feat unknown' "$FX/out"
+check "cleanup gh error other than 404: never says absent" bash -c '! grep -q "remote feat absent" "$1"' _ "$FX/out"
+
 cfresh; cleanup 5 --keep-branch; rc=$?
 check "cleanup --keep-branch: exits 0" test $rc -eq 0
 check "cleanup --keep-branch: no remote delete" no_delete
@@ -858,6 +865,14 @@ wg allow "$WS" "rm -rf node_modules"
 wg allow "$WM" "cd $WS && rm -rf build"
 wg allow "$WM" "rm -rf build"
 wg allow "$WM" "mv a.txt b.txt"
+wg deny "$WM" "rm -rf $WGF/{sib,foo}"
+wg deny "$WM" "rm -rf $WGF/sib{2,}"
+wg deny "$WM" "rm -rf $WGF/{a..c}"
+wg deny "$WM" "rm -rf $WGF/{a,b}"
+wg deny "$WM" "(cd $WGF && rm -rf sib)"
+wg deny "$WM" "{ cd $WGF && rm -rf sib; }"
+wg allow "$WM" "rm -rf client/{a,b}"
+wg allow "$WM" "rm -rf build/{x,y}"
 wg allow "$WM" "agent-harness worktree-rm /x"
 wg allow "$WGF/st" "find . -name x -delete"
 wg allow "$WM" "git commit -m 'doc git worktree remove'"
@@ -868,7 +883,11 @@ cat >"$TMP/orcawt" <<'STUB'
 #!/usr/bin/env bash
 echo "$*" >>"$FX/orcawt.log"
 case "${1:-} ${2:-}" in
+  "repo list")
+    [ ! -e "$FX/orca_repo_fail" ] || exit 1
+    if [ -e "$FX/orca_repo_managed" ]; then jq -n --arg p "$WMAIN" '{ok:true,result:{repos:[{path:$p}]}}'; fi ;;
   "worktree list")
+    [ ! -e "$FX/orca_wt_fail" ] || exit 1
     if [ -f "$FX/orca_wt.json" ]; then cat "$FX/orca_wt.json"; else echo '{"ok":true,"result":{"worktrees":[]}}'; fi ;;
   "worktree rm")
     [ -f "$FX/orca_rm_hook" ] && bash "$FX/orca_rm_hook"
@@ -889,7 +908,7 @@ wtfx() {
     && echo a >a && echo t >tracked && git add a tracked && git commit -qm A && git push -q origin master \
     && git worktree add -q -b feat-x "$WB/wt" origin/master && git worktree add -q -b feat-sib "$WB/sib" origin/master ) >/dev/null 2>&1
   export WMAIN="$WB/main"; WT="$WB/wt"; SIB="$WB/sib"
-  reset; rm -f "$FX"/orca_wt.json "$FX"/orca_rm_hook; echo '{"base":"master"}' >"$CFG"
+  reset; rm -f "$FX"/orca_wt.json "$FX"/orca_rm_hook "$FX"/orca_repo_fail "$FX"/orca_repo_managed "$FX"/orca_wt_fail; echo '{"base":"master"}' >"$CFG"
   WCWD="$WMAIN"
 }
 wtrm() { ( cd "$WCWD" && env ORCA_BIN="$TMP/orcawt" bash "$H/worktree-rm.sh" "$@" ); }
@@ -1012,6 +1031,13 @@ wtfx; orca_activity $(( $(now_ms) - 1800000 )); echo '{"base":"master","worktree
 check "worktree-rm: non-numeric idle config falls back to 60" grep -q 'active within 60 min' <<<"$out"
 check "worktree-rm: non-numeric idle config exits 1" test $rc -eq 1
 
+wtfx; : >"$FX/orca_repo_fail"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: an unreadable orca repo list is a STOP" test "$rc|$(grep -c 'check activity STOP (orca state unreadable)' <<<"$out")|$(test -d "$WT" && echo kept)" = "1|1|kept"
+wtfx; : >"$FX/orca_repo_managed"; : >"$FX/orca_wt_fail"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: a managed repo with an unreadable worktree list is a STOP" test "$rc|$(grep -c 'check activity STOP (orca worktree list unreadable)' <<<"$out")|$(test -d "$WT" && echo kept)" = "1|1|kept"
+wtfx; : >"$FX/orca_repo_managed"; orca_activity 0; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: a managed repo with a readable idle worktree list proceeds" test "$rc|$(test -e "$WT" && echo kept || echo gone)" = "0|gone"
+
 wtfx; mkdir -p "$WMAIN/.git/info"; echo ign >>"$WMAIN/.git/info/exclude"; echo x >"$WT/ign"; out="$(wtrm "$WT" 2>&1)"; rc=$?
 check "worktree-rm: ignored files note in dry run" grep -q "worktree-rm: note $WT has ignored files that will be deleted: ign" <<<"$out"
 
@@ -1059,5 +1085,654 @@ for mode in off on; do
 done
 GUARD_CWD="$TMP/work"
 
+
+# ---- goal worktree lifecycle (fake gh/orca on PATH, no env seams)
+LROOT="$(cd "$TMP" && pwd -P)/lw"; mkdir -p "$LROOT" "$TMP/lbin" "$TMP/lsleep"
+ln -sf "$TMP/gh" "$TMP/lbin/gh"
+cat >"$TMP/lbin/orca" <<'STUB'
+#!/usr/bin/env bash
+echo "$*" >>"$FX/orca.log"
+arg() { local k="$1"; shift; while [ $# -gt 1 ]; do [ "$1" = "$k" ] && { echo "$2"; return; }; shift; done; }
+case "${1:-} ${2:-}" in
+  "repo list")
+    [ ! -e "$FX/orca.list.fail" ] || exit 1
+    if [ -s "$FX/orca.managed" ]; then jq -n --arg p "$(cat "$FX/orca.managed")" '{id:"i",ok:true,result:{repos:[{id:"r",path:$p,displayName:"r"}]}}'
+    else echo '{"id":"i","ok":true,"result":{"repos":[]}}'; fi ;;
+  "worktree list")
+    repo="$(arg --repo "$@")"; repo="${repo#path:}"
+    act="$(cat "$FX/orca.activity" 2>/dev/null || echo 1)"
+    noact=false; [ ! -e "$FX/orca.noactivity" ] || noact=true
+    git -C "$repo" worktree list --porcelain | jq -Rn --argjson a "$act" --argjson noact "$noact" '
+      [inputs] | join("\n") | split("\n\n") | map(select(length > 0) | split("\n")
+        | {path: (.[0] | sub("^worktree "; "")), branch: ((map(select(startswith("branch "))) | .[0] // "") | sub("^branch "; "")),
+           lastActivityAt: $a})
+      | to_entries | map(.value + {isMainWorktree: (.key == 0)})
+      | map(if $noact then del(.lastActivityAt) else . end)
+      | {id: "i", ok: true, result: {worktrees: .}}' \
+      | { if [ -e "$FX/orca.foreign" ]; then jq --arg p "$FX/orca-wt/$(cat "$FX/orca.foreign")" '.result.worktrees += [{path: $p, branch: "", isMainWorktree: false, lastActivityAt: 1}]'; else cat; fi; } ;;
+  "worktree create")
+    repo="$(arg --repo "$@")"; repo="${repo#path:}"; name="$(arg --name "$@")"; base="$(arg --base-branch "$@")"
+    dest="$FX/orca-wt/$name"; mkdir -p "$FX/orca-wt"
+    if [ -e "$FX/orca.foreign" ]; then
+      echo "$name" >"$FX/orca.foreign"
+      git -C "$FX/foreign" worktree add -q -b "$name" "$dest" >/dev/null 2>&1 || exit 1
+    else
+      git -C "$repo" worktree add -q -b "$name" "$dest" "$base" >/dev/null 2>&1 || exit 1
+    fi
+    echo '{"id":"i","ok":true,"result":{"created":true}}' ;;
+  "worktree rm")
+    if [ -e "$FX/orca.rm.fail" ]; then echo '{"id":"i","ok":false,"error":{"code":"rm_failed"}}'; exit 1; fi
+    t="$(arg --worktree "$@")"; t="${t#path:}"
+    main="$(dirname "$(git -C "$t" rev-parse --path-format=absolute --git-common-dir)")"
+    git -C "$main" worktree remove "$t" >/dev/null 2>&1 || exit 1
+    echo '{"id":"i","ok":true,"result":{"removed":true}}' ;;
+esac
+STUB
+printf '#!/bin/sh\nexit 0\n' >"$TMP/lsleep/sleep"
+cat >"$TMP/lbin/fake-chrome" <<'STUB'
+#!/usr/bin/env bash
+for a in "$@"; do case "$a" in --screenshot=*) printf '\211PNG\r\n\032\nfake' >"${a#--screenshot=}" ;; file://*) cp "${a#file://}" "$FX/chrome.html" ;; esac; done
+echo "$*" >"$FX/chrome.args"
+STUB
+chmod +x "$TMP/lbin/orca" "$TMP/lsleep/sleep" "$TMP/lbin/fake-chrome"
+
+LM="$LROOT/main"
+FXR="$(cd "$FX" && pwd -P)"
+LCWD=""
+LH() {
+  local sub="$1" unsets=(-u GH_BIN -u ORCA_BIN -u AGENT_STATE_DIR -u CLAUDE_PROJECT_DIR) sets=(); shift
+  if [ -n "${LH_TEST:-}" ]; then sets+=(AGENT_HARNESS_TEST=1); else unsets+=(-u AGENT_HARNESS_TEST); fi
+  ( cd "${LCWD:-$LM}" && env "${unsets[@]}" PATH="$TMP/lsleep:$TMP/lbin:$PATH" ${sets[@]+"${sets[@]}"} bash "$H/$sub.sh" "$@" )
+}
+lreg_file() { echo "$LM/.git/agent-harness/goals/$1.json"; }
+lreg() { jq -r "$2" "$(lreg_file "$1")"; }
+lw_listed() { git -C "$LM" worktree list --porcelain | grep -qx "worktree $1"; }
+lw_fixture() {
+  reset; rm -rf "${LROOT:?}"/* "$FX/orca-wt" "$FX/foreign" "$FX/orca.managed" "$FX"/orca.* "$FX/out" "$FX/err" "$FX/chrome.args" "$TMP/elsewhere"
+  mkdir -p "$LROOT"
+  git init -q --bare "$LROOT/origin.git"
+  git clone -q "$LROOT/origin.git" "$LM" 2>/dev/null
+  ( cd "$LM" && git config user.email t@t && git config user.name t && git checkout -q -b master \
+    && echo a >a && echo b >b && git add a b && git commit -qm A && git push -q -u origin master \
+    && git remote set-head origin master ) >/dev/null 2>&1
+  mkdir -p "$LM/.git/info"; printf '.claude/state/\n' >>"$LM/.git/info/exclude"
+  [ "${1:-git}" != orca ] || printf '%s' "$LM" >"$FX/orca.managed"
+}
+
+# registry and ship-init
+lw_fixture git
+LH ship-init feat ui hud-theme --goal "build the hud" >"$FX/out" 2>"$FX/err"; rc=$?
+LT="$LROOT/main-wt/feat-ui-hud-theme"; LS=feat-ui-hud-theme
+check "ship-init git: exits 0" test $rc -eq 0
+check "ship-init git: prints the path" test "$(cat "$FX/out")" = "$LT"
+check "ship-init git: sibling directory outside the repo" test "$(dirname "$LT")" = "$LM-wt"
+check "ship-init git: worktree on the typed branch" test "$(git -C "$LT" branch --show-current)" = feat/ui-hud-theme
+check "ship-init git: branch starts at origin/master" test "$(git -C "$LT" rev-parse HEAD)" = "$(git -C "$LM" rev-parse origin/master)"
+check "ship-init git: registry lives in the git common dir" test -f "$LM/.git/agent-harness/goals/$LS.json"
+check "ship-init git: registry schema" test "$(lreg $LS '[.v, .goal, .branch, .path, .base, .via, (.pr|tostring), .head_oid, .status, .reason, .report] | join("|")')" = "1|build the hud|feat/ui-hud-theme|$LT|master|git|null||active||"
+check "ship-init git: registry has a creation time" test -n "$(lreg $LS '.created_at // empty')"
+check "ship-init git: nothing tracked or untracked in main" test -z "$(git -C "$LM" status --porcelain)"
+check "ship-init git: registry file is not tracked" test -z "$(git -C "$LM" ls-files agent-harness .git)"
+LH ship-init fix ui other-goal >"$FX/out" 2>&1; rc=$?
+LT2="$LROOT/main-wt/fix-ui-other-goal"
+check "two concurrent goals: second ship-init succeeds" test $rc -eq 0
+check "two concurrent goals: two registry files" test "$(find "$LM/.git/agent-harness/goals" -name '*.json' | wc -l | tr -d ' ')" = 2
+check "two concurrent goals: distinct worktrees" test -d "$LT" -a -d "$LT2"
+check "two concurrent goals: both active" test "$(lreg $LS .status)|$(lreg fix-ui-other-goal .status)" = "active|active"
+LH ship-init feat ui hud-theme >"$FX/out" 2>"$FX/err"; rc=$?
+check "ship-init refuses a slug that is already active" test $rc -eq 1
+check "ship-init refusal names the active goal" grep -q 'already active' "$FX/err"
+jq --arg s "$LS" --arg b feat/ui-hud-theme '.slug = $s | .branch = $b' "$LM/.claude/state/goal.json" >"$FX/t" && mv "$FX/t" "$LM/.claude/state/goal.json"
+LCWD="$LT" LH goal set "g" >/dev/null 2>&1
+check "goal set keeps the slug of the active goal" test "$(jq -r .slug "$LM/.claude/state/goal.json")" = "$LS"
+LCWD="$LT" LH goal pr 7 >/dev/null 2>&1
+check "goal pr mirrors the PR into the registry" test "$(lreg $LS '.pr')" = 7
+check "goal pr leaves the other goal alone" test "$(lreg fix-ui-other-goal '.pr')" = null
+LCWD="$LT" LH goal sha abc123 >/dev/null 2>&1
+check "goal sha mirrors head_oid into the registry" test "$(lreg $LS .head_oid)" = abc123
+LCWD="$LT" LH goal escalate "needs a human" >/dev/null 2>&1
+check "goal escalate mirrors status and reason into the registry" test "$(lreg $LS '[.status, .reason] | join("|")')" = "escalated|needs a human"
+LH ship-init feat ui hud-theme >"$FX/out" 2>"$FX/err"; rc=$?
+check "ship-init refuses a slug whose worktree still exists" test $rc -eq 1
+check "ship-init refusal creates nothing new" test "$(find "$LM/.git/agent-harness/goals" -name '*.json' | wc -l | tr -d ' ')" = 2
+
+lw_fixture git
+LH ship-init wip ui x >/dev/null 2>&1; rc=$?; check "ship-init rejects bad type" test $rc -eq 1
+LH ship-init feat Ui x >/dev/null 2>&1; rc=$?; check "ship-init rejects uppercase scope" test $rc -eq 1
+LH ship-init feat ui-kit x >/dev/null 2>&1; rc=$?; check "ship-init rejects hyphen in scope" test $rc -eq 1
+LH ship-init feat ui Bad-Desc >/dev/null 2>&1; rc=$?; check "ship-init rejects uppercase description" test $rc -eq 1
+LH ship-init feat ui bad_desc >/dev/null 2>&1; rc=$?; check "ship-init rejects non-kebab description" test $rc -eq 1
+LH ship-init feat ui >/dev/null 2>&1; rc=$?; check "ship-init rejects a missing description" test $rc -eq 2
+LH ship-init --adopt abc >/dev/null 2>&1; rc=$?; check "ship-init rejects a non-numeric PR" test $rc -eq 2
+LH ship-init feat ui x --bogus >/dev/null 2>&1; rc=$?; check "ship-init rejects an unknown flag" test $rc -eq 2
+check "ship-init refusals create no worktree" test ! -e "$LM-wt"
+check "ship-init refusals write no registry" test ! -e "$LM/.git/agent-harness"
+
+lw_fixture orca
+LH ship-init fix ui orca-x >"$FX/out" 2>"$FX/err"; rc=$?
+LT="$FX/orca-wt/fix-ui-orca-x"; LS=fix-ui-orca-x
+LTN="$(cd "$LT" && pwd -P)"
+check "ship-init orca: exits 0" test $rc -eq 0
+check "ship-init orca: calls orca worktree create" grep -qF -- "worktree create --repo path:$LM --name $LS --base-branch origin/master --setup skip --json" "$FX/orca.log"
+check "ship-init orca: resolves the path from worktree list" grep -qF -- "worktree list --repo path:$LM --json" "$FX/orca.log"
+check "ship-init orca: branch renamed to the typed branch" test "$(git -C "$LT" branch --show-current)" = fix/ui-orca-x
+check "ship-init orca: registry records via orca and the resolved path" test "$(lreg $LS '[.path, .via] | join("|")')" = "$LTN|orca"
+lw_fixture orca
+mkdir -p "$LROOT/elsewhere"; git -C "$LM" worktree add -q -b other-b "$LROOT/elsewhere/fix-ui-orca-x" >/dev/null 2>&1
+LH ship-init fix ui orca-x >"$FX/out" 2>"$FX/err"; rc=$?
+check "ship-init orca name collision: exits 1" test $rc -eq 1
+check "ship-init orca name collision: names the pre-existing candidate" grep -qF "orphan worktree, not recorded: $LROOT/elsewhere/fix-ui-orca-x" "$FX/err"
+check "ship-init orca name collision: names the created candidate" grep -qF "orphan worktree, not recorded: $FXR/orca-wt/fix-ui-orca-x" "$FX/err"
+check "ship-init orca name collision: records nothing" test ! -e "$LM/.git/agent-harness/goals/fix-ui-orca-x.json"
+lw_fixture git
+printf '[]' >"$FX/orca.managed"
+LH ship-init fix ui garbage-managed >/dev/null 2>&1; rc=$?
+check "ship-init: an unusable orca repo list counts as not managed" test $rc -eq 0
+check "ship-init: not-managed repo uses git" test "$(lreg fix-ui-garbage-managed .via)" = git
+
+lw_adopt_fixture() {
+  lw_fixture "$1"
+  ( cd "$LM" && git checkout -q -b feat/adopt-me && echo d >d && git add d && git commit -qm D \
+    && git push -q origin feat/adopt-me && git checkout -q master ) >/dev/null 2>&1
+}
+lw_adopt_fixture git; ( cd "$LM" && git branch -q -D feat/adopt-me ) >/dev/null 2>&1
+jq -n '{headRefName:"feat/adopt-me",isCrossRepository:false}' >"$FX/view.json"
+LH ship-init --adopt 9 >"$FX/out" 2>&1; rc=$?
+LT="$LROOT/main-wt/feat-adopt-me"
+check "ship-init adopt: exits 0" test $rc -eq 0
+check "ship-init adopt: worktree on the PR head branch" test "$(git -C "$LT" branch --show-current)" = feat/adopt-me
+check "ship-init adopt: tracks origin" test "$(git -C "$LT" rev-parse --abbrev-ref '@{upstream}')" = origin/feat/adopt-me
+check "ship-init adopt: registry records the PR" test "$(lreg feat-adopt-me '[.branch, (.pr | tostring)] | join("|")')" = "feat/adopt-me|9"
+lw_adopt_fixture git
+jq -n '{headRefName:"feat/adopt-me",isCrossRepository:false}' >"$FX/view.json"
+( cd "$LM" && git checkout -q feat/adopt-me ) >/dev/null 2>&1
+LH ship-init --adopt 9 >"$FX/out" 2>"$FX/err"; rc=$?
+check "ship-init adopt refuses a branch checked out elsewhere" test $rc -eq 1
+check "ship-init adopt refusal creates nothing" test ! -e "$LM-wt/feat-adopt-me"
+lw_adopt_fixture git; ( cd "$LM" && git branch -q -D feat/adopt-me ) >/dev/null 2>&1
+jq -n '{headRefName:"feat/adopt-me",isCrossRepository:true}' >"$FX/view.json"
+LH ship-init --adopt 9 >"$FX/out" 2>"$FX/err"; rc=$?
+check "ship-init adopt refuses a fork PR" test $rc -eq 1
+check "ship-init adopt fork refusal creates nothing" test ! -e "$LM-wt/feat-adopt-me"
+
+# teardown-merged-worktree
+lw_td() {
+  lw_fixture "$1"
+  LH ship-init feat td x >"$FX/out" 2>"$FX/err"; T="$(cat "$FX/out")"; LS=feat-td-x
+  ( cd "$T" && echo c >c && git add c && git commit -qm C && git push -q origin HEAD ) >/dev/null 2>&1
+  TN="$(cd "$T" && pwd -P)"
+  TD_HEAD="$(git -C "$T" rev-parse HEAD)"
+  jq -n --arg h "$TD_HEAD" '{state:"MERGED",baseRefName:"master",isDraft:false,headRefOid:$h,headRefName:"feat/td-x",isCrossRepository:false,files:[]}' >"$FX/view.json"
+  LH goal pr 5 >/dev/null 2>&1
+}
+lw_td_run() { LH teardown-merged-worktree "$@" >"$FX/out" 2>&1; }
+lw_td_refuses() {
+  lw_td_run "${2:-5}"; rc=$?
+  check "teardown refuses $1: exits 1" test $rc -eq 1
+  check "teardown refuses $1: prints STOP" grep -q 'teardown: STOP (' "$FX/out"
+  check "teardown refuses $1: directory kept" test -d "$T"
+  check "teardown refuses $1: registry kept" test -f "$(lreg_file $LS)"
+}
+lw_set_reg() { jq "$1" "$(lreg_file "$LS")" >"$FX/t" && mv "$FX/t" "$(lreg_file "$LS")"; }
+view_mut() { jq "$1" "$FX/view.json" >"$FX/t" && mv "$FX/t" "$FX/view.json"; }
+
+lw_td git; view_mut '.state="OPEN"'; lw_td_refuses "an unmerged PR"
+lw_td git; echo x >>"$T/b"; lw_td_refuses "a dirty tree"
+lw_td git; echo x >"$T/new"; lw_td_refuses "an untracked file"
+lw_td git; view_mut '.headRefOid="0000000000000000000000000000000000000000"'; lw_td_refuses "a head mismatch"
+lw_td git; view_mut '.headRefName="feat/other"'; lw_td_refuses "a branch mismatch"
+lw_td git; ( cd "$T" && echo y >y && git add y && git commit -qm Y ) >/dev/null 2>&1; lw_td_refuses "an extra local commit"
+lw_td git; ln -s "$T" "$TMP/lw-link"; lw_set_reg ".path = \"$TMP/lw-link\""; lw_td_refuses "a symlinked path"; rm -f "$TMP/lw-link"
+lw_td git; mkdir -p "$TMP/elsewhere"; lw_set_reg ".path = \"$TMP/elsewhere\""
+lw_td_refuses "an unlisted path"; check "teardown unlisted path: other directory kept" test -d "$TMP/elsewhere"; rm -rf "$TMP/elsewhere"
+lw_td git; lw_set_reg ".path = \"$LM\""
+lw_td_refuses "the main checkout"; check "teardown main checkout: still the main checkout" test -d "$LM/.git"
+lw_td git; lw_set_reg '.branch = "feat/forged"'; lw_td_refuses "a registered branch that is not the PR head"
+lw_td git; lw_set_reg 'del(.path)'; lw_td_refuses "an entry without a path"
+lw_td git; rm "$FX/view.json"; lw_td_refuses "an unreadable PR"
+lw_td git; LCWD="$T" LH goal escalate "stuck" >/dev/null 2>&1; lw_td_refuses "an escalated goal"
+check "teardown escalated goal: names the reason" grep -q 'escalated' "$FX/out"
+lw_td orca; echo $(( $(date +%s) * 1000 )) >"$FX/orca.activity"; lw_td_refuses "recent orca activity"
+lw_td orca; : >"$FX/orca.noactivity"; lw_td_refuses "unreadable orca activity"
+lw_td git; lw_td_run 6; rc=$?
+check "teardown with no registered worktree: exits 3" test $rc -eq 3
+check "teardown with no registered worktree: says so" grep -q 'no registered worktree for PR 6' "$FX/out"
+check "teardown with no registered worktree: directory kept" test -d "$T"
+lw_td git; lw_td_run abc; rc=$?; check "teardown rejects a non-numeric PR" test $rc -eq 2
+lw_td git; lw_td_run 5 --force; rc=$?; check "teardown rejects an unknown flag" test $rc -eq 2
+
+for mode in git orca; do
+  lw_td "$mode"
+  lw_td_run 5; rc=$?
+  check "teardown $mode: exits 0" test $rc -eq 0
+  check "teardown $mode: directory gone" test ! -e "$T"
+  check "teardown $mode: routes through $mode" grep -qx "teardown: route $mode" "$FX/out"
+  check "teardown $mode: no longer listed" bash -c '! git -C "$1" worktree list --porcelain | grep -q "feat/td-x"' _ "$LM"
+  check "teardown $mode: local branch deleted" bash -c '! git -C "$1" show-ref -q --verify refs/heads/feat/td-x' _ "$LM"
+  check "teardown $mode: remote branch deleted" grep -q 'DELETE repos/o/r/git/refs/heads/feat/td-x' "$FX/gh.log"
+  check "teardown $mode: registry removed" test ! -e "$(lreg_file feat-td-x)"
+  check "teardown $mode: summary line" grep -qxF "teardown: worktree removed $TN; remote feat/td-x deleted; local feat/td-x deleted; registry removed" "$FX/out"
+  check "teardown $mode: main checkout unchanged" test "$(git -C "$LM" status --porcelain)" = ""
+  check "teardown $mode: main checkout back on master" test "$(git -C "$LM" branch --show-current)" = master
+  check "teardown $mode: no stray snapshot refs" test -z "$(git -C "$LM" for-each-ref refs/harness)"
+  check "teardown $mode: squash merge (branch tip is not on master)" bash -c '! git -C "$1" merge-base --is-ancestor "$2" master' _ "$LM" "$TD_HEAD"
+done
+check "teardown orca: removes through orca" grep -qF -- "worktree rm --worktree path:$TN --json" "$FX/orca.log"
+check "teardown orca: never forces or runs hooks" bash -c '! grep -q -- "--force\|--run-hooks" "$1"' _ "$FX/orca.log"
+lw_td git; : >"$FX/branch.gone"; lw_td_run 5; rc=$?
+check "teardown with the remote already deleted: exits 0" test $rc -eq 0
+check "teardown with the remote already deleted: counts as absent" grep -qxF "teardown: worktree removed $TN; remote feat/td-x absent; local feat/td-x deleted; registry removed" "$FX/out"
+check "teardown with the remote already deleted: registry removed" test ! -e "$(lreg_file feat-td-x)"
+lw_td git; echo dirty >>"$LM/a"; echo u >"$LM/untracked.txt"
+MAIN_HEAD="$(git -C "$LM" rev-parse HEAD)"
+lw_td_run 5; rc=$?
+check "teardown dirty main: exits 0" test $rc -eq 0
+check "teardown dirty main: full summary" grep -qxF "teardown: worktree removed $TN; remote feat/td-x deleted; local feat/td-x deleted; registry removed" "$FX/out"
+check "teardown dirty main: registry removed" test ! -e "$(lreg_file feat-td-x)"
+check "teardown dirty main: tracked edit survives" test "$(tail -n1 "$LM/a")" = dirty
+check "teardown dirty main: untracked file survives" test -f "$LM/untracked.txt"
+check "teardown dirty main: HEAD unchanged" test "$(git -C "$LM" rev-parse HEAD)" = "$MAIN_HEAD"
+check "teardown dirty main: branch unchanged" test "$(git -C "$LM" branch --show-current)" = master
+check "teardown dirty main: local branch gone from git branch" bash -c '! git -C "$1" show-ref -q --verify refs/heads/feat/td-x' _ "$LM"
+check "teardown dirty main: branch is checked out nowhere" bash -c '! git -C "$1" worktree list --porcelain | grep -q "branch refs/heads/feat/td-x"' _ "$LM"
+check "teardown dirty main: checkout untouched by cleanup" grep -q '^cleanup: checkout untouched' "$FX/out"
+check "teardown dirty main: no fetch, switch or pull of main" test "$(git -C "$LM" reflog -n3 | grep -c 'checkout\|pull\|switch')" = 0
+check "teardown dirty main: snapshot released" grep -q 'snapshot released refs/harness/snapshots/' "$FX/out"
+lw_td orca; : >"$FX/orca.rm.fail"; lw_td_run 5; rc=$?
+check "teardown orca refusal: exits 4" test $rc -eq 4
+check "teardown orca refusal: worktree kept" test -d "$T"
+check "teardown orca refusal: no git fallback" bash -c '! grep -q "route git" "$1"' _ "$FX/out"
+check "teardown orca refusal: still listed" lw_listed "$TN"
+check "teardown orca refusal: registry kept active" test "$(lreg feat-td-x .status)" = active
+lw_td git; LCWD="$T" lw_td_run 5; rc=$?
+check "teardown from inside the target: exits 0" test $rc -eq 0
+check "teardown from inside the target: directory gone" test ! -e "$T"
+lw_td git; poison() { local f; for f in gh git jq orca; do eval "$f() { echo hit >>\"\$FX/func.log\"; return 1; }"; export -f "${f?}"; done; }
+( poison; lw_td_run 5 ); rc=$?
+check "exported gh function does not affect teardown: exits 0" test $rc -eq 0
+check "exported gh function does not affect teardown: function never ran" test ! -e "$FX/func.log"
+
+# a partial result keeps the registry, and a rerun finishes the job
+lw_td git; echo '{"protected":false,"commit":{"sha":"deadbeef"}}' >"$FX/branch.json"; lw_td_run 5; rc=$?
+check "teardown partial result: exits 1" test $rc -eq 1
+check "teardown partial result: worktree removed" test ! -e "$T"
+check "teardown partial result: registry kept as merged" test "$(lreg feat-td-x .status)" = merged
+check "teardown partial result: reason recorded" grep -q 'remote kept' <<<"$(lreg feat-td-x .reason)"
+check "teardown partial result: prints the rerun command" grep -qF 'rerun: agent-harness teardown-merged-worktree 5' "$FX/out"
+rm -f "$FX/branch.json"; lw_td_run 5; rc=$?
+check "teardown rerun after a partial result: exits 0" test $rc -eq 0
+check "teardown rerun after a partial result: registry removed" test ! -e "$(lreg_file feat-td-x)"
+check "teardown rerun after a partial result: summary" grep -q 'registry removed' "$FX/out"
+
+# ship-merge routes to teardown when the goal is registered, to cleanup otherwise
+lw_td git
+view_mut '.state="OPEN" | .files=[{path:"client/a.gd"}]'
+echo '[{"name":"gate","status":"completed","conclusion":"success","app":{"slug":"github-actions"}}]' >"$FX/checks.json"
+echo '{"data":{"repository":{"pullRequest":{"reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}' >"$FX/threads.json"
+echo 0 >"$FX/behind.txt"
+LH ship-merge 5 --confirmed >"$FX/out" 2>&1; rc=$?
+check "ship-merge registered: exits 0" test $rc -eq 0
+check "ship-merge registered: merges the PR" grep -q '^pr merge 5' "$FX/gh.log"
+check "ship-merge registered: routes to teardown" grep -q '^teardown: worktree removed' "$FX/out"
+check "ship-merge registered: worktree gone" test ! -e "$T"
+check "ship-merge registered: registry removed" test ! -e "$(lreg_file feat-td-x)"
+[ -z "${SHOW_SAMPLE:-}" ] || { echo "--- sample: agent-harness ship-merge 5 --confirmed (registered goal)"; cat "$FX/out"; echo "---"; }
+lw_td git; LCWD="$T" LH goal escalate "stuck" >/dev/null 2>&1
+view_mut '.state="OPEN" | .files=[{path:"client/a.gd"}]'
+LH ship-merge 5 --confirmed >"$FX/out" 2>&1; rc=$?
+check "ship-merge with an escalated goal: still exits 0 after the merge" test $rc -eq 0
+check "ship-merge with an escalated goal: worktree kept" test -d "$T"
+check "ship-merge with an escalated goal: prints the rerun command" grep -qF 'rerun: agent-harness teardown-merged-worktree 5' "$FX/out"
+lw_fixture git
+( cd "$LM" && git checkout -q -b feat/plain && echo p >p && git add p && git commit -qm P && git push -q origin HEAD && git checkout -q master ) >/dev/null 2>&1
+PLAIN_HEAD="$(git -C "$LM" rev-parse feat/plain)"
+jq -n --arg h "$PLAIN_HEAD" '{state:"OPEN",baseRefName:"master",isDraft:false,headRefOid:$h,headRefName:"feat/plain",isCrossRepository:false,files:[{path:"client/a.gd"}]}' >"$FX/view.json"
+echo '[{"name":"gate","status":"completed","conclusion":"success","app":{"slug":"github-actions"}}]' >"$FX/checks.json"
+LH ship-merge 5 --confirmed >"$FX/out" 2>&1; rc=$?
+check "ship-merge unregistered: exits 0" test $rc -eq 0
+check "ship-merge unregistered: runs plain cleanup" grep -q '^cleanup: ' "$FX/out"
+check "ship-merge unregistered: no teardown" bash -c '! grep -q "teardown" "$1"' _ "$FX/out"
+check "ship-merge unregistered: local branch deleted" bash -c '! git -C "$1" show-ref -q --verify refs/heads/feat/plain' _ "$LM"
+
+# report
+lw_fixture git
+LH ship-init docs ui hud-report >/dev/null 2>&1; LT="$(cd "$LM-wt/docs-ui-hud-report" && pwd -P)"; LS=docs-ui-hud-report
+echo '<html><body>hi</body></html>' >"$FX/r.html"
+LH_TEST=1 AGENT_HARNESS_CHROME="$TMP/lbin/fake-chrome" LH report "$LS" "$FX/r.html" >"$FX/out" 2>&1; rc=$?
+LP="$LT/docs/agent-reports/$(date +%Y-%m-%d)-$LS.png"
+check "report: exits 0" test $rc -eq 0
+check "report: prints the default path" test "$(cat "$FX/out")" = "$LP"
+check "report: writes a PNG" test "$(head -c 4 "$LP" | tail -c 3)" = PNG
+check "report: records the path in the registry" test "$(lreg $LS .report)" = "$LP"
+check "report: headless screenshot at 1200x1600 of the file" bash -c 'grep -q -- "--headless=new" "$1" && grep -q -- "--window-size=1200,1600" "$1" && grep -q -- "file://.*/report.html" "$1"' _ "$FX/chrome.args"
+LH_TEST=1 AGENT_HARNESS_CHROME="$TMP/lbin/fake-chrome" LH report "$LS" "$FX/r.html" "$LT/docs/agent-reports/custom.png" >"$FX/out" 2>&1; rc=$?
+check "report: explicit output path inside the worktree" test "$rc|$(cat "$FX/out")" = "0|$LT/docs/agent-reports/custom.png"
+LH_TEST=1 AGENT_HARNESS_CHROME="$TMP/lbin/fake-chrome" LH report "$LS" "$FX/r.html" "$FX/custom.png" >"$FX/out" 2>&1; rc=$?
+check "report: output outside the worktree is refused" test $rc -eq 1
+check "report: nothing written outside the worktree" test ! -e "$FX/custom.png"
+LH_TEST=1 AGENT_HARNESS_CHROME="$TMP/lbin/fake-chrome" LH report "$LS" "$FX/r.html" "$LT/docs/../../escape.png" >"$FX/out" 2>&1; rc=$?
+check "report: .. in the output path is refused" test $rc -eq 1
+LH_TEST=1 AGENT_HARNESS_CHROME="$TMP/lbin/fake-chrome" LH report docs/ui-hud-report "$FX/r.html" >"$FX/out" 2>&1; rc=$?
+check "report: accepts the branch name as well as the slug" test "$rc" -eq 0
+check "report: the rendered copy carries a strict CSP and the original body" bash -c 'grep -q "Content-Security-Policy.*default-src .none.; img-src data:; style-src .unsafe-inline.; font-src data:" "$1" && grep -q "<body>hi</body>" "$1"' _ "$FX/chrome.html"
+check "report: the original HTML is left untouched" test "$(cat "$FX/r.html")" = "<html><body>hi</body></html>"
+check "report: chrome runs without file-access flags" bash -c 'grep -q -- "--no-first-run" "$1" && grep -q -- "--disable-features=FileSystemAccessAPI" "$1" && ! grep -q -- "--allow-file-access" "$1"' _ "$FX/chrome.args"
+check "report: renders a temp copy of the HTML, not the original" bash -c '! grep -q -- "file://$1" "$2"' _ "$FX/r.html" "$FX/chrome.args"
+mkdir -p "$TMP/redir"; rm -rf "$LT/docs"; ln -s "$TMP/redir" "$LT/docs"
+LH_TEST=1 AGENT_HARNESS_CHROME="$TMP/lbin/fake-chrome" LH report "$LS" "$FX/r.html" >"$FX/out" 2>&1; rc=$?
+check "report: a symlinked docs directory is refused" test $rc -eq 1
+check "report: nothing written through the symlink" test -z "$(ls -A "$TMP/redir")"
+rm -f "$LT/docs"
+LH_TEST=1 AGENT_HARNESS_CHROME="$TMP/lbin/missing-chrome" LH report "$LS" "$FX/r.html" >"$FX/out" 2>&1; rc=$?
+check "report without Chrome: exits 2" test $rc -eq 2
+check "report without Chrome: says so" grep -q 'no Chrome found' "$FX/out"
+LH_TEST=1 AGENT_HARNESS_CHROME="$TMP/lbin/fake-chrome" LH report "$LS" "$FX/missing.html" >"$FX/out" 2>&1; rc=$?
+check "report: missing HTML exits 1" test $rc -eq 1
+LH_TEST=1 AGENT_HARNESS_CHROME="$TMP/lbin/fake-chrome" LH report no-such-goal "$FX/r.html" >"$FX/out" 2>&1; rc=$?
+check "report: unknown goal without an output path exits 1" test $rc -eq 1
+LH report "$LS" >/dev/null 2>&1; rc=$?; check "report: missing arguments exit 2" test $rc -eq 2
+REAL_CHROME="$(command -v google-chrome chromium 2>/dev/null | head -n1)"
+[ -n "$REAL_CHROME" ] || [ ! -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ] || REAL_CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+if [ -n "$REAL_CHROME" ]; then
+  env -u AGENT_HARNESS_CHROME bash -c 'cd "$1" && shift && "$@"' _ "$LM" env -u GH_BIN -u ORCA_BIN -u AGENT_HARNESS_TEST -u AGENT_STATE_DIR -u CLAUDE_PROJECT_DIR PATH="$TMP/lsleep:$TMP/lbin:$PATH" bash "$H/report.sh" "$LS" "$FX/r.html" "$LT/docs/agent-reports/real.png" >"$FX/out" 2>&1; rc=$?
+  check "report with real Chrome: renders a PNG" test "$rc|$(head -c 4 "$LT/docs/agent-reports/real.png" 2>/dev/null | tail -c 3)" = "0|PNG"
+fi
+
+# dispatcher
+lw_fixture git
+out="$( cd "$LM" && env -u CLAUDE_PROJECT_DIR PATH="$TMP/lsleep:$TMP/lbin:$PATH" bash "$H/agent-harness.sh" ship-init feat ui via-dispatcher 2>&1)"
+check "dispatcher: ship-init forwards" test "$(head -n1 <<<"$out")" = "$LM-wt/feat-ui-via-dispatcher"
+out="$( cd "$LM" && env -u CLAUDE_PROJECT_DIR PATH="$TMP/lsleep:$TMP/lbin:$PATH" bash "$H/agent-harness.sh" teardown-merged-worktree 99 2>&1)"; rc=$?
+check "dispatcher: teardown-merged-worktree forwards" grep -q 'no registered worktree for PR 99' <<<"$out"
+out="$( cd "$LM" && bash "$H/agent-harness.sh" report 2>&1)"; rc=$?
+check "dispatcher: report forwards" grep -q 'usage: report.sh' <<<"$out"
+check "dispatcher: usage lists the new commands" grep -q 'ship-init|ship-merge|cleanup|teardown-merged-worktree|worktree-rm|report' <<<"$(bash "$H/agent-harness.sh" 2>&1)"
+
+# guard: teardown, ship-init, env and function injection
+GUARD_CWD="$TMP/work"
+LG_ALLOW=(
+  "agent-harness teardown-merged-worktree 5"
+  "agent-harness ship-init feat ui hud-theme"
+  "agent-harness ship-init feat ui hud-theme --goal build the hud"
+  "agent-harness ship-init --adopt 7"
+  "agent-harness ship-init --adopt 7 --goal resume the hud"
+  "$HOME/.local/bin/agent-harness ship-init fix ui y"
+  "agent-harness report my-slug r.html"
+  "agent-harness goal pr 5"
+)
+LG_DENY=(
+  "bash ~/.claude/scripts/agent-harness/teardown-merged-worktree.sh 5"
+  "bash $HOME/.claude/scripts/agent-harness/ship-init.sh fix ui y"
+  "bash ~/.claude/scripts/agent-harness/agent-harness.sh teardown-merged-worktree 5"
+  "bash -x $HOME/.claude/scripts/agent-harness/ship-init.sh fix ui y"
+  "$HOME/.claude/scripts/agent-harness/teardown-merged-worktree.sh 5"
+  "HOME'='/tmp/fake agent-harness ship-init feat ui x"
+  "HOME=/tmp/fake agent-harness teardown-merged-worktree 5"
+  "export HOME=/tmp/fake; agent-harness ship-init feat ui x"
+  ". /tmp/evil.sh; agent-harness ship-init feat ui x"
+  "source /tmp/evil.sh && agent-harness teardown-merged-worktree 5"
+  "true && . /tmp/evil.sh && agent-harness ship-init feat ui x"
+  "agent-harness ship-init feat ui x; . /tmp/evil.sh"
+  "agent-harness teardown-merged-worktree"
+  "agent-harness teardown-merged-worktree abc"
+  "agent-harness teardown-merged-worktree 5 6"
+  "agent-harness teardown-merged-worktree 5 --force"
+  "agent-harness teardown-merged-worktree 5 --keep-branch"
+  "agent-harness teardown-merged-worktree \$PR"
+  "FOO=1 agent-harness teardown-merged-worktree 5"
+  "GH_BIN=/x agent-harness teardown-merged-worktree 5"
+  "ORCA_BIN=/x agent-harness teardown-merged-worktree 5"
+  "PATH=/x:\$PATH agent-harness teardown-merged-worktree 5"
+  "env AGENT_HARNESS_TEST=1 agent-harness ship-init feat ui x"
+  "AGENT_STATE_DIR=/x agent-harness ship-init feat ui x"
+  "CLAUDE_PROJECT_DIR=/x agent-harness ship-init feat ui x"
+  "BASH_ENV=/x agent-harness ship-init feat ui x"
+  "ENV=/x agent-harness ship-init feat ui x"
+  "SHELLOPTS=xtrace agent-harness teardown-merged-worktree 5"
+  "PS4=x agent-harness teardown-merged-worktree 5"
+  "LD_PRELOAD=/x agent-harness ship-init feat ui x"
+  "DYLD_INSERT_LIBRARIES=/x agent-harness ship-init feat ui x"
+  "export -f gh; agent-harness ship-init feat ui x"
+  "declare -fx gh; agent-harness teardown-merged-worktree 5"
+  "set -a; agent-harness ship-init feat ui x"
+  "bash --rcfile /x agent-harness ship-init feat ui x"
+  "bash /tmp/evil/teardown-merged-worktree.sh 5"
+  "bash ./scripts/agent-harness/teardown-merged-worktree.sh 5"
+  "bash scripts/agent-harness/ship-init.sh feat ui y"
+  "bash /tmp/x/scripts/agent-harness/ship-init.sh feat ui y"
+  "bash /tmp/x/scripts/agent-harness/agent-harness.sh teardown-merged-worktree 5"
+  "bash -x /tmp/x/scripts/agent-harness/ship-init.sh feat ui y"
+  "bash /nonhome/.claude/scripts/agent-harness/ship-init.sh fix ui y"
+  "bash $HOME/.claude/scripts/../../tmp/x/scripts/agent-harness/ship-init.sh fix ui y"
+  "./scripts/agent-harness/teardown-merged-worktree.sh 5"
+  "/tmp/x/scripts/agent-harness/ship-init.sh feat ui y"
+  "agent-harness.sh teardown-merged-worktree 12"
+  "/tmp/x/agent-harness teardown-merged-worktree 5"
+  "./agent-harness ship-init feat ui y"
+  "bash /tmp/evil/ship-init.sh feat ui x"
+  "agent-harness ship-init wip ui x"
+  "agent-harness ship-init feat Ui x"
+  "agent-harness ship-init feat ui Bad_Desc"
+  "agent-harness ship-init feat ui"
+  "agent-harness ship-init feat ui x extra"
+  "agent-harness ship-init feat ui x --goal"
+  "agent-harness ship-init feat ui x --goal \$HOME"
+  "agent-harness ship-init --adopt abc"
+  "agent-harness ship-init --adopt 7 8"
+  "FOO=1 agent-harness ship-init feat ui x"
+)
+for mode in off on; do
+  reset; [ "$mode" = on ] && flag_on
+  for c in "${LG_ALLOW[@]}"; do check "lifecycle guard (flag $mode) allows: $c" allowed "$c"; done
+  for c in "${LG_DENY[@]}"; do check "lifecycle guard (flag $mode) denies: $c" denied "$c"; done
+  check "lifecycle guard (flag $mode) still denies worktree-rm --force" denied "agent-harness worktree-rm /x --force"
+  check "lifecycle guard (flag $mode) still denies a git worktree remove" denied "git worktree remove /x"
+  check "lifecycle guard (flag $mode) still asks for worktree-rm --confirmed" asked "agent-harness worktree-rm /x --confirmed"
+done
+reset; flag_on
+check "worktree-rm stays refused in autonomous mode" bash -c '! (cd "$1" && env -u CLAUDE_PROJECT_DIR AGENT_HARNESS_TEST=1 AGENT_STATE_DIR="$2" bash "$3/worktree-rm.sh" /x --confirmed) >/dev/null 2>&1' _ "$TMP/work" "$TMP/state" "$H"
+
+# ---- review fixes: one state location, registry mirror, teardown trust, injection, guard
+lw_stop() {
+  ( cd "${LCWD:-$LM}" && echo '{}' | env -u AGENT_STATE_DIR CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/lsleep:$TMP/lbin:$PATH" bash "$1" )
+}
+STOP_COPIES=("$HOOKS/ship-stop-gate.sh")
+[ ! -f "$HERE/plugins/fmflurry-harness/hooks/scripts/ship-stop-gate.sh" ] || STOP_COPIES+=("$HERE/plugins/fmflurry-harness/hooks/scripts/ship-stop-gate.sh")
+lw_goal_file() { echo "$LM/.claude/state/goal.json"; }
+
+lw_fixture git
+LH ship-init feat ui b1-main >"$FX/out" 2>"$FX/err"; LT="$(cat "$FX/out")"; LS=feat-ui-b1-main
+check "ship-init prints slug=<slug>" grep -qx "slug=$LS" "$FX/err"
+check "ship-init: stdout stays the bare worktree path" test "$(cat "$FX/out")" = "$LM-wt/$LS"
+check "ship-init: goal.json lives in the main checkout" test -f "$(lw_goal_file)"
+check "ship-init: goal.json records branch, slug and status" test "$(jq -r '[.branch, .slug, .status] | join("|")' "$(lw_goal_file)")" = "feat/ui-b1-main|$LS|active"
+check "ship-init: the worktree has no state of its own" test ! -e "$LT/.claude/state/goal.json"
+check "ship-init: registry records the slug" test "$(lreg $LS .slug)" = "$LS"
+LH goal pr 41 >/dev/null 2>&1
+check "goal pr from the main checkout mirrors into the registry" test "$(lreg $LS .pr)" = 41
+LH goal sha cafe01 >/dev/null 2>&1
+check "goal sha from the main checkout mirrors head_oid" test "$(lreg $LS .head_oid)" = cafe01
+LCWD="$LT" LH goal pr 42 >/dev/null 2>&1
+check "goal pr from inside the worktree gives the same result" test "$(lreg $LS .pr)|$(jq -r .pr "$(lw_goal_file)")" = "42|42"
+LCWD="$LT" LH goal sha beef02 >/dev/null 2>&1
+check "goal sha from inside the worktree gives the same result" test "$(lreg $LS .head_oid)" = beef02
+LH goal escalate "from main" >/dev/null 2>&1
+check "goal escalate from the main checkout mirrors status and reason" test "$(lreg $LS '[.status, .reason] | join("|")')" = "escalated|from main"
+check "autonomy flag and goal share the main state dir from the worktree" bash -c 'cd "$1" && env -u CLAUDE_PROJECT_DIR -u AGENT_STATE_DIR bash "$2/autonomy.sh" on >/dev/null && test -f "$3/.claude/state/autonomy.on" && env -u CLAUDE_PROJECT_DIR -u AGENT_STATE_DIR bash "$2/autonomy.sh" off >/dev/null' _ "$LT" "$H" "$LM"
+touch "$LM/.claude/state/autonomy.on"
+out="$(cd "$LT" && env -u CLAUDE_PROJECT_DIR -u AGENT_STATE_DIR -u AGENT_HARNESS_TEST bash "$HOOKS/autonomy-context.sh" </dev/null)"
+check "autonomy-context hook run from the worktree sees the main flag and goal" bash -c 'grep -q "AUTONOMOUS MODE ON" <<<"$1" && grep -q "status=escalated" <<<"$1"' _ "$out"
+out="$(cd "$LT" && echo '{"tool_input":{"questions":[{"question":"q"}]}}' | env -u CLAUDE_PROJECT_DIR -u AGENT_STATE_DIR -u AGENT_HARNESS_TEST bash "$HOOKS/autonomy-ask-guard.sh")"
+check "ask-guard run from the worktree denies via the main flag" grep -q '"permissionDecision": *"deny"' <<<"$out"
+out="$(cd "$LT" && jq -n --arg c "gh pr merge 1" '{cwd:"'"$LT"'",tool_input:{command:$c}}' | env -u CLAUDE_PROJECT_DIR -u AGENT_STATE_DIR -u AGENT_HARNESS_TEST bash "$HOOKS/autonomy-git-guard.sh")"
+check "git-guard run from the worktree uses the main flag" grep -q '"permissionDecision": *"deny"' <<<"$out"
+rm -f "$LM/.claude/state/autonomy.on"
+
+lw_td git
+check "ship-merge-style teardown from main: goal pr set from main" test "$(lreg feat-td-x .pr)" = 5
+lw_td_run 5; rc=$?
+check "teardown from the main checkout (PR set from main): exits 0" test $rc -eq 0
+check "teardown from the main checkout: registry removed" test ! -e "$(lreg_file feat-td-x)"
+lw_td git; lw_set_reg '.pr = null'; lw_td_run 5; rc=$?
+check "teardown falls back to the goal.json slug when no registry entry has the PR" test "$rc|$(test -e "$T" && echo kept || echo gone)" = "0|gone"
+lw_td git; lw_set_reg '.pr = null'; jq '.pr = 9' "$(lw_goal_file)" >"$FX/t" && mv "$FX/t" "$(lw_goal_file)"; lw_td_run 5; rc=$?
+check "teardown: goal.json tracking another PR gives no fallback" test $rc -eq 3
+lw_td git
+view_mut '.state="OPEN" | .files=[{path:"client/a.gd"}]'
+echo '[{"name":"gate","status":"completed","conclusion":"success","app":{"slug":"github-actions"}}]' >"$FX/checks.json"
+echo '{"data":{"repository":{"pullRequest":{"reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}' >"$FX/threads.json"
+echo 0 >"$FX/behind.txt"
+LH ship-merge 5 --confirmed >"$FX/out" 2>&1; rc=$?
+check "ship-merge from the main checkout routes to teardown" test "$rc|$(grep -c '^teardown: worktree removed' "$FX/out")|$(test -e "$T" && echo kept || echo gone)" = "0|1|gone"
+lw_td git
+view_mut '.state="OPEN" | .files=[{path:"client/a.gd"}]'
+LCWD="$T" LH ship-merge 5 --confirmed >"$FX/out" 2>&1; rc=$?
+check "ship-merge from inside the worktree gives the same result" test "$rc|$(grep -c '^teardown: worktree removed' "$FX/out")|$(test -e "$T" && echo kept || echo gone)" = "0|1|gone"
+
+# stop gate mirrors escalation and done into the registry, and teardown refuses escalated or blocked goals
+for gate in "${STOP_COPIES[@]}"; do
+  gl="${gate#"$HERE"/}"
+  lw_td git; touch "$LM/.claude/state/autonomy.on"
+  view_mut '.state="OPEN"'
+  jq --arg h "$TD_HEAD" '.stop_blocks = 4 | .head_sha = $h' "$(lw_goal_file)" >"$FX/t" && mv "$FX/t" "$(lw_goal_file)"
+  lw_stop "$gate" >/dev/null 2>&1
+  check "stop-gate ($gl) escalation: goal.json escalated" test "$(jq -r .status "$(lw_goal_file)")" = escalated
+  check "stop-gate ($gl) escalation: mirrored status and reason in the registry" test "$(lreg feat-td-x '[.status, (.reason | startswith("no progress after 5 stop blocks"))] | join("|")')" = "escalated|true"
+  view_mut '.state="MERGED"'
+  lw_td_run 5; rc=$?
+  check "teardown refuses a goal the stop gate escalated: exits 1" test $rc -eq 1
+  check "teardown refuses a goal the stop gate escalated: says escalated" grep -q 'is escalated' "$FX/out"
+  check "teardown refuses a goal the stop gate escalated: directory kept" test -d "$T"
+  lw_td git; touch "$LM/.claude/state/autonomy.on"
+  lw_stop "$gate" >/dev/null 2>&1
+  check "stop-gate ($gl) done: goal.json done" test "$(jq -r .status "$(lw_goal_file)")" = "done"
+  check "stop-gate ($gl) done: mirrored status in the registry" test "$(lreg feat-td-x .status)" = "done"
+done
+lw_td git; lw_set_reg '.status = "blocked"'; lw_td_refuses "a blocked goal"
+check "teardown blocked goal: says blocked" grep -q 'is blocked' "$FX/out"
+lw_td git; lw_set_reg '.status = "escalated"'; lw_td_refuses "an escalated registry entry"
+
+# H3: ship-init refuses an orca worktree that belongs to another repo
+lw_fixture orca
+git init -q "$FX/foreign"; ( cd "$FX/foreign" && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m f )
+: >"$FX/orca.foreign"
+LH ship-init fix ui foreign-wt >"$FX/out" 2>"$FX/err"; rc=$?
+check "ship-init orca: a worktree of another repo is refused" test $rc -eq 1
+check "ship-init orca: refusal names the common-dir mismatch" grep -q 'is not a worktree of' "$FX/err"
+check "ship-init orca: refusal writes no registry entry" test ! -e "$LM/.git/agent-harness/goals/fix-ui-foreign-wt.json"
+check "ship-init orca: refusal writes no goal.json" test ! -e "$(lw_goal_file)"
+
+# M1 (teardown): registry trust
+lw_td git; mv "$(lreg_file feat-td-x)" "$LM/.git/agent-harness/goals/forged.json"; LS=forged
+lw_td_refuses "a registry file whose name is not the slug of the PR head"
+check "teardown forged name: says so" grep -q 'is not the goal of PR head' "$FX/out"
+lw_td git; git -C "$LM" worktree add -q --detach "$LROOT/odd/feat-td-x" >/dev/null 2>&1 || { mkdir -p "$LROOT/odd"; git -C "$LM" worktree add -q --detach "$LROOT/odd/feat-td-x" >/dev/null 2>&1; }
+lw_set_reg ".path = \"$(cd "$LROOT/odd/feat-td-x" && pwd -P)\""
+lw_td_refuses "a path outside the ship-init layout"
+check "teardown odd path: says layout" grep -q 'layout' "$FX/out"
+check "teardown odd path: the odd worktree is kept" test -d "$LROOT/odd/feat-td-x"
+lw_td git; lw_set_reg '.via = "orca"'; lw_td_run 5; rc=$?
+check "teardown: a git-layout path is accepted whatever the recorded via" test $rc -eq 0
+
+# M2: Orca detection fails closed in teardown
+lw_td git
+mkdir -p "$LROOT/orca/workspaces/r"
+git -C "$LM" worktree move "$T" "$LROOT/orca/workspaces/r/feat-td-x" >/dev/null 2>&1
+OT="$(cd "$LROOT/orca/workspaces/r/feat-td-x" && pwd -P)"
+lw_set_reg ".path = \"$OT\" | .via = \"orca\""
+T="$OT"; lw_td_run 5; rc=$?
+check "teardown: a target under an Orca workspace of a non-Orca repo is a STOP" test $rc -eq 1
+check "teardown orca workspace + unmanaged: names the reason" grep -q 'not Orca-managed' "$FX/out"
+check "teardown orca workspace + unmanaged: directory kept" test -d "$OT"
+lw_td git; : >"$FX/orca.list.fail"; lw_td_run 5; rc=$?
+check "teardown: orca installed but repo list failing is a STOP" test $rc -eq 1
+check "teardown orca list failure: names the reason" grep -q 'repo list is unreadable' "$FX/out"
+check "teardown orca list failure: directory kept" test -d "$T"
+lw_td orca; ln -s "$LM" "$TMP/lw-main-link"; printf '%s' "$TMP/lw-main-link" >"$FX/orca.managed"; lw_td_run 5; rc=$?
+check "teardown: orca repo path through a symlink is matched by realpath" test "$rc|$(grep -cx 'teardown: route orca' "$FX/out")" = "0|1"
+rm -f "$TMP/lw-main-link"
+
+# M1 (report): slug or branch
+lw_fixture git
+LH ship-init feat ui slug-or-branch >/dev/null 2>&1; LT="$(cd "$LM-wt/feat-ui-slug-or-branch" && pwd -P)"
+echo '<html></html>' >"$FX/r.html"
+LH_TEST=1 AGENT_HARNESS_CHROME="$TMP/lbin/fake-chrome" LH report feat/ui-slug-or-branch "$FX/r.html" >"$FX/out" 2>&1; rc=$?
+check "report: accepts the branch name" test "$rc|$(lreg feat-ui-slug-or-branch .report)" = "0|$(cat "$FX/out")"
+
+# C1/H1/H2 (security): test seam, function injection
+FH="$TMP/fakehome"; rm -rf "$FH"; mkdir -p "$FH/.claude/scripts" "$FH/.config/opencode/scripts"
+cp -R "$H" "$FH/.claude/scripts/agent-harness"; cp -R "$H" "$FH/.config/opencode/scripts/agent-harness"
+for inst in "$FH/.claude/scripts/agent-harness" "$FH/.config/opencode/scripts/agent-harness" "$TMP/inst/.cursor/plugins/x/agent-harness"; do
+  [ -d "$inst" ] || { mkdir -p "$(dirname "$inst")"; cp -R "$H" "$inst"; }
+  printf 'GH=\nORCA=\nJQ=\n' >"$inst/.installed"
+  out="$(HOME="$FH" GH_BIN=/x/gh ORCA_BIN=/x/orca AGENT_STATE_DIR=/x/state AGENT_HARNESS_TEST=1 bash -c '. "$1/lib.sh"; echo "$GH|$ORCA|$STATE_DIR|$HARNESS_INSTALLED"' _ "$inst" 2>&1)"
+  check "test seam ignored from an installed copy ($inst): GH_BIN, ORCA_BIN, AGENT_STATE_DIR" test "${out##*|}" = 1 -a "$(cut -d'|' -f1 <<<"$out")" != /x/gh -a "$(cut -d'|' -f2 <<<"$out")" != /x/orca -a "$(cut -d'|' -f3 <<<"$out")" != /x/state
+done
+out="$(HOME="$FH" GH_BIN=/x/gh ORCA_BIN=/x/orca AGENT_STATE_DIR=/x/state AGENT_HARNESS_TEST=1 bash -c '. "$1/lib.sh"; echo "$GH|$ORCA|$STATE_DIR|$HARNESS_INSTALLED"' _ "$H" 2>&1)"
+check "test seam still works from a repo checkout" test "$out" = "/x/gh|/x/orca|/x/state|0"
+( cd "$SDR" && rm -rf "$SDR/.claude/state" && env -u CLAUDE_PROJECT_DIR HOME="$FH" AGENT_HARNESS_TEST=1 AGENT_STATE_DIR="$TMP/ign3" bash "$FH/.claude/scripts/agent-harness/goal.sh" set gz )
+check "installed goal.sh ignores AGENT_STATE_DIR" test ! -e "$TMP/ign3/goal.json" -a -f "$SDR/.claude/state/goal.json"
+check "worktree-core timing seam is gated by the same check" grep -q 'HARNESS_INSTALLED" = 0 \] && \[ "${AGENT_HARNESS_TEST' "$H/worktree-core.sh"
+check "report chrome override is gated by the same check" grep -q 'HARNESS_INSTALLED" = 0 \] && \[ "${AGENT_HARNESS_TEST' "$H/report.sh"
+
+export INJ="$TMP/inj"; rm -rf "$INJ"; mkdir -p "$INJ"
+lw_fixture git
+# The functions are exported on purpose, to prove the dispatcher drops inherited ones.
+# shellcheck disable=SC2329
+inj_run() {
+  ( dirname() { echo hit >>"$INJ/hit.log"; command dirname "$@"; }
+    cd() { echo hit >>"$INJ/hit.log"; builtin cd "$@" || return; }
+    export -f dirname cd
+    builtin cd "$LM" || exit 1
+    env -u GH_BIN -u ORCA_BIN -u AGENT_STATE_DIR -u CLAUDE_PROJECT_DIR PATH="$TMP/lsleep:$TMP/lbin:$PATH" bash "$DISP" teardown-merged-worktree 99 )
+}
+out="$(inj_run 2>&1)"
+check "exported dirname/cd functions do not run in the dispatcher or its children" test ! -e "$INJ/hit.log"
+check "the dispatcher still reaches teardown after the purge" grep -q 'no registered worktree for PR 99' <<<"$out"
+check "the install wrapper launches with #!/bin/bash -p and builtin exec" grep -q "#!/bin/bash -p.nbuiltin exec /bin/bash -p" "$HERE/install.sh"
+check "the install wrapper records the .installed marker" grep -q 'write_harness_marker "$dest/.installed"' "$HERE/install.sh"
+check "the dispatcher launches children with bash -p" grep -q 'builtin exec /bin/bash -p' "$H/agent-harness.sh"
+check "every harness script has a #!/bin/bash -p shebang" test "$(head -qn1 "$H"/*.sh | grep -vc '^#!/bin/bash -p$')" = 0
+check "no harness script calls dirname before lib.sh" test "$(grep -c 'dirname "${BASH_SOURCE' "$H"/*.sh | awk -F: '{s+=$2} END {print s+0}')" = 0
+
+# H1 (security): marker-based installed detection, trusted PATH, no HOME seam
+INS="$TMP/ins"; rm -rf "$INS" "$TMP/fakegh" "$TMP/realtools"; mkdir -p "$TMP/fakegh" "$TMP/realtools"
+cp -R "$H" "$INS"
+printf '#!/bin/bash\necho fake\n' >"$TMP/fakegh/gh"; chmod +x "$TMP/fakegh/gh"
+printf '#!/bin/bash\necho real\n' >"$TMP/realtools/gh"; chmod +x "$TMP/realtools/gh"
+printf 'GH=%s\nORCA=\nJQ=\n' "$TMP/realtools/gh" >"$INS/.installed"
+probe() { HOME="$1" PATH="$TMP/fakegh:$PATH" AGENT_HARNESS_TEST=1 GH_BIN=/x/gh STATE_DIR=/x bash -c '. "$1/lib.sh"; echo "$GH|$HARNESS_INSTALLED|${PATH%%:*}"' _ "$INS" 2>&1; }
+check "installed (marker): a fake HOME does not enable the seam" test "$(probe "$TMP/otherhome")" = "$TMP/realtools/gh|1|/opt/homebrew/bin"
+check "installed (marker) under the real HOME: seam stays off" test "$(probe "$HOME")" = "$TMP/realtools/gh|1|/opt/homebrew/bin"
+printf 'GH=\nORCA=\nJQ=\n' >"$INS/.installed"
+check "installed: a fake gh first on PATH is ignored" test "$(probe "$HOME" | cut -d'|' -f1)" != "$TMP/fakegh/gh"
+rm -f "$INS/.installed"
+check "no marker: checkout mode keeps the test seam even under HOME" test "$(probe "$TMP/otherhome" | cut -d'|' -f1-2)" = "/x/gh|0"
+
+# H2 (security): exported builtin/dirname/cd/exec functions cannot reach the wrapper or its scripts
+WH="$TMP/wrapper-home"; rm -rf "$WH"; mkdir -p "$WH/.claude/scripts" "$WH/bin"
+cp -R "$H" "$WH/.claude/scripts/agent-harness"; printf 'GH=\nORCA=\nJQ=\n' >"$WH/.claude/scripts/agent-harness/.installed"
+printf '#!/bin/bash -p\nbuiltin exec /bin/bash -p "%s/scripts/agent-harness/agent-harness.sh" "$@"\n' "$WH/.claude" >"$WH/bin/agent-harness"; chmod +x "$WH/bin/agent-harness"
+rm -f "$INJ/hit.log"
+# shellcheck disable=SC2329
+wrapper_inj_run() {
+  ( builtin() { echo builtin >>"$INJ/hit.log"; command builtin "$@"; }
+    dirname() { echo dirname >>"$INJ/hit.log"; command dirname "$@"; }
+    cd() { echo cd >>"$INJ/hit.log"; command cd "$@" || return; }
+    exec() { echo exec >>"$INJ/hit.log"; command exec "$@"; }
+    export -f builtin dirname cd exec
+    command cd "$LM" || exit 1
+    env -u GH_BIN -u ORCA_BIN -u AGENT_STATE_DIR -u CLAUDE_PROJECT_DIR "$WH/bin/agent-harness" "$@" )
+}
+out="$(wrapper_inj_run teardown-merged-worktree 99 2>&1)"
+check "exported builtin/dirname/cd/exec functions do not affect the wrapper or its scripts" test ! -e "$INJ/hit.log"
+check "the wrapper still reaches teardown with the functions exported" grep -q 'no registered worktree for PR 99' <<<"$out"
+out="$(wrapper_inj_run goal status 2>&1)"
+check "exported functions do not affect goal.sh via the wrapper" test ! -e "$INJ/hit.log"
+check "ship-merge launches its helpers with bash -p" test "$(grep -c 'bash -p' "$H/ship-merge.sh")" -ge 3
+check "teardown launches cleanup with bash -p and --no-checkout" grep -q 'bash -p "$HARNESS_DIR/cleanup.sh" "$pr" --no-checkout' "$H/teardown-merged-worktree.sh"
+check "goal.sh launches notify with bash -p" test "$(grep -c 'bash -p "$NOTIFY"' "$H/goal.sh")" -ge 2
+
+reset
 echo "tests: $pass passed, $failn failed"
 [ "$failn" -eq 0 ]

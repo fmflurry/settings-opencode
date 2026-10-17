@@ -1,8 +1,8 @@
-#!/usr/bin/env bash
+#!/bin/bash -p
 # Usage: notify.sh <question|waiting|done|failure> <message> [pr]
 set -euo pipefail
 # shellcheck source=scripts/agent-harness/lib.sh
-. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+. "${BASH_SOURCE[0]%/*}/lib.sh"
 kind="${1:-}" msg="${2:-}" pr="${3:-}"
 
 {

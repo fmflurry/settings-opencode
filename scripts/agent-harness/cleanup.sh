@@ -1,14 +1,16 @@
-#!/usr/bin/env bash
+#!/bin/bash -p
 # shellcheck disable=SC2016
-# cleanup.sh <pr> [--keep-branch]: post-merge tidy of the remote head branch, local checkout, local head and goal backup branches. Never removes worktrees.
+# cleanup.sh <pr> [--keep-branch] [--no-checkout]: post-merge tidy of the remote head branch, local checkout, local head and goal backup branches. Never removes worktrees.
+# --no-checkout leaves the checkout alone (no fetch, switch or pull) and deletes the local branch whenever it is checked out nowhere.
 set -euo pipefail
 # shellcheck source=scripts/agent-harness/lib.sh
-. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
-usage="usage: cleanup.sh <pr> [--keep-branch]"
-pr="" keep=""
+. "${BASH_SOURCE[0]%/*}/lib.sh"
+usage="usage: cleanup.sh <pr> [--keep-branch] [--no-checkout]"
+pr="" keep="" nocheckout=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --keep-branch) keep=1 ;;
+    --no-checkout) nocheckout=1 ;;
     -*) echo "$usage" >&2; exit 2 ;;
     *) [ -z "$pr" ] || { echo "$usage" >&2; exit 2; }; pr="$1" ;;
   esac
@@ -18,7 +20,8 @@ done
 
 refuse() { echo "cleanup refused: $1" >&2; exit 1; }
 say() { echo "cleanup: $*"; }
-g() { git -C "$ROOT" "$@"; }
+CO="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+g() { git -C "$CO" "$@"; }
 
 view="$("$GH" pr view "$pr" --json state,headRefName,headRefOid,isCrossRepository)" || refuse "cannot read PR #$pr"
 base="$(base_branch)" || refuse "cannot resolve the base branch"
@@ -33,12 +36,14 @@ if autonomy_on; then
   [ "$gpr" = "$pr" ] || refuse "goal tracks PR #$gpr, not #$pr"
 fi
 
+errf="$(mktemp)"
+trap 'rm -f "$errf"' EXIT
 if [ -z "$keep" ] && [ "$cross" = false ]; then
   repo="$("$GH" repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)" || repo=""
   if [ -z "$repo" ]; then
     say "remote $branch skipped (repo unknown)"
-  elif ! info="$("$GH" api "repos/$repo/branches/$branch" 2>/dev/null)"; then
-    say "remote $branch absent"
+  elif ! info="$("$GH" api "repos/$repo/branches/$branch" 2>"$errf")"; then
+    if grep -q 'HTTP 404' "$errf"; then say "remote $branch absent"; else say "remote $branch unknown (gh error)"; fi
   elif [ "$(jq -r '.protected // false' <<<"$info")" = true ]; then
     say "remote $branch kept (protected)"
   elif ! by_base="$("$GH" pr list --state open --base "$branch" --json number --jq '.[].number' 2>/dev/null)" ||
@@ -57,7 +62,9 @@ fi
 
 dirty=""
 [ -z "$(g status --porcelain 2>/dev/null)" ] || dirty=1
-if [ "${GITHUB_ACTIONS:-}" = true ]; then
+if [ -n "$nocheckout" ]; then
+  say "checkout untouched"
+elif [ "${GITHUB_ACTIONS:-}" = true ]; then
   say "checkout skipped (ci)"
 elif [ -n "$dirty" ]; then
   say "checkout skipped (dirty tree)"
@@ -84,7 +91,7 @@ current="$(g rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 
 if [ -z "$keep" ] && [ "$branch" != "$current" ] && g show-ref --verify --quiet "refs/heads/$branch"; then
   tip="$(g rev-parse "refs/heads/$branch")"
-  if [ -n "$dirty" ]; then
+  if [ -n "$dirty" ] && [ -z "$nocheckout" ]; then
     say "local $branch kept (dirty tree)"
   elif [ "$tip" = "$oid" ] || g merge-base --is-ancestor "$tip" "$oid" 2>/dev/null; then
     if g branch -D "$branch" >/dev/null 2>&1; then say "local $branch deleted"; else say "local $branch kept (delete failed)"; fi
@@ -111,7 +118,7 @@ if [ "$(goal_get '.pr // empty')" = "$pr" ]; then
   fi
 fi
 
-gd="$(cd "$ROOT" && cd "$(g rev-parse --git-dir)" && pwd -P)"
-gc="$(cd "$ROOT" && cd "$(g rev-parse --git-common-dir)" && pwd -P)"
+gd="$(cd "$CO" && cd "$(g rev-parse --git-dir)" && pwd -P)"
+gc="$(cd "$CO" && cd "$(g rev-parse --git-common-dir)" && pwd -P)"
 [ "$gd" = "$gc" ] || say "worktree $(g rev-parse --show-toplevel) kept"
 exit 0

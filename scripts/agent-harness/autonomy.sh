@@ -1,8 +1,8 @@
-#!/usr/bin/env bash
+#!/bin/bash -p
 # Usage: autonomy.sh on|off|status
 set -euo pipefail
 # shellcheck source=scripts/agent-harness/lib.sh
-. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+. "${BASH_SOURCE[0]%/*}/lib.sh"
 
 exclude_state_dir() {
   [ "$STATE_DIR" = "$DEFAULT_STATE_DIR" ] || return 0

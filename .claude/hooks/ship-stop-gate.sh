@@ -3,10 +3,11 @@
 # Stop: while autonomous with an active goal, block stopping until the PR is merged. Fails open when GitHub is unreadable.
 set -u
 cat >/dev/null
-ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+ROOT="$(git -C "${CLAUDE_PROJECT_DIR:-$PWD}" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')"
+[ -n "$ROOT" ] || ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
 STATE_DIR="$ROOT/.claude/state"
 [ "${AGENT_HARNESS_TEST:-}" = 1 ] && STATE_DIR="${AGENT_STATE_DIR:-${TLTB_STATE_DIR:-$STATE_DIR}}"
-NOTIFY="${AGENT_HARNESS_DIR:-$HOME/.claude/scripts/agent-harness}/notify.sh"
+HARNESS_HOME="$HOME/.claude/scripts/agent-harness"
 GOAL_FILE="$STATE_DIR/goal.json"
 GH=gh
 [ "${AGENT_HARNESS_TEST:-}" = 1 ] && GH="${GH_BIN:-gh}"
@@ -14,15 +15,35 @@ MAX_BLOCKS=5
 MAX_TOTAL_BLOCKS=30
 
 [ -f "$STATE_DIR/autonomy.on" ] || exit 0
+notify() {
+  local dir="$HARNESS_HOME" ah
+  [ "${AGENT_HARNESS_TEST:-}" != 1 ] || dir="${AGENT_HARNESS_DIR:-$dir}"
+  if [ -f "$dir/notify.sh" ]; then bash -p "$dir/notify.sh" "$@"
+  elif ah="$(type -P agent-harness)"; then "$ah" notify "$@"
+  fi
+}
 goal_get() { jq -r "$1" "$GOAL_FILE" 2>/dev/null; }
 goal_update() {
   local tmp
   tmp="$(mktemp "$STATE_DIR/goal.XXXXXX")" || return 1
   if jq "$@" "$GOAL_FILE" >"$tmp"; then mv "$tmp" "$GOAL_FILE"; else rm -f "$tmp"; return 1; fi
 }
+reg_mirror() {
+  local slug common f tmp
+  slug="$(goal_get '.slug // empty')"
+  [ -n "$slug" ] || slug="$(goal_get '.branch // empty')"
+  slug="${slug//\//-}"
+  [[ "$slug" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || return 0
+  common="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 0
+  f="$common/agent-harness/goals/$slug.json"
+  [ -f "$f" ] || return 0
+  tmp="$(mktemp "$f.XXXXXX")" || return 0
+  if jq "$@" "$f" >"$tmp"; then mv "$tmp" "$f"; else rm -f "$tmp"; fi
+}
 escalate() {
   goal_update --arg r "$1" '.status = "escalated" | .reason = $r'
-  bash "$NOTIFY" failure "$1: $(goal_get '.goal')" "$(goal_get '.pr // empty')" || true
+  reg_mirror --arg r "$1" '.status = "escalated" | .reason = $r'
+  notify failure "$1: $(goal_get '.goal')" "$(goal_get '.pr // empty')" || true
 }
 [ -f "$GOAL_FILE" ] && [ "$(goal_get '.status')" = active ] || exit 0
 
@@ -35,7 +56,8 @@ if [ -n "$pr" ]; then
 fi
 if [ "$state" = MERGED ]; then
   goal_update '.status = "done"'
-  bash "$NOTIFY" "done" "PR #$pr merged" "$pr" || true
+  reg_mirror '.status = "done"'
+  notify "done" "PR #$pr merged" "$pr" || true
   exit 0
 fi
 

@@ -1,10 +1,42 @@
 # Ship lifecycle: stage detail
 
-Read this when you run a stage and need the exact command. The stage order and stop conditions are in
+Read this when you run a stage and need the exact command. The stage order, the blockers and the stop conditions are in
 [SKILL.md](../SKILL.md).
 
 Placeholders: `<base>` is the `base` key in `.claude/agent-harness.json`, or the repo default branch when the key is
-absent. `<slug>` is a short kebab-case name from the goal.
+absent. `<slug>` is a short kebab-case name from the goal. `<wt>` is the goal worktree path from the registry.
+`<type>/<scope>-<short-description>` is the branch convention from the git-workflow skill (Branch Convention).
+
+Keep the orchestrator's shell in the main checkout. Pass `<wt>` to every subagent brief and use `git -C <wt> ...` or
+absolute paths. Never `cd` into the worktree in the persistent shell.
+
+## 0. Init
+
+Init is the first action of the run, before the clarify round.
+
+```bash
+agent-harness ship-init <type> <scope> <desc> --goal "<goal text>"   # new goal
+agent-harness ship-init --adopt <pr>                                  # resume an existing PR
+```
+
+- It creates a dedicated worktree and branch from the latest `origin/<base>`.
+  - Orca-managed repo (`orca` on PATH and the repo is listed): created through `orca worktree create`.
+  - Anywhere else: a sibling directory `<main>-wt/<slug>`.
+- It writes the registry `<git-common-dir>/agent-harness/goals/<slug>.json` with `{v, goal, slug, branch, path, base,
+  via, pr, head_oid, status, reason, report, created_at}`. The file is local only, never tracked, one per goal, and
+  survives the worktree. `slug` is the registry file name: `ship-init` prints `slug=<slug>` on stderr (the worktree path
+  is the only thing on stdout), and `agent-harness report` accepts the slug or the branch.
+- It writes `branch` and `slug` into `goal.json` (created or merged). The state lives in one place, the main checkout:
+  `<main>/.claude/state/{goal.json,autonomy.on}`. Scripts and hooks resolve it from the first entry of
+  `git worktree list --porcelain`, so `goal pr|sha|escalate` and `ship-merge` behave the same from the main checkout
+  and from inside the worktree. The registry mirror is keyed on the `slug` in `goal.json`, not on the cwd's HEAD. One
+  `goal.json` tracks one goal at a time: a second `ship-init` repoints it and prints a note.
+- The stop gate mirrors `status` and `reason` (escalated or done) into the registry as well.
+- Read the registry for `path` before dispatching any subagent. Do not infer the path from the branch name.
+- Never reuse a branch that already has an open PR you did not create. Use `--adopt` for an existing PR of this goal.
+
+Worktree creation is allowed while the autonomy flag is on (autonomy rule, rule d). Removing a worktree is never done
+by this stage.
 
 ## 1. Clarify
 
@@ -30,59 +62,41 @@ agent-harness goal set "<goal text>" \
 Drop the `reviewStatus` criterion when the config does not set it. `set` replaces any earlier goal. Run
 `agent-harness goal status` to confirm it is active.
 
+Before planning, check the open PRs with [open-pr-check.md](../../../.claude/rules/common/open-pr-check.md) and record
+each overlapping PR's decision. A `Wait or cancel` outcome escalates.
+
 ## 3. Plan
 
-Dispatch `planner` with the goal, the clarified answers, and the assumptions. Ask for an ordered list of phases,
+Dispatch `planner` with the goal, the clarified answers, the assumptions and `<wt>`. Ask for an ordered list of phases,
 each with one verifiable check. Keep the plan in the decision log, not in chat.
 
-## 4. Branch or worktree
+## 4. Implement
 
-The branch name follows the branch convention `<type>/<scope>-<short-description>` from the git-workflow skill (Branch Convention) in every case:
-
-- `<type>`: the conventional commit type (`feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`).
-- `<scope>`: one lowercase alphanumeric token.
-- `<short-description>`: short kebab-case.
-
-Example: `fix/ship-branch-naming`. `git-specialist` names the branch. Never reuse a branch that already has an open PR you did not create.
-
-| Situation | Command |
-|---|---|
-| Repo managed by Orca (`orca` on PATH) | `orca worktree create --name <slug> --base-branch origin/<base>`, then check the branch |
-| Anywhere else | `git switch -c <type>/<scope>-<short-description>` |
-
-The installed `orca worktree create` may have no `--branch` flag (run `orca worktree create --help` to confirm for
-your version). After creating the worktree, run `git branch --show-current`. If it does not match `<type>/<scope>-<short-description>`, rename it with `git branch -m <type>/<scope>-<short-description>`. This is safe because the branch is local and not pushed yet.
-
-Worktree creation is allowed while the autonomy flag is on (see the autonomy rule, rule d). Removing a worktree is
-never allowed.
-
-## 5. Implement
-
-- Write the failing tests first: dispatch `tdd-guide` with the brief contract.
+- Write the failing tests first: dispatch `tdd-guide` with the brief contract. FILES are absolute paths under `<wt>`.
 - Then dispatch `coder` to make them pass. One brief per coherent unit. Parallel dispatches need disjoint FILES.
-- Commit through `git-specialist`, following the git workflow rule. Stage by explicit path. Commit messages are in
-  English.
+- Commit through `git-specialist` with `<wt>` as its working tree, following the git workflow rule. Stage by explicit
+  path. Commit messages are in English.
 
-## 6. Verify
+## 5. Verify
 
-Run these yourself. Paste the last ~15 lines of each output, or state `n/a — <reason>`.
+Run these yourself, in `<wt>`. Paste the last ~15 lines of each output, or state `n/a — <reason>`.
 
 | Case | What to run |
 |---|---|
-| `verify` key set in `.claude/agent-harness.json` | Run each listed command, in order |
+| `verify` key set in `.claude/agent-harness.json` | Run each listed command, in order, from `<wt>` |
 | No `verify` key | Use the verification-gate detection for the project type (`.claude/rules/common/verification-gate.md`) |
 | Docs only | `n/a — docs only` |
 
 Lint and format failures block the same way build failures do. Fix the diff, then re-run. Two failed passes that do
 not reduce the error count: stop and escalate.
 
-## 7. Draft the PR
+## 6. Draft the PR
 
-Dispatch `git-specialist` with the branch name, the base (`<base>`), an English conventional-commit title, and
-a body file. It runs these commands:
+Dispatch `git-specialist` with `<wt>`, the branch name, the base (`<base>`), an English conventional-commit title, and
+a body file. It runs these commands from `<wt>`:
 
 ```bash
-git push -u origin <type>/<scope>-<short-description>
+git -C <wt> push -u origin <type>/<scope>-<short-description>
 gh pr create --draft --base <base> --title "<type>: <description>" --body-file <body-file>
 ```
 
@@ -104,9 +118,9 @@ The body file has four sections. Write `None.` under any section that is empty:
 
 Then record the PR: `agent-harness goal pr <n>`.
 
-## 8. Thorough review (local, still draft)
+## 7. Thorough review (local, still draft)
 
-- Dispatch in one message, so they run in parallel, each on `git diff <base>...HEAD`:
+- Dispatch in one message, so they run in parallel, each on `git -C <wt> diff <base>...HEAD`:
   - `code-reviewer`: correctness, regressions, tests.
   - `security-reviewer`: auth, secrets, input, CI workflows, permissions.
   - `angular-cop` when Angular or TypeScript changed; `dotnet-cop` when .NET changed.
@@ -125,7 +139,7 @@ Then record the PR: `agent-harness goal pr <n>`.
 
 - The comment is an audit trail for a human. It is not a GitHub status. Nothing in the merge path reads it.
 
-## 9. Mark ready
+## 8. Mark ready
 
 ```bash
 gh pr ready <n>
@@ -133,7 +147,7 @@ gh pr ready <n>
 
 `ship-merge` refuses drafts and does not mark a PR ready, so run this step yourself.
 
-## 10. CI and optional review status
+## 9. CI and optional review status
 
 - Watch until every check finishes: `gh pr checks <n> --watch`.
 - Read the `reviewStatus` status for the head SHA. Skip this when the config does not set `reviewStatus`, which is the default:
@@ -155,7 +169,7 @@ gh pr ready <n>
   section. A CI failure caused by repo code or repo config, including workflow files, is fixed by the agent. A missing
   secret, a billing or quota limit, or an outage is escalated.
 
-## 11. Comments
+## 10. Comments
 
 - Run the `get-pr-comments` skill to list open threads and their node IDs.
 - Per thread you addressed: a code fix with a commit, or a reply that explains the decision. Then resolve it.
@@ -176,6 +190,34 @@ gh pr ready <n>
 - Interactive mode: show the user the reply text before posting. Autonomous mode: post directly.
 - Never touch a thread you did not address. Bot threads: reply only if the bot's finding is real.
 
+## 11. Report
+
+The report is a show-me HTML summary, committed in the PR and embedded in the PR body. Do it on the success path and on
+the blocked path.
+
+1. Generate the HTML with the `show-me` skill: what changed, why, the checks and their results, and screenshots when
+   the change touches the UI. Write it outside the tracked tree (for example `/tmp/<slug>-report.html`).
+2. Render it into the worktree. The command renders a temp copy of the HTML and writes only inside the registered
+   worktree (`<slug>` may also be the branch name):
+
+   ```bash
+   agent-harness report <slug> /tmp/<slug>-report.html
+   # writes <wt>/docs/agent-reports/<yyyy-mm-dd>-<slug>.png
+   ```
+
+3. Commit the PNG through `git-specialist` (explicit path, `docs(report): ...` or the goal's type, per the git workflow
+   rule). Push it, then `agent-harness goal sha <sha>`.
+4. Because the push changes the head, wait for CI on the new head (`gh pr checks <n> --watch`). A docs-only change may
+   skip some checks; that is expected, and only the required checks that ran must be green.
+5. Embed the image in the PR body with a commit-SHA permalink, where `<sha>` is the commit that holds the PNG
+   (`git -C <wt> rev-parse HEAD` right after the report commit). It survives branch deletion after the merge:
+
+   ```markdown
+   ![<slug> report](https://github.com/<owner>/<repo>/blob/<sha>/docs/agent-reports/<yyyy-mm-dd>-<slug>.png?raw=true)
+   ```
+
+   Update the body with `gh pr edit <n> --body-file <body-file>`.
+
 ## 12. Merge
 
 ```bash
@@ -195,28 +237,56 @@ agent-harness ship-merge <n> --confirmed  # interactive mode, after the user say
 - only when `reviewStatus` is configured: the newest status with that context on the head is `success`, created by
   `reviewStatusCreator` when that key is set
 
-It merges pinned to the head SHA (method: `--method`, else `mergeMethod` in the config, else the repo's first allowed of squash, rebase, merge), then runs cleanup (step 13). `--keep-branch` keeps the head branch.
+It merges pinned to the head SHA (method: `--method`, else `mergeMethod` in the config, else the repo's first allowed of squash, rebase, merge). Then it runs stage 13 for a registered goal, or `agent-harness cleanup <n>` for an unregistered PR. `--keep-branch` keeps the head branch.
 
 If it refuses, the refusal is input to the loop. Read the reason, fix the cause (rebase or update the branch, resolve a
 thread, fix a check, re-review), push, and retry the merge. The run only stops when the PR merges or a human-only
 blocker stops it. Do not add labels, post comments or create statuses to get past a refusal you did not earn.
 
-## 13. Post-merge cleanup
+## 13. Teardown
 
-`ship-merge` runs `agent-harness cleanup <n>` after the merge. Run it by hand only to retry an item it kept:
+`ship-merge` runs this after a successful merge for a registered goal:
 
 ```bash
-agent-harness cleanup <n>
+agent-harness teardown-merged-worktree <n>
 ```
 
-Each line starts with `cleanup:` and names one item:
+It removes, in order: the worktree, the remote head branch (already deleted counts as ok), the local head branch, and
+the registry file. The local branch is checked against the PR head commit, which survives squash merges.
 
-- `remote`: the PR's head branch on the remote.
-- `local`: the local head branch. Deleted only when fully merged (its tip is an ancestor of the PR head).
-- `checkout`: the base branch, updated. If the base is checked out in another worktree, the checkout detaches at `origin/<base>`.
-- `backup`: a backup branch recorded in `goal.json`.
-- `worktree`: a worktree that still holds a branch. Reported only, never removed.
+It acts only when every check passes, and re-runs the checks right before removal:
 
-For an item kept for a fixable reason (for example a checkout switch that failed on a dirty tree), fix the cause without
-discarding changes, then run `agent-harness cleanup <n>` once more. Never delete branches with `git branch -D`,
+- the PR is MERGED;
+- the worktree HEAD and the branch equal the PR head;
+- the path is a listed, real (non-symlink) worktree, and not the main checkout;
+- the tree is clean, including untracked files;
+- when Orca-managed, there is no Orca activity within `worktreeIdleMinutes` (default 60);
+- the registry file name equals the slug of the PR head branch, the path has the ship-init layout (`<main>-wt/<slug>`,
+  or an Orca workspace path ending in `/<slug>`), and `status` is not `escalated` or `blocked`;
+- Orca detection fails closed: a target under `*/orca/workspaces/*` while the repo is not Orca-managed, or an `orca`
+  binary whose repo list fails, is a STOP.
+
+The main checkout is not touched: teardown runs `cleanup` with `--no-checkout` (no fetch, switch or pull; a dirty main
+does not block it). Once the worktree is gone the local branch is checked out nowhere and is deleted. A GitHub error
+other than HTTP 404 leaves the remote state unknown, so the registry is kept and the rerun command is printed.
+
+Before removing, it lists the ignored files in the worktree, because they are lost. It never uses `--force`. With Orca,
+a refusal keeps the worktree, and there is no git fallback.
+
+Anything partial keeps the registry (`status` merged) and prints the rerun command. Rerun it with
+`agent-harness teardown-merged-worktree <n>` once the cause is fixed. A rerun is the normal fix, not an escalation.
+
+For an unregistered PR, `ship-merge` runs `agent-harness cleanup <n>` instead. Its lines start with `cleanup:` and name
+one item: `remote`, `local` (deleted only when fully merged), `checkout`, `backup` (a backup branch recorded in
+`goal.json`), or `worktree` (reported only, never removed). Never delete branches with `git branch -D`,
 `git push --delete`, or the GitHub API.
+
+After teardown: post the outcome comment (see SKILL.md "Final report"), open the show-me HTML locally, then
+`agent-harness notify done "<msg>" <n>` and `agent-harness goal status`.
+
+## Blocked path
+
+For a blocked or escalated goal, follow SKILL.md "Blocked path": keep the worktree, the branch and the registry
+(`status` escalated, with the reason). Generate and commit the report (stage 11), post the outcome comment with the
+`blob/<sha>` permalink, notify failure, and stop. Teardown never runs. Resume with
+`agent-harness ship-init --adopt <pr>`, or read the registry file.

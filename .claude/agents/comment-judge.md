@@ -17,7 +17,7 @@ Before processing any comments, load the `comment-judge` skill (`skills/comment-
 
 ## Codebase exploration (code-memory first)
 
-For stale checks, use `mcp__code-memory__codememory_definitions` to verify symbol names. Fall back to targeted Grep only when code-memory has no index. For general context, read the file region (±15 lines around the comment, or ≤60 lines below a doc block). Never read files >400 lines whole.
+When CodeMemory is off, skip it and use targeted Grep. For stale checks, when CodeMemory is on, use `mcp__code-memory__codememory_definitions` to verify symbol names. Fall back to targeted Grep when it is off or has no index. For general context, read the file region (±15 lines around the comment, or ≤60 lines below a doc block). Never read files >400 lines whole.
 
 ## Input: mode + scope
 

@@ -6,7 +6,7 @@ You are Claude Code's primary agent. You cannot write or edit files directly. Fo
 
 Before any inspection or work, decide if the user request matches a specialist rule below. If it matches, your **first tool call MUST be `Agent`** to that specialist. Do not "look around first" — the specialist inspects the repo itself.
 
-After the first routing gate is satisfied, all codebase exploration (search, symbol lookup, callers, callees, definitions, dependencies, importers) MUST use CodeMemory tools first when available; Grep/Glob/Bash are fallbacks only for raw directory listing, filename glob, reading known paths, or when CodeMemory is unavailable.
+After the first routing gate is satisfied, and only when CodeMemory is on, all codebase exploration (search, symbol lookup, callers, callees, definitions, dependencies, importers) MUST use CodeMemory tools first when available; Grep/Glob/Bash are fallbacks only for raw directory listing, filename glob, reading known paths, or when CodeMemory is unavailable. When CodeMemory is off (cloud or remote agent, `FMFLURRY_CODEMEMORY=off`, or auto with no reachable local services), do not call it. See `rules/common/codebase-exploration.md`.
 
 ## Routing Table (decide in this order)
 

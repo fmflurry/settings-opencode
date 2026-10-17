@@ -29,6 +29,8 @@ Step 4 is usually one small script that imports the same library the app ships a
 
 ## Steps
 
+When CodeMemory is off (cloud or remote agent, `FMFLURRY_CODEMEMORY=off`, or auto with no reachable local services), skip every `codememory_*` call below and use grep, glob, and read. Do not call CodeMemory. See `docs/codememory-cloud.md`.
+
 1. **Read the change.** The diff, the symbols it adds, changes, and deletes, and what it now does differently, including the part the diff doesn't spell out. Use code-memory: run `codememory_definitions` to pin each modified symbol, then `codememory_callers` (depth 2–3) to find call sites. Use `codememory_importers` and `codememory_dependencies` to map module boundaries. For DI tokens (Angular providers, .NET IModule implementations, Razor @inject), use `codememory_injectors` to find all consumers. For deleted symbols, use `codememory_callers_at_sha` against the prior commit to see what used to call them.
 
 2. **Find the one fact it's safe because of.** PR/commit archaeology: pull the PR and commits using the `why` skill Step 2 to understand intent and prior art. Most changes that look risky are safe because of a single fact, like "this call only drops already-dead cache entries and does nothing else". Find that fact. If it holds, most risky cases are cleared at once. Spend your time here, not on a long list of maybes.

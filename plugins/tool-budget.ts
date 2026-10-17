@@ -17,6 +17,7 @@
  */
 import type { PluginInput } from "@opencode-ai/plugin";
 
+import { resolveCodememory } from "./code-memory-lib/mode.ts";
 import { formatNumber } from "./llm-metrics-lib/format.ts";
 
 type Category = "exploratory" | "edit" | null;
@@ -72,6 +73,12 @@ function stateFor(states: Map<string, BudgetState>, sessionID: string): BudgetSt
 }
 
 export const ToolBudgetPlugin = async (_input: PluginInput) => {
+  let memoryOn = true;
+  try {
+    memoryOn = (await resolveCodememory()).enabled;
+  } catch {
+    memoryOn = false;
+  }
   const states = new Map<string, BudgetState>();
 
   return {
@@ -93,9 +100,11 @@ export const ToolBudgetPlugin = async (_input: PluginInput) => {
       if (category === "edit") state.edits += 1;
 
       if (category === "exploratory" && state.exploratory === 3 && state.edits === 0) {
-        state.pendingNudge =
-          "Exploratory budget hit (3, 0 edits). Next call must be code-memory, Glob, or an Edit. " +
-          "If the repo is not indexed, say so explicitly and continue.";
+        state.pendingNudge = memoryOn
+          ? "Exploratory budget hit (3, 0 edits). Next call must be code-memory, Glob, or an Edit. " +
+            "If the repo is not indexed, say so explicitly and continue."
+          : "Exploratory budget hit (3, 0 edits). Next call must be Glob or an Edit. " +
+            "If the repo is not indexed, say so explicitly and continue.";
         return;
       }
 

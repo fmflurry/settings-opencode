@@ -211,6 +211,7 @@ check "autonomy-context prints goal" grep -q 'Goal: ctx goal' <<<"$out"
 reset
 bash "$H/goal.sh" set "ship it" "crit a" "crit b"
 check "goal criteria array" test "$(jq '.criteria | length' "$TMP/state/goal.json")" = 2
+check "goal default fix cap is 3" test "$(jq -r .max_fix_iterations "$TMP/state/goal.json")" = 3
 jq '.max_fix_iterations = 2' "$TMP/state/goal.json" >"$TMP/g" && mv "$TMP/g" "$TMP/state/goal.json"
 bash "$H/goal.sh" bump; check "bump within max" test $? -eq 0
 ORCA_WORKTREE_ID='repo::/p' bash "$H/goal.sh" bump; rc=$?

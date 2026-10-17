@@ -26,7 +26,7 @@ Tag in output: `## Note: <question> (assumed: <default>)`
 ## Conductor Protocol
 
 ### On receiving blocking question:
-1. Attempt self-resolution: check repo (CodeMemory, codememory_claims, grep, read)
+1. Attempt self-resolution: check repo (CodeMemory when it is on, otherwise grep/read; `codememory_claims` only when CodeMemory is on)
 2. If resolvable → answer it, re-dispatch with answer folded into brief
 3. If NOT resolvable → `ask` tool immediately
 
@@ -50,10 +50,10 @@ Tag in output: `## Note: <question> (assumed: <default>)`
 
 ## Socratic-First Resolution
 
-Before surfacing ANY blocking question to user:
-1. `codememory_retrieve` — semantic search for answer
-2. `codememory_claims` — user preferences/decisions
-3. `grep`/`read` — verify exact files if CodeMemory is suggestive
+Before surfacing ANY blocking question to user. When CodeMemory is off, skip steps 1 and 2 and do not call it.
+1. `codememory_retrieve` — semantic search for answer (only when CodeMemory is on)
+2. `codememory_claims` — user preferences/decisions (only when CodeMemory is on)
+3. `grep`/`read` — verify exact files if CodeMemory is suggestive, or as the first lookup when it is off
 4. If REPO CAN ANSWER → answer it, fold into re-dispatch brief
 5. Only if REPO CANNOT ANSWER → `ask` tool with socratic-design shape:
    - Evidence: what you found

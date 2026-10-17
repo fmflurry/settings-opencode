@@ -710,6 +710,24 @@ Two directories, one source of truth. The **lab** is wherever you cloned this re
 
 **Parity phrasing:** the two harnesses are *synced on install*, not continuously identical. Right now `skills/` holds 69 skills while the shipped `.claude/skills/` mirror holds 52 — the canonical set outgrew the last sync. Run `settings-sync --skills-only` (or `scripts/sync-skills.sh`) to reconcile, and `scripts/skill-drift-check.sh` to confirm.
 
+<a id="cursor-plugin-version-en"></a>
+
+### Cursor plugin version
+
+The installed manifest version is `version` in `scripts/cursor-plugin/config.json`. `node scripts/build-cursor-plugin.mjs` copies it into `plugins/fmflurry-harness/.cursor-plugin/plugin.json` and copies `scripts/cursor-plugin/CHANGELOG.md` into the plugin. `node scripts/cursor-plugin/check.mjs` fails if those version fields differ or if the changelog has no heading for the current version. The marketplace entry has no version field. Root `package.json` versions the settings repo (GitHub releases), not this plugin.
+
+Bump that version by hand in each PR that changes plugin content or its build inputs:
+
+- **patch** — fixes, chores, and doc tweaks to plugin content
+- **minor** — new agents, skills, commands, rules, or behavior
+- **major** — breaking changes: renamed or removed agents or skills, changed tier keys, installer contract changes
+
+The check diffs the working tree against the merge-base with the base branch, so a root README edit does not need a bump. The version it must exceed is the base branch tip: `origin/master` locally, `origin/$GITHUB_BASE_REF` in GitHub Actions (the workflow fetches that ref), or `CURSOR_PLUGIN_BASE` when set. If none of those refs exist, the check prints a skip message and continues.
+
+Plugin sources are `plugins/fmflurry-harness/`, the `.claude` agents, commands, rules, skills, `CLAUDE.md`, `settings.json`, and the hook scripts named in `hooks.include`, plus `skills/`, `commands/`, `opencode.jsonc`, `scripts/build-cursor-plugin.mjs`, `scripts/sync-skills.sh`, and the cursor-plugin config, library, changelog, README template, adapter, setup-harness template, and logo. `scripts/cursor-plugin/check.mjs` does not ship in the plugin.
+
+bump the plugin version + changelog in any PR touching plugin sources.
+
 <a id="flow-en"></a>
 
 ### How it fits together
@@ -1040,6 +1058,22 @@ Deux repertoires, une source de verite: le **lab** (ton clone de ce repo) et le 
 - `install-cursor.sh` génère un plugin Cursor (`node scripts/build-cursor-plugin.mjs` -> `plugins/fmflurry-harness/`) et le copie dans `~/.cursor/plugins/local/fmflurry-harness`, puis Developer: Reload Window dans Cursor. Options : `--yes`, `--link` (symlink au lieu de copie), `--migrate-legacy` (sauvegarde puis supprime ce que l'ancien installeur a copié dans `~/.cursor`, en gardant vos propres entrées), `--uninstall`, `--no-backup`. Limites : pas de liste d'outils par agent, routage du conductor par instruction uniquement, hooks Notification non supportés.
 
 **Parite:** les harnesses sont *synces a l'install*, pas identiques en continu. Aujourd'hui `skills/` = 69 alors que `.claude/skills/` = 52: lancer `settings-sync --skills-only` pour reconcilier.
+
+<a id="cursor-plugin-version-fr"></a>
+
+### Version du plugin Cursor
+
+Le numero installe est `version` dans `scripts/cursor-plugin/config.json`. `node scripts/build-cursor-plugin.mjs` le copie dans `plugins/fmflurry-harness/.cursor-plugin/plugin.json` et copie `scripts/cursor-plugin/CHANGELOG.md` dans le plugin. `node scripts/cursor-plugin/check.mjs` echoue si ces deux versions divergent ou si le changelog n'a pas de titre pour la version courante. L'entree marketplace n'a pas de version. Le `package.json` racine versionne le depot settings (releases GitHub), pas ce plugin.
+
+Monter la version a la main dans chaque PR qui touche le contenu du plugin ou ses entrees de build :
+
+- **patch** — correctifs, chores, retouches de doc du plugin
+- **minor** — nouveaux agents, skills, commandes, regles, ou comportement
+- **major** — ruptures : agents ou skills renommes ou retires, cles de tier changees, contrat de l'installeur change
+
+Le check compare l'arbre de travail au merge-base avec la branche de base : un edit du README racine n'exige pas de bump. La version a depasser est la pointe de la branche de base (`origin/master`, `origin/$GITHUB_BASE_REF` en CI, ou `CURSOR_PLUGIN_BASE`). Sans aucune de ces refs, le check affiche un message et continue.
+
+bump the plugin version + changelog in any PR touching plugin sources.
 
 <a id="flow-fr"></a>
 

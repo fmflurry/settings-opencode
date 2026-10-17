@@ -129,3 +129,9 @@ In all cases:
 4. **Commit & Push**
    - Detailed commit messages
    - Follow conventional commits format
+
+## Cursor plugin version
+
+bump the plugin version + changelog in any PR touching plugin sources.
+
+`scripts/cursor-plugin/config.json` field `version` is the source of truth. The build copies it into `plugins/fmflurry-harness/.cursor-plugin/plugin.json`. Patch for fixes, chores, and doc tweaks; minor for new agents, skills, commands, rules, or behavior; major for breaking changes (renamed or removed agents or skills, tier key changes, installer contract). `node scripts/cursor-plugin/check.mjs` requires a strictly greater version when plugin sources differ from the base branch.

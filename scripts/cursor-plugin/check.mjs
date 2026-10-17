@@ -3,6 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { splitFrontmatter, unquote } from './lib.mjs';
+import {
+  assessPluginVersion,
+  changelogHasVersion,
+  parseSemver,
+  pluginSourcePaths,
+} from './version-guard.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const out = path.resolve(here, '../../plugins/fmflurry-harness');
@@ -15,6 +21,9 @@ if (!fs.existsSync(pluginPath)) {
 } else {
   const plugin = JSON.parse(fs.readFileSync(pluginPath, 'utf8'));
   if (!plugin.name) errors.push('plugin.json: missing name');
+  if (plugin.version !== config.version) {
+    errors.push(`plugin.json version ${JSON.stringify(plugin.version)} != config.json version ${JSON.stringify(config.version)} (source of truth: scripts/cursor-plugin/config.json; run node scripts/build-cursor-plugin.mjs)`);
+  }
   for (const key of Object.keys(plugin)) {
     if (!config.pluginKeys.includes(key)) errors.push(`plugin.json: key not in schema: ${key}`);
   }
@@ -142,6 +151,47 @@ function scan(dir) {
 }
 if (fs.existsSync(out)) scan(out);
 else errors.push('plugins/fmflurry-harness does not exist');
+
+if (!parseSemver(config.version)) {
+  errors.push(`config.json version ${JSON.stringify(config.version)} must be MAJOR.MINOR.PATCH`);
+}
+
+function readChangelog(label, file) {
+  if (!fs.existsSync(file)) {
+    errors.push(`${label}: missing changelog (need a heading for ${config.version})`);
+    return null;
+  }
+  const text = fs.readFileSync(file, 'utf8');
+  if (parseSemver(config.version) && !changelogHasVersion(text, config.version)) {
+    errors.push(`${label}: missing changelog heading for ${config.version} (for example "## [${config.version}]")`);
+  }
+  return text;
+}
+
+const sourceChangelog = readChangelog('scripts/cursor-plugin/CHANGELOG.md', path.join(here, 'CHANGELOG.md'));
+const builtChangelog = readChangelog('plugins/fmflurry-harness/CHANGELOG.md', path.join(out, 'CHANGELOG.md'));
+if (sourceChangelog != null && builtChangelog != null && sourceChangelog !== builtChangelog) {
+  errors.push('plugins/fmflurry-harness/CHANGELOG.md differs from scripts/cursor-plugin/CHANGELOG.md; run node scripts/build-cursor-plugin.mjs');
+}
+
+const marketplacePath = path.join(here, '../../.cursor-plugin/marketplace.json');
+if (fs.existsSync(marketplacePath)) {
+  const marketplace = JSON.parse(fs.readFileSync(marketplacePath, 'utf8'));
+  for (const entry of marketplace.plugins ?? []) {
+    if (entry.name !== config.name || entry.version === undefined) continue;
+    if (entry.version !== config.version) {
+      errors.push(`marketplace.json: ${entry.name} version ${JSON.stringify(entry.version)} != config.json version ${JSON.stringify(config.version)}`);
+    }
+  }
+}
+
+const guard = assessPluginVersion({
+  repoDir: path.resolve(here, '../..'),
+  paths: pluginSourcePaths(config),
+  currentVersion: String(config.version ?? ''),
+});
+for (const notice of guard.notices) console.log(notice);
+errors.push(...guard.errors);
 
 if (errors.length) {
   console.error(errors.join('\n'));

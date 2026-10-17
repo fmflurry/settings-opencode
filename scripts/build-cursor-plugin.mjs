@@ -11,6 +11,7 @@ import {
 
 const repoDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const config = JSON.parse(fs.readFileSync(path.join(repoDir, 'scripts/cursor-plugin/config.json'), 'utf8'));
+const repoName = (config.repository ?? '').split('/').pop().replace(/\.git$/, '') || path.basename(repoDir);
 const out = path.join(repoDir, 'plugins', config.name);
 const claudeDir = path.join(repoDir, '.claude');
 const assertTiered = tierGuard(config);
@@ -124,6 +125,7 @@ write('hooks/scripts/cursor-adapter.sh', read(path.join(repoDir, 'scripts/cursor
 for (const script of hooks.scripts) {
   write(`hooks/scripts/${script}`, portableHookScript(read(path.join(claudeDir, 'hooks', script))), 0o755);
 }
+write('hooks/scripts/codememory-mode.sh', portableHookScript(read(path.join(claudeDir, 'hooks', 'codememory-mode.sh'))), 0o755);
 
 write('mcp.json', JSON.stringify(buildMcp(opencodeCfg), null, 2) + '\n');
 
@@ -135,7 +137,7 @@ const TEXT_EXT = new Set(['.md', '.mdc', '.json', '.txt', '.yaml', '.yml']);
     if (e.isDirectory()) scrub(p);
     else if (e.isFile() && TEXT_EXT.has(path.extname(e.name))) {
       const text = read(p);
-      const clean = sanitize(text, repoDir);
+      const clean = sanitize(text, repoDir, repoName);
       if (clean !== text) fs.writeFileSync(p, clean);
     }
   }

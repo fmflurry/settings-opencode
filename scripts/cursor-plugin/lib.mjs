@@ -270,10 +270,14 @@ export function stripAtImports(body) {
   return body.replace(/^@\S+[ \t]*\n/gm, '').replace(/\n{3,}/g, '\n\n');
 }
 
-export function sanitize(text, repoDir) {
-  const repoName = repoDir.split('/').pop().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const authorCheckout = new RegExp(`/(?:Users|home)/[^/\\s"'\`)]+/Workspace/${repoName}(?![\\w-])`, 'g');
-  return text.split(repoDir).join('<repo>').replace(authorCheckout, '<repo>').replace(/\/Users\/[^/\s"'`)]+/g, '/home/user');
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function sanitize(text, repoDir, repoName = repoDir.split('/').pop()) {
+  const checkout = new RegExp(`${escapeRegExp(repoDir)}(?![\\w-])`, 'g');
+  const authorCheckout = new RegExp(`/(?:Users|home)/[^/\\s"'\`)]+/Workspace/${escapeRegExp(repoName)}(?![\\w-])`, 'g');
+  return text.replace(checkout, '<repo>').replace(authorCheckout, '<repo>').replace(/\/Users\/[^/\s"'`)]+/g, '/home/user');
 }
 
 const HOOK_EVENT_MAP = { PreToolUse: 'preToolUse', Stop: 'stop', SubagentStop: 'subagentStop' };

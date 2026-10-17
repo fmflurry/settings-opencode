@@ -61,8 +61,9 @@ merged), or it is escalated. Escalate only when a human-only blocker stops it, o
 progress (the same blocker and the same failure as the one before). Record the reason with
 `agent-harness goal escalate "<reason>"`. The Stop hook (`ship-stop-gate`) blocks an early stop while the goal is
 active and the PR is unmerged. It escalates after five no-progress blocks or 30 blocks in total, and it fails open
-when the host cannot be read. `agent-harness goal bump` exits 3 at its round ceiling, which also counts as an
-escalation. Do not work around the loop by ending the turn.
+when the host cannot be read. Review/fix rounds stop at 3. `agent-harness goal bump` exits 3 at that ceiling.
+Stop and tell the user the remaining findings. Do not start another fix round. The no-progress rule still escalates
+earlier. Do not work around the loop by ending the turn.
 
 ## Scope
 

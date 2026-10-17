@@ -15,7 +15,7 @@
 >
 > - **Orientation, not scanning.** One `code-memory_codememory_retrieve` call surfaces the right paths, symbols, and prior decisions; `grep`/`read` only run afterwards for exact verification.
 > - **Cross-session memory.** Episodes and findings persist — agents pick up where the last session left off instead of re-discovering the repo from scratch.
-> - **Wired in by default.** `instructions/codememory-first.md` is loaded at session start, and `code-memory_*` tools are pre-allowlisted for the conductor and every specialist subagent.
+> - **Wired in by default.** `instructions/codememory-first.md` is loaded at session start, and `code-memory_*` tools are pre-allowlisted for the conductor and every specialist subagent. Cloud and remote agents skip CodeMemory (`docs/codememory-cloud.md`). `FMFLURRY_CODEMEMORY=on` keeps it on.
 
 # OpenCode + Claude Code Setup
 
@@ -503,7 +503,7 @@ Removing a worktree is treated like `rm -rf`, not bookkeeping (`instructions/wor
 
 #### 9. Codememory-first
 
-When the `code-memory` MCP server is connected, its tools are the mandatory first choice for search, callers, definitions, importers, and dependencies (`instructions/codememory-first.md`). `grep`/`glob`/`bash` are fallbacks only — raw listing, filename globs, or a known path region. This is the rule that makes orientation cheap for every other agent.
+When the `code-memory` MCP server is connected and CodeMemory is on, its tools are the mandatory first choice for search, callers, definitions, importers, and dependencies (`instructions/codememory-first.md`). `grep`/`glob`/`bash` are fallbacks only — raw listing, filename globs, or a known path region. Cloud and remote agents skip CodeMemory (`docs/codememory-cloud.md`). This is the rule that makes orientation cheap for every other agent.
 
 ### Hardened sub-agent orchestration
 
@@ -804,7 +804,7 @@ It then merges pinned to the head SHA and runs `agent-harness cleanup <pr>`. Cle
 
 **Review.** Ship stage 8 runs a thorough local review: `code-reviewer`, `security-reviewer`, and the stack cop
 (`angular-cop` or `dotnet-cop`) on the PR diff. The agent fixes confirmed CRITICAL and HIGH findings, re-runs the
-review after each fix (no round cap; the no-progress rule decides when to escalate), and posts one summary comment for a human to audit. That review is a quality step, not a merge
+review after each fix (capped at 3 review/fix rounds; the no-progress rule can still escalate earlier; hitting the cap stops and escalates with the remaining findings), and posts one summary comment for a human to audit. That review is a quality step, not a merge
 rail. No GitHub status is created, and `ship-merge` does not trust the comment.
 
 **Push rules.** Pushes to the base branch are forbidden in every mode, with or without force. `git push --mirror`, `--all`, and `--no-verify` are forbidden too. Force pushes (`--force`, `--force-with-lease`, `-f`, `+refspec`) are allowed on other branches.
@@ -1137,7 +1137,7 @@ Ensuite, la fusion est épinglée au SHA de la tête, puis `agent-harness cleanu
 
 **Règles de push.** Les pushes vers la branche de base sont interdits dans tous les modes, avec ou sans force. `git push --mirror`, `--all` et `--no-verify` sont aussi interdits. Les force pushes (`--force`, `--force-with-lease`, `-f`, `+refspec`) sont autorisés sur les autres branches.
 
-**Revue.** L'étape 8 du ship lance une revue locale approfondie : `code-reviewer`, `security-reviewer`, et le cop du stack (`angular-cop` ou `dotnet-cop`) sur le diff de la PR. L'agent corrige les findings CRITICAL et HIGH confirmés, relance la revue après chaque correction (sans plafond de tours ; la règle d'absence de progrès décide de l'escalade), et publie un commentaire de synthèse que l'humain peut auditer. Cette revue est une étape de qualité, pas un garde-fou de fusion. Aucun status GitHub n'est créé, et `ship-merge` ne fait pas confiance à ce commentaire.
+**Revue.** L'étape 8 du ship lance une revue locale approfondie : `code-reviewer`, `security-reviewer`, et le cop du stack (`angular-cop` ou `dotnet-cop`) sur le diff de la PR. L'agent corrige les findings CRITICAL et HIGH confirmés, relance la revue après chaque correction (plafond de 3 tours de revue/correctif ; la règle d'absence de progrès peut encore escalader plus tôt ; au plafond, l'agent s'arrête et escalade avec les findings restants), et publie un commentaire de synthèse que l'humain peut auditer. Cette revue est une étape de qualité, pas un garde-fou de fusion. Aucun status GitHub n'est créé, et `ship-merge` ne fait pas confiance à ce commentaire.
 
 **Notifications.** Le run notifie seulement quand un humain doit agir, ou quand l'objectif se termine : `question` quand il doit s'arrêter pour une réponse, `waiting` sur un prompt de permission ou d'inactivité, `failure` en cas d'escalade, et `done` quand la PR est fusionnée. Aucune notification de progression.
 

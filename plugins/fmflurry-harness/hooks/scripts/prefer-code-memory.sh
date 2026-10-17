@@ -6,6 +6,18 @@
 
 set -euo pipefail
 
+MODE_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/codememory-mode.sh"
+if [[ ! -f "$MODE_SH" ]]; then
+  cat >/dev/null || true
+  exit 0
+fi
+# shellcheck source=codememory-mode.sh
+. "$MODE_SH"
+if ! codememory_enabled; then
+  cat >/dev/null || true
+  exit 0
+fi
+
 # Read the full JSON payload from stdin
 PAYLOAD="$(cat)"
 

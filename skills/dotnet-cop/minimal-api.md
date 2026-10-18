@@ -2,7 +2,7 @@
 
 Endpoint mapping, route groups, ProblemDetails error handling, FluentValidation at boundary, typed results, no business logic in handlers.
 
-## 🔴 Blockers
+## 🔴 Important
 
 ### Business logic inside endpoint handler
 ```csharp
@@ -55,7 +55,7 @@ return Result<T>.Fail(validationError).ToHttpResult();
 
 The global `ExceptionHandler` is reserved for genuinely unexpected exceptions only (DB/IO/framework crashes) → 500 response.
 
-## 🟠 Security
+## 🔴 Important [sec]
 
 ### Unvalidated input reaching use case
 ```csharp
@@ -90,7 +90,7 @@ app.MapDelete("/users/{id}", async (...) => ...).RequireAuthorization();
 // Or use a policy: .RequireAuthorization("AdminOnly")
 ```
 
-## 🟡 Risks
+## 🟡 Nit [risk]
 
 ### Inline route group vs. `IEndpoint` / `MinimalApi.Endpoint` base
 Project convention: endpoints implement `IEndpoint` and register themselves via the module. Inline `app.MapX` outside the module registration is a pattern violation:
@@ -127,7 +127,7 @@ await useCase.HandleAsync(req);
 // ExceptionHandler sees UserNotFoundException -> 404 ProblemDetails
 ```
 
-## 🔵 Nits
+## 🟡 Nit
 
 - Route groups should be defined in the module's endpoint registration, not scattered.
 - Use `Results<T1, T2>` union return type for endpoints with multiple success/error paths so OpenAPI schema is precise.

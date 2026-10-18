@@ -150,7 +150,7 @@
       },
     },
     "comment-judge": {
-      "description": "Read-only comment judge. Applies rubric-based verdict to code comments: false/stale (🔴), forbidden/narration/noise (🟡), unsure (❓). REVIEW mode for diffs; PURGE mode for directory scans. Emits JSON findings.",
+      "description": "Read-only comment judge. Applies rubric-based verdict to code comments: false/stale (Important), forbidden/narration/noise (Nit), unsure (❓). REVIEW mode for diffs; PURGE mode for directory scans. Emits JSON findings.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "prompt": "{file:prompts/agents/comment-judge.txt}",

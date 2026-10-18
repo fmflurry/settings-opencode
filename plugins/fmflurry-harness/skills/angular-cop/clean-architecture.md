@@ -2,7 +2,7 @@
 
 DDD layering: presentation → application → domain → infrastructure. Facade + use-case + port + adapter + store. Mirror the [[angular-clean-architecture]] skill.
 
-## 🟢 Architecture blockers
+## 🔴 Important [arch]
 
 ### Component depends on UseCase directly
 Per global rule: components NEVER inject use-cases. They inject the facade.
@@ -52,7 +52,7 @@ Feature A imports concrete classes from feature B's `infrastructure/` or `applic
 // BAD - use-case orchestration belongs in facade
 class CreateOrderUseCase {
   execute() {
-    new ValidateCustomerUseCase().execute(...);  // 🟢
+    new ValidateCustomerUseCase().execute(...);  // 🔴
   }
 }
 
@@ -65,7 +65,7 @@ class OrderFacade {
 }
 ```
 
-## 🟡 Risks
+## 🟡 Nit [risk]
 
 ### Ad-hoc display formatting in components/templates
 Flag local presentation formatting/parsing when reusable Angular pipes or app helpers can do it.
@@ -80,7 +80,7 @@ Flag local presentation formatting/parsing when reusable Angular pipes or app he
 - If no reusable pipe/helper exists, request one in shared/presentation layer; do not accept local component helper.
 - Component may choose data and pass args; pipe/helper owns display transformation.
 
-Report as 🟡 risk, or 🟢 arch when repeated/local formatting creates clear duplication or violates AGENTS.md presentation rules.
+Report as 🟡 Nit [risk], or 🔴 Important [arch] when repeated/local formatting creates clear duplication or violates an AGENTS.md presentation rule.
 
 Example:
 
@@ -124,7 +124,7 @@ Adapter should translate HTTP errors to domain errors before they cross the port
 - Feature-level providers via `provideX()` function returning `Provider[]`.
 - Session/app-scope only in root or session context registry.
 
-## 🔵 Nits
+## 🟡 Nit
 
 - File naming: `*.facade.ts`, `*.usecase.ts` (or `*.use-case.ts` — match project), `*.port.ts`, `*.adapter.ts`, `*.store.ts`.
 - One use-case per file. One adapter per port.

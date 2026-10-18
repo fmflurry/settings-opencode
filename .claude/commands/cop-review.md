@@ -74,9 +74,9 @@ The review report is saved as a static HTML file under `docs/code-review/` — o
 
 A single markdown document with:
 - Header (target, base SHA, head SHA, counts table, verdict)
-- Blockers (🔴 / 🟠 / 🟢 when AGENTS.md mandates)
-- Should-fix (🟡)
-- Optional (🔵 / ❓) collapsed
+- Important (🔴), including a finding that cites an AGENTS.md hard rule
+- Nit (🟡)
+- Pre-existing (⚪) and questions (❓), collapsed. Questions never block. Pre-existing does not block.
 - Tooling (build / lint / format summaries)
 - Footer
 

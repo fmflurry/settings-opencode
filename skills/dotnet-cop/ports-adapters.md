@@ -2,13 +2,13 @@
 
 Core defines ports (interfaces). Infrastructure implements adapters. Dependency direction enforced. No EF entities or infrastructure types leaking into Core.
 
-## 🟢 Architecture blockers
+## 🔴 Important [arch]
 
 ### Core imports infrastructure namespace
 ```csharp
 // BAD — use case in Core/ references EF Core or HTTP client
-using Microsoft.EntityFrameworkCore;           // 🟢 in Core/ use case
-using System.Net.Http;                         // 🟢 in Core/ use case
+using Microsoft.EntityFrameworkCore;           // 🔴 in Core/ use case
+using System.Net.Http;                         // 🔴 in Core/ use case
 
 // GOOD — Core knows only its own types + BCL primitives
 // Core/<VerbNoun>.cs has zero using directives pointing to Infrastructure/
@@ -20,7 +20,7 @@ The dependency rule is absolute: Core → nothing infrastructure. If Core needs 
 // BAD — outgoing port returns EF entity
 public interface IGetOrderPort
 {
-    Task<OrderEntity> FindByIdAsync(Guid id);  // 🟢 EF entity in port signature
+    Task<OrderEntity> FindByIdAsync(Guid id);  // 🔴 EF entity in port signature
 }
 
 // GOOD — port returns a domain model
@@ -34,7 +34,7 @@ EF entities stay in `Infrastructure/`. Map in the adapter using Riok.Mapperly be
 ### Adapter imports from another module's Core
 ```csharp
 // BAD — Order adapter references User domain model
-using MyApp.Module.User.Core.Model;            // 🟢 cross-module Core import
+using MyApp.Module.User.Core.Model;            // 🔴 cross-module Core import
 
 // GOOD — use shared contracts or a dedicated outgoing port in OrderModule
 ```
@@ -69,7 +69,7 @@ services.AddScoped<ICreateOrder, CreateOrder>();
 services.AddScoped<ICreateOrderPort, CreateOrderAdapter>();
 ```
 
-## 🟡 Risks
+## 🟡 Nit [risk]
 
 ### Adapter throws raw infrastructure exceptions across the port boundary
 ```csharp
@@ -119,7 +119,7 @@ Riok.Mapperly mappers map between EF entities and domain models. They belong in 
 ### One adapter handles multiple unrelated outgoing ports
 ISP violation: each adapter should implement one outgoing port. Split large adapters into focused ones.
 
-## 🔵 Nits
+## 🟡 Nit
 
 - Incoming port naming: `I<VerbNoun>` (e.g. `ICreateOrder`, `IGetUser`).
 - Outgoing port naming: `I<VerbNoun>Port` (e.g. `ICreateOrderPort`, `IGetUserPort`).

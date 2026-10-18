@@ -2,7 +2,7 @@
 
 Subscription lifecycle, leak patterns, async pipe, signal interop.
 
-## 🔴 Blockers
+## 🔴 Important
 
 ### Subscription without teardown
 ```ts
@@ -40,7 +40,7 @@ a$.pipe(switchMap(a => b$)).subscribe(...);
 <div *ngIf="data$ | async as data">{{ data.name }}</div>
 ```
 
-## 🟡 Risks
+## 🟡 Nit [risk]
 
 ### `Subject` used where `BehaviorSubject` / signal is correct
 - Need current value on subscribe? -> `BehaviorSubject` or signal.
@@ -68,7 +68,7 @@ data$.subscribe(d => d.processed = true);
 data$.pipe(map(d => ({ ...d, processed: true }))).subscribe(...);
 ```
 
-## 🟢 Architecture
+## 🔴 Important [arch]
 
 ### Components subscribing instead of facade
 Per global rule and project AGENTS.md: components consume signals from facade. Facade owns the subscription lifecycle.
@@ -90,7 +90,7 @@ class FooComponent {
 
 If using flurryx, see [[angular-cop-flurryx]] — `syncToStore` handles teardown via DestroyRef-aware Store.
 
-## 🔵 Nits
+## 🟡 Nit
 
 - Operator imports from `rxjs` (not deep paths like `rxjs/operators` post-v7).
 - Prefer `toSignal` / `toObservable` for interop over manual bridges.

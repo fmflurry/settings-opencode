@@ -205,7 +205,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE <context>_migrator IN SCHEMA <context>
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO <context>_app;
 ```
 
-**Forbidden** (🔴 blockers):
+**Forbidden** (🔴 Important):
 - Cross-schema query: `SELECT ... FROM <other_context>.table` in a handler.
 - Cross-schema grant: `GRANT ... ON SCHEMA <other_context> TO <context>_app`.
 - DDL by runtime role: Runtime connection used to run migrations; table owned by `<context>_app`; missing `REVOKE CREATE`.

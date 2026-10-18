@@ -52,7 +52,7 @@ A comment is a sign of failure to write clear code. Use it only when the *why* i
 
 ## Truthfulness clause
 
-**A comment that asserts behavior must be true of the code as written.** A false or stale comment is a blocker (🔴). When code changes, update or delete comments it contradicts. Never leave a comment that is no longer true.
+**A comment that asserts behavior must be true of the code as written.** A false or stale comment is Important (🔴). When code changes, update or delete comments it contradicts. Never leave a comment that is no longer true.
 
 Example:
 ```csharp

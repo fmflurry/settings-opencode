@@ -1,6 +1,6 @@
 # angular-cop / design-system — Kourou v0 Token Enforcement
 
-Canonical category markers for design-system violations in component templates, styles, and generated classes.
+Design-system findings use the review badges. 🔴 Important blocks. 🟡 Nit does not block unless the finding cites an AGENTS.md hard rule. ❓ never blocks.
 
 **Scope:** Applied to `*.component.html`, `*.component.ts`, `*.component.css`, and any file containing Tailwind classes or inline styles.
 
@@ -8,29 +8,29 @@ Canonical category markers for design-system violations in component templates, 
 
 ## Token Inventory — Markers & Detection
 
-### BLOCK (🟢 fix-before-merge)
+### BLOCK (🔴 Important)
 
 > Any single finding here must be fixed before the PR merges. Likely an oversight or auto-generated mistake.
 
 | Violation | Detection | Why | Marker |
 |-----------|-----------|-----|----------|
-| Raw `--k-*` base-scale color in class/style | `grep -nE 'var\(--k-' *.html *.ts *.css` · `style=".*var\(--k-` | Base scale is internal; semantic aliases exist for all cases. Mixing base scale and semantic breaks consistency and dark-mode overrides. | 🟢 |
-| Stock Tailwind palette literal (`lime-*` / `stone-*` / `violet-*`) | `grep -nE 'class="[^"]*\b(violet|green|lime|stone|amber)-[0-9]' *.html` | These colors are NOT in the Kourou palette. Use semantic aliases: `bg-primary` (brand green), `bg-accent` (deep brand green, AI only), `bg-foreground` (warm near-black). | 🟢 |
-| Hex color literal in class/style | `grep -nE 'class="[^"]*\b#[0-9a-fA-F]{3,8}\b' \|` `style=".*#[0-9a-fA-F]' ` | All colors must flow through theme aliases. No hardcoded hex. | 🟢 |
-| Accent on human/action surface | Code review: Button, tab, form control using `bg-accent`/`border-accent`/`text-accent` (must be human-facing, not AI-only). Grep: `class=".*\b(bg-accent|text-accent)\b"` in non-agent component. | `accent` is AI/intelligence only — deep brand green. Human controls use `primary`. Violet has been removed from the palette entirely. | 🟢 |
-| Inline gradient with `var(--k-*)` | `grep -nE 'style=".*linear-gradient.*var\(--k-' *.html *.ts` | Base-scale vars cannot be inlined; they don't override dark mode. Create a named utility in `theme.css` instead. | 🟢 |
-| `--gc-*` chrome colors on product surface | Grep `bg-gc-*` / `text-gc-*` in non-brand/non-chrome component | GC brand palette is for sidebar chrome only, never product UI. Use `bg-primary`, `bg-accent`, etc. | 🟢 |
+| Raw `--k-*` base-scale color in class/style | `grep -nE 'var\(--k-' *.html *.ts *.css` · `style=".*var\(--k-` | Base scale is internal; semantic aliases exist for all cases. Mixing base scale and semantic breaks consistency and dark-mode overrides. | 🔴 Important |
+| Stock Tailwind palette literal (`lime-*` / `stone-*` / `violet-*`) | `grep -nE 'class="[^"]*\b(violet|green|lime|stone|amber)-[0-9]' *.html` | These colors are NOT in the Kourou palette. Use semantic aliases: `bg-primary` (brand green), `bg-accent` (deep brand green, AI only), `bg-foreground` (warm near-black). | 🔴 Important |
+| Hex color literal in class/style | `grep -nE 'class="[^"]*\b#[0-9a-fA-F]{3,8}\b' \|` `style=".*#[0-9a-fA-F]' ` | All colors must flow through theme aliases. No hardcoded hex. | 🔴 Important |
+| Accent on human/action surface | Code review: Button, tab, form control using `bg-accent`/`border-accent`/`text-accent` (must be human-facing, not AI-only). Grep: `class=".*\b(bg-accent|text-accent)\b"` in non-agent component. | `accent` is AI/intelligence only — deep brand green. Human controls use `primary`. Violet has been removed from the palette entirely. | 🔴 Important |
+| Inline gradient with `var(--k-*)` | `grep -nE 'style=".*linear-gradient.*var\(--k-' *.html *.ts` | Base-scale vars cannot be inlined; they don't override dark mode. Create a named utility in `theme.css` instead. | 🔴 Important |
+| `--gc-*` chrome colors on product surface | Grep `bg-gc-*` / `text-gc-*` in non-brand/non-chrome component | GC brand palette is for sidebar chrome only, never product UI. Use `bg-primary`, `bg-accent`, etc. | 🔴 Important |
 
-### SHOULD (🔵 nit or ❓ q)
+### SHOULD (🟡 Nit [nit] or ❓)
 
-> Advisory. Fix when practical; do not block the PR on these alone unless AGENTS.md flags the category as mandatory.
+> Advisory. These are 🟡 Nit. They do not block unless the finding cites an AGENTS.md hard rule.
 
 | Violation | Detection | Why | Marker |
 |-----------|-----------|-----|----------|
-| Arbitrary value w/ EXACT token equivalent | `grep -nE 'class="[^"]*\b(text-\[15px\]|text-\[18px\]|text-\[24px\]|text-\[32px\]|max-w-\[1200px\]|p-\[24px\]|p-\[16px\]|h-\[36px\]|h-\[28px\]|h-\[44px\])' *.html` | Token exists and is semantic; arbitrary syntax adds noise and blocks dark-mode overrides. | 🔵 fix-in-polish |
-| Off-grid spacing (no exact token) | `grep -nE 'class="[^"]*\b(px?\|m)\-\[[0-9]+px\]' *.html` where value ∉ {4,8,12,16,20,24,32,40,48,64} | One-off sizing without a token is acceptable if justified. Mark as ❓ q for reviewer decision. | ❓ q |
-| Arbitrary type size (no exact token) | `text-[13.5px]`, `text-[17px]` (not in {11,12,13,14,15,18,24,32}) | Off-scale type breaks hierarchy and dark-mode sync. Likely a token should be added. | ❓ q |
-| Arbitrary radius (no exact token) | `rounded-[10px]`, `rounded-[14px]` (not in {6,8,12,16}) | Radius has finite scale; off-scale is rare. Acceptable if documented. | ❓ q |
+| Arbitrary value w/ EXACT token equivalent | `grep -nE 'class="[^"]*\b(text-\[15px\]|text-\[18px\]|text-\[24px\]|text-\[32px\]|max-w-\[1200px\]|p-\[24px\]|p-\[16px\]|h-\[36px\]|h-\[28px\]|h-\[44px\])' *.html` | Token exists and is semantic; arbitrary syntax adds noise and blocks dark-mode overrides. | 🟡 Nit |
+| Off-grid spacing (no exact token) | `grep -nE 'class="[^"]*\b(px?\|m)\-\[[0-9]+px\]' *.html` where value ∉ {4,8,12,16,20,24,32,40,48,64} | One-off sizing without a token is acceptable if justified. Mark as ❓ for reviewer decision. | ❓ |
+| Arbitrary type size (no exact token) | `text-[13.5px]`, `text-[17px]` (not in {11,12,13,14,15,18,24,32}) | Off-scale type breaks hierarchy and dark-mode sync. Likely a token should be added. | ❓ |
+| Arbitrary radius (no exact token) | `rounded-[10px]`, `rounded-[14px]` (not in {6,8,12,16}) | Radius has finite scale; off-scale is rare. Acceptable if documented. | ❓ |
 
 ---
 
@@ -146,21 +146,21 @@ All equivalences from `frontend/src/styles/theme.css` + `tokens/*.css`:
 2. Scan for class attributes containing arbitrary brackets or raw `--k-*` refs.
 3. Check component `.ts` for inline `style` or `ngStyle` with color/spacing.
 4. Verify any AI-facing surfaces use `accent` (deep brand green); all human controls use `primary` (brand green).
-5. Look for off-grid spacing/type. If no token maps exactly, decide: fix (🟢) or note as deliberate (❓ q).
+5. Look for off-grid spacing/type. If no token maps exactly, decide: fix (🔴 Important) or note as deliberate (❓).
 
 **Example findings:**
 
 ```html
-<!-- 🟢 BLOCK: stock Tailwind palette -->
+<!-- 🔴 Important: stock Tailwind palette -->
 <button class="bg-lime-500">Submit</button>  <!-- → bg-primary -->
 
-<!-- 🟢 BLOCK: raw base scale -->
+<!-- 🔴 Important: raw base scale -->
 <div style="background: var(--k-sand-50)">Card</div>  <!-- → bg-surface-page -->
 
-<!-- 🟢 BLOCK: hex color -->
+<!-- 🔴 Important: hex color -->
 <span class="text-[#86B81C]">Label</span>  <!-- → text-primary or semantic alias -->
 
-<!-- 🔵 NITS: exact token equivalents (fix in polish) -->
+<!-- 🟡 Nit: exact token equivalents (fix in polish) -->
 <h1 class="text-[32px]">Title</h1>  <!-- → text-display -->
 <div class="p-[24px]">Card</div>  <!-- → p-card -->
 

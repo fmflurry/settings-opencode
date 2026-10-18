@@ -1,6 +1,6 @@
 # angular-cop / output format
 
-Two modes: `senior` (default, terse) and `junior` (verbose + teaching). Important findings (🔴 / 🟠) always include rationale regardless of mode. The emoji are category markers. The tag rules are in the code-reviewer agent.
+Two modes: `senior` (default, terse) and `junior` (verbose + teaching). Important findings (🔴) always include rationale regardless of mode. One badge per tag: 🔴 Important, 🟡 Nit, ⚪ Pre-existing, ❓ question (never blocks). Category labels (`[bug]`, `[sec]`, `[arch]`, `[risk]`, `[nit]`, `[comment]`, `[format]`) follow the tag. The tag rules are in the code-reviewer agent.
 
 ## Header (both modes)
 
@@ -13,37 +13,38 @@ Two modes: `senior` (default, terse) and `junior` (verbose + teaching). Importan
 
 Comments: added 5 · verified 4 · forbidden 0 · false 1
 
-| 🔴 | 🟠 | 🟡 | 🟢 | 🔵 | ❓ |
-|----|----|----|----|----|----|
-| 2 | 0 | 5 | 1 | 8 | 1 |
+| 🔴 Important | 🟡 Nit | ⚪ Pre-existing | ❓ |
+|--------------|--------|-----------------|----|
+| 3 | 5 | 1 | 1 |
 
-**Verdict:** BLOCK | APPROVE-WITH-CHANGES | APPROVE
+**Verdict:** BLOCK | APPROVE
 ```
 
 ## Senior mode (terse)
 
 One line per finding. Format:
 ```
-<file>:L<line>: <sev-emoji> <category>: <problem>. <fix>.
+<file>:L<line>: <badge> <Tag> [<category>]: <problem>. <fix>.
 ```
 
 Example:
 ```markdown
-## 🔴 Blockers
-- `src/app/customer/customer-list.component.html`:L23: 🔴 bug: `{{ buildLabel() }}` calls method in template, runs every CD cycle. Convert to `computed`.
-- `src/app/order/order.facade.ts`:L88: 🟠 sec: API token logged on error path. Strip before `console.error`.
+## 🔴 Important
+- `src/app/customer/customer-list.component.html`:L23: 🔴 Important [bug]: `{{ buildLabel() }}` calls method in template, runs every CD cycle. Convert to `computed`.
+- `src/app/order/order.facade.ts`:L88: 🔴 Important [sec]: API token logged on error path. Strip before `console.error`.
+- `src/app/foo/foo.component.ts`:L12: 🔴 Important [arch]: component injects `CreateOrderUseCase` directly. Inject `OrderFacade` instead. (AGENTS.md §Architecture)
 
-## 🟢 Architecture
-- `src/app/foo/foo.component.ts`:L12: 🟢 arch: component injects `CreateOrderUseCase` directly. Inject `OrderFacade` instead. (AGENTS.md §Architecture)
+## 🟡 Nit
+- `src/app/bar/bar.component.ts`:L45: 🟡 Nit [risk]: `subscribe()` without `takeUntilDestroyed`. Wrap or convert to `toSignal`.
+- `src/app/store/user.store.ts`:L30: 🟡 Nit [risk]: decorator order — `@Loading` above `@SkipIfCached`. Swap.
+- `src/app/x.ts`:L10: 🟡 Nit [nit]: missing `readonly` on `Customer.id`.
 
-## 🟡 Should-fix
-- `src/app/bar/bar.component.ts`:L45: 🟡 risk: `subscribe()` without `takeUntilDestroyed`. Wrap or convert to `toSignal`.
-- `src/app/store/user.store.ts`:L30: 🟡 risk: decorator order — `@Loading` above `@SkipIfCached`. Swap.
+## ⚪ Pre-existing
+- `src/app/legacy/legacy.service.ts`:L12: ⚪ Pre-existing [sec]: token logged on a path this diff does not touch. Does not block.
 
-<details><summary>🔵 Nits (8) / ❓ Questions (1)</summary>
+<details><summary>❓ Questions (1)</summary>
 
-- `src/app/x.ts`:L10: 🔵 nit: missing `readonly` on `Customer.id`.
-- `src/app/y.ts`:L4: ❓ q: intentional that `getCountries` re-fetches without `@SkipIfCached`?
+- `src/app/y.ts`:L4: ❓ intentional that `getCountries` re-fetches without `@SkipIfCached`?
 </details>
 
 ## Tooling
@@ -57,7 +58,7 @@ Example:
 Each finding becomes a block:
 
 ```markdown
-### 🔴 [bug] `customer-list.component.html:L23` — method call in template
+### 🔴 Important [bug] `customer-list.component.html:L23` — method call in template
 
 **Problem.** The template binds `{{ buildLabel() }}`. Angular re-invokes `buildLabel()` on every change detection cycle (potentially dozens of times per second when the component participates in a parent's CD). This wastes CPU and can mask state bugs because the value is recomputed instead of derived.
 
@@ -83,7 +84,7 @@ private buildLabel(user: User, locale: string): string {
 - Angular docs: https://angular.dev/guide/signals
 ```
 
-Important findings (🔴 / 🟠) always rendered in this block format even in senior mode.
+Important findings (🔴) are always rendered in this block format even in senior mode.
 
 ## Verdict logic
 
@@ -94,13 +95,12 @@ if forbidden-comments > 0                                -> BLOCK (reason: "forb
 elif false-comments > 0 AND reviewed confirmed any      -> BLOCK (reason: "false comments confirmed by you with quoted repo line")
 elif tsc errors > 0                                       -> BLOCK (reason: "build red")
 elif lint errors > 0  (warnings excluded)               -> BLOCK (reason: "lint red")
-elif any (🔴 or 🟠)                                     -> BLOCK
-elif any (🟢 with AGENTS.md hard-rule citation)         -> BLOCK
-elif unconfirmed false/stale comments > 0              -> APPROVE-WITH-CHANGES (flag for follow-up, but not blocking)
-elif any 🟡                                             -> APPROVE-WITH-CHANGES
-elif only 🔵 / ❓                                       -> APPROVE
-else (no findings + tooling clean + no forbidden)      -> APPROVE
+elif any Important                                       -> BLOCK
+elif any finding cites an AGENTS.md hard rule            -> BLOCK
+else (no Important finding, no AGENTS.md hard-rule citation, tooling clean) -> APPROVE
 ```
+
+❓ never blocks. ⚪ Pre-existing does not block. 🟡 Nit does not block unless that finding cites an AGENTS.md hard rule. Unconfirmed false/stale comments stay ❓.
 
 (True false comments are only blocking if YOU have confirmed them by quoting a contradicting line from the repo itself; per comment-judge Trust limits.)
 
@@ -110,9 +110,9 @@ If `--no-tools` was passed, the tooling gate is skipped but the verdict line MUS
 
 ```markdown
 ---
-Generated by `angular-cop`. Re-run with `/cop-review <target> --level=junior` for teaching format. Findings ≥80% confidence; uncertain items use `❓ q:` instead of guessing.
+Generated by `angular-cop`. Re-run with `/cop-review <target> --level=junior` for teaching format. Findings ≥80% confidence; uncertain items use `❓` instead of guessing.
 ```
 
 ## Mode auto-detection
 
-If user passes no `--level`, default `senior`. If user message contains "junior", "new dev", "explain", "teach", or `--level=junior`, switch to junior. If mixed audience, render header + summary in senior format but render every 🔴/🟠 in junior block format.
+If user passes no `--level`, default `senior`. If user message contains "junior", "new dev", "explain", "teach", or `--level=junior`, switch to junior. If mixed audience, render header + summary in senior format but render every 🔴 Important finding in junior block format.

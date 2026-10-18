@@ -35,7 +35,7 @@ Pre-merge review. Compares HEAD vs `origin/<target>`. Minimal-API-first, SoT-awa
 
 1. **Read-only.** Never patch code. Output report only.
 2. **Diff window:** `git merge-base HEAD origin/<target>`..`HEAD`. Never review changes already on target.
-3. **Confidence ≥ 80%.** Skip uncertain findings. Use `❓ q:` instead of speculative `🔴 bug:`.
+3. **Confidence ≥ 80%.** Skip uncertain findings. Use `❓` instead of a speculative `🔴 Important [bug]:`. ❓ never blocks.
 4. **Project rules win.** `AGENTS.md` overrides this skill. Re-read on every run; do not cache between sessions.
 5. **dotnet-clean-architecture ground truth:** load [[dotnet-clean-architecture]] SKILL.md before flagging architecture code. Do not invent APIs or patterns.
 6. **No fluff.** No "great work", no restating what the diff already shows.
@@ -69,18 +69,18 @@ Pre-merge review. Compares HEAD vs `origin/<target>`. Minimal-API-first, SoT-awa
 8. Aggregate findings -> render via output-format.md
 ```
 
-## Severity
+## Tags
 
-| Tag | Meaning | Action |
-|---|---|---|
-| 🔴 bug | broken behavior, runtime crash, data loss | BLOCK merge |
-| 🟠 sec | security risk (unvalidated input, leaked secret, tenant-data leak) | BLOCK merge |
-| 🟡 risk | works today, fragile tomorrow (N+1, missing filter, scope violation) | Fix before merge |
-| 🟢 arch | violates mandatory architecture rule (SoT) or AGENTS.md-escalated opt-in rule | Fix before merge |
-| 🔵 nit | style, naming, micro-optim | Optional |
-| ❓ q | genuine question | Author decides |
-
-Promote to BLOCK if AGENTS.md flags the category as mandatory.
+| Badge | Tag | Category | Blocks |
+|---|---|---|---|
+| 🔴 | Important | [bug] broken behavior, runtime crash, data loss | yes |
+| 🔴 | Important | [sec] security risk (unvalidated input, leaked secret, tenant-data leak) | yes |
+| 🔴 | Important | [arch] mandatory architecture rule (SoT) | yes |
+| 🔴 | Important | [comment] confirmed false/stale or forbidden comment; [format] failed format check | yes |
+| 🟡 | Nit | [risk] works today, fragile tomorrow (N+1, missing filter, scope violation) | no, unless the finding cites an AGENTS.md hard rule |
+| 🟡 | Nit | [nit] style, naming, micro-optim | no |
+| ⚪ | Pre-existing | any category already on the base | no |
+| ❓ | question | [q] genuine question | never |
 
 ## Sub-pages (read on demand)
 
@@ -112,11 +112,11 @@ Parse rule blocks. Where this skill and AGENTS.md disagree, AGENTS.md wins. Cite
 Single markdown document, sections in fixed order:
 
 1. **Summary** — target, base SHA, head SHA, files changed, finding counts by tag.
-2. **Blockers** (🔴 / 🟠 / 🟢-when-AGENTS-mandates) — sorted by tag, then file path.
-3. **Should-fix** (🟡) — same sort.
-4. **Optional** (🔵 / ❓) — collapsible.
+2. **Important** (🔴) — blocks. Sorted by file path.
+3. **Nit** (🟡) — does not block alone.
+4. **Pre-existing** (⚪) and **questions** (❓) — collapsible. Pre-existing does not block. Questions never block.
 5. **Tooling** — dotnet build summary, dotnet format summary.
-6. **Verdict** — `APPROVE` / `APPROVE-WITH-CHANGES` / `BLOCK`.
+6. **Verdict** — `APPROVE` or `BLOCK`. Any Important finding, or any finding that cites an AGENTS.md hard rule, is BLOCK. Otherwise APPROVE.
 
 See [[dotnet-cop-output-format]] for full templates.
 

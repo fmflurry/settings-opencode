@@ -2,7 +2,7 @@
 
 Project runs TS strict. New code in the diff must obey.
 
-## 🔴 Blockers
+## 🔴 Important
 
 ### `any` introduced in the diff
 ```ts
@@ -46,7 +46,7 @@ function normalize(user: User): User {
 }
 ```
 
-## 🟡 Risks
+## 🟡 Nit [risk]
 
 ### Missing `readonly` on public data
 DTOs, value objects, signal payloads should be `readonly`:
@@ -72,7 +72,7 @@ Inferred return types are fine for locals. Exported / public class methods shoul
 ### Discriminated union not exhausted in `switch`
 Missing `default: const _: never = x;` -> future variants compile silently.
 
-## 🔵 Nits
+## 🟡 Nit
 
 - Prefer `type` over `interface` when the shape is closed and may be unioned.
 - `const` assertions on literal arrays / records: `as const`.
@@ -87,9 +87,9 @@ After static review, run:
 npx tsc --noEmit --pretty false
 ```
 Map each error code to tag:
-- `TS2322`, `TS2345`, `TS2532`, `TS2531`, `TS2540` -> 🔴 bug
-- `TS6133` (unused), `TS6196` -> 🔵 nit
-- Others -> 🟡 risk by default
+- `TS2322`, `TS2345`, `TS2532`, `TS2531`, `TS2540` -> 🔴 Important [bug]
+- `TS6133` (unused), `TS6196` -> 🟡 Nit [nit]
+- Others -> 🟡 Nit [risk] by default
 
 Then:
 ```bash

@@ -46,7 +46,7 @@ After install, run `/setup-harness`. It writes `~/.cursor/rules/fmflurry-harness
 
 ## Versioning
 
-Manifest version 0.4.4. The build reads it from `scripts/cursor-plugin/config.json` and writes `.cursor-plugin/plugin.json`. History is in `CHANGELOG.md`.
+Manifest version 0.4.5. The build reads it from `scripts/cursor-plugin/config.json` and writes `.cursor-plugin/plugin.json`. History is in `CHANGELOG.md`.
 
 bump the plugin version + changelog in any PR touching plugin sources.
 

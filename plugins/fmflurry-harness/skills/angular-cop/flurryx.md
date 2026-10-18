@@ -4,9 +4,9 @@ State management correctness. Mirror authority: the [[flurryx]] skill. Do not in
 
 ## Prereq
 
-Load [[flurryx]] before flagging anything below. If unsure whether an API exists, mark `❓ q:` — do not invent the verdict.
+Load [[flurryx]] before flagging anything below. If unsure whether an API exists, mark `❓` — do not invent the verdict.
 
-## 🔴 Blockers
+## 🔴 Important
 
 ### Manual `Record<K,V>` updates instead of keyed store
 ```ts
@@ -57,7 +57,7 @@ Only use `@SkipIfCached` when cache hits are intended. If the method always re-f
 ### Writing to store from a component
 Components read signals only. All writes go through facade/service that owns the Store.
 
-## 🟡 Risks
+## 🟡 Nit [risk]
 
 ### Hand-rolled `Subject` where Store would do
 If the data is async + cached + keyed -> Store. If it's a one-shot event bus -> Subject is fine.
@@ -77,7 +77,7 @@ readonly users = collectKeyed(this.store, 'USERS');
 ### Direct `@flurryx/core` import
 Prefer `flurryx` umbrella. `@flurryx/core | store | rx` only if host already depends.
 
-## 🔵 Nits
+## 🟡 Nit
 
 - Use `Store.for<Config>().build()` builder over class extension when feasible.
 - Cache TTL: rely on `DEFAULT_CACHE_TTL_MS` unless a value is justified.

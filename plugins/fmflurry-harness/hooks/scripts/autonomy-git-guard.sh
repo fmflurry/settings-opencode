@@ -20,6 +20,7 @@ cfg() { [ -f "$CONFIG_FILE" ] || return 0; jq -r "$1" "$CONFIG_FILE" 2>/dev/null
 
 base_cfg="$(cfg '.base // empty')"
 if [ -n "$base_cfg" ]; then BASES=("$base_cfg"); else BASES=(main master); fi
+ALIAS_RE=$'(^|\n)[Aa][Ll][Ii][Aa][Ss]\\.'
 is_base() { local b; for b in "${BASES[@]}"; do [ "$1" = "$b" ] && return 0; done; return 1; }
 
 DEFAULT_ALTS='\.github/|\.claude/|\.opencode/|tools/agent-harness/|tools/ci/|opencode\.jsonc$|AGENTS\.md$|CLAUDE\.md$'
@@ -48,11 +49,17 @@ is_protected_token() {
 }
 any_protected() { local t; for t in "$@"; do is_protected_token "$t" && return 0; done; return 1; }
 
-# Prints the branch a push would update. Returns 1 when a location override
-# (--git-dir, --work-tree, GIT_DIR, GIT_WORK_TREE) does not resolve. Callers
-# must deny in the parent shell: deny inside $(...) only exits the subshell.
+# Sets RH_CUR to the branch a push would update. Returns 1 when a location override
+# (--git-dir, --work-tree, GIT_DIR, GIT_WORK_TREE) does not resolve. Results are cached per
+# location so repeated pushes cost one git call. Callers must deny in the parent shell.
+RH_K=(); RH_V=(); RH_S=()
 resolve_head() {
-  local gdir="$1" cur=""
+  local gdir="$1" cur="" key k
+  printf -v key '%q ' "$gdir" "${GIT_DIR_VAL:-}" "${GIT_WT_VAL:-}" "$SAW_LOC" ${GIT_LOC+"${GIT_LOC[@]}"}
+  for ((k = 0; k < ${#RH_K[@]}; k++)); do
+    if [ "${RH_K[k]}" = "$key" ]; then RH_CUR="${RH_V[k]}"; return "${RH_S[k]}"; fi
+  done
+  RH_CUR=""
   if [ "$SAW_LOC" = 1 ] || [ -n "${GIT_DIR_VAL:-}" ] || [ -n "${GIT_WT_VAL:-}" ]; then
     local -a ea=()
     [ -n "${GIT_DIR_VAL:-}" ] && ea+=(GIT_DIR="$GIT_DIR_VAL")
@@ -62,16 +69,19 @@ resolve_head() {
     else
       cur="$(cd "$cwd" 2>/dev/null && git ${GIT_LOC+"${GIT_LOC[@]}"} rev-parse --abbrev-ref HEAD 2>/dev/null)" || true
     fi
-    [ -n "$cur" ] || return 1
-    printf '%s' "$cur"
-    return 0
+    RH_CUR="$cur"
+    RH_K+=("$key"); RH_V+=("$cur")
+    if [ -n "$cur" ]; then RH_S+=(0); return 0; fi
+    RH_S+=(1); return 1
   fi
   cur="$(git -C "$gdir" rev-parse --abbrev-ref HEAD 2>/dev/null)" || true
-  printf '%s' "$cur"
+  RH_CUR="$cur"
+  RH_K+=("$key"); RH_V+=("$cur"); RH_S+=(0)
+  return 0
 }
 
 check_push() {
-  local gdir="$1" a ref cur; shift
+  local gdir="$1" a ref; shift
   local pos=()
   for a in "$@"; do
     case "$a" in
@@ -93,8 +103,8 @@ check_push() {
   done
   if [ "${#pos[@]}" -le 1 ] || { [ "${#pos[@]}" -eq 2 ] && [ "${pos[1]}" = HEAD ]; }; then
     if [ "$CD_BASE" = "?" ] && [ "$SAW_LOC" != 1 ] && [ -z "$GIT_DIR_VAL" ]; then deny; fi
-    cur="$(resolve_head "$gdir")" || deny
-    is_base "$cur" && deny
+    resolve_head "$gdir" || deny
+    is_base "$RH_CUR" && deny
   fi
 }
 
@@ -139,7 +149,7 @@ check_git() {
       --config-env | --config-env=*) deny_config ;;
       -c)
         kv="${args[$j]:-}"
-        grep -Eqi '^alias\.' <<<"$kv" && deny_alias
+        [[ "$kv" =~ $ALIAS_RE ]] && deny_alias
         [ "$AUTO" = 1 ] && deny_config
         j=$((j + 2)) ;;
       -*) j=$((j + 1)) ;;
@@ -177,17 +187,24 @@ check_git() {
   esac
 }
 
+gh_has() {
+  local re="$1" l
+  if [[ "$line" != *$'\n'* ]]; then [[ "$line" =~ $re ]]; return; fi
+  while IFS= read -r l; do [[ "$l" =~ $re ]] && return 0; done <<<"$line"
+  return 1
+}
+
 check_gh() {
   local line="$*" t method=0
-  grep -Eq ' pr( .*)? merge( |$)' <<<"$line" && deny
-  grep -Eq ' api( |$)' <<<"$line" || return 0
-  grep -Eq 'pulls/[0-9]+/merge|mergePullRequest|repos/[^ ]*/merges|query=@' <<<"$line" && deny
-  grep -Eq 'deleteRef' <<<"$line" && deny_branch_delete
-  grep -Eq ' graphql( .*)? --input( |=|$)' <<<"$line" && deny
-  grep -Eqi '(-X|--method)[ =]*(PUT|PATCH|DELETE)' <<<"$line" && method=1
+  gh_has ' pr( .*)? merge( |$)' && deny
+  gh_has ' api( |$)' || return 0
+  gh_has 'pulls/[0-9]+/merge|mergePullRequest|repos/[^ ]*/merges|query=@' && deny
+  gh_has 'deleteRef' && deny_branch_delete
+  gh_has ' graphql( .*)? --input( |=|$)' && deny
+  gh_has '(-[Xx]|--[Mm][Ee][Tt][Hh][Oo][Dd])[ =]*([Pp][Uu][Tt]|[Pp][Aa][Tt][Cc][Hh]|[Dd][Ee][Ll][Ee][Tt][Ee])' && method=1
   [ "$method" = 1 ] || return 0
   local del=0
-  grep -Eqi '(-X|--method)[ =]*DELETE' <<<"$line" && del=1
+  gh_has '(-[Xx]|--[Mm][Ee][Tt][Hh][Oo][Dd])[ =]*[Dd][Ee][Ll][Ee][Tt][Ee]' && del=1
   for t in "$@"; do
     [ "$del" = 1 ] && [[ "$t" == *%2[Ff]* || "$t" == *'$'* ]] && deny_branch_delete
     [[ "$t" =~ refs/heads/(.+)$ ]] || continue
@@ -206,6 +223,17 @@ check_redirects() {
   done
 }
 
+ensure_loose() {
+  [ -n "$LOOSE_HIT" ] && return 0
+  if grep -Eq -- "$LOOSE_RE" <<<"$cmd"; then LOOSE_HIT=1; else LOOSE_HIT=0; fi
+}
+
+ensure_pyrm() {
+  [ -n "$PYRM_HIT" ] && return 0
+  PYRM_HIT=0
+  [[ "$cmd" =~ rmtree|rm_rf|rmSync|remove_tree|rmdir ]] && [[ "$cmd" =~ /orca/workspaces/|worktree ]] && PYRM_HIT=1
+}
+
 interpreter_inline_hits_protected() {
   local a inline=0 script=0 stdin=0
   [ "$#" -eq 0 ] && stdin=1
@@ -218,12 +246,26 @@ interpreter_inline_hits_protected() {
   done
   [ "$inline" = 0 ] && [ "$script" = 1 ] && [ "$stdin" = 0 ] && return 1
   [ "$inline" = 1 ] || [ "$stdin" = 1 ] || return 1
-  grep -Eq -- "$LOOSE_RE" <<<"$cmd"
+  ensure_loose
+  [ "$LOOSE_HIT" = 1 ]
 }
 
+LOOSE_HIT=""
+PYRM_HIT=""
 CD_BASE=""
 WTS=()
 WTS_LOADED=0
+
+PD_K=(); PD_V=()
+phys_dir() {
+  local save="$PWD" k
+  for ((k = ${#PD_K[@]} - 1; k >= 0; k--)); do
+    if [ "${PD_K[k]}" = "$1" ]; then d="${PD_V[k]}"; return 0; fi
+  done
+  d=""
+  if cd -P "$1" 2>/dev/null; then d="$PWD"; cd "$save" 2>/dev/null; fi
+  PD_K+=("$1"); PD_V+=("$d")
+}
 
 norm_path() {
   local p="${1/#\~/$HOME}" out=() seg d
@@ -240,20 +282,21 @@ norm_path() {
   set +f
   p="/${out[*]}"
   if [ -d "$p" ]; then
-    d="$(cd -P "$p" 2>/dev/null && pwd)"
+    phys_dir "$p"
     [ -n "$d" ] && p="$d"
   elif [ -d "${p%/*}" ]; then
-    d="$(cd -P "${p%/*}" 2>/dev/null && pwd)"
+    phys_dir "${p%/*}"
     [ -n "$d" ] && p="${d%/}/${p##*/}"
   fi
-  printf '%s' "${p%/}"
+  NP="${p%/}"
+  NP="${NP%"${NP##*[!$'\n']}"}"
 }
 
 load_wts() {
   [ "$WTS_LOADED" = 1 ] && return 0
   WTS_LOADED=1
   local l
-  while IFS= read -r l; do WTS+=("$(norm_path "${l#worktree }" /)"); done < <(git -C "$cwd" worktree list --porcelain 2>/dev/null | grep '^worktree ')
+  while IFS= read -r l; do norm_path "${l#worktree }" /; WTS+=("$NP"); done < <(git -C "$cwd" worktree list --porcelain 2>/dev/null | grep '^worktree ')
 }
 
 unknown_base_relative() { [ "$CD_BASE" = "?" ] && [[ "$1" != /* && "$1" != \~* ]]; }
@@ -261,7 +304,7 @@ unknown_base_relative() { [ "$CD_BASE" = "?" ] && [[ "$1" != /* && "$1" != \~* ]
 is_worktree_path() {
   unknown_base_relative "$1" && return 0
   local a wt
-  a="$(norm_path "$1" "${CD_BASE:-$cwd}")"
+  norm_path "$1" "${CD_BASE:-$cwd}"; a="$NP"
   [[ "$a/" =~ /orca/workspaces/[^/]+(/[^/]+)?/$ ]] && return 0
   [[ "$a" == */orca || "$a" == */orca/workspaces ]] && return 0
   load_wts
@@ -277,7 +320,7 @@ glob_hits_worktree() {
   unknown_base_relative "$1" && return 0
   local g="$1" pre="${1%%[\*\?\[\{]*}" d wt
   case "$pre" in */*) d="${pre%/*}"; [ -n "$d" ] || d=/ ;; *) d=. ;; esac
-  d="$(norm_path "$d" "${CD_BASE:-$cwd}")"
+  norm_path "$d" "${CD_BASE:-$cwd}"; d="$NP"
   load_wts
   for wt in "${WTS[@]}"; do
     [[ "$wt" == "$d"/* ]] && return 0
@@ -293,7 +336,7 @@ is_git_dir_path() {
     *) return 1 ;;
   esac
   unknown_base_relative "$p" && return 0
-  a="$(norm_path "$p" "${CD_BASE:-$cwd}")"
+  norm_path "$p" "${CD_BASE:-$cwd}"; a="$NP"
   load_wts
   for wt in "${WTS[@]}"; do
     [ "$a" = "$wt/.git" ] || [[ "$a" == "$wt/.git/"* ]] && return 0
@@ -357,14 +400,15 @@ is_prefix_keyword() {
 }
 
 prefix_value_flags() {
+  PVF=""
   case "$1" in
-    sudo) echo "-u -g -h -p -C -D -R -T -U --user --group --host --prompt --chdir" ;;
-    env) echo "-u -C -S --unset --chdir --split-string" ;;
-    xargs) echo "-n -I -L -P -s -d -E -a --max-args --max-procs --max-lines --delimiter --arg-file --replace --eof --max-chars" ;;
-    nice) echo "-n --adjustment" ;;
-    timeout) echo "-s -k --signal --kill-after" ;;
-    exec) echo "-a" ;;
-    time) echo "-f -o" ;;
+    sudo) PVF="-u -g -h -p -C -D -R -T -U --user --group --host --prompt --chdir" ;;
+    env) PVF="-u -C -S --unset --chdir --split-string" ;;
+    xargs) PVF="-n -I -L -P -s -d -E -a --max-args --max-procs --max-lines --delimiter --arg-file --replace --eof --max-chars" ;;
+    nice) PVF="-n --adjustment" ;;
+    timeout) PVF="-s -k --signal --kill-after" ;;
+    exec) PVF="-a" ;;
+    time) PVF="-f -o" ;;
   esac
 }
 
@@ -486,66 +530,217 @@ check_harness_cmd() {
   return 0
 }
 
-# Backslash-newline is removed before quote processing. Join it first so a base ref
-# cannot hide on the next line. $() and ANSI-C are not interpreted: a git or rm
-# command that needs their result is denied.
-join_continuations() {
-  local s="$1" out="" i=0 n=${#1} c q=0
-  while [ "$i" -lt "$n" ]; do
-    c="${s:i:1}"
-    if [ "$q" = 1 ] || [ "$q" = 3 ]; then
-      if [ "$q" = 3 ] && [ "$c" = "\\" ] && [ $((i + 1)) -lt "$n" ]; then
-        out+="$c${s:i+1:1}"; i=$((i + 2)); continue
-      fi
-      [ "$c" = "'" ] && q=0
-      out+="$c"; i=$((i + 1)); continue
-    fi
-    if [ "$q" = 2 ]; then
-      if [ "$c" = "\\" ] && [ "${s:i+1:1}" = $'\n' ]; then i=$((i + 2)); continue; fi
-      if [ "$c" = "\\" ] && [ $((i + 1)) -lt "$n" ]; then
-        out+="$c${s:i+1:1}"; i=$((i + 2)); continue
-      fi
-      [ "$c" = '"' ] && q=0
-      out+="$c"; i=$((i + 1)); continue
-    fi
-    if [ "$c" = "\\" ] && [ "${s:i+1:1}" = $'\n' ]; then i=$((i + 2)); continue; fi
-    if [ "$c" = "\\" ] && [ $((i + 1)) -lt "$n" ]; then
-      out+="$c${s:i+1:1}"; i=$((i + 2)); continue
-    fi
-    if [ "$c" = "'" ]; then q=1; out+="$c"; i=$((i + 1)); continue; fi
-    if [ "$c" = '"' ]; then q=2; out+="$c"; i=$((i + 1)); continue; fi
-    if [ "$c" = '$' ] && [ "${s:i+1:1}" = "'" ]; then q=3; out+="$c"; i=$((i + 1)); continue; fi
-    out+="$c"; i=$((i + 1))
-  done
-  printf '%s' "$out"
+# mode=join drops backslash-newline outside single quotes. mode=scan emits one record per word
+# (w, exp, brace, raw, lit, litbase, litval; text fields start with "_" so read keeps empty ones)
+# and an "s" record per segment break, escaping "\" TAB LF as \\ \t \n. mode=lit unquotes stdin.
+# mode=seg keeps only legacy-tokenizer segments that can reach a check; scan drops no-op ones the same way.
+# Input is walked in bounded chunks because BSD awk's substr is O(length), which would make a long line quadratic.
+# The "$'" branch keeps the historic behaviour: the quote that follows closes the state at once.
+GG_AWK='
+function esc(s,   n, p, ch, m, i, c, o, ob) {
+  if (index(s, BS) == 0 && index(s, "\t") == 0 && index(s, "\n") == 0) return s
+  n = length(s); p = 1; o = ""
+  while (p <= n) {
+    ch = substr(s, p, CH); m = length(ch); ob = ""
+    for (i = 1; i <= m; i++) {
+      c = substr(ch, i, 1)
+      if (c == BS) ob = ob BS BS
+      else if (c == "\t") ob = ob BS "t"
+      else if (c == "\n") ob = ob BS "n"
+      else ob = ob c
+    }
+    o = o ob; p += m
+  }
+  return o
 }
+function stripnl(s) {
+  if (substr(s, length(s), 1) == "\n") sub(/\n+$/, "", s)
+  return s
+}
+function lit(s,   n, p, ch, m, lim, i, c, qq, o, ob) {
+  if (index(s, BS) == 0 && index(s, SQ) == 0 && index(s, DQ) == 0) return s
+  n = length(s); p = 1; qq = 0; o = ""
+  while (p <= n) {
+    ch = substr(s, p, CH + 1); m = length(ch); lim = (m > CH) ? CH : m
+    ob = ""; i = 1
+    while (i <= lim) {
+      c = substr(ch, i, 1); i++
+      if (qq == 1) { if (c == SQ) qq = 0; else ob = ob c; continue }
+      if (qq == 2) {
+        if (c == BS && i <= m) { ob = ob substr(ch, i, 1); i++; continue }
+        if (c == DQ) qq = 0; else ob = ob c
+        continue
+      }
+      if (c == SQ) { qq = 1; continue }
+      if (c == DQ) { qq = 2; continue }
+      if (c == BS && i <= m) { ob = ob substr(ch, i, 1); i++; continue }
+      ob = ob c
+    }
+    o = o ob; p += i - 1
+  }
+  return o
+}
+function pr(r,   i) {
+  sw = 1
+  if (ov) { print r; return }
+  if (nb < 16) { buf[++nb] = r; return }
+  for (i = 1; i <= nb; i++) print buf[i]
+  ov = 1; print r
+}
+function fw(   i, j, r, br, n, lw, lb, lv, ps, lws, lbs, rec) {
+  W = W wb; wb = ""
+  if (W != "" || ex) {
+    br = 0
+    if (!ex && index(W, SQ) == 0 && index(W, DQ) == 0) {
+      i = index(W, "{")
+      if (i) {
+        r = substr(W, i + 1)
+        j = index(r, ",")
+        if (j && index(substr(r, j + 1), "}")) br = 1
+        else { j = index(r, ".."); if (j && index(substr(r, j + 2), "}")) br = 1 }
+      }
+    }
+    lw = lit(W)
+    n = split(W, ps, "/")
+    lb = (n > 1) ? lit(ps[n]) : lw
+    i = index(W, "=")
+    lv = i ? lit(substr(W, i + 1)) : lw
+    lws = stripnl(lw); lbs = stripnl(lb)
+    rec = "w\t" ex "\t" br "\t_" esc(W) "\t_" esc(lws) "\t_" esc(lbs) "\t_" esc(stripnl(lv))
+    if (lbs == "export") xs = 1
+    if (nw == 0) {
+      md = 0
+      if (!ex && !br && W !~ ASG) {
+        if (lbs == "git") md = xs ? 0 : 2
+        else if (!(lbs in SK)) md = 1
+      }
+      if (md == 2) held = rec
+      else if (md == 0) pr(rec)
+    } else if (md == 0) pr(rec)
+    else if (md == 2) {
+      if (!ex && !br && substr(W, 1, 1) != "-" && lws != "worktree" && lws != "push") md = 1
+      else { pr(held); pr(rec); md = 0 }
+    }
+    nw++
+  }
+  W = ""; ex = 0
+}
+function fsg(   i, txt) {
+  fw()
+  if (sw) {
+    if (ov) { print "s"; prevtxt = "" }
+    else {
+      txt = ""
+      for (i = 1; i <= nb; i++) txt = txt buf[i] "\n"
+      if (txt == prevtxt) print "r"
+      else { for (i = 1; i <= nb; i++) print buf[i]; print "s"; prevtxt = txt }
+    }
+  }
+  sw = 0; nw = 0; md = 0; held = ""; nb = 0; ov = 0
+}
+function segkeep(s,   t, k, b, i, a, n, ps) {
+  sub(/^[ \t\r\f\v({]+/, "", s)
+  if (s == "") return 0
+  if (index(s, ">")) return 1
+  match(s, /^[^ \t]+/); t = substr(s, 1, RLENGTH)
+  sub(/[)}]+$/, "", t)
+  if (t == "" || t ~ ASG) return 1
+  n = split(t, ps, "/"); b = ps[n]
+  if (b in LK) return 1
+  if (b in PY || b ~ /^python[0-9]/) return !pyinert
+  if (b != "git") return 0
+  k = split(s, a, " ")
+  for (i = 1; i <= k; i++) { sub(/[)}]+$/, "", a[i]); if (a[i] == "worktree") return 1 }
+  if (k < 2) return 0
+  t = a[2]
+  if (substr(t, 1, 1) == "-" || index(t, "$") || index(t, "`") || index(t, "{") || (t in GD)) return 1
+  return 0
+}
+function scanrec(rec, more,   L, n, p, ch, m, lim, i, c) {
+  L = more ? rec "\n" : rec
+  n = length(L); p = 1
+  while (p <= n) {
+    ch = substr(L, p, CH + 1); m = length(ch); lim = (m > CH) ? CH : m
+    i = 1
+    while (i <= lim) {
+      c = substr(ch, i, 1); i++
+      if (q == 0) {
+        if (c == " " || c == "\t" || c == "\r") { fw(); continue }
+        if (c == "\n" || c == ";" || c == "&" || c == "|") { fsg(); continue }
+        if (c == BS) { wb = wb c; if (i <= m) { wb = wb substr(ch, i, 1); i++ }; continue }
+        if (c == SQ) { q = 1; wb = wb c; continue }
+        if (c == DQ) { q = 2; wb = wb c; continue }
+        if (c == "$") { ex = 1; if (substr(ch, i, 1) == SQ) q = 3; wb = wb c; continue }
+        if (c == "`") ex = 1
+        wb = wb c; continue
+      }
+      if (q == 1) { wb = wb c; if (c == SQ) q = 0; continue }
+      if (q == 3) {
+        ex = 1
+        if (c == BS && i <= m) { wb = wb c substr(ch, i, 1); i++; continue }
+        wb = wb c; if (c == SQ) q = 0
+        continue
+      }
+      if (c == "$" || c == "`") ex = 1
+      if (c == BS && i <= m) { wb = wb c substr(ch, i, 1); i++; continue }
+      wb = wb c; if (c == DQ) q = 0
+    }
+    W = W wb; wb = ""; p += i - 1
+  }
+}
+function joinrec(rec, more,   L, n, p, ch, m, lim, i, c, del) {
+  L = more ? rec "\n" : rec
+  n = length(L); p = 1; del = 0
+  while (p <= n) {
+    ch = substr(L, p, CH + 1); m = length(ch); lim = (m > CH) ? CH : m
+    i = 1
+    while (i <= lim) {
+      c = substr(ch, i, 1); i++
+      if (q == 1) { if (c == SQ) q = 0; continue }
+      if (q == 3) {
+        if (c == BS && i <= m) { i++; continue }
+        if (c == SQ) q = 0
+        continue
+      }
+      if (c == BS) {
+        if (i <= m) { if (substr(ch, i, 1) == "\n") del = 1; i++ }
+        continue
+      }
+      if (q == 2) { if (c == DQ) q = 0; continue }
+      if (c == SQ) q = 1
+      else if (c == DQ) q = 2
+      else if (c == "$" && substr(ch, i, 1) == SQ) q = 3
+    }
+    p += i - 1
+  }
+  print del ? substr(L, 1, n - 2) : L
+}
+BEGIN {
+  n = split("if then elif else do while until ! { ( builtin eval env sudo command exec nice nohup xargs timeout time bash sh zsh dash export cd pushd rm gh", ps, " ")
+  for (i = 1; i <= n; i++) SK[ps[i]] = 1
+  n = split("if then elif else do while until ! { ( builtin eval env sudo command exec nice nohup xargs timeout time bash sh zsh dash agent-harness agent-harness.sh worktree-rm.sh teardown-merged-worktree.sh ship-init.sh ship-merge.sh cleanup.sh orca rm mv trash rsync find cd pushd gh tee cp ln install truncate touch sed dd", ps, " ")
+  for (i = 1; i <= n; i++) LK[ps[i]] = 1
+  n = split("push reset branch update-ref send-pack commit checkout restore config worktree", ps, " ")
+  for (i = 1; i <= n; i++) GD[ps[i]] = 1
+  n = split("python perl node ruby", ps, " ")
+  for (i = 1; i <= n; i++) PY[ps[i]] = 1
+  ASG = "^[A-Za-z_][A-Za-z0-9_]*="
+  CH = 512; SQ = "\047"; DQ = "\""; BS = "\\"; q = 0; ex = 0; sw = 0; nb = 0; ov = 0; prevtxt = ""; ORS = (mode == "join") ? "" : "\n" }
+mode == "seg" { if (segkeep($0)) print $0; next }
+mode == "lit" { acc = (NR > 1) ? acc "\n" $0 : $0; next }
+{ if (hv) { if (mode == "join") joinrec(prev, 1); else scanrec(prev, 1) }; prev = $0; hv = 1 }
+END {
+  if (mode == "lit") { print stripnl(lit(acc)); exit }
+  if (hv) { if (mode == "join") joinrec(prev, 0); else scanrec(prev, 0) }
+  if (mode == "scan") fsg()
+}
+'
 
-literalize() {
-  local s="$1" out="" i=0 n=${#1} c q=0 nx
-  while [ "$i" -lt "$n" ]; do
-    c="${s:i:1}"
-    if [ "$q" = 1 ]; then
-      [ "$c" = "'" ] && q=0 || out+="$c"
-      i=$((i + 1)); continue
-    fi
-    if [ "$q" = 2 ]; then
-      if [ "$c" = "\\" ] && [ $((i + 1)) -lt "$n" ]; then
-        nx="${s:i+1:1}"
-        case "$nx" in
-          '$' | '`' | '"' | '\\') out+="$nx" ;;
-          *) out+="$nx" ;;
-        esac
-        i=$((i + 2)); continue
-      fi
-      [ "$c" = '"' ] && q=0 || out+="$c"
-      i=$((i + 1)); continue
-    fi
-    if [ "$c" = "'" ]; then q=1; i=$((i + 1)); continue; fi
-    if [ "$c" = '"' ]; then q=2; i=$((i + 1)); continue; fi
-    if [ "$c" = "\\" ] && [ $((i + 1)) -lt "$n" ]; then out+="${s:i+1:1}"; i=$((i + 2)); continue; fi
-    out+="$c"; i=$((i + 1))
-  done
-  printf '%s' "$out"
+home_lit() {
+  case "$HOME" in
+    *[\'\"\\]*) HOME_LIT="$(printf '%s' "$HOME" | LC_ALL=C awk -v mode=lit "$GG_AWK")" ;;
+    *) HOME_LIT="$HOME" ;;
+  esac
 }
 
 note_assign_idx() {
@@ -557,7 +752,7 @@ note_assign_idx() {
     *) return 0 ;;
   esac
   if [ "${exp_f[$idx]}" = 1 ] || [ "${brace_f[$idx]}" = 1 ]; then GIT_ENV_U=1; return 0; fi
-  val="$(literalize "${w#*=}")"
+  val="${litv_f[$idx]}"
   case "$name" in
     GIT_DIR) GIT_DIR_VAL="$val"; [ "$persist" = 1 ] && P_GIT_DIR="$val" ;;
     GIT_WORK_TREE) GIT_WT_VAL="$val"; [ "$persist" = 1 ] && P_GIT_WT="$val" ;;
@@ -578,7 +773,7 @@ screen_git() {
         opt="$w"; i=$((i + 1))
         [ "$i" -ge "${#words[@]}" ] && break
         if [ "${exp_f[$i]}" = 1 ] || [ "${brace_f[$i]}" = 1 ]; then opt_u=1; i=$((i + 1)); continue; fi
-        val="$(literalize "${words[$i]}")"
+        val="${lit_f[$i]}"
         case "$opt" in
           -C)
             case "$val" in /*) gdir="$val" ;; *) gdir="$gdir/$val" ;; esac
@@ -586,16 +781,16 @@ screen_git() {
           --git-dir | --work-tree) GIT_LOC+=("$opt" "$val"); SAW_LOC=1 ;;
           --config-env) deny_config ;;
           -c)
-            grep -Eqi '^alias\.' <<<"$val" && deny_alias
+            [[ "$val" =~ $ALIAS_RE ]] && deny_alias
             [ "$AUTO" = 1 ] && deny_config ;;
         esac
         i=$((i + 1)); continue ;;
       --git-dir=* | --work-tree=*)
-        if [ "${exp_f[$i]}" = 1 ] || [ "${brace_f[$i]}" = 1 ]; then opt_u=1; else GIT_LOC+=("$(literalize "$w")"); SAW_LOC=1; fi
+        if [ "${exp_f[$i]}" = 1 ] || [ "${brace_f[$i]}" = 1 ]; then opt_u=1; else GIT_LOC+=("${lit_f[$i]}"); SAW_LOC=1; fi
         i=$((i + 1)); continue ;;
       --config-env=*) deny_config ;;
       --namespace=* | --exec-path=* | --super-prefix=* | -*) i=$((i + 1)); continue ;;
-      *) sub="$(literalize "$w")"; i=$((i + 1)); break ;;
+      *) sub="${lit_f[$i]}"; i=$((i + 1)); break ;;
     esac
   done
   [ "$sub_u" = 1 ] && deny_unparsed
@@ -612,7 +807,7 @@ screen_git() {
       [ "$AUTO" = 1 ] || return 0
       while [ "$i" -lt "${#words[@]}" ]; do
         [ "${exp_f[$i]}" = 1 ] || [ "${brace_f[$i]}" = 1 ] && deny_unparsed
-        lit+=("$(literalize "${words[$i]}")")
+        lit+=("${lit_f[$i]}")
         i=$((i + 1))
       done
       local saved_cd="${CD_BASE:-}"
@@ -637,7 +832,7 @@ screen_gh() {
   local i="$1"
   local -a lit=(gh)
   while [ "$i" -lt "${#words[@]}" ]; do
-    lit+=("$(literalize "${words[$i]}")")
+    lit+=("${lit_f[$i]}")
     i=$((i + 1))
   done
   check_gh "${lit[@]}"
@@ -654,11 +849,11 @@ screen_segment() {
     [ "${exp_f[$i]}" = 1 ] || [ "${brace_f[$i]}" = 1 ] && u=1
     if [ "$u" = 0 ] && [[ "$w" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then note_assign_idx "$i"; i=$((i + 1)); continue; fi
     b="${w##*/}"
-    if [ "$u" = 0 ]; then b="$(literalize "$b")"; fi
+    if [ "$u" = 0 ]; then b="${litb_f[$i]}"; fi
     if [ "$u" = 0 ] && is_prefix_keyword "$b"; then i=$((i + 1)); continue; fi
     if [ "$u" = 0 ] && [[ "$b" =~ ^(env|sudo|command|exec|nice|nohup|xargs|timeout|time)$ ]]; then
       wb="$b"; i=$((i + 1))
-      vf="$(prefix_value_flags "$wb")"
+      prefix_value_flags "$wb"; vf="$PVF"
       while [ "$i" -lt "${#words[@]}" ] && [[ "${words[$i]}" == -* ]]; do
         o="${words[$i]}"; i=$((i + 1))
         [ "$o" = -- ] && break
@@ -699,8 +894,8 @@ screen_segment() {
       if [ $((i + 1)) -lt "${#words[@]}" ] && { [ "${exp_f[$((i + 1))]}" = 1 ] || [ "${brace_f[$((i + 1))]}" = 1 ]; }; then tu=1; fi
       if [ "$SR_CD" = "?" ] || [ "$tu" = 1 ] || [[ "$tgt" == -* ]]; then SR_CD="?"
       else
-        tgt="$(literalize "$tgt")"
-        SR_CD="$(norm_path "$tgt" "${SR_CD:-$cwd}")"
+        if [ $((i + 1)) -lt "${#words[@]}" ]; then tgt="${lit_f[$((i + 1))]}"; else [ -n "${HOME_LIT+x}" ] || home_lit; tgt="$HOME_LIT"; fi
+        norm_path "$tgt" "${SR_CD:-$cwd}"; SR_CD="$NP"
         SR_CD="${SR_CD:-/}"
       fi
       return 0
@@ -709,7 +904,7 @@ screen_segment() {
   done
   [ "$i" -lt "${#words[@]}" ] || return 0
   if [ "${exp_f[$i]}" = 1 ] || [ "${brace_f[$i]}" = 1 ]; then deny_unparsed; fi
-  w="${words[$i]}"; b="$(literalize "${w##*/}")"
+  b="${litb_f[$i]}"
   i=$((i + 1))
   case "$b" in
     git) screen_git "$i" ;;
@@ -718,68 +913,37 @@ screen_segment() {
   esac
 }
 
-flush_sr_word() {
-  if [ -n "$sr_word" ] || [ "$sr_exp" = 1 ] || [ "$sr_brace" = 1 ]; then
-    if [ "$sr_exp" = 0 ] && [ "$sr_brace" = 0 ] && [[ "$sr_word" != *\'* && "$sr_word" != *\"* ]] \
-      && { [[ "$sr_word" == *'{'*','*'}'* ]] || [[ "$sr_word" == *'{'*'..'*'}'* ]]; }; then
-      sr_brace=1
+command -v awk >/dev/null 2>&1 || deny_unparsed
+cmd="$(LC_ALL=C awk -v mode=join "$GG_AWK" <<<"$cmd")"
+words=(); exp_f=(); brace_f=(); lit_f=(); litb_f=(); litv_f=()
+P_GIT_DIR=""; P_GIT_WT=""; P_GIT_CFG=0
+SR_CD=""
+scan_out="$(LC_ALL=C awk -v mode=scan "$GG_AWK" <<<"$cmd")"
+seg_fresh=0
+SK_CD="" SK_DIR="" SK_WT="" SK_CFG=""
+while IFS=$'\t' read -r rec_k rec_e rec_b rec_r rec_l rec_lb rec_lv; do
+  if [ "$rec_k" = s ] || [ "$rec_k" = r ]; then
+    if [ "$rec_k" = r ] && [ "$SR_CD" = "$SK_CD" ] && [ "$P_GIT_DIR" = "$SK_DIR" ] && [ "$P_GIT_WT" = "$SK_WT" ] && [ "$P_GIT_CFG" = "$SK_CFG" ]; then
+      :
+    elif [ "${#words[@]}" -gt 0 ]; then
+      SK_CD="$SR_CD" SK_DIR="$P_GIT_DIR" SK_WT="$P_GIT_WT" SK_CFG="$P_GIT_CFG"
+      screen_segment
     fi
-    words+=("$sr_word"); exp_f+=("$sr_exp"); brace_f+=("$sr_brace")
+    seg_fresh=1
+    continue
   fi
-  sr_word=""; sr_exp=0; sr_brace=0
-}
-
-flush_sr_seg() {
-  flush_sr_word
-  [ "${#words[@]}" -gt 0 ] && screen_segment
-  words=(); exp_f=(); brace_f=()
-}
-
-screen_raw() {
-  local s="$1" i=0 c
-  local n=${#s}
-  local sr_word="" sr_exp=0 sr_brace=0 q=0
-  words=(); exp_f=(); brace_f=()
-  P_GIT_DIR=""; P_GIT_WT=""; P_GIT_CFG=0
-  SR_CD=""
-  while [ "$i" -lt "$n" ]; do
-    c="${s:i:1}"
-    if [ "$q" = 1 ]; then
-      sr_word+="$c"; [ "$c" = "'" ] && q=0
-      i=$((i + 1)); continue
-    fi
-    if [ "$q" = 3 ]; then
-      sr_exp=1
-      if [ "$c" = "\\" ] && [ $((i + 1)) -lt "$n" ]; then sr_word+="$c${s:i+1:1}"; i=$((i + 2)); continue; fi
-      sr_word+="$c"; [ "$c" = "'" ] && q=0
-      i=$((i + 1)); continue
-    fi
-    if [ "$q" = 2 ]; then
-      [ "$c" = '$' ] || [ "$c" = '`' ] && sr_exp=1
-      if [ "$c" = "\\" ] && [ $((i + 1)) -lt "$n" ]; then sr_word+="$c${s:i+1:1}"; i=$((i + 2)); continue; fi
-      sr_word+="$c"; [ "$c" = '"' ] && q=0
-      i=$((i + 1)); continue
-    fi
-    case "$c" in
-      \\)
-        if [ $((i + 1)) -lt "$n" ]; then sr_word+="$c${s:i+1:1}"; i=$((i + 2)); else sr_word+="$c"; i=$((i + 1)); fi ;;
-      "'") q=1; sr_word+="$c"; i=$((i + 1)) ;;
-      '"') q=2; sr_word+="$c"; i=$((i + 1)) ;;
-      '$')
-        sr_exp=1
-        if [ "${s:i+1:1}" = "'" ]; then q=3; fi
-        sr_word+="$c"; i=$((i + 1)) ;;
-      '`') sr_exp=1; sr_word+="$c"; i=$((i + 1)) ;;
-      ' ' | $'\t' | $'\r') flush_sr_word; i=$((i + 1)) ;;
-      $'\n' | ';' | '&' | '|') flush_sr_seg; i=$((i + 1)) ;;
-      *) sr_word+="$c"; i=$((i + 1)) ;;
-    esac
-  done
-  flush_sr_seg
-}
-
-cmd="$(join_continuations "$cmd")"
-screen_raw "$cmd"
+  if [ "$seg_fresh" = 1 ]; then
+    words=(); exp_f=(); brace_f=(); lit_f=(); litb_f=(); litv_f=()
+    seg_fresh=0
+  fi
+  rec_r="${rec_r#_}"; rec_l="${rec_l#_}"; rec_lb="${rec_lb#_}"; rec_lv="${rec_lv#_}"
+  [[ "$rec_r" == *\\* ]] && printf -v rec_r '%b' "$rec_r"
+  [[ "$rec_l" == *\\* ]] && printf -v rec_l '%b' "$rec_l"
+  [[ "$rec_lb" == *\\* ]] && printf -v rec_lb '%b' "$rec_lb"
+  [[ "$rec_lv" == *\\* ]] && printf -v rec_lv '%b' "$rec_lv"
+  words+=("$rec_r"); exp_f+=("$rec_e"); brace_f+=("$rec_b")
+  lit_f+=("$rec_l"); litb_f+=("$rec_lb"); litv_f+=("$rec_lv")
+done <<<"$scan_out"
 
 if [[ "$cmd" == *agent-harness* ]] && { [ "$AUTO" = 1 ] || [[ "$cmd" =~ worktree-rm|teardown-merged-worktree|ship-init ]]; }; then
   unquoted="$(tr -d "'\"" <<<"$cmd")"
@@ -791,10 +955,22 @@ if [[ "$cmd" == *worktree-rm* ]] && grep -Eq '(^|[^[:alnum:]_])(export|declare +
 [[ "$cmd" == *--confirmed* && "$cmd" == *worktree-rm* ]] && ASKED_WT=1
 
 segments="$(tr -d "'\"" <<<"$cmd" | sed -E 's/\$\(/;/g; s/`/;/g; s/\\(.)/\1/g' | tr ';&|' '\n\n\n')"
+pyinert=0
+if [[ "$segments" != *python* && "$segments" != *perl* && "$segments" != *node* && "$segments" != *ruby* ]]; then
+  pyinert=1
+else
+  ensure_pyrm
+  [ "$AUTO" = 1 ] && ensure_loose
+  [ "$PYRM_HIT" = 0 ] && { [ "$AUTO" = 0 ] || [ "$LOOSE_HIT" = 0 ]; } && pyinert=1
+fi
+segments="$(LC_ALL=C awk -v mode=seg -v pyinert="$pyinert" "$GG_AWK" <<<"$segments")"
+PSEG=""; PIN=""
 while IFS= read -r seg; do
-  seg="$(sed -E 's/^[[:space:]({]+//' <<<"$seg")"
+  if [ "$seg" = "$PSEG" ] && [ "$CD_BASE" = "$PIN" ]; then continue; fi
+  PSEG="$seg"; PIN="$CD_BASE"
+  seg="${seg#"${seg%%[![:space:]({]*}"}"
   [ -n "$seg" ] || continue
-  read -ra toks <<<"$seg"
+  set -f; toks=($seg); set +f
   [ "${#toks[@]}" -gt 0 ] || continue
   for ((i = 0; i < ${#toks[@]}; i++)); do
     while [[ "${toks[i]}" == *[\)\}] ]]; do toks[i]="${toks[i]%?}"; done
@@ -819,7 +995,7 @@ while IFS= read -r seg; do
       pref=1
       [ "$b" = xargs ] && XARGS=1
       i=$((i + 1))
-      vf="$(prefix_value_flags "$b")"
+      prefix_value_flags "$b"; vf="$PVF"
       while [[ "${toks[$i]:-}" == -* ]]; do
         o="${toks[$i]}"; i=$((i + 1))
         [ "$o" = -- ] && break
@@ -857,11 +1033,12 @@ while IFS= read -r seg; do
     find) check_find_worktree "${ct[@]:1}" ;;
     xargs) ;;
     python | python[0-9]* | perl | node | ruby)
-      grep -Eq 'rmtree|rm_rf|rmSync|remove_tree|rmdir' <<<"$cmd" && grep -Eq '/orca/workspaces/|worktree' <<<"$cmd" && deny_worktree ;;
+      ensure_pyrm
+      [ "$PYRM_HIT" = 1 ] && deny_worktree ;;
     cd | pushd)
       tgt="${ct[1]:-$HOME}"
       if [ "$CD_BASE" = "?" ] || [[ "$tgt" == *'$'* || "$tgt" == -* ]]; then CD_BASE="?"
-      else CD_BASE="$(norm_path "$tgt" "${CD_BASE:-$cwd}")"; CD_BASE="${CD_BASE:-/}"
+      else norm_path "$tgt" "${CD_BASE:-$cwd}"; CD_BASE="$NP"; CD_BASE="${CD_BASE:-/}"
       fi ;;
   esac
   if check_harness_cmd teardown-merged-worktree pr "$has_assign" "$c0" "${ct[@]:1}"; then continue; fi

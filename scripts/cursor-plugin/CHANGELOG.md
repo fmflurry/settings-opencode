@@ -2,6 +2,11 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.9] - 2026-10-19
+
+- The autonomy git guard scan is rewritten as one linear awk pass with a bounded number of forks. Commands of 200K characters or 5000 lines are decided in under a second, and the decisions are unchanged.
+- The guard denies with "cannot parse" when `awk` is missing.
+
 ## [0.4.8] - 2026-10-18
 
 - `/tdd refactor` pins current behavior with characterization tests that pass immediately. The restructure does not edit those tests. Planner, blast-radius, and `/verify` use that pin as the baseline.

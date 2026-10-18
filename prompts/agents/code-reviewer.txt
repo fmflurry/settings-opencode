@@ -51,7 +51,7 @@ These are the default tag rules, used when the repository has no `REVIEW.md`. Wh
 
 A performance checklist item has no heading tag. A measurable or exploitable slowdown is Important. An unmeasured micro-optimization is a Nit.
 
-Cop emoji (🔴 🟠 🟡 🟢 🔵 ❓) are category markers, not tags. BLOCK is Important. WARN is a Nit.
+Cop badges match the review tags: 🔴 Important, 🟡 Nit, ⚪ Pre-existing, ❓ question (never blocks). Category labels (`[bug]`, `[sec]`, `[arch]`, `[risk]`, `[nit]`, `[comment]`, `[format]`) follow the badge. BLOCK is Important. WARN is a Nit. A finding that cites an AGENTS.md hard rule blocks even when the tag is Nit.
 
 The verdict is **Approve** or **Block**. There is no Warning verdict.
 
@@ -135,8 +135,8 @@ For every added or changed comment in the diff:
 1. If the repo provides `scripts/check-added-comments.sh`, run it; otherwise `git diff -U0 | grep -nE '^\+.*(//|/\*|#|<!--)'`.
 2. Load skill `comment-judge` (REVIEW mode) and apply its rubric to classify each added/changed comment:
    - **verified**: Comment explains a non-obvious constraint or choice; it matches code behavior.
-   - **forbidden-class**: Narrates what code does, restates signature, references task/PR/agent, logs history, claims quality, or repeats a type. Move to commit message or remove. (tier 🟡, BLOCK).
-   - **false-or-stale**: Comment asserts behavior the code does not perform (e.g., "thread-safe" without locking). (tier 🔴, but ❓ advisory — only BLOCK when YOU confirm by quoting a contradicting line from the repo itself, per Trust limits).
+   - **forbidden-class**: Narrates what code does, restates signature, references task/PR/agent, logs history, claims quality, or repeats a type. Move to commit message or remove. (tier Nit; the reviewer emits it as 🔴 Important [comment] and blocks).
+   - **false-or-stale**: Comment asserts behavior the code does not perform (e.g., "thread-safe" without locking). (tier Important when you confirm by quoting a contradicting line from the repo; otherwise ❓, which never blocks, per Trust limits).
 3. Also flag pre-existing comments made false or misleading by the diff's code changes (truthfulness clause).
 
 **Noise-filter exception:** Comment findings are NEVER dropped as noise or style issues, even if other Nit findings are consolidated.

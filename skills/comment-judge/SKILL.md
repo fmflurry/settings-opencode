@@ -23,7 +23,7 @@ Merge consecutive `path:line` hits in the same file into blocks: `start_line..en
 
 **REVIEW mode:** Missing a false comment is costly (reviewers trust the code). A wrong flag is cheap (human ignores). Strategy: flag suspected false/stale/forbidden comments even with partial evidence. Tier as ❓ (low) when evidence is incomplete.
 
-**PURGE mode:** Verdicts are bulk-applied to many files. Delete only at high confidence (🔴 or 🟡). Any doubt → keep + ❓ marker for follow-up.
+**PURGE mode:** Verdicts are bulk-applied to many files. Delete only at high confidence (`Important` or `Nit`). Any doubt → keep + ❓ marker for follow-up.
 
 **Never auto-apply `false`:** Comment may be correct and code may be wrong = possible bug. Always require human review.
 
@@ -34,19 +34,19 @@ Read the code the comment describes: enclosing symbol, or ±15 lines, or ≤60 l
 Ask in order; first failure wins:
 
 **a) FORBIDDEN class (per the project's code-comments rule — `~/.claude/rules/common/code-comments.md` / `~/.config/opencode/instructions/code-comments.md`, or the repo's own copy if it has one)**
-   - Narration: restates what code does; rename the code instead (tier: 🟡).
-   - **adr-restate:** Restating, paraphrasing, or quoting design-doc/RFC/rule sections, points, phases, or citing project convention files (AGENTS.md, rules, CLAUDE.md) content. Citations must be bare pointers only: `(ADR-1042)` or `(RFC 7636 §4.2)` for external specs (section allowed for RFCs only). Tier: 🟡.
-   - **task-ref (extended):** Requirement or work-item IDs: `US\d+`, `EX\d+`, `SEC\d+`, `R\d{1,2}`, `F\d[a-z]?`, `#\d{5,}`, `WI \d+`, `TC #\d+`, `Phase \d`, `sub-phase`, `P\d(\.\d)?`, `Pin #\d+`. Fix: strip the ID; keep the sentence if a why remains. Tier: 🟡.
-   - Suppression/TODO missing reason or ticket number (tier: 🟡).
-   - History/changelog/task reference (tier: 🟡).
-   - Quality claim or verification assertion (tier: 🟡).
-   - Section banners or `#region` markers (tier: 🟡).
+   - Narration: restates what code does; rename the code instead (tier: Nit).
+   - **adr-restate:** Restating, paraphrasing, or quoting design-doc/RFC/rule sections, points, phases, or citing project convention files (AGENTS.md, rules, CLAUDE.md) content. Citations must be bare pointers only: `(ADR-1042)` or `(RFC 7636 §4.2)` for external specs (section allowed for RFCs only). Tier: Nit.
+   - **task-ref (extended):** Requirement or work-item IDs: `US\d+`, `EX\d+`, `SEC\d+`, `R\d{1,2}`, `F\d[a-z]?`, `#\d{5,}`, `WI \d+`, `TC #\d+`, `Phase \d`, `sub-phase`, `P\d(\.\d)?`, `Pin #\d+`. Fix: strip the ID; keep the sentence if a why remains. Tier: Nit.
+   - Suppression/TODO missing reason or ticket number (tier: Nit).
+   - History/changelog/task reference (tier: Nit).
+   - Quality claim or verification assertion (tier: Nit).
+   - Section banners or `#region` markers (tier: Nit).
    - Verdict: **delete** or **rewrite** (reason rule).
 
-**b) FALSE or STALE (tier: 🔴)**
+**b) FALSE or STALE (tier: Important)**
    - FALSE: Comment claims behavior the code does NOT perform (e.g., "thread-safe" without locks). The contradicting evidence is IN the attached code itself (enclosing symbol, ±15 lines). Must quote contradicting `path:line` + exact line.
    - STALE: Comment describes behavior, a call site, a symbol, or an architecture that has moved or been removed. The contradicting evidence lives OUTSIDE the attached code (another file, a removed/renamed symbol, a deleted method call). Even though the claim is technically untrue now, the comment was once correct and was never updated when the code changed. Verdict: **rewrite** if the attached code still needs a non-obvious why (supply corrected ≤1-line reason); else **delete**. Evidence: quote removal or cite `codememory_definitions` result.
-   - Mixed (noise + stale): When history/ticket noise is attached to stale code, classify **STALE** (🔴 outranks 🟡); remove noise + supply corrected reason if needed.
+   - Mixed (noise + stale): When history/ticket noise is attached to stale code, classify **STALE** (Important outranks Nit); remove noise + supply corrected reason if needed.
    - Verdict: **false** (REVIEW mode only; PURGE requires high confidence). If low confidence → ❓.
 
 **c) NARRATION (restates next lines or method signature)**
@@ -95,8 +95,8 @@ One finding per judged block, JSON:
   "start_line": 42,
   "end_line": 45,
   "category": "comment",
-  "tier": "🔴",
-  "rule_ref": "code-comments.md#forbidden-class",
+  "tier": "Important",
+  "rule_ref": "code-comments.md#false-or-stale",
   "source": "llm",
   "existing_code": "// This is thread-safe.\nfunction update(cache, key, value) {",
   "verdict": "false",
@@ -111,12 +111,12 @@ One finding per judged block, JSON:
 - `rewrite` — replace with suggestion_code (≤1 line, English, no narration).
 - `false` — assertion proven false; must quote evidence.
 
-**Tier** (category marker, not a finding tag):
-- 🔴 false/stale.
-- 🟡 forbidden/narration/noise.
-- ❓ unsure.
+**Tier** (review tag, JSON `tier` field):
+- `Important` — false/stale.
+- `Nit` — forbidden, narration, noise.
+- `❓` — unsure. Never blocks.
 
-Blocking is decided by the code-reviewer finding tags, not by this tier. A forbidden comment is Important. A false comment is Important only when the reviewer confirms it by quoting a contradicting line. These emoji stay category markers.
+A confirmed false/stale finding is Important and blocks. An unconfirmed false/stale stays ❓ and does not block. The reviewer emits a forbidden comment as 🔴 Important [comment] and blocks; narration and noise stay 🟡 Nit.
 
 **Summary line format:**
 ```

@@ -4,7 +4,7 @@
 
 Commands and queries implement the SharedKernel contracts; handlers expose a single `Handle(message, CancellationToken)` and inject domain interfaces via primary constructor; no business logic outside the domain.
 
-## 🟢 Architecture blockers (when module opts in to CQRS)
+## 🔴 Important [arch]
 
 ### Command/query not implementing the contract
 ```csharp
@@ -40,7 +40,7 @@ var placed = Order.Place(items);   // rule lives in the aggregate
 ```
 Handlers orchestrate (load → invoke aggregate behavior → persist → return Result). Calculations/branching on domain state belong in the aggregate or a domain service.
 
-## 🟡 Risks
+## 🟡 Nit [risk]
 
 ### Query handler rehydrates an aggregate
 A `IQueryHandler` loading via the write-side repository (`Orders.Find`) or replaying events to answer a read. Reads must hit a projection/read model.
@@ -51,7 +51,7 @@ Command/query handlers should return `Result`/`Result<T>` so business failures a
 ### Async suffix misuse
 `Async` suffix added to handler/repository methods. Convention: async is the default, **no `Async` suffix**; suffix the synchronous overload with `Sync` if one exists.
 
-## 🔵 Nits
+## 🟡 Nit
 
 - Command/query named `<Verb><Noun>` (`PlaceOrder`, `CancelOrder`); handler `<UseCase>Handler`.
 - Read-model DTOs are `record`s in `Application/ReadModels/`.

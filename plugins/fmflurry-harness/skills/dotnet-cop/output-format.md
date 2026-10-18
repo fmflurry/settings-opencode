@@ -1,6 +1,6 @@
 # dotnet-cop / output format
 
-Two modes: `senior` (default, terse) and `junior` (verbose + teaching). Important findings (🔴 / 🟠) always include rationale regardless of mode. The emoji are category markers. The tag rules are in the code-reviewer agent.
+Two modes: `senior` (default, terse) and `junior` (verbose + teaching). Important findings (🔴) always include rationale regardless of mode. One badge per tag: 🔴 Important, 🟡 Nit, ⚪ Pre-existing, ❓ question (never blocks). Category labels (`[bug]`, `[sec]`, `[arch]`, `[risk]`, `[nit]`, `[comment]`, `[format]`) follow the tag. The tag rules are in the code-reviewer agent.
 
 ## Header (both modes)
 
@@ -13,37 +13,38 @@ Two modes: `senior` (default, terse) and `junior` (verbose + teaching). Importan
 
 Comments: added 5 · verified 4 · forbidden 0 · false 1
 
-| 🔴 | 🟠 | 🟡 | 🟢 | 🔵 | ❓ |
-|----|----|----|----|----|----|
-| 2 | 0 | 5 | 1 | 8 | 1 |
+| 🔴 Important | 🟡 Nit | ⚪ Pre-existing | ❓ |
+|--------------|--------|-----------------|----|
+| 3 | 5 | 1 | 1 |
 
-**Verdict:** BLOCK | APPROVE-WITH-CHANGES | APPROVE
+**Verdict:** BLOCK | APPROVE
 ```
 
 ## Senior mode (terse)
 
 One line per finding. Format:
 ```
-<file>:L<line>: <sev-emoji> <category>: <problem>. <fix>.
+<file>:L<line>: <badge> <Tag> [<category>]: <problem>. <fix>.
 ```
 
 Example:
 ```markdown
-## 🔴 Blockers
-- `Module/Order/Application/Endpoint/CreateOrderEndpoint.cs`:L42: 🔴 bug: business rule (discount cap) computed inside endpoint handler. Move to `CreateOrder` use case behind incoming port.
-- `Module/Order/Infrastructure/Adapter/OrderAdapter.cs`:L88: 🟠 sec: raw SQL string built with string interpolation — SQL injection risk. Use parameterized EF Core query or raw SQL with `FromSqlRaw` + parameters.
+## 🔴 Important
+- `Module/Order/Application/Endpoint/CreateOrderEndpoint.cs`:L42: 🔴 Important [bug]: business rule (discount cap) computed inside endpoint handler. Move to `CreateOrder` use case behind incoming port.
+- `Module/Order/Infrastructure/Adapter/OrderAdapter.cs`:L88: 🔴 Important [sec]: raw SQL string built with string interpolation — SQL injection risk. Use parameterized EF Core query or raw SQL with `FromSqlRaw` + parameters.
+- `Module/User/Core/CreateUser.cs`:L12: 🔴 Important [arch]: use case imports `Microsoft.EntityFrameworkCore` directly. Core must have zero infrastructure dependencies. Move EF call to outgoing port / adapter. (AGENTS.md §Architecture)
 
-## 🟢 Architecture
-- `Module/User/Core/CreateUser.cs`:L12: 🟢 arch: use case imports `Microsoft.EntityFrameworkCore` directly. Core must have zero infrastructure dependencies. Move EF call to outgoing port / adapter. (AGENTS.md §Architecture)
+## 🟡 Nit
+- `Module/Order/Infrastructure/Adapter/OrderAdapter.cs`:L67: 🟡 Nit [risk]: query without `AsNoTracking()` on a read-only path. Adds EF tracking overhead.
+- `Module/Order/Core/Model/Endpoint/CreateOrderRequest.cs`:L30: 🟡 Nit [risk]: no FluentValidation validator for this request; invalid input passes unvalidated to use case.
+- `Module/User/UserModule.cs`:L10: 🟡 Nit [nit]: `RegisterModule` registers `Riok.Mapperly` mapper after scoped services — consider grouping infrastructure registrations.
 
-## 🟡 Should-fix
-- `Module/Order/Infrastructure/Adapter/OrderAdapter.cs`:L67: 🟡 risk: query without `AsNoTracking()` on a read-only path. Adds EF tracking overhead.
-- `Module/Order/Core/Model/Endpoint/CreateOrderRequest.cs`:L30: 🟡 risk: no FluentValidation validator for this request; invalid input passes unvalidated to use case.
+## ⚪ Pre-existing
+- `Module/Billing/Infrastructure/BillingDbContext.cs`:L20: ⚪ Pre-existing [arch]: shared DbContext already on the base branch. Does not block.
 
-<details><summary>🔵 Nits (8) / ❓ Questions (1)</summary>
+<details><summary>❓ Questions (1)</summary>
 
-- `Module/User/UserModule.cs`:L10: 🔵 nit: `RegisterModule` registers `Riok.Mapperly` mapper after scoped services — consider grouping infrastructure registrations.
-- `Module/Order/Core/CreateOrder.cs`:L4: ❓ q: intentional that `CreateOrder` does not check for duplicate order within the same day?
+- `Module/Order/Core/CreateOrder.cs`:L4: ❓ intentional that `CreateOrder` does not check for duplicate order within the same day?
 </details>
 
 ## Tooling
@@ -57,7 +58,7 @@ Example:
 Each finding becomes a block:
 
 ```markdown
-### 🔴 [bug] `CreateOrderEndpoint.cs:L42` — business logic in endpoint handler
+### 🔴 Important [bug] `CreateOrderEndpoint.cs:L42` — business logic in endpoint handler
 
 **Problem.** The endpoint handler directly computes the discount cap (`if (total > 1000) discount = 0.1m`). Minimal API endpoint handlers are part of the Application (driving) layer and must delegate all domain logic to an incoming port / use case. Encoding business rules here bypasses the Core layer, making them invisible to tests and impossible to reuse.
 
@@ -96,7 +97,7 @@ app.MapPost("/orders", async (CreateOrderRequest req, ICreateOrder useCase) =>
 - Pattern: dotnet-clean-architecture / SoT minimal-API / opt-in CQRS
 ```
 
-Important findings (🔴 / 🟠) always rendered in this block format even in senior mode.
+Important findings (🔴) are always rendered in this block format even in senior mode.
 
 ## Verdict logic
 
@@ -107,13 +108,12 @@ if forbidden-comments > 0                                -> BLOCK (reason: "forb
 elif false-comments > 0 AND reviewed confirmed any      -> BLOCK (reason: "false comments confirmed by you with quoted repo line")
 elif dotnet build errors > 0                              -> BLOCK (reason: "build red")
 elif dotnet format violations > 0                       -> BLOCK (reason: "format violations")
-elif any (🔴 or 🟠)                                     -> BLOCK
-elif any (🟢 with AGENTS.md hard-rule citation)         -> BLOCK
-elif unconfirmed false/stale comments > 0              -> APPROVE-WITH-CHANGES (flag for follow-up, but not blocking)
-elif any 🟡                                             -> APPROVE-WITH-CHANGES
-elif only 🔵 / ❓                                       -> APPROVE
-else (no findings + tooling clean + no forbidden)      -> APPROVE
+elif any Important                                       -> BLOCK
+elif any finding cites an AGENTS.md hard rule            -> BLOCK
+else (no Important finding, no AGENTS.md hard-rule citation, tooling clean) -> APPROVE
 ```
+
+❓ never blocks. ⚪ Pre-existing does not block. 🟡 Nit does not block unless that finding cites an AGENTS.md hard rule. Unconfirmed false/stale comments stay ❓.
 
 (True false comments are only blocking if YOU have confirmed them by quoting a contradicting line from the repo itself; per comment-judge Trust limits.)
 
@@ -123,9 +123,9 @@ If `--no-tools` was passed, the tooling gate is skipped but the verdict line MUS
 
 ```markdown
 ---
-Generated by `dotnet-cop`. Re-run with `/cop-review <target> --level=junior` for teaching format. Findings ≥80% confidence; uncertain items use `❓ q:` instead of guessing.
+Generated by `dotnet-cop`. Re-run with `/cop-review <target> --level=junior` for teaching format. Findings ≥80% confidence; uncertain items use `❓` instead of guessing.
 ```
 
 ## Mode auto-detection
 
-If user passes no `--level`, default `senior`. If user message contains "junior", "new dev", "explain", "teach", or `--level=junior`, switch to junior. If mixed audience, render header + summary in senior format but render every 🔴/🟠 in junior block format.
+If user passes no `--level`, default `senior`. If user message contains "junior", "new dev", "explain", "teach", or `--level=junior`, switch to junior. If mixed audience, render header + summary in senior format but render every 🔴 Important finding in junior block format.

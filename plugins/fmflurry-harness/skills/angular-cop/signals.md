@@ -2,7 +2,7 @@
 
 Angular signals, computed, effects, OnPush. Applies to `*.component.ts`, `*.component.html`, `*.directive.ts`.
 
-## 🔴 Blockers
+## 🔴 Important
 
 ### Method calls in templates
 ```html
@@ -56,7 +56,7 @@ export class FooComponent {}
 ```
 Why: external templates preserve HTML tooling, enable IDE refactoring, reduce class file size, and keep diffs clean.
 
-## 🟡 Risks
+## 🟡 Nit [risk]
 
 ### Missing OnPush
 Standalone components default to `Default` CD. With signals you almost always want OnPush:
@@ -89,7 +89,7 @@ return computed(() => value);
 return computed(() => this.signal());
 ```
 
-## 🔵 Nits
+## 🟡 Nit
 
 - Signal name should not end in `$` (that's RxJS convention).
 - `Signal<T>` over `WritableSignal<T>` in public APIs (read-only exposure).

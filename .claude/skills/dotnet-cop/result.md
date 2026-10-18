@@ -2,7 +2,7 @@
 
 Expected/business failures are **returned** as `Result`/`Result<T>`, never thrown. `Error` carries a code and message; mapping to HTTP status happens at the API boundary. Throwing is reserved for genuinely unexpected/unrecoverable conditions.
 
-## 🔴 Blockers
+## 🔴 Important
 
 ### Business error thrown instead of returned
 ```csharp
@@ -31,12 +31,12 @@ A single catch-all `Error` type used for distinct business failures. Errors must
 ### Throwing across a repository/port boundary for an expected condition
 Infrastructure surfacing a raw `DbUpdateException`/unique-violation as an exception when it represents a known business failure (e.g. duplicate) — map it to a failed `Result` (or a domain error) at the boundary.
 
-## 🟡 Risks
+## 🟡 Nit [risk]
 
 ### Result success without data
 `Result<T>.Success()` where `T` data is expected by the caller — return `Success(value)`.
 
-## 🔵 Nits
+## 🟡 Nit
 
 - Error code convention: `<context>.<rule>` (e.g. `ordering.order-has-no-items`).
 - One `Error` subclass per file under the context's Domain.

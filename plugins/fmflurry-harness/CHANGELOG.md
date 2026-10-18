@@ -2,6 +2,10 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.5] - 2026-10-18
+
+- Cop and comment-judge badges match the review tags: Important, Nit, Pre-existing, and a question. Only Important blocks, and a finding that cites an AGENTS.md hard rule also blocks. Questions never block. Pre-existing does not block. The APPROVE-WITH-CHANGES verdict and the five-color category ladder are gone. Category labels stay after the tag. The comment-judge JSON `tier` is `Important`, `Nit`, or `❓`.
+
 ## [0.4.4] - 2026-10-18
 
 - `create-verification-skill` writes a project `verify-this` override from the repository's package.json, Makefile, .NET project, and CI workflow commands.

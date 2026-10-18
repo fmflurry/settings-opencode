@@ -62,7 +62,7 @@ dotnet_diagnostic.CA2201.severity = warning      # do not raise reserved excepti
 dotnet_diagnostic.CA1031.severity = suggestion   # do not catch general exception
 
 # ---------------------------------------------------------------
-# Style rules — suggestion (🔵 nit tier; never BLOCK)
+# Style rules — suggestion (🟡 Nit; never BLOCK)
 # ---------------------------------------------------------------
 csharp_style_var_for_built_in_types = true:suggestion
 csharp_style_var_when_type_is_apparent = true:suggestion

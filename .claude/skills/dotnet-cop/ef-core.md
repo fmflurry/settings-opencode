@@ -2,7 +2,7 @@
 
 DbContext per module/schema, migrations via `dotnet ef migrations add`, no lazy-loading surprises, AsNoTracking for reads, no N+1, query splitting, migration safety. **Doctrine**: schema-per-module isolation + FORCE RLS on all context-schema tables + lightweight app-role (DML-only, no DDL).
 
-## 🟢 Blockers
+## 🔴 Important
 
 ### Single shared `DbContext` across modules (god context)
 ```csharp
@@ -104,7 +104,7 @@ await context.OrderItems.AddRangeAsync(items);
 await context.SaveChangesAsync();                      // atomic
 ```
 
-## 🟡 Risks
+## 🟡 Nit [risk]
 
 ### Missing `AsNoTracking()` on read-only query
 ```csharp
@@ -148,7 +148,7 @@ services.AddDbContext<AppDbContext>(o =>
 // GOOD — explicit eager or split loading
 // Use .Include() or .AsSplitQuery() for large navigations
 ```
-If lazy loading is present, flag it as 🟡 risk unless AGENTS.md explicitly allows it.
+If lazy loading is present, flag it as 🟡 Nit [risk] unless AGENTS.md explicitly allows it. A finding that cites an AGENTS.md hard rule forbidding it is BLOCK.
 
 ### Migration without corresponding snapshot update
 EF Core auto-generates the `*ModelSnapshot.cs`. A migration file added without an updated snapshot indicates the migration was hand-edited or generated incorrectly — flag for author verification.
@@ -176,7 +176,7 @@ An entity/table with a `tenant_id` column (tenant-scoped) is added/modified with
 
 **Risk:** Real isolation loss. RLS keyed on the `app.tenant_id` GUC (stamped by `TenantSessionInterceptor`) is the mandatory isolation mechanism. There is **no** EF Core `HasQueryFilter` tenant predicate in this repo — do not add one and do not expect one.
 
-## 🔵 Nits
+## 🟡 Nit
 
 - `SaveChangesAsync(cancellationToken)` — always pass `CancellationToken` through from the endpoint.
 - `FindAsync(id, cancellationToken)` preferred over `FirstOrDefaultAsync(x => x.Id == id)` for PK lookups (uses identity cache).

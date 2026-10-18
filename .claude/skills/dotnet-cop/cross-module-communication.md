@@ -5,7 +5,7 @@ Sales module with subdomains such as Invoices, Customers, Payments, Dunning, Rec
 Catalog). Hard blocker: NO direct cross-module data reads — only the Wolverine message bus +
 per-module projections. This is the modular-monolith refinement of `modular-isolation.md`.
 
-## 🟢 Architecture blockers
+## 🔴 Important [arch]
 
 ### Direct cross-module data read via shared DbContext (hard blocker)
 A module MUST NOT read another module's data through a shared DbContext (e.g. a wide
@@ -14,7 +14,7 @@ OWN DbContext.
 
 ```csharp
 // BAD — ModuleB.Infrastructure depends on ModuleA.Infrastructure (wide DbContext)
-<ProjectReference Include="..\GcPlatform.ModuleA.Infrastructure\GcPlatform.ModuleA.Infrastructure.csproj" />  // 🟢 violation
+<ProjectReference Include="..\GcPlatform.ModuleA.Infrastructure\GcPlatform.ModuleA.Infrastructure.csproj" />  // 🔴 violation
 
 // BAD — cross-domain read port in SharedKernel (DELETED, never reintroduce)
 // GcPlatform.ModuleA.Domain.DunningPorts.ICustomerDunningReader

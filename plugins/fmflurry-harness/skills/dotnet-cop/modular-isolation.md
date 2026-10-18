@@ -2,12 +2,12 @@
 
 Module boundaries, no direct cross-module type references, communication via contracts/registry, reflection-based module discovery. Hard blocker: cross-module dependencies flow ONLY through events (via Wolverine bus) or intent interfaces implemented by consumers.
 
-## 🟢 Architecture blockers
+## 🔴 Important [arch]
 
 ### Direct cross-module type reference (concrete type, not contract)
 ```csharp
 // BAD — Module A imports concrete class from Module B's internal namespace
-using MyApp.Module.Order.Core;           // inside Module.User — 🟢 violation
+using MyApp.Module.Order.Core;           // inside Module.User — 🔴 violation
 
 // GOOD — Module A uses a shared contract / public API or receives via DI
 using MyApp.Shared.Contracts.Orders;     // contract defined in Shared kernel
@@ -39,7 +39,7 @@ MUST NOT read another module's data through a shared DbContext or a cross-domain
 
 ```csharp
 // BAD — ModuleB.Infrastructure reads ModuleA data via a wide shared DbContext
-using GcPlatform.ModuleA.Infrastructure;            // 🟢 violation (shared DbContext)
+using GcPlatform.ModuleA.Infrastructure;            // 🔴 violation (shared DbContext)
 var invoice = await moduleADb.Invoices.FirstAsync(...);
 
 // BAD — cross-domain read port defined in SharedKernel (DELETED, never reintroduce)
@@ -89,7 +89,7 @@ public class UserModule : IModule
 {
     public IServiceCollection RegisterModule(IServiceCollection services)
     {
-        services.AddScoped<ICreateOrderPort, CreateOrderAdapter>();  // 🟢 wrong module
+        services.AddScoped<ICreateOrderPort, CreateOrderAdapter>();  // 🔴 wrong module
         return services;
     }
 }
@@ -124,7 +124,7 @@ public class ReportModule : IModule
 }
 ```
 
-## 🟡 Risks
+## 🟡 Nit [risk]
 
 ### Module exposes internal implementation type in public namespace
 If consumers can import `MyApp.Module.Order.Infrastructure.Adapter.OrderAdapter` directly, the module boundary is effectively broken even if the code compiles:
@@ -153,7 +153,7 @@ factory.WithWebHostBuilder(b =>
         s.AddScoped<IRegisterUserPort, FakeUserPort>()));
 ```
 
-## 🔵 Nits
+## 🟡 Nit
 
 - Module folder name should match the class name: folder `Module/Order/` → class `OrderModule`.
 - Module registration order should be deterministic; sort alphabetically in `Program.cs` call if ordering matters.

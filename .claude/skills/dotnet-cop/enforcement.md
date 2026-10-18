@@ -10,7 +10,7 @@ Canonical list for dotnet-cop and the coder self-check. **BLOCK** findings fail 
 
 ## ✅ MUST — SoT BLOCK (mandatory for all modules)
 
-Review fails when any of these is present. Corresponds to 🔴 bug, 🟠 sec, and mandatory 🟢 arch findings.
+Review fails when any of these is present. Emit them as 🔴 Important [bug], 🔴 Important [sec], or 🔴 Important [arch].
 
 | Rule | Detection | Why |
 |---|---|---|
@@ -64,7 +64,7 @@ The following rules apply **only when a module explicitly adopts the named patte
 
 ## ⚠️ SHOULD — WARN
 
-Advisory findings. Reported as 🟡 risk or 🔵 nit. Do not block on their own unless AGENTS.md escalates.
+Advisory findings. Reported as 🟡 Nit [risk] or 🟡 Nit [nit]. They do not block unless the finding cites an AGENTS.md hard rule.
 
 | Rule | Detection | Why |
 |---|---|---|

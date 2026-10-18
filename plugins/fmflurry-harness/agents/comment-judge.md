@@ -1,6 +1,6 @@
 ---
 name: comment-judge
-description: "Read-only comment judge. Applies rubric-based verdict to code comments: false/stale (🔴), forbidden/narration/noise (🟡), unsure (❓). REVIEW mode for diffs; PURGE mode for directory scans. Emits JSON findings."
+description: "Read-only comment judge. Applies rubric-based verdict to code comments: false/stale (Important), forbidden/narration/noise (Nit), unsure (❓). REVIEW mode for diffs; PURGE mode for directory scans. Emits JSON findings."
 readonly: true
 tier: cheap
 ---
@@ -31,14 +31,14 @@ Your caller provides one of:
 1. **Harvest blocks**: If the repo provides `scripts/check-added-comments.sh`, run it (`bash scripts/check-added-comments.sh <base>` for REVIEW, `bash scripts/check-added-comments.sh --path <path>` for PURGE). Otherwise fall back: REVIEW mode — `git diff -U0 <base>...HEAD | grep -nE '^\+.*(//|/\*|#|<!--)'`; PURGE mode — `grep -rnE '(//|/\*|#|<!--)' <dir>`. Parse output into `path:line` hits.
 2. **Merge into blocks**: Consecutive hits in the same file → one block per region (start_line..end_line).
 3. **Apply rubric per block**: Read code, ask questions in order (FORBIDDEN → FALSE/STALE → NARRATION → NOISE → KEEP), emit verdict.
-4. **Emit findings**: JSON per the finding shape below. Optional `verdict` field: keep|delete|rewrite|false. Tier: 🔴 (false/stale), 🟡 (forbidden/narration/noise), ❓ (unsure).
+4. **Emit findings**: JSON per the finding shape below. Optional `verdict` field: keep|delete|rewrite|false. Tier: `Important` (false/stale), `Nit` (forbidden/narration/noise), `❓` (unsure, never blocks).
 5. **Budget check**: ≤40 blocks per file, ≤200 per dispatch. Over cap: return `## Continuation: next=<path>`.
 
 ## Asymmetric cost
 
 **REVIEW**: Missing a false comment is costly. Flag suspected violations even with partial evidence (tier ❓). Conservative.
 
-**PURGE**: Verdicts are bulk-applied. Delete only at high confidence (🔴 or 🟡). Any doubt → keep + ❓.
+**PURGE**: Verdicts are bulk-applied. Delete only at high confidence (`Important` or `Nit`). Any doubt → keep + ❓.
 
 **Never auto-apply `false`:** Always require human review.
 
@@ -51,7 +51,7 @@ Write JSON findings to the path your caller specifies (or stdout), one object pe
   "path": "src/file.ts",
   "start_line": 42,
   "end_line": 45,
-  "tier": "🔴",
+  "tier": "Important",
   "verdict": "false",
   "category": "comment",
   "source": "llm",

@@ -4,7 +4,7 @@
 
 Aggregates are created via private ctor + static factory and mutate state **only** by raising and applying domain events; events are immutable and past-tense; rehydration round-trips; the event store is append-only; queries read projections, never rehydrate.
 
-## 🟢 / 🔴 Blockers (when module opts in to event sourcing)
+## 🔴 Important
 
 ### State mutated outside an event
 Every state change must be expressed as a raised+applied domain event. Public setters or direct assignments outside a `When()` handler mean the aggregate cannot be rebuilt from its stream.
@@ -21,7 +21,7 @@ The event store is append-only. Correct errors via compensating events, never by
 ### Query rehydrates the aggregate
 A read path loading via the write-side repository or replaying events instead of reading a projection.
 
-## 🟡 Risks
+## 🟡 Nit [risk]
 
 ### Missing rehydration / round-trip coverage
 A new aggregate with events but no developer test asserting `LoadFromHistory(events)` reconstructs the same state (`Id`, state, `Version`) as the factory path.
@@ -35,7 +35,7 @@ Event-store `Append` without an `expectedVersion` check → lost updates under c
 ### Snapshot drift
 `ToSnapshot()`/restore exists but isn't covered by a test proving snapshot+tail replay equals full replay.
 
-## 🔵 Nits
+## 🟡 Nit
 
 - Events named past tense (`OrderPlaced`, `OrderCancelled`), one per file.
 - `IDomainEvent` carries `Id`, `StreamId`, `Version`, `OccurredOn`; `OccurredOn` sourced from `IDateTimeProvider`, not `DateTime.Now` inline.

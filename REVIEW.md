@@ -12,7 +12,7 @@ This file is the single reference for finding tags in this repository. When it e
 
 A measurable or exploitable slowdown is Important. An unmeasured micro-optimization is a Nit.
 
-Cop emoji are category markers, not tags. BLOCK is Important. WARN is a Nit.
+Badges: 🔴 Important, 🟡 Nit, ⚪ Pre-existing, ❓ question (never blocks). Category labels (`[bug]`, `[sec]`, `[arch]`, `[risk]`, `[nit]`, `[comment]`, `[format]`) follow the badge. BLOCK is Important. WARN is a Nit. A finding that cites an AGENTS.md hard rule is Important.
 
 ## Verdict
 

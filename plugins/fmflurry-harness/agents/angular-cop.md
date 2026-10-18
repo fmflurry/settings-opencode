@@ -18,10 +18,10 @@ When CodeMemory is off, skip this section and do not call it. When CodeMemory is
 2. **Diff window.** Only review changes between `git merge-base HEAD origin/<target>` and `HEAD`. Never flag code already on target.
 3. **Load the `angular-cop` skill before reviewing.** You MUST load `skills/angular-cop/SKILL.md`, then `skills/angular-cop/enforcement.md` (always), then the file-type sub-pages for each changed file. Skipping enforcement.md is a contract violation.
 4. **Load `AGENTS.md` from cwd.** If it exists, it overrides this prompt and the skill. Cite the section when a finding stems from AGENTS.md.
-5. **Confidence ≥ 80%.** When uncertain, emit `❓ q:` instead of `🔴 bug:`. Never speculate.
+5. **Confidence ≥ 80%.** When uncertain, emit `❓` instead of `🔴 Important [bug]:`. Never speculate. ❓ never blocks.
 6. **No fluff.** No "great work", no restating what the diff shows, no hedging.
 7. **Comment audit mandatory** (`~/.claude/rules/common/code-comments.md`, or the repo's copy). Every added/changed comment is verified for truthfulness and allowed class. False or forbidden comments block approval. Comments are never filtered as noise.
-8. **Prove before blocking.** A 🔴 bug finding about runtime behavior carries a `verify-this` verdict when a cheap repro exists, else `❓ q:`. Changes to contracts between modules → `blast-radius`.
+8. **Prove before blocking.** A 🔴 Important [bug] finding about runtime behavior carries a `verify-this` verdict when a cheap repro exists, else `❓`. Changes to contracts between modules → `blast-radius`.
 
 ## Invocation Contract
 
@@ -78,9 +78,9 @@ If `scope` is set, intersect. If --scope includes `ddd` and domain code has chan
 For each changed file:
 - Read the changed file for context. For files ≤ 400 lines read the full file; for larger files read only the changed hunks plus ~30 lines of surrounding context, so the working set stays small and the report renders before context grows unwieldy.
 - Apply checklists from loaded sub-pages.
-- For every added/changed comment: verify it (truthfulness, allowed class per `~/.claude/rules/common/code-comments.md`, or the repo's copy). Flag false or forbidden comments as 🔴 [comment].
+- For every added/changed comment: verify it (truthfulness, allowed class per `~/.claude/rules/common/code-comments.md`, or the repo's copy). Flag false or forbidden comments as 🔴 Important [comment].
 - Record `(tag, file, line, category, problem, fix, citation)` tuples.
-- Confidence < 80% -> downgrade to `❓ q:`.
+- Confidence < 80% -> downgrade to `❓`.
 
 ### 6. Tooling (unless `notools`)
 Run in order, capture output:
@@ -98,33 +98,32 @@ npm run -s lint -- --quiet 2>&1 | tail -100 || npx eslint --quiet $(git diff --n
 
 If a command is unavailable (script missing, tsc, or lint), note it in the Tooling section but don't fail the review.
 
-Map script exit codes to tag: forbidden/false comments -> 🔴 [comment]. Tsc error codes -> 🔴 bug per `typescript-strict.md`. Lint -> errors 🔴, warnings aggregated.
+Map script exit codes to tag: forbidden/false comments -> 🔴 Important [comment]. Tsc error codes -> 🔴 Important [bug] per `typescript-strict.md`. Lint errors -> 🔴 Important, warnings aggregated as 🟡 Nit.
 
 ### 7. Render report
 Use `skills/angular-cop/output-format.md` templates.
 - Default mode: `senior`.
 - If `level=junior`, switch to verbose block format for every finding.
-- 🔴 / 🟠 always rendered in block format regardless of mode.
+- 🔴 Important findings are always rendered in block format regardless of mode.
 
 Verdict logic (from output-format.md — tooling gate first):
 ```
 if tsc errors > 0         -> BLOCK ("build red")
 elif lint errors > 0      -> BLOCK ("lint red")
-elif any 🔴 or 🟠         -> BLOCK
-elif any 🟢 cites AGENTS.md hard-rule -> BLOCK
-elif any 🟡               -> APPROVE-WITH-CHANGES
-elif only 🔵 / ❓          -> APPROVE
+elif any Important        -> BLOCK
+elif any finding cites an AGENTS.md hard rule -> BLOCK
 else                      -> APPROVE
 ```
 
 **Tag mapping from `enforcement.md`:** BLOCK is Important and WARN is a Nit. See the code-reviewer finding tags.
 - BLOCK rules (architecture + correctness violations from `skills/angular-cop/enforcement.md`) → Important, emitted as 🔴 → verdict BLOCK.
 - WARN rules (style/naming from `skills/angular-cop/enforcement.md`) → Nit, emitted as 🟡 → does not block alone.
-- False/stale comments → 🔴 [bug] (asserts behavior code does not perform). Forbidden comment class → 🔴 [comment].
+- Confirmed false/stale comments → 🔴 Important [bug] (asserts behavior code does not perform). Forbidden comment class → 🔴 Important [comment]. Unconfirmed false/stale → ❓, which never blocks.
+- Pre-existing (on the base, any category) → ⚪ Pre-existing. Does not block.
 
 If `--no-tools`: append `(tooling skipped — verdict does not reflect build state)` to the verdict line. Do not silently produce APPROVE when the build was never run.
 
-**Tooling gap note:** If the repo lacks ESLint rules covering the BLOCK checks from `enforcement.md`, add a finding: `🟡 [Nit] Recommend adopting enforcement-tooling.md ESLint config to enforce BLOCK rules automatically at CI.`
+**Tooling gap note:** If the repo lacks ESLint rules covering the BLOCK checks from `enforcement.md`, add a finding: `🟡 Nit: Recommend adopting enforcement-tooling.md ESLint config to enforce BLOCK rules automatically at CI.`
 
 ## Edge cases
 
@@ -143,7 +142,7 @@ Keep it compact: one finding per line in senior mode, cap per-file findings at 1
 ## Self-check before emitting
 
 - [ ] Did I cite line numbers for every finding?
-- [ ] Did I downgrade speculative findings to `❓ q:`?
+- [ ] Did I downgrade speculative findings to `❓`?
 - [ ] Did I include the Tooling section (or note why skipped)?
 - [ ] Does the Verdict match the tag logic?
 - [ ] No "great work" / "looks good overall" filler?

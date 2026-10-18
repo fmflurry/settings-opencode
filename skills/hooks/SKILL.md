@@ -1,0 +1,37 @@
+---
+name: hooks
+description: "Use when configuring session hooks, auto-accept permissions, or a TodoWrite breakdown for a multi-step task."
+---
+
+# Hooks System
+
+why-not-tooled: which hook to install depends on the environment; no analyzer selects it.
+
+## Hook Types
+
+- **PreToolUse**: Before tool execution (validation, parameter modification)
+- **PostToolUse**: After tool execution (auto-format, checks)
+- **Stop**: When session ends (final verification)
+
+## Auto-Accept Permissions
+
+Use with caution:
+- Enable for trusted, well-defined plans
+- Disable for exploratory work
+- Never use dangerously-skip-permissions flag
+- Configure `permissions.allow` / `permissions.deny` in `~/.claude/settings.json` or project `.claude/settings.json`
+
+## TodoWrite Best Practices
+
+Use TodoWrite tool to:
+- Track progress on multi-step tasks
+- Verify understanding of instructions
+- Enable real-time steering
+- Show granular implementation steps
+
+Todo list reveals:
+- Out of order steps
+- Missing items
+- Extra unnecessary items
+- Wrong granularity
+- Misinterpreted requirements

@@ -62,7 +62,7 @@ agent-harness goal set "<goal text>" \
 Drop the `reviewStatus` criterion when the config does not set it. `set` replaces any earlier goal. Run
 `agent-harness goal status` to confirm it is active.
 
-Before planning, check the open PRs with [open-pr-check.md](../../../.claude/rules/common/open-pr-check.md) and record
+Before planning, check the open PRs with the `open-pr-check` skill (`skills/open-pr-check/SKILL.md`) and record
 each overlapping PR's decision. A `Wait or cancel` outcome escalates.
 
 ## 3. Plan

@@ -9,17 +9,9 @@ alwaysApply: false
 
 ## Secret Management
 
-```typescript
-// NEVER: Hardcoded secrets
-const apiKey = "sk-proj-xxxxx"
+A secret scanner owns hardcoded keys. Read secrets from the environment and fail startup when a required one is missing.
 
-// ALWAYS: Environment variables
-const apiKey = process.env.OPENAI_API_KEY
-
-if (!apiKey) {
-  throw new Error('OPENAI_API_KEY not configured')
-}
-```
+why-not-tooled: which secrets are required at startup is app-specific.
 
 ## Agent Support
 

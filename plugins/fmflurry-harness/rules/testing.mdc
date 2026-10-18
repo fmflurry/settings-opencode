@@ -1,6 +1,7 @@
 ---
 description: "Testing Requirements"
-alwaysApply: true
+globs: "**/*.test.*,**/*.spec.*"
+alwaysApply: false
 ---
 # Testing Requirements
 

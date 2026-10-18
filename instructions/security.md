@@ -1,0 +1,28 @@
+# Security Guidelines
+
+A secret scanner owns hardcoded secrets. `npm audit` (or the stack equivalent) owns known vulnerable dependencies. Parameterized queries and the output encoder own SQL injection and XSS when the stack has them. Do not restate those checks in prose.
+
+why-not-tooled: authorization, CSRF, rate limits, and what an error message may reveal are not one analyzer across stacks.
+
+## Checks the tools do not cover
+
+Before a commit that changes auth, input handling, or error responses:
+
+- [ ] Authentication and authorization verified for the new path
+- [ ] CSRF protection enabled where the stack uses cookies
+- [ ] Rate limiting on new endpoints
+- [ ] Error messages don't leak sensitive data
+- [ ] User input is validated at the boundary
+- [ ] Required secrets come from the environment or a secret manager and are checked at startup
+- [ ] Lock files are committed (`package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`). CI uses a frozen install (`npm ci`, `yarn install --frozen-lockfile`, `pnpm install --frozen-lockfile`). `node_modules` stays untracked
+- [ ] Any secret that may have been exposed is rotated
+
+## Security Response Protocol
+
+If a security issue is found:
+
+1. STOP immediately
+2. Use **security-reviewer** agent
+3. Fix Important issues before continuing
+4. Rotate any exposed secrets
+5. Review the codebase for the same issue

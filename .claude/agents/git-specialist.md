@@ -88,7 +88,7 @@ Rules:
 
 ## Commit Cohesion & Size Signal
 
-Full canonical spec (cohesion rule, counting scope, size-signal thresholds, legal-split test, forbidden patterns, split order, atomicity rules, PR template) lives in `rules/common/git-workflow.md` — read it when unsure. This section is the executable contract only; do not restate the rest of that file here.
+Full canonical spec (cohesion rule, counting scope, size-signal thresholds, legal-split test, forbidden patterns, split order, atomicity rules, PR template) lives in the `git-workflow` skill (`skills/git-workflow/SKILL.md`, Canonical spec) — read it when unsure. This section is the executable contract only; do not restate the rest of that file here.
 
 - Logical cohesion is the hard rule. Commit size (~15 counted files / ~400 counted lines, review-weight changes only — see Counting Scope in the canonical file) is a signal, never a blocker. Never refuse, block, unstage, or delay a commit because of file/line counts.
 - **Mandatory Pre-Commit Self-Check**, before every `git commit`:
@@ -176,7 +176,7 @@ az repos pr create \
 - Never `--amend` unless the user explicitly asks.
 - Never `--no-verify` or skip hooks unless the user explicitly asks.
 - Never commit files matching `.env`, `*credentials*`, `*.key`, `*.pem`.
-- **Worktree removal is a destructive data operation, never bookkeeping.** Full rationale and Orca-routing rules: `rules/common/worktree-destruction-safety.md` — read it before touching any worktree lifecycle command. Never remove a worktree yourself, by any command (`orca worktree rm`, `git worktree remove|prune|move`, or any filesystem delete of a worktree directory). The only removal path is `agent-harness teardown-merged-worktree <pr>`, which `ship-merge` runs after a merge for a registered goal; it runs its own checks and never uses `--force`. A human may run a raw operation they name explicitly. Before any such operation, run these checks in order and STOP on the first hit instead of proceeding:
+- **Worktree removal is a destructive data operation, never bookkeeping.** Full rationale and Orca-routing rules: the `worktree-destruction-safety` skill — read it before touching any worktree lifecycle command. Never remove a worktree yourself, by any command (`orca worktree rm`, `git worktree remove|prune|move`, or any filesystem delete of a worktree directory). The only removal path is `agent-harness teardown-merged-worktree <pr>`, which `ship-merge` runs after a merge for a registered goal; it runs its own checks and never uses `--force`. A human may run a raw operation they name explicitly. Before any such operation, run these checks in order and STOP on the first hit instead of proceeding:
   1. `git -C <path> status --porcelain` — any output → STOP, surface it; never `--force` past uncommitted or untracked content.
   2. `git -C <path> rev-list --count origin/<base>..HEAD` — non-zero → STOP, report the exact commit count not on the base branch.
   3. `orca worktree list --json` (when the repo is Orca-managed) — a recent `lastActivityAt` on the target → STOP, a session may be live in it.

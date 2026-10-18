@@ -395,6 +395,7 @@ Shipped on `master` through `fa50d8e` (2026-10-18). The plugin number is `versio
 | [#29](https://github.com/fmflurry/settings-opencode/pull/29) | 0.4.1 | Enforcement ladder: code, then lint, tests, or static analysis, then a prose rule, then human review. |
 | [#30](https://github.com/fmflurry/settings-opencode/pull/30) | 0.4.2 | A project's `REVIEW.md` is the tag reference when it exists. The PR template adds Risk, How to revert, and Tier. |
 | [#32](https://github.com/fmflurry/settings-opencode/pull/32) | 0.4.3 | Always-applied Cursor rules drop from 21 files (1438 lines) to 7 files (502 lines). The rest load by path glob or by skill. |
+| [#33](https://github.com/fmflurry/settings-opencode/pull/33) | 0.4.4 | `create-verification-skill` writes a project `verify-this` override from the repository's build, test, and e2e commands. |
 
 **Semver (#25, policy note in #29).** `scripts/cursor-plugin/check.mjs` diffs plugin sources against the merge-base with the base branch (`origin/master`, `origin/$GITHUB_BASE_REF` in GitHub Actions, or `CURSOR_PLUGIN_BASE`). The version must be `MAJOR.MINOR.PATCH` and strictly greater, and the changelog needs a heading for it. The build copies `scripts/cursor-plugin/config.json` into `plugins/fmflurry-harness/.cursor-plugin/plugin.json`. A root `README.md` edit is not a plugin source. `#25` shipped that guard at 0.2.0, with patch, minor, and major as the suggested bumps. From 0.4.1, `scripts/cursor-plugin/CHANGELOG.md` says later plugin changes bump the patch only. The guard does not enforce that: it still accepts a minor or major bump, and it still prints those suggestions.
 
@@ -416,7 +417,7 @@ Hooks and the OpenCode code-memory plugins no-op when the decision is off. `FMFL
 
 **Rules diet (#32).** Plugin 0.4.3 (`fa50d8e`). `plugins/fmflurry-harness/rules/` has 7 files with `alwaysApply: true`, 502 lines, down from 21 files and 1438 lines at `62aa030`. They are `autonomy.mdc`, `conductor.mdc`, `enforcement-ladder.mdc`, `orchestration.mdc`, `question-handling.mdc`, `tool-budget.mdc`, and `verification-gate.mdc`. `scripts/cursor-plugin/config.json` `rules.always` lists the six `common/` rules. The build adds `rules/conductor.mdc`. There is no `rules/always__harness.mdc` in this build. File-bound rules stay in that directory with `alwaysApply: false` and `globs`: `code-comments`, `coding-style`, `security`, `testing`, and the five `typescript-*` packs. These left the always-on set and are skills: `agent-roster`, `brief-contract`, `codebase-exploration`, `git-workflow`, `harness-parity`, `hooks`, `open-pr-check`, `patterns`, `performance`, `worktree-destruction-safety`. `skills/ai-ecosystem-audit/SKILL.md` (Always-on budget) counts session-global rules. More than 8 `alwaysApply: true` Cursor rules is a confirmed finding. The built set is 7.
 
-**Not in this tree.** A verification-creation skill and a socratic spike are not shipped. Neither name is in the tree at `fa50d8e`.
+**Not in this tree.** A socratic spike is not shipped. That name is not in the tree at `fa50d8e`.
 
 <a id="goals-en"></a>
 
@@ -950,6 +951,7 @@ Livré sur `master` jusqu'à `fa50d8e` (2026-10-18). Le numéro du plugin est `v
 | [#29](https://github.com/fmflurry/settings-opencode/pull/29) | 0.4.1 | Échelle d'application : code, puis lint, tests ou analyse statique, puis une règle en prose, puis la revue humaine. |
 | [#30](https://github.com/fmflurry/settings-opencode/pull/30) | 0.4.2 | Le `REVIEW.md` d'un projet est la référence des tags quand il existe. Le modèle de PR ajoute Risk, How to revert et Tier. |
 | [#32](https://github.com/fmflurry/settings-opencode/pull/32) | 0.4.3 | Les règles Cursor toujours appliquées passent de 21 fichiers (1438 lignes) à 7 fichiers (502 lignes). Le reste se charge par glob de chemin ou par skill. |
+| [#33](https://github.com/fmflurry/settings-opencode/pull/33) | 0.4.4 | `create-verification-skill` écrit l'override projet de `verify-this` à partir des commandes build, test et e2e du dépôt. |
 
 **Semver (#25, note de politique dans #29).** `scripts/cursor-plugin/check.mjs` compare les sources du plugin au merge-base avec la branche de base (`origin/master`, `origin/$GITHUB_BASE_REF` en GitHub Actions, ou `CURSOR_PLUGIN_BASE`). La version doit être `MAJOR.MINOR.PATCH`, strictement supérieure, et le changelog doit avoir un titre pour elle. Le build copie `scripts/cursor-plugin/config.json` dans `plugins/fmflurry-harness/.cursor-plugin/plugin.json`. Un edit du `README.md` racine n'est pas une source du plugin. `#25` a livré cette garde en 0.2.0, avec patch, minor et major comme suggestions. Depuis 0.4.1, `scripts/cursor-plugin/CHANGELOG.md` demande un bump de patch pour les changements de plugin suivants. La garde ne l'impose pas : elle accepte encore un bump minor ou major, et elle affiche toujours ces suggestions.
 
@@ -971,7 +973,7 @@ Les hooks et les plugins OpenCode code-memory ne font rien quand la décision es
 
 **Rules diet (#32).** Plugin 0.4.3 (`fa50d8e`). `plugins/fmflurry-harness/rules/` compte 7 fichiers `alwaysApply: true`, 502 lignes, contre 21 fichiers et 1438 lignes à `62aa030`. Ce sont `autonomy.mdc`, `conductor.mdc`, `enforcement-ladder.mdc`, `orchestration.mdc`, `question-handling.mdc`, `tool-budget.mdc` et `verification-gate.mdc`. `rules.always` dans `scripts/cursor-plugin/config.json` liste les six règles `common/`. Le build ajoute `rules/conductor.mdc`. Ce build n'a pas de `rules/always__harness.mdc`. Les règles liées à des fichiers restent dans ce répertoire avec `alwaysApply: false` et `globs` : `code-comments`, `coding-style`, `security`, `testing`, et les cinq packs `typescript-*`. Celles-ci ont quitté l'ensemble toujours chargé et sont des skills : `agent-roster`, `brief-contract`, `codebase-exploration`, `git-workflow`, `harness-parity`, `hooks`, `open-pr-check`, `patterns`, `performance`, `worktree-destruction-safety`. `skills/ai-ecosystem-audit/SKILL.md` (Always-on budget) compte les règles globales de session. Plus de 8 règles Cursor `alwaysApply: true` est un finding confirmé. L'ensemble construit en a 7.
 
-**Pas dans cet arbre.** Un skill verification-creation et un socratic spike ne sont pas livrés. Aucun de ces noms n'est dans l'arbre à `fa50d8e`.
+**Pas dans cet arbre.** Un socratic spike n'est pas livré. Ce nom n'est pas dans l'arbre à `fa50d8e`.
 
 <a id="objectif-fr"></a>
 

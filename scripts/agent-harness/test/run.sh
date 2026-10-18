@@ -1735,6 +1735,9 @@ check "ship-merge launches its helpers with bash -p" test "$(grep -c 'bash -p' "
 check "teardown launches cleanup with bash -p and --no-checkout" grep -q 'bash -p "$HARNESS_DIR/cleanup.sh" "$pr" --no-checkout' "$H/teardown-merged-worktree.sh"
 check "goal.sh launches notify with bash -p" test "$(grep -c 'bash -p "$NOTIFY"' "$H/goal.sh")" -ge 2
 
+check "verify-this picks up the generated override and runs its commands" \
+  node --test "$HERE/scripts/agent-harness/test/verify-override.test.mjs"
+
 reset
 echo "tests: $pass passed, $failn failed"
 [ "$failn" -eq 0 ]

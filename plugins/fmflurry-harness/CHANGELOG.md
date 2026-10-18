@@ -2,6 +2,11 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.4] - 2026-10-18
+
+- `create-verification-skill` writes a project `verify-this` override from the repository's package.json, Makefile, .NET project, and CI workflow commands.
+- `verify-this` runs that override when the project has one, and otherwise keeps its generic surfaces. Claude Code keeps the installed skill in front of a project skill, OpenCode v2 replaces it from `.opencode/skills`, and Cursor does not document same-name order, so the loader reads the file itself.
+
 ## [0.4.3] - 2026-10-18
 
 - Always-applied Cursor rules drop from 21 files (1438 lines) to 7 files (502 lines). Domain rules load by path or by skill description. ESLint, secret scanners, and `npm audit` are named where prose used to restate them.

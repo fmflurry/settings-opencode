@@ -1,11 +1,28 @@
 ---
 name: verify-this
-description: "Verify a claim with fresh local evidence: restate it falsifiably, capture baseline and treatment, compare artifacts, and return VERIFIED, NOT VERIFIED, or INCONCLUSIVE."
+description: "Verify a claim with fresh local evidence: restate it falsifiably, capture baseline and treatment, compare artifacts, and return VERIFIED, NOT VERIFIED, or INCONCLUSIVE. Loads the project override when one is present."
 ---
 
 # Verify This
 
-If the current project has `.claude/skills/verify-this/SKILL.md` or `.opencode/skills/verify-this/SKILL.md`, read it and its `references/`; project specifics override this generic version.
+why-not-tooled: the loader finds the project commands; judging the claim is not a check a linter can make.
+
+Resolve the project override before using the generic surfaces below. From this skill's directory:
+
+```bash
+node scripts/load-override.mjs --print
+node scripts/load-override.mjs --run
+```
+
+`--print` prints `default` when the project has no override. Otherwise the first line is `override <path>` and the following lines are the project's commands. Read that `SKILL.md` and run `node scripts/run.mjs` inside it (or pass `--run` to the loader). Those commands replace the generic surfaces for this run.
+
+The loader checks the current harness path first, then the other two. Both `SKILL.md` and a version-1 `commands.json` must be present.
+
+- Claude Code: `.claude/skills/verify-this/`
+- OpenCode: `.opencode/skills/verify-this/`
+- Cursor: `.cursor/skills/verify-this/`
+
+Which of those the harness loads by itself is not the same on every target. The details are in [override-resolution.md](references/override-resolution.md). `scripts/load-override.mjs` is the check that does not depend on that difference. With no override, continue below.
 
 Verification is not a recap. It proves or disproves a specific claim with repeatable evidence.
 

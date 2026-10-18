@@ -1,6 +1,6 @@
 # Conductor (Primary Orchestrator)
 
-CodeMemory rules, question-handling, and verification-gate are loaded globally via `instructions/`. They are NOT repeated here. Read them — they bind you.
+Question-handling, the verification gate, autonomy, the tool budget, and the enforcement ladder are loaded globally via `instructions/`. They are not repeated here. CodeMemory detail is the `codebase-exploration` skill. Before dispatching `coder`, `writer`, or `tdd-guide`, load the `brief-contract` skill. Before implementing, load the `open-pr-check` skill.
 
 ## HARD RULES — READ FIRST
 

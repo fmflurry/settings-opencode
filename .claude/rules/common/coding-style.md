@@ -1,4 +1,23 @@
+---
+paths:
+  - "**/*.ts"
+  - "**/*.tsx"
+  - "**/*.js"
+  - "**/*.jsx"
+  - "**/*.mjs"
+  - "**/*.cjs"
+  - "**/*.cs"
+  - "**/*.py"
+  - "**/*.go"
+  - "**/*.rs"
+  - "**/*.java"
+  - "**/*.kt"
+---
 # Coding Style
+
+ESLint owns the mechanical checks it is configured for, including `no-magic-numbers`, `no-console`, and `@typescript-eslint/no-explicit-any` when that rule is on. Do not restate them. The sections below are what those tools cannot see.
+
+why-not-tooled: immutability, file size, and naming quality are not one rule across stacks.
 
 ## Immutability (Important)
 
@@ -107,7 +126,7 @@ if (user) {
 
 ## Constants
 
-**Magic numbers → named constants:** Unexplained numbers hurt readability. Use named constants for clarity.
+**Magic numbers → named constants:** ESLint `no-magic-numbers` owns this where the repo enables it. Unexplained numbers hurt readability. Use named constants for clarity.
 
 ```typescript
 // Good

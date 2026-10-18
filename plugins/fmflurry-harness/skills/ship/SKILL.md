@@ -81,7 +81,7 @@ Check the mode with `agent-harness autonomy status`. The rules behind both modes
 2. **Set the goal.** `agent-harness goal set "$ARGUMENTS" <criteria...>`. Criteria: PR merged to the base branch,
    every `requiredChecks` entry green, the `verify` commands green, the `reviewStatus` status successful on the head
    (when configured), zero open review threads.
-2b. **Check open PRs.** Follow [open-pr-check.md](../../.claude/rules/common/open-pr-check.md) before planning or
+2b. **Check open PRs.** Follow the `open-pr-check` skill (`skills/open-pr-check/SKILL.md`) before planning or
     implementing. Record each overlapping PR's decision; a `Wait or cancel` outcome escalates.
 3. **Plan.** Dispatch the `planner` agent with the goal worktree path. Keep the plan in the log, not in chat.
 4. **Implement.** `tdd-guide` writes the failing tests, then `coder` implements. Both get a 6-field brief per the
@@ -210,7 +210,7 @@ Then open the show-me HTML locally for the user. Do not create throwaway screens
   Never weaken a check: disabling or skipping a test, job or required check, `continue-on-error`, deleting a check, or lowering thresholds. Force pushes on the PR branch are allowed.
 - Worktree removal: the only path is `agent-harness teardown-merged-worktree <pr>`, for the registered worktree of a
   MERGED PR, in autonomous mode. `agent-harness worktree-rm` and every other removal stay forbidden to agents in every
-  mode (see the worktree destruction rule, `.claude/rules/common/worktree-destruction-safety.md`). No deny-list commands
+  mode (see the worktree destruction rule, the `worktree-destruction-safety` skill). No deny-list commands
   (see the autonomy rule).
 - Branches are deleted only by `agent-harness teardown-merged-worktree` or `agent-harness cleanup`, never by raw
   `git branch -D`, `git push --delete`, or the API.

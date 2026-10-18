@@ -1,6 +1,7 @@
 ---
 description: "Code Comments (mandatory)"
-alwaysApply: true
+globs: "**/*.ts,**/*.tsx,**/*.js,**/*.jsx,**/*.mjs,**/*.cjs,**/*.cs,**/*.py,**/*.go,**/*.rs,**/*.java,**/*.kt"
+alwaysApply: false
 ---
 # Code Comments (mandatory)
 

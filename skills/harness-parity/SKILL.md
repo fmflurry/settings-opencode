@@ -25,9 +25,11 @@ Follow these steps in order for every harness artifact change:
    - For agents: split the single Claude `.md` into a prompt `.txt` + JSONC config entry.
 
 4. **Wire the artifact into the registry/load-path**
-   - Claude: Add an `@`-import line to `.claude/CLAUDE.md` for rules/instructions.
-   - OpenCode: Add entries to `opencode.jsonc`: `instructions` array, `command` object, or `agent` object.
-   - If the artifact needs registration, skipping this step leaves it orphaned.
+   - Universal rules (every turn, no file type): `@`-import in `.claude/CLAUDE.md` and an `opencode.jsonc` `instructions` entry. The always-on set is enforcement-ladder, orchestration (OpenCode: `subagent-routing`), question-handling, autonomy, verification-gate, and tool-budget.
+   - File-bound rules: `paths:` in the Claude rule. Cursor derives `globs` from that frontmatter. Do not `@`-import them. OpenCode has no globs: keep the instruction file **off** the `instructions` array and point the agent that edits those files at it (`prompts/agents/coder.txt` for source, `tdd-guide` for tests).
+   - Situational rules: a skill whose `description` says when to load it. Do not `@`-import them and do not add them to `instructions`.
+   - Commands and agents: `opencode.jsonc` `command` or `agent` object, as before.
+   - A file with no `paths`, no skill `description`, and no registry entry is orphaned.
 
 5. **Bring across any reference sub-files**
    - For skills with reference files (`reference.md`, `templates.md`, etc.), copy them too.
@@ -49,7 +51,7 @@ Follow these steps in order for every harness artifact change:
 | **Skill** | `.claude/skills/<name>/SKILL.md` | `.opencode/skills/<name>/SKILL.md` | Both: `name` + `description` (no changes) | None (no registry entry either side) | Copy reference files (`reference-*.md`, etc.) with the same directory structure. |
 | **Command** | `.claude/commands/<name>.md` (subdir allowed, e.g. `opsx/new.md`) | `.opencode/commands/<name>.md` (flat; convert `opsx/new` → `opsx-new`) | Claude: `description` only. Body includes `> CC: delegate to <agent>` note. | OpenCode: `description` + `agent:` + `subtask: true` | Add to `opencode.jsonc` `command` object for visibility. Drop the `> CC:` note when porting; it's replaced by `agent:` frontmatter. |
 | **Agent** | `.claude/agents/<name>.md` (single file: frontmatter `name`/`description`/`tools` + prompt body) | Prompt: `.opencode/prompts/agents/<name>.txt` (prompt body only). Config: entry in `opencode.jsonc` `agent` object. | Claude: `name`, `description`, `tools`, frontmatter + prompt body. | OpenCode: Remove `name`/`description`/`tools` from `.txt`, place in JSONC `agent` object with keys `description`, `mode`, `model`, `prompt`, `temperature`, `topP`, `tools`, optional `permission`. | If delegatable, also add to `conductor.permission.task` allow-list in JSONC. Split the Claude file into prompt text + JSONC config. |
-| **Rule / Instruction** | `.claude/rules/**/*.md` + `@rules/...` import in `.claude/CLAUDE.md` | `.opencode/instructions/<name>.md` + entry in `opencode.jsonc` `instructions` array | Both: standard markdown frontmatter (none required; body is the content). | Claude: `@rules/path/to/file.md` line in `.claude/CLAUDE.md`. | Adding the file alone is NOT enough — it must be in the active load path or it is orphaned. Register immediately. |
+| **Rule / Instruction** | `.claude/rules/**/*.md`. Universal rules are `@`-imported from `CLAUDE.md`. File-bound rules use `paths:` and are not imported. | `instructions/<name>.md`. Only universal rules are listed in `opencode.jsonc` `instructions`. | File-bound Claude rules: a `paths:` list. | Universal: `@` import and an `instructions` entry. File-bound: `paths:` plus an agent pointer. Situational: a skill `description`. | A file with no `paths`, no skill description, and no registry entry is orphaned. |
 
 ### Key Translation Notes
 
@@ -60,9 +62,9 @@ Follow these steps in order for every harness artifact change:
 
 ## C. Discovery & Trigger
 
-This skill is always loaded in the harness rule/instruction (`.claude/rules/common/harness-parity.md` or `.opencode/instructions/harness-parity.md`), which reminds you to consult this skill whenever you modify a harness artifact. The skill provides the detailed translation table and replication checklist.
+This skill loads by its description when you add, edit, rename, or delete a harness artifact. It is not an always-on rule. The translation table and replication checklist are here.
 
-Whenever you **add, edit, rename, or delete** any artifact — no matter which harness you're in — the rule/instruction will prompt you to replicate the change in the other harness using this skill.
+Whenever you **add, edit, rename, or delete** any artifact — no matter which harness you're in — replicate the change in the other harness using this skill. The skill description is the trigger. It is not session-global.
 
 ---
 

@@ -30,7 +30,7 @@ events) and CQRS (separate read/write models). Event Sourcing (Marten event stor
 All code MUST be written in English — identifiers, comments, and documentation — regardless of
 the user's language or the conversation language. French (or any other non-English) identifiers,
 comments, or docs are a hard violation. This mirrors the commit-message mandate
-(rules/common/git-workflow.md § Language).
+(the `git-workflow` skill, Canonical spec, Language).
 
 | Artifact | Rule |
 |---|---|

@@ -7,7 +7,7 @@ paths:
 ---
 # TypeScript/JavaScript Hooks
 
-> This file extends [common/hooks.md](../common/hooks.md) with TypeScript/JavaScript specific content.
+> Load the `hooks` skill for the shared hook types. This file is the TypeScript addition.
 
 ## PostToolUse Hooks
 

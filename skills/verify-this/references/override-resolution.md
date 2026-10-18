@@ -49,7 +49,7 @@ Discovered project directories include `.cursor/skills/`, `.agents/skills/`, and
 
 The page does not say which copy is used when a plugin skill and a project skill share a name. Root `skills/` in a repository is not one of the listed directories.
 
-This Cursor cloud session on 2026-10-18 listed skills from `/workspace/.claude/skills/` and from `~/.cursor/plugins/cache/`, as separate entries. It did not list `/workspace/skills/`. The repo has no `.cursor/skills/` directory, so that path was not in the list either. Nothing in that session was a same-name collision, so it does not show which copy would win.
+This Cursor cloud session on 2026-10-18 listed skills from `<repo>/.claude/skills/` and from `~/.cursor/plugins/cache/`, as separate entries. It did not list `<repo>/skills/`. The repo has no `.cursor/skills/` directory, so that path was not in the list either. Nothing in that session was a same-name collision, so it does not show which copy would win.
 
 The plugin copy of `verify-this` therefore runs `load-override.mjs`, which reads `.cursor/skills/verify-this/` when the generator has written it, and otherwise keeps the generic surfaces.
 

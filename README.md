@@ -576,7 +576,7 @@ Defined in `opencode.jsonc` under `agent` — **26 entries**: the primary plus 2
 | `security-reviewer`    | read-only       | OWASP/secrets/deps review. Reports vulnerabilities; fixes routed to `coder`.                                            | Auth, input, endpoints, secrets   |
 | `tdd-guide`            | writable (tests)| RED → GREEN → REFACTOR + 80% coverage. Delegates GREEN impl to `coder` via scoped Task perm.                             | New features, bug fixes, refactors|
 | `build-error-resolver` | writable        | Fixes build/typecheck/lint/TS errors with minimal diffs.                                                                | Red build or lint                 |
-| `e2e-runner`           | writable        | Playwright E2E tests, run + artifacts.                                                                                  | Browser journeys                  |
+| `e2e-runner`           | writable        | E2E tests from the project override or a discovered runner.                                                             | Browser journeys                  |
 | `doc-updater`          | writable        | Generated docs + codemaps.                                                                                               | `/update-docs`, `/update-codemaps`|
 | `refactor-cleaner`     | writable        | Dead-code removal + consolidation, behavior preserved.                                                                  | Cleanup requests                  |
 | `database-reviewer`    | read-only       | PostgreSQL/Supabase schema, query perf, RLS, migrations.                                                                | SQL/migration/schema review       |
@@ -620,7 +620,7 @@ Pinned (21):
 | `/security`        | security-reviewer    | Security audit.                      |
 | `/gdpr-review`     | gdpr-specialist      | GDPR/CNIL compliance audit.          |
 | `/build-fix`       | build-error-resolver | Build/TS error resolution.           |
-| `/e2e`             | e2e-runner           | E2E test generation/run.             |
+| `/e2e`             | e2e-runner           | E2E tests from the project override or discovered runner. |
 | `/refactor-clean`  | refactor-cleaner     | Dead-code cleanup.                   |
 | `/orchestrate`     | planner              | Multi-agent orchestration.           |
 | `/verify`          | (conductor)          | Verification loop.                   |
@@ -643,11 +643,11 @@ Unpinned templates (16) — available in `commands/`, plus Claude-side/OpenSpec 
 
 ### Skills
 
-**70 skills** listed below. `scripts/sync-skills.sh` computes the canonical union (root `skills/` ∪ `.claude/skills/`, root wins on conflicts), excludes the runtime dir `skills/skill-creator/`, and copies into both harness targets. Attribution for vendored skills lives in [`skills/THIRD_PARTY_NOTICES.md`](skills/THIRD_PARTY_NOTICES.md).
+**71 skills** listed below. `scripts/sync-skills.sh` computes the canonical union (root `skills/` ∪ `.claude/skills/`, root wins on conflicts), excludes the runtime dir `skills/skill-creator/`, and copies into both harness targets. Attribution for vendored skills lives in [`skills/THIRD_PARTY_NOTICES.md`](skills/THIRD_PARTY_NOTICES.md).
 
 - **Planning & design (5):** `socratic-design`, `chimera`, `api-spec-openapi`, `why`, `blast-radius`.
 - **Review & quality (6):** `comment-judge`, `interfectio-commentarum`, `verify-this`, `create-verification-skill`, `test-behavior-not-implementation`, `ai-ecosystem-audit`.
-- **TDD & testing (2):** `tdd-workflow`, `tdd`.
+- **TDD & testing (3):** `tdd-workflow`, `tdd`, `e2e`.
 - **CI & git (5):** `fix-ci`, `fix-merge-conflicts`, `get-pr-comments`, `loop-on-ci`, `git-workflow`.
 - **Angular (4):** `angular-clean-architecture`, `angular-ddd`, `angular-cop`, `angular-accessibility`.
 - **.NET (3):** `dotnet-clean-architecture`, `dotnet-ddd`, `dotnet-cop`.
@@ -662,7 +662,7 @@ Unpinned templates (16) — available in `commands/`, plus Claude-side/OpenSpec 
 - **Domain (2):** `flurryx`, `transloco`.
 - **Universal standards (1):** `coding-standards`.
 
-The PostgreSQL and Playwright sets are **gc.platform-specific project playbooks**, not general-purpose skills — read them alongside the `postgres-dba` and `e2e-runner` agents.
+The PostgreSQL and Playwright sets are **gc.platform-specific project playbooks**, not general-purpose skills — read them alongside the `postgres-dba` agent. `/e2e` and `e2e-runner` do not assume that stack. They read `e2e.json` or discover the start command, ports, and runner (`skills/e2e`). Load `playwright-e2e-authoring` and `playwright-e2e-review` only when that override names them. A project sets `"enabled": false` to opt out. Consumers that do not want the playbooks omit those two skills when vendoring.
 
 `skill-creator` is a runtime-only skill: it is git-ignored (`skills/skill-creator/`) and never synced. `opencode-skill-creator` (npm) provides the same capability at runtime.
 
@@ -1038,7 +1038,7 @@ Definis dans `opencode.jsonc` (champ `agent`) — **26 entrees**: le primary plu
 | `security-reviewer`    | read-only        | Revue OWASP/secrets/deps. Remediation vers `coder`.                                                               | Auth, input, endpoints, secrets   |
 | `tdd-guide`            | writable (tests) | RED → GREEN → REFACTOR + 80%. Delegue le GREEN au `coder`.                                                        | Features, fixes, refactors        |
 | `build-error-resolver` | writable         | Fix build/typecheck/lint/TS, diff minimal.                                                                        | Build ou lint rouge               |
-| `e2e-runner`           | writable         | Tests E2E Playwright.                                                                                             | Parcours navigateur               |
+| `e2e-runner`           | writable         | Tests E2E depuis l'override projet ou un runner decouvert.                                                       | Parcours navigateur               |
 | `doc-updater`          | writable         | Docs generees + codemaps.                                                                                         | `/update-docs`, `/update-codemaps`|
 | `refactor-cleaner`     | writable         | Suppression code mort + consolidation.                                                                            | Demandes de nettoyage             |
 | `database-reviewer`    | read-only        | PostgreSQL/Supabase: schema, perfs, RLS, migrations.                                                              | Revue SQL/migration/schema        |
@@ -1091,7 +1091,7 @@ Chemins possibles: requete normale (routage via Task), mention `@agent`, command
 | `/security`        | security-reviewer    | Audit securite.                            |
 | `/gdpr-review`     | gdpr-specialist      | Audit conformite GDPR/CNIL.                |
 | `/build-fix`       | build-error-resolver | Resolution build/TS errors.                |
-| `/e2e`             | e2e-runner           | Generation/run tests E2E.                  |
+| `/e2e`             | e2e-runner           | Tests E2E depuis l'override projet ou le runner decouvert. |
 | `/refactor-clean`  | refactor-cleaner     | Nettoyage code mort.                       |
 | `/orchestrate`     | planner              | Orchestration multi-agents.                |
 | `/verify`          | (conductor)          | Boucle de verification.                    |
@@ -1110,11 +1110,11 @@ Non epinglees (16): `/checkpoint`, `/pm2`, `/setup-pm`, `/ecosystem-audit`, `/cr
 
 ### Skills
 
-**70 skills** listes ci-dessous. `scripts/sync-skills.sh` calcule l'union canonique (root `skills/` ∪ `.claude/skills/`, root gagne), exclut le runtime `skills/skill-creator/`, et copie vers chaque cible. Attribution dans [`skills/THIRD_PARTY_NOTICES.md`](skills/THIRD_PARTY_NOTICES.md).
+**71 skills** listes ci-dessous. `scripts/sync-skills.sh` calcule l'union canonique (root `skills/` ∪ `.claude/skills/`, root gagne), exclut le runtime `skills/skill-creator/`, et copie vers chaque cible. Attribution dans [`skills/THIRD_PARTY_NOTICES.md`](skills/THIRD_PARTY_NOTICES.md).
 
 - **Planification & design (5):** `socratic-design`, `chimera`, `api-spec-openapi`, `why`, `blast-radius`.
 - **Revue & qualite (6):** `comment-judge`, `interfectio-commentarum`, `verify-this`, `create-verification-skill`, `test-behavior-not-implementation`, `ai-ecosystem-audit`.
-- **TDD & tests (2):** `tdd-workflow`, `tdd`.
+- **TDD & tests (3):** `tdd-workflow`, `tdd`, `e2e`.
 - **CI & git (5):** `fix-ci`, `fix-merge-conflicts`, `get-pr-comments`, `loop-on-ci`, `git-workflow`.
 - **Angular (4):** `angular-clean-architecture`, `angular-ddd`, `angular-cop`, `angular-accessibility`.
 - **.NET (3):** `dotnet-clean-architecture`, `dotnet-ddd`, `dotnet-cop`.
@@ -1126,7 +1126,7 @@ Non epinglees (16): `/checkpoint`, `/pm2`, `/setup-pm`, `/ecosystem-audit`, `/cr
 - **Harness & config (5):** `config-sync`, `harness-parity`, `skill-authoring`, `treetopia`, `strategic-compact`.
 - **Securite (1):** `security-review`. **Conformite (1):** `gdpr-compliance`. **Domaine (2):** `flurryx`, `transloco`. **Standards (1):** `coding-standards`.
 
-Les ensembles PostgreSQL et Playwright sont des **playbooks projet specifiques a gc.platform**. `skill-creator` est runtime-only, git-ignore et jamais synchronise.
+Les ensembles PostgreSQL et Playwright sont des **playbooks projet specifiques a gc.platform**. `/e2e` et `e2e-runner` ne supposent pas cette stack : ils lisent `e2e.json` ou decouvrent la commande de demarrage, les ports et le runner (`skills/e2e`). Les playbooks Playwright ne se chargent que si l'override les nomme. `"enabled": false` desactive `/e2e`. Un consommateur qui n'en veut pas omet `playwright-e2e-authoring` et `playwright-e2e-review` au vendoring. `skill-creator` est runtime-only, git-ignore et jamais synchronise.
 
 <a id="instructions-fr"></a>
 

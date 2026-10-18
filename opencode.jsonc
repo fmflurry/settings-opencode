@@ -341,7 +341,7 @@
       },
     },
     "e2e-runner": {
-      "description": "MUST delegate for browser automation, Playwright work, and critical user-flow E2E tests. Generates, runs, and reports artifacts.",
+      "description": "MUST delegate for browser automation, Playwright work, and critical user-flow E2E tests. Reads the project e2e override or discovered start command, ports, and test runner. Generates, runs, and reports artifacts.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "prompt": "{file:prompts/agents/e2e-runner.txt}",
@@ -612,7 +612,7 @@
       "subtask": true,
     },
     "e2e": {
-      "description": "Generate and run E2E tests with Playwright",
+      "description": "Generate and run end-to-end tests from the project e2e override or a discovered runner",
       "template": "{file:commands/e2e.md}\n\n$ARGUMENTS",
       "agent": "e2e-runner",
       "subtask": true,

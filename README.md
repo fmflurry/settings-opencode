@@ -78,7 +78,7 @@ A hardened primary `conductor` agent backed by **25 specialist sub-agents**, wir
 | Name           | What it does                      | Why it's good                                      |
 | -------------- | --------------------------------- | -------------------------------------------------- |
 | `/plan`        | Delegates to `planner` for a plan | Forces routing before any code is written          |
-| `/tdd`         | Runs a test-first cycle           | Same TDD guardrails, triggered on demand           |
+| `/tdd`         | Test-first cycle, or `/tdd refactor` to pin behavior | Characterization tests pass immediately and stay frozen |
 | `/cop-review`  | Pre-merge review of the branch    | Applies stack-specific checklists and runs lint    |
 | `/security`    | Security audit of the change      | Read-only findings; fixes routed to `coder`        |
 | `/git`         | Branch and commit operations      | Keeps git work in the specialist's hands           |
@@ -512,7 +512,11 @@ Most non-trivial work follows a fixed order, so planning, implementation, and re
 planner → (tdd-guide → coder) or coder → code-reviewer → verify → git-specialist
 ```
 
-A test-first variant routes `tdd-guide` first (RED), then `tdd-guide` delegates the GREEN implementation to `coder`, then `code-reviewer`, then the verification gate, then `git-specialist`. Docs-only work short-circuits to `writer`.
+A feature goes `planner` → `/tdd` (RED) → `coder` (GREEN) → `/verify` → `/pr` → `/cop-review` → `ship-merge`.
+
+A behavior-preserving refactor goes `planner` → `/tdd refactor` (characterization tests that pass immediately, then freeze) → `coder` (the restructure does not edit those tests) → `/blast-radius` → `/verify` (baseline against treatment on the same pin) → `/pr` → `/cop-review` → `ship-merge`.
+
+A test-first variant routes `tdd-guide` first (RED), then `tdd-guide` delegates the GREEN implementation to `coder`, then `code-reviewer`, then the verification gate, then `git-specialist`. Docs-only work short-circuits to `writer`. A refactor routes `tdd-guide` in `/tdd refactor` mode first, so the characterization pin is green before any restructure.
 
 #### 4. The brief contract
 
@@ -574,7 +578,7 @@ Defined in `opencode.jsonc` under `agent` — **26 entries**: the primary plus 2
 | `dotnet-cop`           | read-only       | .NET 10 Minimal API review (ports/adapters, modular isolation, EF Core). Runs build + `dotnet format`.                  | .NET PR review                    |
 | `gdpr-specialist`      | read-only       | GDPR/CNIL compliance review (consent, cookies, PII, retention, transfers, 72h breach).                                  | Privacy-sensitive features        |
 | `security-reviewer`    | read-only       | OWASP/secrets/deps review. Reports vulnerabilities; fixes routed to `coder`.                                            | Auth, input, endpoints, secrets   |
-| `tdd-guide`            | writable (tests)| RED → GREEN → REFACTOR + 80% coverage. Delegates GREEN impl to `coder` via scoped Task perm.                             | New features, bug fixes, refactors|
+| `tdd-guide`            | writable (tests)| RED → GREEN → REFACTOR + 80% coverage. `/tdd refactor` pins current behavior with characterization tests that already pass. Delegates impl to `coder`. | New features, bug fixes, refactors|
 | `build-error-resolver` | writable        | Fixes build/typecheck/lint/TS errors with minimal diffs.                                                                | Red build or lint                 |
 | `e2e-runner`           | writable        | E2E tests from the project override or a discovered runner.                                                             | Browser journeys                  |
 | `doc-updater`          | writable        | Generated docs + codemaps.                                                                                               | `/update-docs`, `/update-codemaps`|
@@ -614,7 +618,7 @@ Pinned (21):
 | `/git`             | git-specialist       | Bounded git ops (branches, commits). |
 | `/push-changes`    | git-specialist       | Commit + push with upstream guard.   |
 | `/plan`            | planner              | Implementation plan.                 |
-| `/tdd`             | tdd-guide            | TDD cycle with coverage.             |
+| `/tdd`             | tdd-guide            | TDD cycle. `/tdd refactor` pins current behavior. |
 | `/api-spec`        | api-spec-architect   | OpenAPI 3.1 spec generation.         |
 | `/cop-review`      | code-reviewer        | Direct pre-merge review; selects stack guidance. |
 | `/security`        | security-reviewer    | Security audit.                      |
@@ -1036,7 +1040,7 @@ Definis dans `opencode.jsonc` (champ `agent`) — **26 entrees**: le primary plu
 | `dotnet-cop`           | read-only        | Revue pre-merge .NET 10 Minimal API.                                                                              | Revue PR .NET                     |
 | `gdpr-specialist`      | read-only        | Conformite GDPR/CNIL (consent, cookies, PII, retention, transferts, breach 72h).                                  | Features sensibles                |
 | `security-reviewer`    | read-only        | Revue OWASP/secrets/deps. Remediation vers `coder`.                                                               | Auth, input, endpoints, secrets   |
-| `tdd-guide`            | writable (tests) | RED → GREEN → REFACTOR + 80%. Delegue le GREEN au `coder`.                                                        | Features, fixes, refactors        |
+| `tdd-guide`            | writable (tests) | RED → GREEN → REFACTOR + 80%. `/tdd refactor` pose des characterization tests deja verts. Delegue l'implementation au `coder`. | Features, fixes, refactors |
 | `build-error-resolver` | writable         | Fix build/typecheck/lint/TS, diff minimal.                                                                        | Build ou lint rouge               |
 | `e2e-runner`           | writable         | Tests E2E depuis l'override projet ou un runner decouvert.                                                       | Parcours navigateur               |
 | `doc-updater`          | writable         | Docs generees + codemaps.                                                                                         | `/update-docs`, `/update-codemaps`|
@@ -1058,6 +1062,8 @@ Definis dans `opencode.jsonc` (champ `agent`) — **26 entrees**: le primary plu
 
 - **Le conductor n'ecrit pas.** `tools.write: false`, `tools.edit: false`, `permission.edit/write: deny`; sa Task allowlist enumere chaque specialiste, `*: deny` bloque le reste. `instructions/subagent-routing.md` impose un Task-first gate.
 - **Flux canonique:** `planner → (tdd-guide → coder) ou coder → code-reviewer → verify → git-specialist`.
+  - Fonctionnalite: `planner` → `/tdd` (RED) → `coder` (GREEN) → `/verify` → `/pr` → `/cop-review` → `ship-merge`.
+  - Refactor: `planner` → `/tdd refactor` (characterization tests, verts immediatement, puis geles) → `coder` (restructure sans modifier ces tests) → `/blast-radius` → `/verify` (baseline contre treatment sur le meme pin) → `/pr` → `/cop-review` → `ship-merge`.
 - **Brief contract (6 champs):** `TASK`, `FILES`, `CHANGE`, `DONE-WHEN` (commande executable), `OUT OF SCOPE`, `CONTEXT ALREADY RESOLVED` + `BUDGET`.
 - **Questions:** chaque ambiguite taggee `[BLOCKING]` ou `[NON-BLOCKING]`; le conductor tente de resoudre depuis le repo avant de demander.
 - **Verification gate:** aucun "done" sans preuve fraiche (build/lint/tests executes, sortie collee).
@@ -1085,7 +1091,7 @@ Chemins possibles: requete normale (routage via Task), mention `@agent`, command
 | `/git`             | git-specialist       | Operations git encadrees (branche/commit). |
 | `/push-changes`    | git-specialist       | Commit + push (avec garde sur upstream).   |
 | `/plan`            | planner              | Plan d'implementation.                     |
-| `/tdd`             | tdd-guide            | Cycle TDD avec coverage.                   |
+| `/tdd`             | tdd-guide            | Cycle TDD. `/tdd refactor` fige le comportement actuel. |
 | `/api-spec`        | api-spec-architect   | Generation de specs OpenAPI 3.1.           |
 | `/cop-review`      | code-reviewer        | Revue pre-merge directe; selectionne le guide du stack. |
 | `/security`        | security-reviewer    | Audit securite.                            |

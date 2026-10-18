@@ -300,7 +300,7 @@
       },
     },
     "tdd-guide": {
-      "description": "MUST delegate for new features, bug fixes, or refactors that need tests. Enforces RED-GREEN-REFACTOR and 80%+ coverage. Writes test files only; delegates implementation to coder.",
+      "description": "MUST delegate for new features, bug fixes, or refactors that need tests. A refactor pins current behavior first with characterization tests that already pass. Enforces RED-GREEN-REFACTOR for new behavior and 80%+ coverage. Writes test files only; delegates implementation to coder.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "prompt": "{file:prompts/agents/tdd-guide.txt}",
@@ -576,7 +576,7 @@
       "subtask": true,
     },
     "tdd": {
-      "description": "Enforce TDD workflow with 80%+ test coverage",
+      "description": "Enforce TDD workflow with 80%+ test coverage. /tdd refactor pins current behavior first.",
       "template": "{file:commands/tdd.md}\n\n$ARGUMENTS",
       "agent": "tdd-guide",
       "subtask": true,

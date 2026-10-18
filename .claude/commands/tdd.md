@@ -1,5 +1,5 @@
 ---
-description: Enforce TDD workflow with 80%+ coverage
+description: Enforce TDD workflow with 80%+ coverage. /tdd refactor pins current behavior first.
 ---
 
 # TDD Command
@@ -18,6 +18,18 @@ RED → GREEN → REFACTOR → REPEAT
 2. **GREEN**: Write minimal code to pass the test
 3. **REFACTOR**: Improve code while keeping tests green
 4. **REPEAT**: Continue until feature complete
+
+## Refactor mode
+
+`/tdd refactor` (the first argument is `refactor`, or the task is a behavior-preserving restructure) does not start RED.
+
+1. Write characterization tests that pin the current observable behavior.
+2. Run them on the unchanged code. They pass immediately. A failure means the test is wrong: fix the test, not the code.
+3. Freeze those tests. The restructure does not edit them.
+4. Hand the restructure to `coder`. Production code changes. The characterization tests stay as written.
+5. New behavior still uses RED: a failing test first, then the smallest code.
+
+`/tdd` without `refactor` stays RED → GREEN → REFACTOR.
 
 ## Your Task
 

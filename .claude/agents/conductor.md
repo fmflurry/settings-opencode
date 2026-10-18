@@ -97,6 +97,10 @@ Subagents you dispatch CANNOT spawn further subagents — their `Agent` calls ar
 - `Grep`/`Glob` for narrow navigation after CodeMemory.
 - Synthesize subagent outputs into the final user reply.
 
+## Refactor handoff
+
+A behavior-preserving refactor dispatches `tdd-guide` for `/tdd refactor` first. The characterization tests pass on the unchanged code and stay frozen. Then dispatch `coder` for the restructure. The restructure does not edit those tests. Then `/blast-radius` runs the pin, and `/verify` compares baseline and treatment on that same pin.
+
 ## Delegation Hygiene
 
 - One narrow, explicit job per `Agent` call. No "do everything" briefs.

@@ -821,6 +821,10 @@ check "git-guard denies an ANSI-C split subcommand" denied "$(printf '%s' "git p
 check "git-guard denies brace expansion of a base ref" denied 'git push origin ma{ster,in}'
 check "git-guard denies a base ref hidden by a line continuation" denied "$(printf 'git push origin \\\nmaster')"
 check "git-guard denies an assignment substitution in front of a base push" denied 'FOO=$(date) git push origin master'
+check "git-guard denies a quoted assignment before gh pr merge" denied "FOO='a b' gh pr merge 12"
+check "git-guard denies a double-quoted assignment before gh pr merge" denied 'FOO="a b" gh pr merge 12'
+check "git-guard denies env with a quoted assignment before gh pr merge" denied "env FOO='a b' gh pr merge 12"
+check "git-guard allows a quoted assignment before gh pr view" allowed "FOO='a b' gh pr view"
 check "git-guard denies -c push.default on a bare push" denied 'git -c push.default=matching push'
 check "git-guard denies -c push.default even with an explicit feature ref" denied 'git -c push.default=matching push origin feat'
 check "git-guard denies -c remote.push" denied 'git -c remote.origin.push=refs/heads/master:refs/heads/master push origin feat'
@@ -853,6 +857,8 @@ git -C "$TMP/work" checkout -q master
 check "git-guard (flag off) allows bare push on the base branch" allowed "git push"
 git -C "$TMP/work" checkout -q feat
 check "git-guard (flag off) allows a push substitution" allowed 'git push origin $(echo master)'
+check "git-guard (flag off) allows a quoted assignment before gh pr merge" allowed "FOO='a b' gh pr merge 12"
+check "git-guard (flag off) allows a quoted assignment before gh pr view" allowed "FOO='a b' gh pr view"
 check "git-guard (flag off) allows -c push.default" allowed 'git -c push.default=matching push origin master'
 check "git-guard (flag off) denies ANSI-C quoted git" denied "$(printf '%s' "\$'git' push origin master")"
 check "git-guard (flag off) denies ANSI-C quoted push" denied "$(printf '%s' "git \$'push' origin master")"

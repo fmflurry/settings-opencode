@@ -94,6 +94,7 @@ The two halves stand alone. Use the OpenCode side, the Claude Code mirror, or bo
 
 - [Public install](#public-install)
 - [English](#english)
+  - [Recent changes](#recent-en)
   - [Goals](#goals-en)
   - [Repository layout](#layout-en)
   - [Configuration](#config-en)
@@ -110,6 +111,7 @@ The two halves stand alone. Use the OpenCode side, the Claude Code mirror, or bo
   - [How it fits together](#flow-en)
   - [Autonomous mode](#autonomy-en)
 - [Français](#francais)
+  - [Changements récents](#recent-fr)
   - [Objectif](#objectif-fr)
   - [Structure du repo](#structure-fr)
   - [Configuration](#config-fr)
@@ -378,6 +380,43 @@ If a new plugin shows up, OpenCode picks it up on the next restart. If an env va
 ## English
 
 Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primary `conductor` agent (no write/edit perms — must delegate), **25 specialist sub-agents**, always-on instructions, slash commands, OpenCode plugins (secret-file guard, notifications, llm-metrics, tool-budget, autonomy), custom tools, and a Claude Code mirror.
+
+<a id="recent-en"></a>
+
+### Recent changes
+
+Shipped on `master` through `fa50d8e` (2026-10-18). The plugin number is `version` in `scripts/cursor-plugin/config.json`. History is `scripts/cursor-plugin/CHANGELOG.md`.
+
+| PR | Plugin | What landed |
+| --- | --- | --- |
+| [#25](https://github.com/fmflurry/settings-opencode/pull/25) | 0.2.0 | Semver guard in `scripts/cursor-plugin/check.mjs`. A plugin-source change must carry a version strictly above the base. |
+| [#27](https://github.com/fmflurry/settings-opencode/pull/27) | 0.3.0 | CodeMemory stays off in cloud and remote sessions unless overridden. Ship review/fix rounds stop at 3. |
+| [#28](https://github.com/fmflurry/settings-opencode/pull/28) | 0.4.0 | Review findings are Important, Nit, or Pre-existing. Only Important blocks. The verdict is Approve or Block. |
+| [#29](https://github.com/fmflurry/settings-opencode/pull/29) | 0.4.1 | Enforcement ladder: code, then lint, tests, or static analysis, then a prose rule, then human review. |
+| [#30](https://github.com/fmflurry/settings-opencode/pull/30) | 0.4.2 | A project's `REVIEW.md` is the tag reference when it exists. The PR template adds Risk, How to revert, and Tier. |
+| [#32](https://github.com/fmflurry/settings-opencode/pull/32) | 0.4.3 | Always-applied Cursor rules drop from 21 files (1438 lines) to 7 files (502 lines). The rest load by path glob or by skill. |
+
+**Semver (#25, policy note in #29).** `scripts/cursor-plugin/check.mjs` diffs plugin sources against the merge-base with the base branch (`origin/master`, `origin/$GITHUB_BASE_REF` in GitHub Actions, or `CURSOR_PLUGIN_BASE`). The version must be `MAJOR.MINOR.PATCH` and strictly greater, and the changelog needs a heading for it. The build copies `scripts/cursor-plugin/config.json` into `plugins/fmflurry-harness/.cursor-plugin/plugin.json`. A root `README.md` edit is not a plugin source. `#25` shipped that guard at 0.2.0, with patch, minor, and major as the suggested bumps. From 0.4.1, `scripts/cursor-plugin/CHANGELOG.md` says later plugin changes bump the patch only. The guard does not enforce that: it still accepts a minor or major bump, and it still prints those suggestions.
+
+**CodeMemory (#27).** `FMFLURRY_CODEMEMORY=on|off|auto` wins. Unset, `auto`, or any other value detects. Detection order is in `docs/codememory-cloud.md`, implemented in `plugins/code-memory-lib/mode.ts` and `.claude/hooks/codememory-mode.sh`:
+
+- `CLAUDE_CODE_REMOTE` truthy (`true`, `1`, or `yes`), or `CLAUDE_CODE_REMOTE_SESSION_ID` non-empty: off.
+- Cursor metadata `agent/runtime` equal to `managed`, read with `GET /v1/meta-data/agent/runtime` on `CURSOR_AGENT_SOCKET` (default `/run/cursor/api.sock`): off.
+- CI: truthy `GITHUB_ACTIONS`, `GITLAB_CI`, `CIRCLECI`, or `BUILDKITE`, or a set `TF_BUILD` or `JENKINS_URL`: off. `CI=true` alone is ignored, because `.claude/settings.json` sets `CI` for every Claude Code session.
+- macOS (`uname` Darwin), and none of the signals above: on, even when the local services are down.
+- Otherwise both FalkorDB `127.0.0.1:6379` and Qdrant `127.0.0.1:6333` must accept a TCP connection, or CodeMemory stays off. A failed probe is "down", not an error.
+
+Hooks and the OpenCode code-memory plugins no-op when the decision is off. `FMFLURRY_CODEMEMORY=on` keeps it on in the cloud. `off` keeps it off on a laptop.
+
+**Review tags (#28, #30).** The default mapping is Finding tags in `.claude/agents/code-reviewer.md`. Important blocks the merge. Nit does not. Pre-existing does not, at any gravity. Approve means no Important finding is open (lint passes, and no forbidden comments). Block means at least one Important finding is open. There is no Warning verdict. `scripts/cursor-plugin/check.mjs` rejects the old uppercase review-severity words in harness sources. The allowlist for non-review uses (GDPR, database health, plan risk lines, npm audit, CVE) is `scripts/cursor-plugin/review-tags.mjs`. When the repository under review has a root `REVIEW.md`, that file is the only tag mapping. The reviewer cites it and does not apply the default table as a second mapping. This repo ships `REVIEW.md`.
+
+**Enforcement ladder (#29).** `.claude/rules/common/enforcement-ladder.md` (Cursor copy `plugins/fmflurry-harness/rules/enforcement-ladder.mdc`) and `instructions/enforcement-ladder.md` (loaded from `opencode.jsonc`). Put the fix at the first level that can hold it: code, then lint, tests, or static analysis, then a prose rule, then human review. A prose rule carries `why-not-tooled:`. Adding always-on prose means deleting or shortening other always-on prose in the same change.
+
+**PR template (#30).** `.github/pull_request_template.md` has Summary, Risk, How to revert, and Tier. Tier is T1, T2, or T3, from blast radius, protected paths, and diff size. It is not a finding tag. `/setup-harness` writes that template when `.github/pull_request_template.md` is missing and leaves an existing file alone (`scripts/cursor-plugin/templates/setup-harness.md`, built to `plugins/fmflurry-harness/skills/setup-harness/SKILL.md`). `commands/pr.md` and `commands/create-pull-request.md` fill the template when it exists.
+
+**Rules diet (#32).** Plugin 0.4.3 (`fa50d8e`). `plugins/fmflurry-harness/rules/` has 7 files with `alwaysApply: true`, 502 lines, down from 21 files and 1438 lines at `62aa030`. They are `autonomy.mdc`, `conductor.mdc`, `enforcement-ladder.mdc`, `orchestration.mdc`, `question-handling.mdc`, `tool-budget.mdc`, and `verification-gate.mdc`. `scripts/cursor-plugin/config.json` `rules.always` lists the six `common/` rules. The build adds `rules/conductor.mdc`. There is no `rules/always__harness.mdc` in this build. File-bound rules stay in that directory with `alwaysApply: false` and `globs`: `code-comments`, `coding-style`, `security`, `testing`, and the five `typescript-*` packs. These left the always-on set and are skills: `agent-roster`, `brief-contract`, `codebase-exploration`, `git-workflow`, `harness-parity`, `hooks`, `open-pr-check`, `patterns`, `performance`, `worktree-destruction-safety`. `skills/ai-ecosystem-audit/SKILL.md` (Always-on budget) counts session-global rules. More than 8 `alwaysApply: true` Cursor rules is a confirmed finding. The built set is 7.
+
+**Not in this tree.** A verification-creation skill and a socratic spike are not shipped. Neither name is in the tree at `fa50d8e`.
 
 <a id="goals-en"></a>
 
@@ -716,6 +755,8 @@ Bump that version by hand in each PR that changes plugin content or its build in
 - **minor** — new agents, skills, commands, rules, or behavior
 - **major** — breaking changes: renamed or removed agents or skills, changed tier keys, installer contract changes
 
+From plugin 0.4.1, `scripts/cursor-plugin/CHANGELOG.md` asks for a patch bump on every later plugin change. The check still only requires a version strictly above the base. It does not reject a minor or major bump.
+
 The check diffs the working tree against the merge-base with the base branch, so a root README edit does not need a bump. The version it must exceed is the base branch tip: `origin/master` locally, `origin/$GITHUB_BASE_REF` in GitHub Actions (the workflow fetches that ref), or `CURSOR_PLUGIN_BASE` when set. If none of those refs exist, the check prints a skip message and continues.
 
 Plugin sources are `plugins/fmflurry-harness/`, the `.claude` agents, commands, rules, skills, `CLAUDE.md`, `settings.json`, and the hook scripts named in `hooks.include`, plus `skills/`, `commands/`, `opencode.jsonc`, `scripts/build-cursor-plugin.mjs`, `scripts/sync-skills.sh`, and the cursor-plugin config, library, changelog, README template, adapter, setup-harness template, and logo. `scripts/cursor-plugin/check.mjs` does not ship in the plugin.
@@ -738,12 +779,81 @@ bump the plugin version + changelog in any PR touching plugin sources.
 ### Autonomous mode
 
 Autonomous mode lets the agent take one goal from clarification to a merged PR. Turn it on, then run `/ship <goal>`.
-With the flag off, the agent asks before each irreversible step, and a merge needs `--confirmed`.
+With the flag off, the agent asks before each irreversible step, and a merge needs `--confirmed`. Turning the flag
+on does not start work (`skills/autonomous/SKILL.md`).
 
-The run is a loop: implement, verify, push, local review, CI, then `ship-merge`. A blocker the agent can fix (a
-review finding, a failing check, a conflict, a stale branch, a thread, a merge refusal) sends it back to fix, then
-review again, then merge. It stops only when the PR merges or a human-only blocker needs a person (credentials,
-billing or quota, an outage, a product decision, a forbidden action).
+The run is a loop, owned by `skills/ship/SKILL.md`: implement, verify, push a draft PR, local review, CI, then
+`agent-harness ship-merge`. A blocker the agent can fix (a confirmed Important finding, a failing check, a
+conflict, a stale branch, an unresolved thread, a merge refusal) sends it back to fix, then review again, then
+merge. It ends as `done` (the PR is merged and the goal worktree is torn down) or escalated.
+
+**How to launch it.** The goal text is the argument of `/ship`. The flag is also
+`agent-harness autonomy on|off|status` (`scripts/agent-harness/autonomy.sh`). `install.sh` installs that wrapper
+at `~/.local/bin/agent-harness` when Claude Code or OpenCode is an install target. `install-cursor.sh` does not.
+
+- **Claude Code.** There is no `.claude/commands/ship.md`. `/ship <goal>` is the `ship` skill,
+  `skills/ship/SKILL.md`. `install.sh` runs `scripts/sync-skills.sh`, which copies it to `~/.claude/skills/ship`.
+  `/autonomous on|off|status` is `skills/autonomous/SKILL.md` (`disable-model-invocation: true`, so it stays
+  user-invoked). The behaviour rule is `.claude/rules/common/autonomy.md`. The Stop hook is
+  `.claude/hooks/ship-stop-gate.sh`, wired from `.claude/settings.json`.
+- **OpenCode.** `/ship` and `/autonomous` are pinned in `opencode.jsonc` (`command.ship`, `command.autonomous`),
+  both on `conductor`, templates `commands/ship.md` and `commands/autonomous.md`. The startup rule is
+  `instructions/autonomy.md`. `plugins/autonomy.ts` blocks the `question` tool, injects autonomy context, denies
+  forbidden git commands, and re-prompts the root session when the stop gate blocks. The sidebar toggle is
+  `tui-plugins/autonomy-status.tsx` (registered in `tui.json`): command palette "Toggle autonomous mode",
+  `/autonomy-toggle`, or `<leader>u`.
+- **Cursor.** `/ship <goal>` is `plugins/fmflurry-harness/commands/ship.md` (built from `commands/ship.md` by
+  `scripts/build-cursor-plugin.mjs`). It loads `plugins/fmflurry-harness/skills/ship/SKILL.md`. `/autonomous` is
+  `plugins/fmflurry-harness/commands/autonomous.md` and `plugins/fmflurry-harness/skills/autonomous/SKILL.md`.
+  The always-on rule is `plugins/fmflurry-harness/rules/autonomy.mdc`. The `stop` entry in
+  `plugins/fmflurry-harness/hooks/hooks.json` runs `hooks/scripts/ship-stop-gate.sh`. That hook calls
+  `agent-harness` only when the command is already on `PATH`.
+
+**Review loop.** Stage 7 of `skills/ship/SKILL.md` reviews `git diff <base>...HEAD` with `code-reviewer`,
+`security-reviewer`, and the stack cop when it applies (`angular-cop` or `dotnet-cop`; `database-reviewer` when
+SQL changed). The agent confirms each finding against the code. Only a confirmed Important finding blocks. Nit
+and Pre-existing do not. Tags come from the repo's `REVIEW.md` when it exists, otherwise from Finding tags in
+`.claude/agents/code-reviewer.md`. After the fixes it posts one summary comment
+(`skills/ship/references/review-format.md`). That comment is an audit trail. `ship-merge` does not read it.
+
+**3-round cap.** `scripts/agent-harness/goal.sh` and `scripts/agent-harness/ship-init.sh` set
+`max_fix_iterations` to 3. Before each fix round the skill runs `agent-harness goal bump`, which adds 1 to
+`fix_iterations`. When the count reaches 3 the command marks the goal `escalated`, runs
+`agent-harness notify failure`, and exits 3. The skill does not start that round. The same bump is used before
+a CI fix round (stage 9 of `skills/ship/SKILL.md`).
+
+**No-progress rule.** Two checks share the name. They are not the same test.
+
+- `skills/ship/SKILL.md` (Stop conditions) treats a full loop iteration as no progress when the same Important
+  finding and the same failure remain, or the same non-review blocker fails the same way. A new failure, a new
+  finding, or a green check counts as progress. The agent then runs `agent-harness goal escalate`. No script
+  compares finding text. That check is the skill's instruction.
+- `.claude/hooks/ship-stop-gate.sh` (Cursor copy: `plugins/fmflurry-harness/hooks/scripts/ship-stop-gate.sh`)
+  increments `stop_blocks` when the PR head SHA is unchanged. At 5 it escalates with
+  `no progress after 5 stop blocks`. A changed head increments `total_blocks` only. At 30 total blocks it
+  escalates. While the goal is active and the PR is unmerged, the hook blocks an early stop. If GitHub cannot
+  be read and those caps are not hit, the hook exits 0. OpenCode has no Stop hook. `plugins/autonomy.ts` runs
+  the same script on `session.idle` of a root session and re-prompts with the reason
+  (`instructions/autonomy.md`).
+
+**When it escalates.** `skills/ship/SKILL.md` (Human-only) stops for missing credentials, account limits or
+billing, an external outage, a product decision the repo cannot answer, or an action on the forbidden list.
+It also stops on the skill's no-progress rule, on `goal bump` exit 3, and on the stop-gate caps above. A
+gitleaks finding or a secret exposure stops the run for `security-reviewer` and rotation. An open-PR outcome
+of `Wait or cancel` escalates (`skills/open-pr-check/SKILL.md`). The blocked path keeps the worktree,
+the branch, and the registry (`skills/ship/SKILL.md`, Blocked path).
+
+**What it never does.** Hard limits in `skills/ship/SKILL.md`, and rule (d) in `.claude/rules/common/autonomy.md`:
+
+- Merge only through `agent-harness ship-merge`. Never `gh pr merge`, and never a push to the base branch.
+- Never `git push --mirror`, `git push --all`, or `--no-verify`. Never weaken a check: skip a test, a job, or
+  a required check, set `continue-on-error`, delete a check, or lower a threshold.
+- Never remove a worktree except `agent-harness teardown-merged-worktree <pr>`, after that PR is MERGED, in
+  autonomous mode. Never delete a branch except through that teardown or `agent-harness cleanup`.
+- Never merge a PR that matches `protectedPaths` while the flag is on. A human passes `--confirmed`.
+- Never add a label, post a comment, or create a status to get past a `ship-merge` refusal.
+- Never notify for progress. The run does not trigger builds or releases.
+- Never tear down a blocked or escalated goal.
 
 ```bash
 agent-harness autonomy on|off|status     # toggle .claude/state/autonomy.on (gitignored, per machine)
@@ -812,7 +922,7 @@ rail. No GitHub status is created, and `ship-merge` does not trust the comment.
 - These are client-side guardrails, not a security boundary. An agent with shell access can call `gh` directly.
 - Branch protection on the base branch (required reviews, required checks, restricted pushes) is the real enforcement. Set it on the host.
 - A PR that matches `protectedPaths` needs a human merge (`--confirmed`), when that key is set. Without the key, autonomous mode merges every PR that passes the gate.
-- OpenCode has no git-guard or stop-gate hooks. Its rules are enforced by the instruction and the merge gate only.
+- OpenCode does not register Claude Code hooks. `plugins/autonomy.ts` runs `autonomy-git-guard.sh` before bash and `ship-stop-gate.sh` when a root session goes idle (`instructions/autonomy.md`).
 
 **Parity.** The autonomy-status mod (`.claude/mods/`, status line and band) is Claude Code only. OpenCode has no equivalent.
 
@@ -825,6 +935,43 @@ rail. No GitHub status is created, and `ship-merge` does not trust the comment.
 Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), **25 sous-agents specialises**, des instructions toujours actives, des commandes slash, des plugins (secret-file guard, notifications, llm-metrics, tool-budget), des outils custom et un mirror Claude Code.
 
 Chiffres (au **2026-10-02**) : **26 agents** (1 conductor + 25 specialistes) · **69 skills** · **37 templates de commandes** (dont **21** epinglees dans `opencode.jsonc`) · **12 instructions** chargees au demarrage · **22 rule packs** `.claude` · **7 hooks** · **6 serveurs MCP** · **4 fichiers d'outils custom** · **2 plugins TUI**.
+
+<a id="recent-fr"></a>
+
+### Changements récents
+
+Livré sur `master` jusqu'à `fa50d8e` (2026-10-18). Le numéro du plugin est `version` dans `scripts/cursor-plugin/config.json`. L'historique est `scripts/cursor-plugin/CHANGELOG.md`.
+
+| PR | Plugin | Ce qui est livré |
+| --- | --- | --- |
+| [#25](https://github.com/fmflurry/settings-opencode/pull/25) | 0.2.0 | Garde semver dans `scripts/cursor-plugin/check.mjs`. Une modification des sources du plugin doit porter une version strictement supérieure à la base. |
+| [#27](https://github.com/fmflurry/settings-opencode/pull/27) | 0.3.0 | CodeMemory reste éteint dans les sessions cloud et distantes, sauf override. Les tours revue/correctif de ship s'arrêtent à 3. |
+| [#28](https://github.com/fmflurry/settings-opencode/pull/28) | 0.4.0 | Les findings sont Important, Nit ou Pre-existing. Seul Important bloque. Le verdict est Approve ou Block. |
+| [#29](https://github.com/fmflurry/settings-opencode/pull/29) | 0.4.1 | Échelle d'application : code, puis lint, tests ou analyse statique, puis une règle en prose, puis la revue humaine. |
+| [#30](https://github.com/fmflurry/settings-opencode/pull/30) | 0.4.2 | Le `REVIEW.md` d'un projet est la référence des tags quand il existe. Le modèle de PR ajoute Risk, How to revert et Tier. |
+| [#32](https://github.com/fmflurry/settings-opencode/pull/32) | 0.4.3 | Les règles Cursor toujours appliquées passent de 21 fichiers (1438 lignes) à 7 fichiers (502 lignes). Le reste se charge par glob de chemin ou par skill. |
+
+**Semver (#25, note de politique dans #29).** `scripts/cursor-plugin/check.mjs` compare les sources du plugin au merge-base avec la branche de base (`origin/master`, `origin/$GITHUB_BASE_REF` en GitHub Actions, ou `CURSOR_PLUGIN_BASE`). La version doit être `MAJOR.MINOR.PATCH`, strictement supérieure, et le changelog doit avoir un titre pour elle. Le build copie `scripts/cursor-plugin/config.json` dans `plugins/fmflurry-harness/.cursor-plugin/plugin.json`. Un edit du `README.md` racine n'est pas une source du plugin. `#25` a livré cette garde en 0.2.0, avec patch, minor et major comme suggestions. Depuis 0.4.1, `scripts/cursor-plugin/CHANGELOG.md` demande un bump de patch pour les changements de plugin suivants. La garde ne l'impose pas : elle accepte encore un bump minor ou major, et elle affiche toujours ces suggestions.
+
+**CodeMemory (#27).** `FMFLURRY_CODEMEMORY=on|off|auto` gagne. Absent, `auto`, ou toute autre valeur : détection. L'ordre est dans `docs/codememory-cloud.md`, implémenté dans `plugins/code-memory-lib/mode.ts` et `.claude/hooks/codememory-mode.sh` :
+
+- `CLAUDE_CODE_REMOTE` vrai (`true`, `1` ou `yes`), ou `CLAUDE_CODE_REMOTE_SESSION_ID` non vide : éteint.
+- Métadonnée Cursor `agent/runtime` égale à `managed`, lue par `GET /v1/meta-data/agent/runtime` sur `CURSOR_AGENT_SOCKET` (défaut `/run/cursor/api.sock`) : éteint.
+- CI : `GITHUB_ACTIONS`, `GITLAB_CI`, `CIRCLECI` ou `BUILDKITE` vrais, ou `TF_BUILD` ou `JENKINS_URL` défini : éteint. `CI=true` seul est ignoré, parce que `.claude/settings.json` pose `CI` pour chaque session Claude Code.
+- macOS (`uname` Darwin), et aucun signal ci-dessus : allumé, même si les services locaux sont arrêtés.
+- Sinon FalkorDB `127.0.0.1:6379` et Qdrant `127.0.0.1:6333` doivent tous les deux accepter une connexion TCP, sinon CodeMemory reste éteint. Une sonde en échec veut dire « down », pas une erreur.
+
+Les hooks et les plugins OpenCode code-memory ne font rien quand la décision est éteinte. `FMFLURRY_CODEMEMORY=on` le garde allumé dans le cloud. `off` le garde éteint sur un portable.
+
+**Tags de revue (#28, #30).** Le mapping par défaut est Finding tags dans `.claude/agents/code-reviewer.md`. Important bloque la fusion. Nit ne bloque pas. Pre-existing ne bloque pas, quelle que soit la gravité. Approve veut dire qu'aucun finding Important n'est ouvert (lint vert, et aucun commentaire interdit). Block veut dire qu'au moins un finding Important est ouvert. Il n'y a pas de verdict Warning. `scripts/cursor-plugin/check.mjs` rejette les anciens mots de sévérité de revue en capitales dans les sources du harness. La liste d'exceptions pour les usages hors revue (GDPR, santé base de données, lignes de risque de `/plan`, npm audit, CVE) est `scripts/cursor-plugin/review-tags.mjs`. Quand le dépôt en revue a un `REVIEW.md` à la racine, ce fichier est le seul mapping. Le reviewer le cite et n'applique pas la table par défaut en second mapping. Ce dépôt livre `REVIEW.md`.
+
+**Échelle d'application (#29).** `.claude/rules/common/enforcement-ladder.md` (copie Cursor `plugins/fmflurry-harness/rules/enforcement-ladder.mdc`) et `instructions/enforcement-ladder.md` (chargée depuis `opencode.jsonc`). Placer le correctif au premier niveau qui peut le tenir : code, puis lint, tests ou analyse statique, puis une règle en prose, puis la revue humaine. Une règle en prose porte `why-not-tooled:`. Ajouter de la prose toujours chargée suppose d'en supprimer ou d'en raccourcir d'autre dans le même changement.
+
+**Modèle de PR (#30).** `.github/pull_request_template.md` contient Summary, Risk, How to revert et Tier. Tier vaut T1, T2 ou T3, selon le blast radius, les chemins protégés et la taille du diff. Ce n'est pas un tag de finding. `/setup-harness` écrit ce modèle quand `.github/pull_request_template.md` manque, et laisse un fichier existant (`scripts/cursor-plugin/templates/setup-harness.md`, construit vers `plugins/fmflurry-harness/skills/setup-harness/SKILL.md`). `commands/pr.md` et `commands/create-pull-request.md` remplissent le modèle quand il existe.
+
+**Rules diet (#32).** Plugin 0.4.3 (`fa50d8e`). `plugins/fmflurry-harness/rules/` compte 7 fichiers `alwaysApply: true`, 502 lignes, contre 21 fichiers et 1438 lignes à `62aa030`. Ce sont `autonomy.mdc`, `conductor.mdc`, `enforcement-ladder.mdc`, `orchestration.mdc`, `question-handling.mdc`, `tool-budget.mdc` et `verification-gate.mdc`. `rules.always` dans `scripts/cursor-plugin/config.json` liste les six règles `common/`. Le build ajoute `rules/conductor.mdc`. Ce build n'a pas de `rules/always__harness.mdc`. Les règles liées à des fichiers restent dans ce répertoire avec `alwaysApply: false` et `globs` : `code-comments`, `coding-style`, `security`, `testing`, et les cinq packs `typescript-*`. Celles-ci ont quitté l'ensemble toujours chargé et sont des skills : `agent-roster`, `brief-contract`, `codebase-exploration`, `git-workflow`, `harness-parity`, `hooks`, `open-pr-check`, `patterns`, `performance`, `worktree-destruction-safety`. `skills/ai-ecosystem-audit/SKILL.md` (Always-on budget) compte les règles globales de session. Plus de 8 règles Cursor `alwaysApply: true` est un finding confirmé. L'ensemble construit en a 7.
+
+**Pas dans cet arbre.** Un skill verification-creation et un socratic spike ne sont pas livrés. Aucun de ces noms n'est dans l'arbre à `fa50d8e`.
 
 <a id="objectif-fr"></a>
 
@@ -1065,6 +1212,8 @@ Monter la version a la main dans chaque PR qui touche le contenu du plugin ou se
 - **minor** — nouveaux agents, skills, commandes, regles, ou comportement
 - **major** — ruptures : agents ou skills renommes ou retires, cles de tier changees, contrat de l'installeur change
 
+Depuis le plugin 0.4.1, `scripts/cursor-plugin/CHANGELOG.md` demande un bump de patch pour chaque changement de plugin suivant. Le check exige seulement une version strictement supérieure à la base. Il ne refuse pas un bump minor ou major.
+
 Le check compare l'arbre de travail au merge-base avec la branche de base : un edit du README racine n'exige pas de bump. La version a depasser est la pointe de la branche de base (`origin/master`, `origin/$GITHUB_BASE_REF` en CI, ou `CURSOR_PLUGIN_BASE`). Sans aucune de ces refs, le check affiche un message et continue.
 
 bump the plugin version + changelog in any PR touching plugin sources.
@@ -1082,9 +1231,36 @@ bump the plugin version + changelog in any PR touching plugin sources.
 
 ### Mode autonome
 
-Le mode autonome permet à l'agent de mener un objectif de la clarification jusqu'à une PR fusionnée. Activez-le, puis lancez `/ship <goal>`. Avec le flag désactivé, l'agent demande avant chaque étape irréversible, et une fusion nécessite `--confirmed`.
+Le mode autonome permet à l'agent de mener un objectif de la clarification jusqu'à une PR fusionnée. Activez-le, puis lancez `/ship <goal>`. Avec le flag désactivé, l'agent demande avant chaque étape irréversible, et une fusion nécessite `--confirmed`. Activer le flag ne démarre aucun travail (`skills/autonomous/SKILL.md`).
 
-Le run est une boucle : implémenter, vérifier, pousser, revue locale, CI, puis `ship-merge`. Un blocage que l'agent peut corriger (un finding de revue, un check en échec, un conflit, une branche en retard, un fil de discussion, un refus de fusion) le renvoie vers la correction, puis vers une nouvelle revue, puis vers la fusion. Il s'arrête seulement quand la PR est fusionnée ou quand un blocage réservé à un humain exige une personne (identifiants, facturation ou quota, panne externe, décision produit, action interdite).
+Le run est une boucle, tenue par `skills/ship/SKILL.md` : implémenter, vérifier, pousser une PR brouillon, revue locale, CI, puis `agent-harness ship-merge`. Un blocage que l'agent peut corriger (un finding Important confirmé, un check en échec, un conflit, une branche en retard, un fil non résolu, un refus de fusion) le renvoie vers la correction, puis vers une nouvelle revue, puis vers la fusion. Il se termine en `done` (PR fusionnée et worktree du goal retiré) ou escaladé.
+
+**Comment le lancer.** Le texte du goal est l'argument de `/ship`. Le flag est aussi `agent-harness autonomy on|off|status` (`scripts/agent-harness/autonomy.sh`). `install.sh` installe ce wrapper dans `~/.local/bin/agent-harness` quand Claude Code ou OpenCode est une cible d'install. `install-cursor.sh` ne le fait pas.
+
+- **Claude Code.** Il n'y a pas de `.claude/commands/ship.md`. `/ship <goal>` est le skill `ship`, `skills/ship/SKILL.md`. `install.sh` lance `scripts/sync-skills.sh`, qui le copie vers `~/.claude/skills/ship`. `/autonomous on|off|status` est `skills/autonomous/SKILL.md` (`disable-model-invocation: true`, donc invoqué par l'utilisateur). La règle de comportement est `.claude/rules/common/autonomy.md`. Le hook Stop est `.claude/hooks/ship-stop-gate.sh`, branché depuis `.claude/settings.json`.
+- **OpenCode.** `/ship` et `/autonomous` sont épinglés dans `opencode.jsonc` (`command.ship`, `command.autonomous`), tous deux sur `conductor`, templates `commands/ship.md` et `commands/autonomous.md`. La règle chargée au démarrage est `instructions/autonomy.md`. `plugins/autonomy.ts` bloque l'outil `question`, injecte le contexte d'autonomie, refuse les commandes git interdites, et relance la session racine quand le stop gate bloque. La bascule de la barre latérale est `tui-plugins/autonomy-status.tsx` (enregistrée dans `tui.json`) : palette « Toggle autonomous mode », `/autonomy-toggle`, ou `<leader>u`.
+- **Cursor.** `/ship <goal>` est `plugins/fmflurry-harness/commands/ship.md` (construit depuis `commands/ship.md` par `scripts/build-cursor-plugin.mjs`). Il charge `plugins/fmflurry-harness/skills/ship/SKILL.md`. `/autonomous` est `plugins/fmflurry-harness/commands/autonomous.md` et `plugins/fmflurry-harness/skills/autonomous/SKILL.md`. La règle toujours active est `plugins/fmflurry-harness/rules/autonomy.mdc`. L'entrée `stop` de `plugins/fmflurry-harness/hooks/hooks.json` lance `hooks/scripts/ship-stop-gate.sh`. Ce hook appelle `agent-harness` seulement si la commande est déjà sur le `PATH`.
+
+**Boucle de revue.** L'étape 7 de `skills/ship/SKILL.md` relit `git diff <base>...HEAD` avec `code-reviewer`, `security-reviewer`, et le cop du stack quand il s'applique (`angular-cop` ou `dotnet-cop` ; `database-reviewer` si le SQL a changé). L'agent confirme chaque finding contre le code. Seul un finding Important confirmé bloque. Nit et Pre-existing ne bloquent pas. Les tags viennent du `REVIEW.md` du dépôt quand il existe, sinon de Finding tags dans `.claude/agents/code-reviewer.md`. Après les correctifs, un commentaire de synthèse est publié (`skills/ship/references/review-format.md`). Ce commentaire est une trace d'audit. `ship-merge` ne le lit pas.
+
+**Plafond de 3 tours.** `scripts/agent-harness/goal.sh` et `scripts/agent-harness/ship-init.sh` posent `max_fix_iterations` à 3. Avant chaque tour de correctif, le skill lance `agent-harness goal bump`, qui ajoute 1 à `fix_iterations`. Quand le compte atteint 3, la commande marque le goal `escalated`, lance `agent-harness notify failure`, et sort avec le code 3. Le skill ne démarre pas ce tour. Le même bump est utilisé avant un tour de correctif CI (étape 9 de `skills/ship/SKILL.md`).
+
+**Règle d'absence de progrès.** Deux contrôles portent ce nom. Ce n'est pas le même test.
+
+- `skills/ship/SKILL.md` (Stop conditions) traite une itération complète comme sans progrès quand le même finding Important et le même échec restent, ou quand le même blocage hors revue échoue de la même façon. Un nouvel échec, un nouveau finding, ou un check vert compte comme un progrès. L'agent lance alors `agent-harness goal escalate`. Aucun script ne compare le texte des findings. Ce contrôle est l'instruction du skill.
+- `.claude/hooks/ship-stop-gate.sh` (copie Cursor : `plugins/fmflurry-harness/hooks/scripts/ship-stop-gate.sh`) incrémente `stop_blocks` quand le SHA de tête de la PR est inchangé. À 5, il escalade avec `no progress after 5 stop blocks`. Une tête changée n'incrémente que `total_blocks`. À 30 blocs au total, il escalade. Tant que le goal est actif et que la PR n'est pas fusionnée, le hook bloque un arrêt anticipé. Si GitHub est illisible et que ces plafonds ne sont pas atteints, le hook sort 0. OpenCode n'a pas de hook Stop. `plugins/autonomy.ts` lance le même script sur `session.idle` d'une session racine et relance avec la raison (`instructions/autonomy.md`).
+
+**Quand ça escalade.** `skills/ship/SKILL.md` (Human-only) s'arrête pour des identifiants manquants, des limites de compte ou de facturation, une panne externe, une décision produit que le dépôt ne peut pas trancher, ou une action de la liste interdite. Il s'arrête aussi sur la règle d'absence de progrès du skill, sur la sortie 3 de `goal bump`, et sur les plafonds du stop gate ci-dessus. Un finding gitleaks ou une exposition de secret arrête le run pour `security-reviewer` et une rotation. Un résultat `Wait or cancel` du contrôle des PR ouvertes escalade (`skills/open-pr-check/SKILL.md`). Le chemin bloqué conserve le worktree, la branche et le registre (`skills/ship/SKILL.md`, Blocked path).
+
+**Ce qu'il ne fait jamais.** Hard limits de `skills/ship/SKILL.md`, et règle (d) de `.claude/rules/common/autonomy.md` :
+
+- Fusion uniquement par `agent-harness ship-merge`. Jamais `gh pr merge`, et jamais un push vers la branche de base.
+- Jamais `git push --mirror`, `git push --all`, ni `--no-verify`. Jamais affaiblir un check : sauter un test, un job ou un check requis, poser `continue-on-error`, supprimer un check, ou baisser un seuil.
+- Jamais retirer un worktree sauf `agent-harness teardown-merged-worktree <pr>`, après que cette PR est MERGED, en mode autonome. Jamais supprimer une branche sauf par ce teardown ou `agent-harness cleanup`.
+- Jamais fusionner une PR qui correspond à `protectedPaths` tant que le flag est actif. Un humain passe `--confirmed`.
+- Jamais ajouter un label, publier un commentaire, ou créer un status pour passer un refus de `ship-merge`.
+- Jamais notifier un progrès. Le run ne déclenche ni build ni release.
+- Jamais retirer un goal bloqué ou escaladé.
 
 ```bash
 agent-harness autonomy on|off|status     # bascule .claude/state/autonomy.on (gitignored, par machine)
@@ -1144,6 +1320,6 @@ Ensuite, la fusion est épinglée au SHA de la tête, puis `agent-harness teardo
 - Ce sont des garde-fous côté client, pas une frontière de sécurité. Un agent avec accès shell peut appeler `gh` directement.
 - La protection de branche sur la branche de base (reviews requises, checks requis, push restreints) est le vrai mécanisme d'application. À configurer sur l'hébergeur.
 - Une PR qui correspond à `protectedPaths` nécessite une fusion humaine (`--confirmed`), quand la clé est définie. Sans cette clé, le mode autonome fusionne toute PR qui passe les garde-fous.
-- OpenCode n'a pas de hooks git-guard ni de stop-gate. Ses règles sont appliquées par l'instruction et le garde-fou de fusion seulement.
+- OpenCode n'enregistre pas les hooks Claude Code. `plugins/autonomy.ts` lance `autonomy-git-guard.sh` avant bash et `ship-stop-gate.sh` quand une session racine passe idle (`instructions/autonomy.md`).
 
 **Parité.** Le mod de statut autonome (`.claude/mods/`, barre d'état et bandeau) est réservé à Claude Code. OpenCode n'a pas d'équivalent.

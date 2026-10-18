@@ -2,6 +2,10 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.6] - 2026-10-18
+
+- `socratic-design` prototypes any question a spike under 30 minutes can settle, and presents that result instead of asking. An L-sized task is restated in the agent's own words, and that restatement is confirmed, before planning.
+
 ## [0.4.5] - 2026-10-18
 
 - Cop and comment-judge badges match the review tags: Important, Nit, Pre-existing, and a question. Only Important blocks, and a finding that cites an AGENTS.md hard rule also blocks. Questions never block. Pre-existing does not block. The APPROVE-WITH-CHANGES verdict and the five-color category ladder are gone. Category labels stay after the tag. The comment-judge JSON `tier` is `Important`, `Nit`, or `❓`.

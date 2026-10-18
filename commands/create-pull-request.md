@@ -42,7 +42,8 @@ Auth check before proceeding:
 
   Example: `feat(api): add user authentication endpoint`
 
-- Body: construct using the **PR body contract** below. Soft guidance — the model SHOULD follow this shape when composing the body, but missing sections do not block PR creation.
+- Body: if `.github/pull_request_template.md` exists, fill it and use it as the body. `## Risk`, `## How to revert`, and `## Tier` must contain real content for this change. Tier is T1 (low), T2, or T3 (sensitive), from blast radius, protected paths, and diff size. It is not a finding tag. When the template file is absent, still include those three sections, then use the **PR body contract** below for anything else. The contract below is soft guidance: missing optional sections do not block PR creation.
+- Read `REVIEW.md` at the repository root when it exists. It is the single reference for the tag mapping (Important, Nit, Pre-existing) and for what blocks a merge. Cite it in the report back to the user. If it is absent, say that the reviewer uses the default tag rules in `code-reviewer`.
 
 #### PR Body Contract
 

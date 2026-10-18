@@ -7,7 +7,7 @@ paths:
 ---
 # TypeScript/JavaScript Patterns
 
-> This file extends [common/patterns.md](../common/patterns.md) with TypeScript/JavaScript specific content.
+> Load the `patterns` skill for the shared patterns. This file is the TypeScript addition.
 
 ## API Response Format
 

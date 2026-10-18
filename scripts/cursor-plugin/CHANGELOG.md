@@ -2,6 +2,11 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.3] - 2026-10-18
+
+- Always-applied Cursor rules drop from 21 files (1438 lines) to 7 files (502 lines). Domain rules load by path or by skill description. ESLint, secret scanners, and `npm audit` are named where prose used to restate them.
+- `performance`, `patterns`, and `hooks` are skills. File-bound rules (`code-comments`, `testing`, `coding-style`, `security`) use `paths`. The `ai-ecosystem-audit` skill checks the always-on budget.
+
 ## [0.4.2] - 2026-10-18
 
 - Pull request template with Risk, How to revert, and Tier. `/setup-harness` offers that template to a project that does not have one.

@@ -10,10 +10,11 @@ You are a pure implementation specialist. You receive a concrete spec and produc
 
 ## Codebase exploration (code-memory first)
 
-When CodeMemory is off, skip this section and do not call it. When CodeMemory is on and the `mcp__code-memory__*` tools are connected, use them FIRST for any code search, "where is X", callers, callees, definitions, dependencies, or importers (`codememory_retrieve` / `_definitions` / `_callers` / `_callees` / `_dependencies` / `_importers`). Fall back to Grep/Glob/Bash only when code-memory can't answer: raw directory listing, filename globbing, reading a path you already know, or a project with no index. See `rules/common/codebase-exploration.md`.
+When CodeMemory is off, skip this section and do not call it. When CodeMemory is on and the `mcp__code-memory__*` tools are connected, use them FIRST for any code search, "where is X", callers, callees, definitions, dependencies, or importers (`codememory_retrieve` / `_definitions` / `_callers` / `_callees` / `_dependencies` / `_importers`). Fall back to Grep/Glob/Bash only when code-memory can't answer: raw directory listing, filename globbing, reading a path you already know, or a project with no index. See the `codebase-exploration` skill.
 
 ## Scope
 
+- Source rules are not session-global. Before editing source, apply `rules/common/coding-style.md`, `rules/common/code-comments.md`, and `rules/common/security.md`. ESLint, secret scanners, and `npm audit` own the mechanical checks those files name. Before the first edit of a new change, load the `open-pr-check` skill.
 - Implement non-test code per the brief given by the caller (build agent or tdd-guide).
 - Apply the project's coding standards and guidelines (see auto-loaded `coding-standards` skill and any project `AGENTS.md` / rules).
 - **Before writing any C#** (`*.csproj`/`*.sln`/`*.slnx` in scope), you MUST load the `dotnet-clean-architecture` skill, the `dotnet-ddd` skill (DDD tactical patterns for domain code), AND `skills/dotnet-cop/enforcement.md`, and apply every BLOCK rule (module isolation, ports/adapters direction, no EF entities in Core, `.AsNoTracking()` on reads, ProblemDetails, no `FromSqlRaw` interpolation, CancellationToken propagation, English-only code & PascalCase English module naming).

@@ -5,19 +5,10 @@
   "instructions": [
     "~/.config/opencode/instructions/subagent-routing.md",
     "~/.config/opencode/instructions/question-handling.md",
-    "~/.config/opencode/instructions/open-pr-check.md",
-    "~/.config/opencode/instructions/codememory-first.md",
     "~/.config/opencode/instructions/verification-gate.md",
-    "~/.config/opencode/instructions/harness-parity.md",
-    "~/.config/opencode/instructions/brief-contract.md",
     "~/.config/opencode/instructions/autonomy.md",
     "~/.config/opencode/instructions/tool-budget.md",
-    "~/.config/opencode/instructions/code-comments.md",
-    "~/.config/opencode/instructions/git-workflow.md",
-    "~/.config/opencode/instructions/worktree-destruction-safety.md",
-    "~/.config/opencode/instructions/coding-style.md",
     "~/.config/opencode/instructions/enforcement-ladder.md",
-    "~/.config/opencode/instructions/testing.md",
   ],
   "agent": {
     "conductor": {

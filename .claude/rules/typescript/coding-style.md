@@ -60,9 +60,9 @@ const validated = schema.parse(input)
 
 ## Console.log
 
-- No `console.log` statements in production code
-- Use proper logging libraries instead
-- See hooks for automatic detection
+ESLint `no-console` owns production `console.log`. Use the repo's logger. The `hooks` skill can warn on edited files when that rule is off.
+
+why-not-tooled: only the repos that have not enabled `no-console`.
 
 ## Any and facades
 

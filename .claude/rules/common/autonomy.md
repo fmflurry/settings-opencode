@@ -42,7 +42,7 @@ These stay forbidden in every mode:
 - any push to the base branch, with or without force
 - `git push --mirror` and `git push --all`
 - worktree removal in any form, including `agent-harness worktree-rm` (it refuses while the flag is on), per the worktree
-  destruction rule (`.claude/rules/common/worktree-destruction-safety.md`). The one exception is the teardown in rule (d).
+  destruction rule (the `worktree-destruction-safety` skill). The one exception is the teardown in rule (d).
 - raw branch deletion: `git branch -D`, `git push --delete` or `git push origin :<ref>`, `gh api -X DELETE .../git/refs/heads/...`.
   Only `agent-harness cleanup` deletes branches.
 - commands on the deny list in `.claude/settings.json`, and the Bash commands the git guard hook denies (merges

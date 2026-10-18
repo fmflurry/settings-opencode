@@ -51,6 +51,18 @@ Match mirrors by logical name and role, not by byte equality. Compare purpose, t
 - **Coherence gap:** a required purpose, trigger, owner, output, mutation boundary, route, or evidence rule is absent, ambiguous, or inconsistent.
 - **Relevance gap:** an artifact is unsupported by the selected relevance mode's current stack/conventions, or relevant stack/conventions lack a needed harness counterpart. This is not a product-source-quality judgment.
 
+## Always-on budget
+
+Count session-global rules. A domain or file-bound rule that is still session-global is a **confirmed** finding. The budget is 8 `alwaysApply: true` Cursor rules.
+
+Check all of these:
+
+- Cursor: `scripts/cursor-plugin/config.json` `rules.always`, plus `rules/conductor.mdc` when the plugin is built, plus `rules/always__harness.mdc` only when `CLAUDE.md` still has text after `@` imports are stripped. Count built `.mdc` files whose frontmatter says `alwaysApply: true` when `plugins/fmflurry-harness/rules/` exists. More than 8 is a confirmed finding.
+- Claude: every pathless file under `.claude/rules/` is session-global, because Claude loads that directory unconditionally. The only pathless rules are `enforcement-ladder`, `orchestration`, `question-handling`, `autonomy`, `verification-gate`, and `tool-budget`. An `@` import in `.claude/CLAUDE.md` of any other rule is a confirmed finding.
+- OpenCode: `opencode.jsonc` `instructions` lists only the universal twins (`subagent-routing`, `question-handling`, `verification-gate`, `autonomy`, `tool-budget`, `enforcement-ladder`). `code-comments`, `testing`, `coding-style`, `security`, `performance`, `patterns`, and `hooks` in that array are a confirmed finding.
+- Reachability: a rule that left the always-on set must still be reachable by a `paths:` / `globs` list, an agent-requested rule `description`, a skill `description`, or an agent prompt that names the file. Missing all four is a confirmed finding.
+- Tool duplicates: a rule that restates a check ESLint, a secret scanner, or `npm audit` already owns, and does not name that tool, is a **likely** finding. The prose should point at the tool and keep only the gap.
+
 ## gc.platform relevance criteria
 
 In `gc-platform` mode, use only current repository evidence for relevance: project markers and documented conventions for the Angular frontend, .NET backend, tests, API specifications, and harness rules. Do not infer relevance from user-home assets or inspect application implementation quality. In `portable` mode, evaluate whether the artifact remains coherent as a generic OpenCode/Claude harness asset.

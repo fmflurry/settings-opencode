@@ -15,7 +15,7 @@
 >
 > - **Orientation, not scanning.** One `code-memory_codememory_retrieve` call surfaces the right paths, symbols, and prior decisions; `grep`/`read` only run afterwards for exact verification.
 > - **Cross-session memory.** Episodes and findings persist — agents pick up where the last session left off instead of re-discovering the repo from scratch.
-> - **Wired in by default.** `instructions/codememory-first.md` is loaded at session start, and `code-memory_*` tools are pre-allowlisted for the conductor and every specialist subagent. Cloud and remote agents skip CodeMemory (`docs/codememory-cloud.md`). `FMFLURRY_CODEMEMORY=on` keeps it on.
+> - **Wired in by default.** the `codebase-exploration` skill is loaded at session start, and `code-memory_*` tools are pre-allowlisted for the conductor and every specialist subagent. Cloud and remote agents skip CodeMemory (`docs/codememory-cloud.md`). `FMFLURRY_CODEMEMORY=on` keeps it on.
 
 # OpenCode + Claude Code Setup
 
@@ -35,7 +35,7 @@ A hardened primary `conductor` agent backed by **25 specialist sub-agents**, wir
 | Skills                       | 69    | canonical set in `skills/*/SKILL.md`; `skill-creator` is runtime-only and git-ignored  |
 | Command templates            | 37    | `commands/*.md`; **21** pinned in `opencode.jsonc`                                      |
 | Session-start instructions   | 12    | loaded from `instructions/` (`caveman-ultra.md` is not loaded)                          |
-| `.claude` rule packs         | 22    | 17 under `rules/common/`, 5 under `rules/typescript/`                                   |
+| `.claude` rule packs         | 15    | 6 always-on under `rules/common/`, 4 path-scoped, 5 under `rules/typescript/`           |
 | Hooks                        | 7     | `.claude/hooks/*.sh`                                                                    |
 | MCP servers                  | 6     | 1 enabled (`code-memory`), 5 disabled by default                                        |
 | Custom tool files            | 4     | `run-tests`, `check-coverage`, `security-audit`, plus the `index.ts` barrel             |
@@ -290,11 +290,11 @@ If your provider doesn't support `reasoningEffort`, OpenCode silently ignores it
 
 #### 4. Install MCP server prerequisites
 
-`opencode.jsonc` declares six MCP servers: one enabled by default (`code-memory`) and five disabled (`context7`, `blender`, `wallaby`, `Figma`, `smartbear-swagger`). **CodeMemory is strongly recommended** — `instructions/codememory-first.md` routes repo orientation through it before falling back to `grep`/`read`. The others are optional but documented here so you know what you're opting into.
+`opencode.jsonc` declares six MCP servers: one enabled by default (`code-memory`) and five disabled (`context7`, `blender`, `wallaby`, `Figma`, `smartbear-swagger`). **CodeMemory is strongly recommended** — the `codebase-exploration` skill routes repo orientation through it before falling back to `grep`/`read`. The others are optional but documented here so you know what you're opting into.
 
 | Server            | Install                                                                                        | Status                                                                                                                                                   |
 | ----------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| code-memory       | `uvx --from flurryx-code-memory@latest code-memory-mcp` (auto-installed on first use)          | **Recommended.** Enabled. Semantic repo orientation; `code-memory_*` tools are pre-allowlisted for every subagent. Pairs with `instructions/codememory-first.md`. |
+| code-memory       | `uvx --from flurryx-code-memory@latest code-memory-mcp` (auto-installed on first use)          | **Recommended.** Enabled. Semantic repo orientation; `code-memory_*` tools are pre-allowlisted for every subagent. Pairs with the `codebase-exploration` skill. |
 | context7          | nothing — `npx -y @upstash/context7-mcp@latest`                                                | Disabled by default. Live docs lookup.                                                                                                                    |
 | blender           | `uv --directory $HOME/dev/blender_mcp/mcp run blender-mcp`                                     | Disabled by default. Blender scene tooling; drives the `gaudi` agent when enabled.                                                                        |
 | wallaby           | install [Wallaby.js](https://wallabyjs.com) and run `wallaby update-mcp`                       | Disabled by default. Runtime-test introspection.                                                                                                          |
@@ -400,7 +400,7 @@ Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primar
 - TUI plugins: `tui-plugins/*.tsx` (registered in `tui.json`; `autonomy-status.tsx` is the autonomy sidebar panel).
 - Custom tools: `tools/*.ts`.
 - Mode notes: `contexts/*.md`.
-- Global instructions: `instructions/*.md` (12 loaded at session start; `caveman-ultra.md` is present but not loaded).
+- Global instructions: `instructions/*.md` (6 loaded at session start; file-bound and situational docs are skills or unloaded instruction files).
 - Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`, `scripts/llm-metrics-dashboard.ts` (live llm-metrics dashboard), `scripts/settings-sync.sh`, `scripts/sync-skills.sh` (sync canonical skill set to both harnesses), `scripts/skill-drift-check.sh` (read-only drift detector).
 - Install entry points: `bootstrap.sh`, `bootstrap.ps1`, `install.sh`, `install-cursor.sh`.
 - Claude mirror: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/agents/`, `.claude/skills/` (synced from the canonical set on install), `.claude/commands/`.
@@ -412,20 +412,14 @@ Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primar
 
 Six concerns wired in one file:
 
-1. `instructions`: always-on docs loaded at session start. Currently **13**:
+1. `instructions`: always-on docs loaded at session start. Currently **6**:
    - `instructions/subagent-routing.md` — Task-first subagent delegation gate.
    - `instructions/question-handling.md` — blocking vs non-blocking question protocol.
-   - `instructions/open-pr-check.md` — check for an open PR before starting work.
-   - `instructions/codememory-first.md` — prefer [CodeMemory](https://github.com/fmflurry/code-memory) MCP (`code-memory_*` tools) for repo orientation before `grep`/`read`.
    - `instructions/verification-gate.md` — independent build/test verification before "done".
-   - `instructions/harness-parity.md` — keep `.claude/` and `.opencode/` in parity.
-   - `instructions/brief-contract.md` — the 6-field subagent brief contract.
+   - `instructions/autonomy.md` — destructive-action and autonomous-mode limits.
    - `instructions/tool-budget.md` — verification-vs-exploration budget.
-   - `instructions/code-comments.md` — comment truthfulness + forbidden classes.
-   - `instructions/git-workflow.md` — commit cohesion, staging discipline, English commit messages.
-   - `instructions/worktree-destruction-safety.md` — pre-removal checks, snapshots, the `agent-harness worktree-rm` removal path, and the goal worktree teardown.
-   - `instructions/coding-style.md` — immutability, file size, naming, error handling.
-   - `instructions/testing.md` — 80%+ coverage, RED-GREEN-REFACTOR, test types.
+   - `instructions/enforcement-ladder.md` — code, then lint or tests, then a prose rule, then review.
+   File-bound guidance stays on disk and off this array: `instructions/code-comments.md`, `instructions/coding-style.md`, `instructions/testing.md`, `instructions/security.md` (the coder or tdd-guide prompt points at them). Situational guidance is a skill: `open-pr-check`, `codebase-exploration`, `harness-parity`, `brief-contract`, `git-workflow`, `worktree-destruction-safety`, `performance`, `patterns`, `hooks`, `agent-roster`.
    > `instructions/caveman-ultra.md` sits in the repo but is **not** in the `instructions` array, so it isn't loaded at session start.
 2. `default_agent`: `conductor` (orchestrator-only — cannot write/edit).
 3. `agent`: 26 definitions (model + reasoning effort + prompt + tool allowlist). All models are env-driven (`OPENCODE_MODEL_*`, `OPENCODE_REASONING_*`) — see [Public install](#public-install).
@@ -483,7 +477,7 @@ A test-first variant routes `tdd-guide` first (RED), then `tdd-guide` delegates 
 
 #### 4. The brief contract
 
-Before dispatching `coder`, `writer`, or `tdd-guide`, the conductor emits a **6-field brief** (`instructions/brief-contract.md`): `TASK` (one imperative outcome), `FILES` (authoritative path + line ranges), `CHANGE` (named target state), `DONE-WHEN` (an executable command that must exit 0), `OUT OF SCOPE`, and `CONTEXT ALREADY RESOLVED` — plus a `BUDGET`. Precise briefs cost roughly 4× fewer tokens than open-ended ones, so this is enforced, not advice.
+Before dispatching `coder`, `writer`, or `tdd-guide`, the conductor emits a **6-field brief** (the `brief-contract` skill): `TASK` (one imperative outcome), `FILES` (authoritative path + line ranges), `CHANGE` (named target state), `DONE-WHEN` (an executable command that must exit 0), `OUT OF SCOPE`, and `CONTEXT ALREADY RESOLVED` — plus a `BUDGET`. Precise briefs cost roughly 4× fewer tokens than open-ended ones, so this is enforced, not advice.
 
 #### 5. Question handling
 
@@ -499,11 +493,11 @@ Nobody says "done" without fresh evidence (`instructions/verification-gate.md`).
 
 #### 8. Worktree destruction safety
 
-Removing a worktree is treated like `rm -rf`, not bookkeeping (`instructions/worktree-destruction-safety.md`). The only removal path is `agent-harness worktree-rm <path> --confirmed`; without `--confirmed` it is a dry run that exits 3. It runs the pre-removal checks: `git status --porcelain`, commits not on the base branch, activity (fails closed when unknown), and every other checkout of the repo (main and sibling worktrees) clean or snapshotted. It lists the target's ignored files before removing. Snapshots are recoverable refs under `refs/harness/snapshots/<ts>-<n>` that capture tracked content, file modes, index state, and untracked files. In Orca-managed repos the removal goes through Orca, never with `--force`. The command then waits for the removal to finish, settles, and re-scans every other checkout; a change is reported as `changed during removal`. A changed checkout is restored only if its HEAD is unchanged and it is clean. Otherwise exit 4 with inspect and restore commands, refs kept. On success each snapshot sha is printed before its ref is released. Not covered: ignored files, untracked nested git repositories (reported as a note), and submodule contents. Any failed check is a hard stop reported to the human. The guard denies raw `orca worktree rm`, `git worktree remove|prune|move` (including global options and aliases), and recursive `rm`/`mv`/`trash`/`rsync --delete`/`find -delete` on a worktree or its parent, in every mode. It is text matching and cannot catch commands assembled at run time; the script's checks are the real boundary. `git worktree prune -n` stays allowed. Worktree removal is forbidden in autonomous mode, and `worktree-rm` refuses while autonomy is on. One exception: `agent-harness teardown-merged-worktree <pr>` removes the registered goal worktree of a MERGED PR in autonomous mode. It re-runs the checks against the PR head (not an `origin/<base>..HEAD` count, because squash merges rewrite history), never uses `--force`, and keeps the registry when a step is partial. Goal worktrees are created by `agent-harness ship-init` and registered in `<git-common-dir>/agent-harness/goals/<slug>.json`.
+Removing a worktree is treated like `rm -rf`, not bookkeeping (the `worktree-destruction-safety` skill). The only removal path is `agent-harness worktree-rm <path> --confirmed`; without `--confirmed` it is a dry run that exits 3. It runs the pre-removal checks: `git status --porcelain`, commits not on the base branch, activity (fails closed when unknown), and every other checkout of the repo (main and sibling worktrees) clean or snapshotted. It lists the target's ignored files before removing. Snapshots are recoverable refs under `refs/harness/snapshots/<ts>-<n>` that capture tracked content, file modes, index state, and untracked files. In Orca-managed repos the removal goes through Orca, never with `--force`. The command then waits for the removal to finish, settles, and re-scans every other checkout; a change is reported as `changed during removal`. A changed checkout is restored only if its HEAD is unchanged and it is clean. Otherwise exit 4 with inspect and restore commands, refs kept. On success each snapshot sha is printed before its ref is released. Not covered: ignored files, untracked nested git repositories (reported as a note), and submodule contents. Any failed check is a hard stop reported to the human. The guard denies raw `orca worktree rm`, `git worktree remove|prune|move` (including global options and aliases), and recursive `rm`/`mv`/`trash`/`rsync --delete`/`find -delete` on a worktree or its parent, in every mode. It is text matching and cannot catch commands assembled at run time; the script's checks are the real boundary. `git worktree prune -n` stays allowed. Worktree removal is forbidden in autonomous mode, and `worktree-rm` refuses while autonomy is on. One exception: `agent-harness teardown-merged-worktree <pr>` removes the registered goal worktree of a MERGED PR in autonomous mode. It re-runs the checks against the PR head (not an `origin/<base>..HEAD` count, because squash merges rewrite history), never uses `--force`, and keeps the registry when a step is partial. Goal worktrees are created by `agent-harness ship-init` and registered in `<git-common-dir>/agent-harness/goals/<slug>.json`.
 
 #### 9. Codememory-first
 
-When the `code-memory` MCP server is connected and CodeMemory is on, its tools are the mandatory first choice for search, callers, definitions, importers, and dependencies (`instructions/codememory-first.md`). `grep`/`glob`/`bash` are fallbacks only — raw listing, filename globs, or a known path region. Cloud and remote agents skip CodeMemory (`docs/codememory-cloud.md`). This is the rule that makes orientation cheap for every other agent.
+When the `code-memory` MCP server is connected and CodeMemory is on, its tools are the mandatory first choice for search, callers, definitions, importers, and dependencies (the `codebase-exploration` skill). `grep`/`glob`/`bash` are fallbacks only — raw listing, filename globs, or a known path region. Cloud and remote agents skip CodeMemory (`docs/codememory-cloud.md`). This is the rule that makes orientation cheap for every other agent.
 
 ### Hardened sub-agent orchestration
 
@@ -637,9 +631,9 @@ The PostgreSQL and Playwright sets are **gc.platform-specific project playbooks*
 
 ### Instructions & rules
 
-**12 session-start instructions** (listed in [Configuration](#config-en)) are the operating rules every agent loads. They sit at `instructions/*.md` and cover: subagent routing, question handling, codememory-first, the verification gate, harness parity, the brief contract, tool budget, code comments, git workflow, worktree destruction safety, coding style, and testing.
+**6 session-start instructions** (listed in [Configuration](#config-en)) are the operating rules every agent loads: subagent routing, question handling, the verification gate, autonomy, the tool budget, and the enforcement ladder.
 
-The Claude Code side carries the same doctrine as **22 rule packs** under `.claude/rules/`: **17** in `rules/common/` (agents, brief contract, code comments, codebase exploration, coding style, git workflow, harness parity, hooks, orchestration, patterns, performance, question handling, security, testing, tool budget, verification gate, worktree safety) and **5** in `rules/typescript/` (coding style, hooks, patterns, security, testing).
+The Claude Code side keeps the same six as pathless rules under `.claude/rules/common/`, plus path-scoped rules for code comments, coding style, security, and testing, and five `rules/typescript/` packs. Domain text that is not file-bound lives in skills (`codebase-exploration`, `brief-contract`, `git-workflow`, `worktree-destruction-safety`, `performance`, `patterns`, `hooks`, `agent-roster`, `open-pr-check`, `harness-parity`).
 
 Two top-level instruction files, distinct jobs:
 
@@ -690,7 +684,7 @@ Reusable OpenCode tools exposed via `tools/index.ts`:
 - `CLAUDE.md` — global user instructions (no `any`, facade != UseCase).
 - `settings.json` — allow/deny permissions, env (`API_TIMEOUT_MS=3000000`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80`), `PreToolUse` / `PostToolUse` / `Stop` hooks. Seeded on first install; personal edits preserved on reinstall.
 - `hooks/*.sh` — seven hooks: pre-tool-use warnings, CodeMemory preference, RTK rewrite, tool-budget nudge, notification, stop, and subagent-stop.
-- `rules/common/*.md` + `rules/typescript/*.md` — 22 rule packs (style, testing, security, patterns, hooks, agents, orchestration).
+- `rules/common/*.md` + `rules/typescript/*.md` — 15 rule packs. Six are always-on. Code comments, coding style, security, and testing are path-scoped. The five `typescript/` packs stay path-scoped. Patterns, hooks, and the agent roster are skills.
 - `agents/*.md` — 26 agent definitions mirroring the OpenCode roster.
 - `commands/*.md` — Claude commands (`/create-pull-request`, `/update-codemaps`, arena, OpenSpec).
 - `skills/**` — the skill mirror, synced from the canonical set by `scripts/sync-skills.sh` on install. It is **not** guaranteed to equal today's `skills/` (the canonical set grows between syncs), so treat `skills/` as the source of truth and run `settings-sync --skills-only` to catch the mirror up.
@@ -732,7 +726,7 @@ bump the plugin version + changelog in any PR touching plugin sources.
 
 ### How it fits together
 
-1. Startup: OpenCode loads `opencode.jsonc` -> 12 always-on instructions -> auto-loads every plugin in `plugins/` plus the TUI plugins registered in `tui.json`.
+1. Startup: OpenCode loads `opencode.jsonc` -> 6 always-on instructions -> auto-loads every plugin in `plugins/` plus the TUI plugins registered in `tui.json`. Skills load when their description matches.
 2. Dev: `conductor` executes — it cannot write files; it dispatches Task calls to specialists. `secret-file-guard` blocks `.env` access; `tool-budget` nudges verification over exploration.
 3. Workflow: `conductor` routes to specialists through Task (perm-enforced); `/plan`, `/tdd`, `/security`, etc. force the same routing explicitly. The brief contract, question protocol, and verification gate bracket each hand-off.
 4. Idle/completion: `llm-metrics` persists per-call metrics; `notification` sends completion/question/permission alerts.
@@ -853,7 +847,7 @@ Chiffres (au **2026-10-02**) : **26 agents** (1 conductor + 25 specialistes) · 
 - TUI plugins: `tui-plugins/*.tsx` (registered in `tui.json`; `autonomy-status.tsx` is the autonomy sidebar panel).
 - Outils custom: `tools/*.ts`.
 - Contextes (memos de mode): `contexts/*.md`.
-- Instructions globales: `instructions/*.md` (12 chargees au demarrage; `caveman-ultra.md` n'est pas charge).
+- Instructions globales: `instructions/*.md` (6 chargees au demarrage; le reste est un skill ou un fichier non charge).
 - Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`, `scripts/llm-metrics-dashboard.ts`, `scripts/settings-sync.sh`, `scripts/sync-skills.sh`, `scripts/skill-drift-check.sh`.
 - Installeurs: `bootstrap.sh`, `bootstrap.ps1`, `install.sh`, `install-cursor.sh`.
 - Mirror Claude Code: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/agents/`, `.claude/skills/`, `.claude/commands/`.
@@ -865,7 +859,7 @@ Chiffres (au **2026-10-02**) : **26 agents** (1 conductor + 25 specialistes) · 
 
 Le fichier orchestre six choses:
 
-1. `instructions`: docs toujours chargees au demarrage (12 au total) — routing sous-agent, question handling, codememory-first, verification gate, harness parity, brief contract, tool budget, code comments, git workflow, worktree safety, coding style, testing.
+1. `instructions`: docs toujours chargees au demarrage (6) — routing sous-agent, question handling, verification gate, autonomie, tool budget, enforcement ladder. Le reste est un skill ou une instruction hors tableau (`code-comments`, `coding-style`, `testing`, `security`).
 2. `default_agent`: `conductor` (orchestrateur sans droit d'ecriture).
 3. `agent`: definitions des sous-agents (modele + reasoning effort + prompt + outils autorises). Tous les modeles passent par variables d'environnement (`OPENCODE_MODEL_*`, `OPENCODE_REASONING_*`).
 4. `command`: mappe `/<name>` -> template + sous-agent + `subtask`; **21** entrees epinglees.
@@ -991,9 +985,9 @@ Les ensembles PostgreSQL et Playwright sont des **playbooks projet specifiques a
 
 ### Instructions & règles
 
-**12 instructions de demarrage** (`instructions/*.md`) que chaque agent charge: routage des sous-agents, gestion des questions, codememory-first, verification gate, parite des harnesses, brief contract, budget d'outils, commentaires de code, workflow git, securite de destruction des worktrees, style de code et tests.
+**6 instructions de demarrage** (`instructions/*.md`): routage, questions, verification, autonomie, budget d'outils, enforcement ladder. Le reste est un skill ou une regle bornee par `paths:`.
 
-Le cote Claude Code porte la meme doctrine via **22 packs de règles** dans `.claude/rules/`: **17** dans `rules/common/` et **5** dans `rules/typescript/`.
+Le cote Claude Code garde ces six regles sans `paths:`, plus les regles bornees (commentaires, style, securite, tests) et **5** packs `rules/typescript/`.
 
 Deux fichiers d'instructions distincts: le **`CLAUDE.md` racine** (guidelines comportementales, alimente par les packs via `@rules/...`) et **`.claude/CLAUDE.md`** (instructions globales installees dans `~/.claude`, avec l'essentiel cross-projet).
 
@@ -1039,7 +1033,7 @@ Outils OpenCode reutilisables exposes via `tools/index.ts`:
 - `CLAUDE.md` — instructions globales (no `any`, facade != UseCase).
 - `settings.json` — permissions allow/deny, env vars (`API_TIMEOUT_MS=3000000`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80`), hooks `PreToolUse` / `PostToolUse` / `Stop`. Initialisé à la première install; éditions conservées à la réinstall.
 - `hooks/*.sh` — sept hooks (warnings, CodeMemory, RTK rewrite, tool-budget, notification, stop, subagent-stop).
-- `rules/common/*.md` + `rules/typescript/*.md` — 22 packs de règles.
+- `rules/common/*.md` + `rules/typescript/*.md` — 15 packs. Six toujours charges, quatre bornes par `paths:`, cinq packs `typescript/`.
 - `agents/*.md` — 26 agents mirroir du roster OpenCode.
 - `commands/*.md` — commandes Claude (`/create-pull-request`, `/update-codemaps`, arena, OpenSpec).
 - `skills/**` — miroir des skills, synchronisé via `scripts/sync-skills.sh` à l'install. **Pas garanti identique** à `skills/` du jour (le set canonical grandit entre les syncs): `skills/` reste la source de verite; `settings-sync --skills-only` pour reconcilier.
@@ -1079,7 +1073,7 @@ bump the plugin version + changelog in any PR touching plugin sources.
 
 ### Comment tout s'emboite
 
-1. Demarrage: OpenCode charge `opencode.jsonc` -> 12 instructions globales -> auto-charge chaque plugin de `plugins/` plus les plugins TUI enregistres dans `tui.json`.
+1. Demarrage: OpenCode charge `opencode.jsonc` -> 6 instructions globales -> auto-charge chaque plugin de `plugins/` plus les plugins TUI enregistres dans `tui.json`. Les skills se chargent selon leur description.
 2. Dev: `conductor` execute — il n'a pas le droit d'ecrire; il dispatche des Task vers les specialistes. `secret-file-guard` bloque l'acces `.env`; `tool-budget` pousse la verification.
 3. Workflow: routage via Task (impose par permissions); `/plan`, `/tdd`, `/security`, etc. forcent explicitement le meme routage. Brief contract, question protocol et verification gate encadrent chaque passage.
 4. Idle/completion: `llm-metrics` persiste les metriques par appel; `notification` envoie les alertes.

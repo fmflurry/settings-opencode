@@ -25,7 +25,7 @@ Unknown commands default to NOT counted. Under-enforce rather than block real wo
 ## Exploratory Budget Rules
 
 - **Default**: 3 calls per dispatched task unless the brief raises it.
-- **Pre-requisite**: When CodeMemory is on, before the 1st exploratory call, at least one code-memory call must have been made. Before the 4th, at least two code-memory calls. When CodeMemory is off, skip this prerequisite and do not call it. See `rules/common/codebase-exploration.md`.
+- **Pre-requisite**: When CodeMemory is on, before the 1st exploratory call, at least one code-memory call must have been made. Before the 4th, at least two code-memory calls. When CodeMemory is off, skip this prerequisite and do not call it. See the `codebase-exploration` skill.
 - **Target ratio**: exploratory bash : edits ≤ 2 (proven achievable at 1.35).
 
 ## Trip Levels (L1 and L2 ONLY)

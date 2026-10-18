@@ -865,6 +865,160 @@ check "git-guard (flag off) denies ANSI-C quoted push" denied "$(printf '%s' "gi
 check "git-guard (flag off) denies --config-env" denied 'git --config-env=push.default=VAR status'
 check "git-guard (flag off) denies --config-env split form" denied 'git --config-env alias.x=VAR status'
 
+PROBE_BASE="$TMP/baserepo"
+probe_decision() { # mode cmd
+  rm -f "$TMP/state/autonomy.on"; [ "$1" = on ] && flag_on
+  local d; d="$(decision "$2")"; echo "${d:-allow}"
+}
+PROBE_CMDS="$(cat <<'CMDS'
+allow|allow|git reset --har
+allow|allow|git reset --ha HEAD~1
+allow|allow|git commit --no-verif -m x
+allow|allow|git push --no-ver origin feat
+allow|allow|git push --mirro origin
+allow|allow|git push --al origin
+allow|allow|git push --delet origin feat
+allow|allow|git push --prun origin
+allow|allow|git branch --del feat
+deny|allow|git branch -D feat
+allow|allow|git push origin main~0
+allow|allow|git push origin main^0
+deny|allow|git push origin refs/heads/main:refs/heads/main
+allow|allow|git push origin heads/main
+allow|allow|git push origin HEAD:heads/main
+allow|allow|git push origin HEAD:refs/heads//main
+deny|allow|git push origin tag main
+allow|allow|git push origin
+allow|allow|git push
+allow|allow|git push origin HEAD
+allow|allow|git push origin @
+deny|allow|git update-ref -d refs/heads/feat
+allow|allow|git update-ref refs/heads/main HEAD
+deny|allow|git push --force-with-lease origin main
+deny|allow|git push origin +HEAD:main
+deny|allow|git -c core.hooksPath=/dev/null commit -m x
+allow|allow|git commit -n -m x
+allow|allow|git merge feat
+allow|allow|git pull origin main
+deny|allow|git push origin HEAD:main HEAD:feat
+deny|allow|git push origin feat main
+deny|allow|git push origin --repo=x main
+deny|allow|git -C @B@ push origin
+deny|allow|GIT_DIR=@B@/.git git push origin
+deny|allow|git --git-dir=@B@/.git push origin
+deny|allow|cd @B@ && git push origin
+deny|allow|cd @B@; git push origin HEAD
+deny|allow|pushd @B@ && git push
+deny|allow|export GIT_DIR=@B@/.git; git push origin
+deny|allow|env GIT_DIR=@B@/.git git push origin
+deny|allow|(cd @B@ && git push)
+deny|allow|echo $(cd @B@ && git push)
+deny|allow|cd ~/Workspace/isagri/gc.platform && git push
+allow|allow|cd ../../../../Workspace/isagri/gc.platform && git push
+allow|allow|echo main | xargs git push origin
+deny|allow|cd /tmp && cd @B@ && git push
+deny|allow|git --git-dir @B@/.git push
+deny|allow|cd "@B@" && git push
+deny|allow|cd $HOME/Workspace/isagri/gc.platform && git push
+deny|allow|git push origin `echo main`
+deny|allow|git push origin $'main'
+deny|allow|git push origin {main,feat}
+deny|allow|git push origin m{a,}in
+deny|allow|git push origin "$B"
+deny|allow|B=main; git push origin $B
+deny|allow|sh -c 'cd @B@ && git push'
+deny|deny|a=git; $a push origin main
+deny|allow|command git push origin main
+deny|allow|\git push origin main
+deny|allow|/usr/bin/git push origin main
+deny|allow|git push origin ma''in
+deny|allow|nohup git push origin main
+deny|allow|time git push origin main
+deny|allow|timeout 5 git push origin main
+deny|allow|sudo -u x git push origin main
+deny|allow|exec git push origin main
+deny|allow|git push origin main&
+deny|allow|git push origin main|cat
+deny|allow|git push -- origin main
+deny|allow|git -c x=y push origin main
+deny|allow|git push --repo origin main
+allow|allow|git -C @B@ worktree list
+allow|allow|GIT_WORK_TREE=@B@ git push origin
+allow|allow|git --work-tree=@B@ push
+allow|allow|git config remote.origin.push HEAD:main
+allow|allow|git config push.default upstream
+allow|allow|git branch -u origin/main
+allow|allow|git config core.hooksPath /dev/null
+allow|allow|echo main | xargs git push origin
+allow|allow|git push origin
+allow|allow|git update-ref refs/heads/main HEAD
+deny|allow|gh alias set m "pr merge"
+allow|allow|gh m 1
+deny|allow|gh pr merge 1
+deny|allow|gh -R o/r pr merge 1
+deny|allow|X='a b' gh pr merge 1
+deny|allow|gh api -X PUT repos/o/r/pulls/1/merge
+deny|allow|gh api repos/o/r/pulls/1/merge -X PUT
+deny|allow|gh api --method=put repos/o/r/pulls/1/merge
+deny|allow|gh api repos/o/r/pulls/1/merge -f merge_method=squash
+deny|allow|gh api repos/o/r/git/refs/heads/feat -X DELETE
+deny|allow|gh api graphql -f query='mutation{mergePullRequest(input:{pullRequestId:"x"}){clientMutationId}}'
+allow|allow|gh pr review 1 --approve
+deny|allow|git push origin "main
+deny|allow|git push origin 'main
+allow|allow|git push origin main\
+deny|allow|git push origin $'ma\x69n'
+deny|allow|git push origin "ma"\@NL@in
+CMDS
+)"
+while IFS='|' read -r p_on p_off p_cmd; do
+  p_cmd="${p_cmd//@B@/$PROBE_BASE}"; p_cmd="${p_cmd//@NL@/$'\n'}"
+  check "git-guard probe (flag on) $p_on: $p_cmd" test "$(probe_decision on "$p_cmd")" = "$p_on"
+  check "git-guard probe (flag off) $p_off: $p_cmd" test "$(probe_decision off "$p_cmd")" = "$p_off"
+done <<<"$PROBE_CMDS"
+perf_guard() { # name expected file
+  local json="$TMP/perf.json" t0 t1 out dec ms
+  jq -Rs --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:.}}' <"$3" >"$json"
+  t0="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
+  out="$(cd "$GUARD_CWD" && bash "$HOOKS/autonomy-git-guard.sh" <"$json")"
+  t1="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
+  ms="$(perl -e 'printf "%d", ($ARGV[1] - $ARGV[0]) * 1000' "$t0" "$t1")"
+  dec="$(jq -r '.hookSpecificOutput.permissionDecision // "allow"' <<<"${out:-{\}}")"
+  echo "perf: $1 -> $dec in ${ms}ms"
+  check "git-guard perf decision: $1" test "$dec" = "$2"
+  check "git-guard perf under 1000ms: $1 (took ${ms}ms)" test "$ms" -lt 1000
+}
+perf_input() { # file prefix lineText lines suffix
+  { printf '%s' "$2"; perl -e 'print "$ARGV[0]\n" x $ARGV[1]' "$3" "$4"; printf '%s' "$5"; } >"$1"
+}
+reset; flag_on
+PF="$TMP/perf.cmd"
+{ printf 'echo '; perl -e 'print "a" x 200000'; printf ' && git push origin main'; } >"$PF"
+perf_guard "200K one-liner then push to base" deny "$PF"
+perf_input "$PF" $'cat <<EOF\n' 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' 5000 'EOF'
+perf_guard "5000-line heredoc without git" allow "$PF"
+perf_input "$PF" '' 'git status' 5000 ''
+perf_guard "5000 lines of git status" allow "$PF"
+{ printf 'gh pr create --body "'; perl -e 'print "a" x 200000'; printf '"'; } >"$PF"
+perf_guard "gh pr create with 200K body" allow "$PF"
+{ printf "echo '"; perl -e 'print "a" x 200000'; printf "'"; } >"$PF"
+perf_guard "200K single-quoted word" allow "$PF"
+perf_input "$PF" '' 'python -c x' 5000 ''
+perf_guard "5000 lines of python -c x" allow "$PF"
+perf_input "$PF" $'cat <<EOF\n' 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' 2000 $'EOF\ngit push origin main'
+perf_guard "push to base after 2000-line heredoc" deny "$PF"
+perf_input "$PF" '' 'cd /tmp' 5000 ''
+perf_guard "5000 lines of cd /tmp" allow "$PF"
+perf_input "$PF" '' 'export A=b' 5000 ''
+perf_guard "5000 lines of export A=b" allow "$PF"
+perf_input "$PF" '' 'rm -f x' 5000 ''
+perf_guard "5000 lines of rm -f x" allow "$PF"
+perf_input "$PF" '' 'echo x > /tmp/f' 5000 ''
+perf_guard "5000 lines of echo x > /tmp/f" allow "$PF"
+perf_input "$PF" '' 'gh pr view 1' 5000 ''
+perf_guard "5000 lines of gh pr view 1" allow "$PF"
+rm -f "$TMP/state/autonomy.on"
+
 WGF="$(mktemp -d)"; WGF="$(cd -P "$WGF" && pwd)"
 mkdir -p "$WGF/main" "$WGF/st"
 git -C "$WGF/main" init -q . && git -C "$WGF/main" -c user.email=a@b -c user.name=n commit -q --allow-empty -m i

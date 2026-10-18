@@ -33,7 +33,8 @@ test('refactor mode pins current behavior and freezes those tests', () => {
 
 test('tdd-guide says a refactor already passes', () => {
   assert.match(read('.claude/agents/tdd-guide.md'), /already pass/);
-  assert.match(read('opencode.jsonc'), /"tdd-guide"[\s\S]{0,500}already pass/);
+  const agent = read('opencode.jsonc').split('"tdd-guide": {')[1]?.slice(0, 800) ?? '';
+  assert.match(agent, /already pass/);
 });
 
 test('planner names the pin before blast-radius and verify', () => {

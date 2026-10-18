@@ -15,6 +15,8 @@ This skill ensures all code development follows TDD principles with comprehensiv
 - Adding API endpoints
 - Creating new components
 
+A behavior-preserving restructure uses `/tdd refactor`: characterization tests that pass immediately on the unchanged code. The restructure does not edit those tests. New behavior still starts RED.
+
 ## Core Principles
 
 ### 1. Tests BEFORE Code

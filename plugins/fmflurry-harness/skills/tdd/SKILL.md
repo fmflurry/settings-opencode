@@ -11,6 +11,10 @@ Features are built via **strict TDD discipline**: every behavior emerges via a f
 
 This discipline applies to **all layers**: domain aggregates, Application handlers, Infrastructure implementations.
 
+## Behavior-preserving refactor
+
+A restructure that must keep current behavior does not start RED. `/tdd refactor` writes characterization tests that pass immediately on the unchanged code, then freezes them. The restructure does not edit those tests. A failure on unchanged code means the test is wrong. New behavior still starts RED.
+
 ## Optional: Double-Loop Method (ATDD Outer Loop)
 
 For explicit use-case specification, you may adopt a **two-loop structure**: the outer loop turns a specification into acceptance tests at the handler level (Application layer); the inner loop builds domain behavior via strict RED-GREEN-REFACTOR. The outer loop helps document and test integration points; it is not mandatory.

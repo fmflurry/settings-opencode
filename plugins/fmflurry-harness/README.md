@@ -5,14 +5,14 @@ A conductor that routes every task to the matching specialist subagent (planner,
 ## Install
 
 - Marketplace: `/add-plugin fmflurry-harness` once the plugin is listed.
-- Local: clone [fmflurry/settings-opencode](https://github.com/fmflurry/settings-opencode) and run `./install-cursor.sh`, then run Developer: Reload Window.
+- Local: clone [fmflurry/settings-opencode](https://github.com/fmflurry/settings-opencode) and run `./install-cursor.sh`, then run Developer: Reload Window. The installer also puts `agent-harness` on `~/.local/bin` (scripts under `~/.local/share/fmflurry-harness`).
 
 ## Components
 
 | Component | Contents |
 | --- | --- |
 | Agents (25) | Specialist subagents the conductor delegates to |
-| Skills (83) | Reusable skills, including a `conductor` skill carrying the routing rules |
+| Skills (84) | Reusable skills, including a `conductor` skill carrying the routing rules |
 | Commands (65) | Slash commands for review, git, planning and verification |
 | Rules (16) | Always-on baseline plus the conductor routing rule; TypeScript rules apply on matching files |
 | Hooks | Pre-tool-use guards, command rewriting, code-memory preference, tool budget, stop checks |
@@ -46,7 +46,7 @@ After install, run `/setup-harness`. It writes `~/.cursor/rules/fmflurry-harness
 
 ## Versioning
 
-Manifest version 0.4.7. The build reads it from `scripts/cursor-plugin/config.json` and writes `.cursor-plugin/plugin.json`. History is in `CHANGELOG.md`.
+Manifest version 0.4.8. The build reads it from `scripts/cursor-plugin/config.json` and writes `.cursor-plugin/plugin.json`. History is in `CHANGELOG.md`.
 
 bump the plugin version + changelog in any PR touching plugin sources.
 

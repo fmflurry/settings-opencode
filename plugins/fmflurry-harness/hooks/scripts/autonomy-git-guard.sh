@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # PreToolUse (Bash): in every mode, deny worktree removal (orca/git/rm) except via agent-harness worktree-rm or teardown-merged-worktree, and shell-function or env injection into agent-harness commands; while autonomous, also deny merges, pushes to a base branch (forced or not) and shell edits of protected paths. Fails open on empty input or missing jq.
-# A quote-aware scan denies git and rm words it cannot parse (substitution, ANSI-C quoting, brace expansion). The legacy tokenizer still strips quotes so a quoted ref cannot hide.
+# A quote-aware scan denies git and rm words it cannot parse (substitution, ANSI-C quoting, brace expansion), and, while autonomous, feeds gh to the same scan so a quoted assignment cannot hide gh pr merge. The legacy tokenizer still strips quotes so a quoted ref cannot hide.
 input="$(cat)"
 command -v jq >/dev/null 2>&1 || exit 0
 cmd="$(jq -r '.tool_input.command // empty' <<<"$input" 2>/dev/null)"
@@ -630,6 +630,19 @@ screen_rm() {
   done
 }
 
+# The legacy tokenizer deletes quotes before it splits, so FOO='a b' gh
+# becomes the command b. check_gh has to see the quote-aware words.
+screen_gh() {
+  [ "$AUTO" = 1 ] || return 0
+  local i="$1"
+  local -a lit=(gh)
+  while [ "$i" -lt "${#words[@]}" ]; do
+    lit+=("$(literalize "${words[$i]}")")
+    i=$((i + 1))
+  done
+  check_gh "${lit[@]}"
+}
+
 screen_segment() {
   local i=0 w b u wb vf o j found
   GIT_DIR_VAL="${P_GIT_DIR:-}"
@@ -701,6 +714,7 @@ screen_segment() {
   case "$b" in
     git) screen_git "$i" ;;
     rm) screen_rm "$i" ;;
+    gh) screen_gh "$i" ;;
   esac
 }
 

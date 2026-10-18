@@ -5,7 +5,7 @@ A conductor that routes every task to the matching specialist subagent (planner,
 ## Install
 
 - Marketplace: `/add-plugin fmflurry-harness` once the plugin is listed.
-- Local: clone [fmflurry/settings-opencode](https://github.com/fmflurry/settings-opencode) and run `./install-cursor.sh`, then run Developer: Reload Window.
+- Local: clone [fmflurry/settings-opencode](https://github.com/fmflurry/settings-opencode) and run `./install-cursor.sh`, then run Developer: Reload Window. The installer also puts `agent-harness` on `~/.local/bin` (scripts under `~/.local/share/fmflurry-harness`).
 
 ## Components
 

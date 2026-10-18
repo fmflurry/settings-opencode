@@ -1084,32 +1084,20 @@ install_notify_scripts() {
     fi
 }
 
-write_harness_marker() {
-    local tool var
-    : > "$1"
-    for tool in gh orca jq; do
-        var="$(printf '%s' "$tool" | tr '[:lower:]' '[:upper:]')"
-        printf '%s=%s\n' "$var" "$(type -P "$tool" || true)" >> "$1"
-    done
-}
+# shellcheck disable=SC1091
+source "$REPO_DIR/scripts/lib/install-agent-harness.sh"
 
 install_agent_harness_scripts() {
     local src_dir="$REPO_DIR/scripts/agent-harness"
     [ -f "$src_dir/agent-harness.sh" ] || return 0
 
-    local dest script
+    local dest
     local dests=()
     [ "$CLAUDE_TARGET_READY" = "1" ] && dests+=("$TARGET_CLAUDE/scripts/agent-harness")
     [ "$OPENCODE_TARGET_READY" = "1" ] && [ "$OPENCODE_TARGET_IS_SOURCE" != "1" ] && dests+=("$TARGET_OPENCODE/scripts/agent-harness")
 
     for dest in "${dests[@]+"${dests[@]}"}"; do
-        mkdir -p "$dest"
-        for script in "$src_dir"/*.sh; do
-            cp "$script" "$dest/$(basename "$script")"
-            chmod +x "$dest/$(basename "$script")"
-        done
-        write_harness_marker "$dest/.installed"
-        ok "installed agent-harness scripts into $dest"
+        install_agent_harness_tree "$dest"
     done
 
     if [ "$OPENCODE_TARGET_READY" = "1" ] && [ "$OPENCODE_TARGET_IS_SOURCE" != "1" ]; then
@@ -1132,14 +1120,7 @@ install_agent_harness_scripts() {
     fi
     [ -n "$harness_root" ] || return 0
 
-    # A wrapper, not a symlink: agent-harness.sh resolves its siblings from its own dirname.
-    local bin_dir="$HOME/.local/bin"
-    local link="$bin_dir/agent-harness"
-    mkdir -p "$bin_dir"
-    [ -L "$link" ] && rm -f "$link"
-    printf '#!/bin/bash -p\nbuiltin exec /bin/bash -p "%s/scripts/agent-harness/agent-harness.sh" "$@"\n' "$harness_root" > "$link"
-    chmod +x "$link"
-    ok "installed $link"
+    install_agent_harness_wrapper "$harness_root"
 }
 
 merge_agent_harness_settings() {

@@ -16,6 +16,7 @@
     "~/.config/opencode/instructions/git-workflow.md",
     "~/.config/opencode/instructions/worktree-destruction-safety.md",
     "~/.config/opencode/instructions/coding-style.md",
+    "~/.config/opencode/instructions/enforcement-ladder.md",
     "~/.config/opencode/instructions/testing.md",
   ],
   "agent": {

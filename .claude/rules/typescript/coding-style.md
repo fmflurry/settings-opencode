@@ -63,3 +63,10 @@ const validated = schema.parse(input)
 - No `console.log` statements in production code
 - Use proper logging libraries instead
 - See hooks for automatic detection
+
+## Any and facades
+
+- Never use the `any` type.
+  why-not-tooled: not every target repo enables `@typescript-eslint/no-explicit-any`.
+- Angular components call a facade, not a UseCase.
+  why-not-tooled: no analyzer in this harness flags a UseCase injected into a component.

@@ -31,3 +31,9 @@ MANDATORY workflow:
 ## Agent Support
 
 - **tdd-guide** - Use PROACTIVELY for new features, enforces write-tests-first
+
+## Shape
+
+Arrange, then act, then assert. The test name states the behavior, not "works".
+
+why-not-tooled: test names and AAA shape are not one lint rule across languages.

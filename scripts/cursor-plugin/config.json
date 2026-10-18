@@ -2,7 +2,7 @@
   "name": "fmflurry-harness",
   "displayName": "fmflurry Harness",
   "description": "Conductor routing, specialist agents, skills, commands, rules and MCP servers from the fmflurry harness.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "homepage": "https://github.com/fmflurry/settings-opencode/tree/master/plugins/fmflurry-harness",
   "repository": "https://github.com/fmflurry/settings-opencode",
   "keywords": ["agents", "conductor", "subagents", "skills", "rules", "hooks", "mcp", "code-memory"],
@@ -27,7 +27,7 @@
   "rules": {
     "always": [
       "common/agents", "common/autonomy", "common/brief-contract", "common/code-comments", "common/codebase-exploration",
-      "common/coding-style", "common/git-workflow", "common/harness-parity", "common/hooks",
+      "common/coding-style", "common/enforcement-ladder", "common/git-workflow", "common/harness-parity", "common/hooks",
       "common/open-pr-check", "common/orchestration", "common/patterns", "common/performance", "common/question-handling",
       "common/security", "common/testing", "common/tool-budget", "common/verification-gate",
       "common/worktree-destruction-safety"

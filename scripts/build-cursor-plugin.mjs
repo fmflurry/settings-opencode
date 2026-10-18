@@ -110,10 +110,13 @@ for (const rel of [...config.rules.always, ...config.rules.requested]) {
   ));
 }
 
-write('rules/always__harness.mdc', mdc(
-  { description: 'Always-on baseline from CLAUDE.md', alwaysApply: true },
-  stripAtImports(read(path.join(claudeDir, 'CLAUDE.md'))),
-));
+const harnessBody = stripAtImports(read(path.join(claudeDir, 'CLAUDE.md')));
+if (harnessBody.trim()) {
+  write('rules/always__harness.mdc', mdc(
+    { description: 'Always-on baseline from CLAUDE.md', alwaysApply: true },
+    harnessBody,
+  ));
+}
 write('rules/conductor.mdc', mdc(
   { description: 'Conductor: route every task to the matching specialist subagent', alwaysApply: true },
   conductorRuleBody(read(path.join(claudeAgentsDir, 'conductor.md')), config),

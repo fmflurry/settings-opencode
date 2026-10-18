@@ -62,9 +62,9 @@ Example: `dotnet-cop` loads `[[dotnet-clean-architecture]]` (and `[[dotnet-ddd]]
 | One skill, two unrelated stacks | Confusing scope (e.g., "TypeScript + Rust patterns") | Split into two skills |
 | Reference file no public path | User can't access it | Ensure skill body links it or mention in description |
 
-## Encode Lessons in Structure
+## Enforcement ladder
 
-A second written rule for the same failure is a signal: build a mechanism instead of another rule. Strength order: **unrepresentable state** (makes the error impossible) > **lint rule / CI gate** (fails the build) > **shared helper / utility** (reusable code) > **runtime check** (guards at the boundary) > **prose rule** (text). One-off slip → add a note. Recurring pattern → encode it: a hook, linter, plugin, or script, then delete the duplicated rule file. See `plugins/tool-budget.ts` for a worked example.
+New or edited rules follow `.claude/rules/common/enforcement-ladder.md` (OpenCode: `instructions/enforcement-ladder.md`). Order: code, then lint/test/static analysis, then a prose rule, then human review. Stop at the first level that holds. A prose mandate includes `why-not-tooled:` naming the level that cannot enforce it. A second written rule for the same failure means encode a mechanism and delete the duplicate. Prefer a description trigger or a `paths` glob over always-on text.
 
 ## Maintenance Checklist: Editing a Skill
 
@@ -96,4 +96,5 @@ A skill is too large if:
 - [ ] Create `reference-*.md` for edge cases, templates, detailed examples.
 - [ ] All reference files listed in body with wiki-links or markdown links.
 - [ ] No duplicated doctrine — link to shared sources instead (e.g., coding-standards, CLAUDE.md).
+- [ ] Prose mandates follow the enforcement ladder and include `why-not-tooled:`.
 - [ ] Test: Show description to a user; do they know when to invoke it?

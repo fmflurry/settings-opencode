@@ -2,6 +2,11 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.1] - 2026-10-17
+
+- Enforcement ladder: code, then lint, tests, or static analysis, then a prose rule, then human review. A prose rule carries `why-not-tooled:`.
+- From this version on, plugin changes bump the patch number only.
+
 ## [0.4.0] - 2026-10-17
 
 - Review findings use the tags Important, Nit, and Pre-existing. Only Important blocks the merge. The Warning verdict is gone: Approve means no Important finding is open, and Block means at least one is.
@@ -15,7 +20,7 @@ Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cur
 ## [0.2.0] - 2026-10-17
 
 - Semver is enforced. A change to plugin sources must bump `version` strictly above the base branch, and this file needs a heading for that version.
-- Patch for fixes, chores, and doc tweaks. Minor for new agents, skills, commands, rules, or behavior. Major for breaking changes: renamed or removed agents or skills, tier key changes, installer contract changes.
+- Before 0.4.1: patch for fixes, chores, and doc tweaks; minor for new agents, skills, commands, rules, or behavior; major for breaking changes (renamed or removed agents or skills, tier key changes, installer contract changes). From 0.4.1 on, bump the patch only.
 
 ## [0.1.0] - 2026-10-07
 

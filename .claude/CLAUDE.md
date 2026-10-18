@@ -1,6 +1,4 @@
-- Never use 'any' type.
-- Never use UseCase in components. Always use facade in components to interact with UseCase.
-
+@rules/common/enforcement-ladder.md
 @rules/common/orchestration.md
 @rules/common/question-handling.md
 @rules/common/open-pr-check.md

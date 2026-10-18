@@ -96,6 +96,10 @@ git log --pretty=format: --name-only | sort | uniq -c | sort -rn | head -20
 ```
 ````
 
+## Enforcement ladder
+
+Before a mandate goes into the skill, follow `instructions/enforcement-ladder.md` (Claude: `.claude/rules/common/enforcement-ladder.md`). Order: code, then lint/test/static analysis, then prose, then human review. A prose mandate includes `why-not-tooled:`.
+
 ## Output
 
 Creates:

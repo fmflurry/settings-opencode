@@ -11,6 +11,10 @@ Run verification loop to validate the implementation: $ARGUMENTS
 
 If $ARGUMENTS names a specific claim, dispatch `verify-this` and return its verdict instead of the checklist below.
 
+## Refactor baseline
+
+When the change is a `/tdd refactor`, the characterization tests are the claim. Baseline is those tests on the old structure. Treatment is the same tests on the new structure. The restructure does not edit those tests. A test edit between baseline and treatment is not a comparison. Both runs must pass.
+
 Execute comprehensive verification:
 
 1. **Type Check**: `npx tsc --noEmit`

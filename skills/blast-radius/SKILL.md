@@ -55,6 +55,8 @@ When CodeMemory is off (cloud or remote agent, `FMFLURRY_CODEMEMORY=off`, or aut
 
 5. **Prove the one fact.** Write a script or test that runs the real code, run it, and paste what happened. Store proof scripts in `/tmp` (ephemeral; no commit). If a proof is worth keeping, dispatch to `tdd-guide` to write a permanent test.
 
+   When the change is a `/tdd refactor`, the safety fact is the characterization pin. Run those tests. They pass immediately on the old structure, and they must pass on the new structure. The restructure does not edit them. Do not replace that pin with a new proof.
+
 6. **For a big or wide change, run multiple reviewers in parallel.** Different reviewers catch different real bugs:
    - `code-reviewer` — code quality, logic errors, maintainability
    - `architect` — system design, module boundaries, scalability

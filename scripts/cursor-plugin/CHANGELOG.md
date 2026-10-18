@@ -2,6 +2,13 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.8] - 2026-10-18
+
+- `/tdd refactor` pins current behavior with characterization tests that pass immediately. The restructure does not edit those tests. Planner, blast-radius, and `/verify` use that pin as the baseline.
+- `install-cursor.sh` installs the agent-harness CLI with the same helper as `install.sh`.
+- `/e2e` and `e2e-runner` read a project `e2e.json` override or discover the start command, ports, and test runner. `"enabled": false` opts out.
+- The autonomy git guard applies the quote-aware scan to `gh`, so a quoted assignment can no longer hide `gh pr merge`.
+
 ## [0.4.7] - 2026-10-18
 
 - The autonomy git guard denies a git or rm command it cannot parse: command substitution, backticks, ANSI-C quoting, brace expansion of a git word, and a base ref hidden by a line continuation. While autonomous, `git -c` and `GIT_CONFIG_*` are rejected; `--config-env` and `alias.*` are rejected in every mode. `--git-dir`, `--work-tree`, `GIT_DIR`, and `GIT_WORK_TREE` count when deciding which branch a push updates. Removing a worktree's `.git` metadata is denied, including without `-r`.

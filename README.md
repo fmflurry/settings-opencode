@@ -78,7 +78,7 @@ A hardened primary `conductor` agent backed by **25 specialist sub-agents**, wir
 | Name           | What it does                      | Why it's good                                      |
 | -------------- | --------------------------------- | -------------------------------------------------- |
 | `/plan`        | Delegates to `planner` for a plan | Forces routing before any code is written          |
-| `/tdd`         | Runs a test-first cycle           | Same TDD guardrails, triggered on demand           |
+| `/tdd`         | Test-first cycle, or `/tdd refactor` to pin behavior | Characterization tests pass immediately and stay frozen |
 | `/cop-review`  | Pre-merge review of the branch    | Applies stack-specific checklists and runs lint    |
 | `/security`    | Security audit of the change      | Read-only findings; fixes routed to `coder`        |
 | `/git`         | Branch and commit operations      | Keeps git work in the specialist's hands           |
@@ -512,7 +512,11 @@ Most non-trivial work follows a fixed order, so planning, implementation, and re
 planner → (tdd-guide → coder) or coder → code-reviewer → verify → git-specialist
 ```
 
-A test-first variant routes `tdd-guide` first (RED), then `tdd-guide` delegates the GREEN implementation to `coder`, then `code-reviewer`, then the verification gate, then `git-specialist`. Docs-only work short-circuits to `writer`.
+A feature goes `planner` → `/tdd` (RED) → `coder` (GREEN) → `/verify` → `/pr` → `/cop-review` → `ship-merge`.
+
+A behavior-preserving refactor goes `planner` → `/tdd refactor` (characterization tests that pass immediately, then freeze) → `coder` (the restructure does not edit those tests) → `/blast-radius` → `/verify` (baseline against treatment on the same pin) → `/pr` → `/cop-review` → `ship-merge`.
+
+A test-first variant routes `tdd-guide` first (RED), then `tdd-guide` delegates the GREEN implementation to `coder`, then `code-reviewer`, then the verification gate, then `git-specialist`. Docs-only work short-circuits to `writer`. A refactor routes `tdd-guide` in `/tdd refactor` mode first, so the characterization pin is green before any restructure.
 
 #### 4. The brief contract
 
@@ -574,9 +578,9 @@ Defined in `opencode.jsonc` under `agent` — **26 entries**: the primary plus 2
 | `dotnet-cop`           | read-only       | .NET 10 Minimal API review (ports/adapters, modular isolation, EF Core). Runs build + `dotnet format`.                  | .NET PR review                    |
 | `gdpr-specialist`      | read-only       | GDPR/CNIL compliance review (consent, cookies, PII, retention, transfers, 72h breach).                                  | Privacy-sensitive features        |
 | `security-reviewer`    | read-only       | OWASP/secrets/deps review. Reports vulnerabilities; fixes routed to `coder`.                                            | Auth, input, endpoints, secrets   |
-| `tdd-guide`            | writable (tests)| RED → GREEN → REFACTOR + 80% coverage. Delegates GREEN impl to `coder` via scoped Task perm.                             | New features, bug fixes, refactors|
+| `tdd-guide`            | writable (tests)| RED → GREEN → REFACTOR + 80% coverage. `/tdd refactor` pins current behavior with characterization tests that already pass. Delegates impl to `coder`. | New features, bug fixes, refactors|
 | `build-error-resolver` | writable        | Fixes build/typecheck/lint/TS errors with minimal diffs.                                                                | Red build or lint                 |
-| `e2e-runner`           | writable        | Playwright E2E tests, run + artifacts.                                                                                  | Browser journeys                  |
+| `e2e-runner`           | writable        | E2E tests from the project override or a discovered runner.                                                             | Browser journeys                  |
 | `doc-updater`          | writable        | Generated docs + codemaps.                                                                                               | `/update-docs`, `/update-codemaps`|
 | `refactor-cleaner`     | writable        | Dead-code removal + consolidation, behavior preserved.                                                                  | Cleanup requests                  |
 | `database-reviewer`    | read-only       | PostgreSQL/Supabase schema, query perf, RLS, migrations.                                                                | SQL/migration/schema review       |
@@ -614,13 +618,13 @@ Pinned (21):
 | `/git`             | git-specialist       | Bounded git ops (branches, commits). |
 | `/push-changes`    | git-specialist       | Commit + push with upstream guard.   |
 | `/plan`            | planner              | Implementation plan.                 |
-| `/tdd`             | tdd-guide            | TDD cycle with coverage.             |
+| `/tdd`             | tdd-guide            | TDD cycle. `/tdd refactor` pins current behavior. |
 | `/api-spec`        | api-spec-architect   | OpenAPI 3.1 spec generation.         |
 | `/cop-review`      | code-reviewer        | Direct pre-merge review; selects stack guidance. |
 | `/security`        | security-reviewer    | Security audit.                      |
 | `/gdpr-review`     | gdpr-specialist      | GDPR/CNIL compliance audit.          |
 | `/build-fix`       | build-error-resolver | Build/TS error resolution.           |
-| `/e2e`             | e2e-runner           | E2E test generation/run.             |
+| `/e2e`             | e2e-runner           | E2E tests from the project override or discovered runner. |
 | `/refactor-clean`  | refactor-cleaner     | Dead-code cleanup.                   |
 | `/orchestrate`     | planner              | Multi-agent orchestration.           |
 | `/verify`          | (conductor)          | Verification loop.                   |
@@ -643,11 +647,11 @@ Unpinned templates (16) — available in `commands/`, plus Claude-side/OpenSpec 
 
 ### Skills
 
-**70 skills** listed below. `scripts/sync-skills.sh` computes the canonical union (root `skills/` ∪ `.claude/skills/`, root wins on conflicts), excludes the runtime dir `skills/skill-creator/`, and copies into both harness targets. Attribution for vendored skills lives in [`skills/THIRD_PARTY_NOTICES.md`](skills/THIRD_PARTY_NOTICES.md).
+**71 skills** listed below. `scripts/sync-skills.sh` computes the canonical union (root `skills/` ∪ `.claude/skills/`, root wins on conflicts), excludes the runtime dir `skills/skill-creator/`, and copies into both harness targets. Attribution for vendored skills lives in [`skills/THIRD_PARTY_NOTICES.md`](skills/THIRD_PARTY_NOTICES.md).
 
 - **Planning & design (5):** `socratic-design`, `chimera`, `api-spec-openapi`, `why`, `blast-radius`.
 - **Review & quality (6):** `comment-judge`, `interfectio-commentarum`, `verify-this`, `create-verification-skill`, `test-behavior-not-implementation`, `ai-ecosystem-audit`.
-- **TDD & testing (2):** `tdd-workflow`, `tdd`.
+- **TDD & testing (3):** `tdd-workflow`, `tdd`, `e2e`.
 - **CI & git (5):** `fix-ci`, `fix-merge-conflicts`, `get-pr-comments`, `loop-on-ci`, `git-workflow`.
 - **Angular (4):** `angular-clean-architecture`, `angular-ddd`, `angular-cop`, `angular-accessibility`.
 - **.NET (3):** `dotnet-clean-architecture`, `dotnet-ddd`, `dotnet-cop`.
@@ -662,7 +666,7 @@ Unpinned templates (16) — available in `commands/`, plus Claude-side/OpenSpec 
 - **Domain (2):** `flurryx`, `transloco`.
 - **Universal standards (1):** `coding-standards`.
 
-The PostgreSQL and Playwright sets are **gc.platform-specific project playbooks**, not general-purpose skills — read them alongside the `postgres-dba` and `e2e-runner` agents.
+The PostgreSQL and Playwright sets are **gc.platform-specific project playbooks**, not general-purpose skills — read them alongside the `postgres-dba` agent. `/e2e` and `e2e-runner` do not assume that stack. They read `e2e.json` or discover the start command, ports, and runner (`skills/e2e`). Load `playwright-e2e-authoring` and `playwright-e2e-review` only when that override names them. A project sets `"enabled": false` to opt out. Consumers that do not want the playbooks omit those two skills when vendoring.
 
 `skill-creator` is a runtime-only skill: it is git-ignored (`skills/skill-creator/`) and never synced. `opencode-skill-creator` (npm) provides the same capability at runtime.
 
@@ -739,7 +743,7 @@ Two directories, one source of truth. The **lab** is wherever you cloned this re
 - `scripts/sync-skills.sh` computes the canonical skill union and copies it into every active harness target. installers call it; you can run it standalone.
 - `scripts/skill-drift-check.sh` is a **read-only** drift detector: it hashes every copy of a skill across the known roots (repo `.claude/skills`, `.opencode/skills`, `~/.config/opencode/skills`, `~/.claude/skills`) and exits non-zero when two copies of the same skill diverge. Also compares the kept-overlap instruction topics.
 - The `config-sync` skill is the agent-facing version of the same job: edit an agent/rule/skill here, and it propagates the change across harness dirs.
-- `install-cursor.sh` builds the Cursor plugin (`node scripts/build-cursor-plugin.mjs` -> `plugins/fmflurry-harness/`) and copies it to `~/.cursor/plugins/local/fmflurry-harness`; then run Developer: Reload Window in Cursor. Flags: `--yes`, `--link` (symlink instead of copy), `--migrate-legacy` (back up then remove what the old installer copied into `~/.cursor`, keeping your own entries), `--uninstall`, `--no-backup`. Limits: no per-agent tool allowlist, conductor routing by instruction only, Notification hooks unsupported.
+- `install-cursor.sh` builds the Cursor plugin (`node scripts/build-cursor-plugin.mjs` -> `plugins/fmflurry-harness/`) and copies it to `~/.cursor/plugins/local/fmflurry-harness`; then run Developer: Reload Window in Cursor. It also installs the `agent-harness` CLI, using the same helper as `install.sh`: scripts go to `~/.local/share/fmflurry-harness/scripts/agent-harness` and the wrapper is `~/.local/bin/agent-harness`. Re-running prints those paths and does not add a second command. Flags: `--yes`, `--link` (symlink instead of copy), `--migrate-legacy` (back up then remove what the old installer copied into `~/.cursor`, keeping your own entries), `--uninstall`, `--no-backup`. Limits: no per-agent tool allowlist, conductor routing by instruction only, Notification hooks unsupported.
 
 **Parity phrasing:** the two harnesses are *synced on install*, not continuously identical. Right now `skills/` holds 69 skills while the shipped `.claude/skills/` mirror holds 52 — the canonical set outgrew the last sync. Run `settings-sync --skills-only` (or `scripts/sync-skills.sh`) to reconcile, and `scripts/skill-drift-check.sh` to confirm.
 
@@ -789,7 +793,7 @@ merge. It ends as `done` (the PR is merged and the goal worktree is torn down) o
 
 **How to launch it.** The goal text is the argument of `/ship`. The flag is also
 `agent-harness autonomy on|off|status` (`scripts/agent-harness/autonomy.sh`). `install.sh` installs that wrapper
-at `~/.local/bin/agent-harness` when Claude Code or OpenCode is an install target. `install-cursor.sh` does not.
+at `~/.local/bin/agent-harness` when Claude Code or OpenCode is an install target. `install-cursor.sh` installs that same wrapper, pointing at `~/.local/share/fmflurry-harness`.
 
 - **Claude Code.** There is no `.claude/commands/ship.md`. `/ship <goal>` is the `ship` skill,
   `skills/ship/SKILL.md`. `install.sh` runs `scripts/sync-skills.sh`, which copies it to `~/.claude/skills/ship`.
@@ -807,7 +811,7 @@ at `~/.local/bin/agent-harness` when Claude Code or OpenCode is an install targe
   `plugins/fmflurry-harness/commands/autonomous.md` and `plugins/fmflurry-harness/skills/autonomous/SKILL.md`.
   The always-on rule is `plugins/fmflurry-harness/rules/autonomy.mdc`. The `stop` entry in
   `plugins/fmflurry-harness/hooks/hooks.json` runs `hooks/scripts/ship-stop-gate.sh`. That hook calls
-  `agent-harness` only when the command is already on `PATH`.
+  `agent-harness` from `PATH`. `install-cursor.sh` installs that command at `~/.local/bin/agent-harness`.
 
 **Review loop.** Stage 7 of `skills/ship/SKILL.md` reviews `git diff <base>...HEAD` with `code-reviewer`,
 `security-reviewer`, and the stack cop when it applies (`angular-cop` or `dotnet-cop`; `database-reviewer` when
@@ -1036,9 +1040,9 @@ Definis dans `opencode.jsonc` (champ `agent`) — **26 entrees**: le primary plu
 | `dotnet-cop`           | read-only        | Revue pre-merge .NET 10 Minimal API.                                                                              | Revue PR .NET                     |
 | `gdpr-specialist`      | read-only        | Conformite GDPR/CNIL (consent, cookies, PII, retention, transferts, breach 72h).                                  | Features sensibles                |
 | `security-reviewer`    | read-only        | Revue OWASP/secrets/deps. Remediation vers `coder`.                                                               | Auth, input, endpoints, secrets   |
-| `tdd-guide`            | writable (tests) | RED → GREEN → REFACTOR + 80%. Delegue le GREEN au `coder`.                                                        | Features, fixes, refactors        |
+| `tdd-guide`            | writable (tests) | RED → GREEN → REFACTOR + 80%. `/tdd refactor` pose des characterization tests deja verts. Delegue l'implementation au `coder`. | Features, fixes, refactors |
 | `build-error-resolver` | writable         | Fix build/typecheck/lint/TS, diff minimal.                                                                        | Build ou lint rouge               |
-| `e2e-runner`           | writable         | Tests E2E Playwright.                                                                                             | Parcours navigateur               |
+| `e2e-runner`           | writable         | Tests E2E depuis l'override projet ou un runner decouvert.                                                       | Parcours navigateur               |
 | `doc-updater`          | writable         | Docs generees + codemaps.                                                                                         | `/update-docs`, `/update-codemaps`|
 | `refactor-cleaner`     | writable         | Suppression code mort + consolidation.                                                                            | Demandes de nettoyage             |
 | `database-reviewer`    | read-only        | PostgreSQL/Supabase: schema, perfs, RLS, migrations.                                                              | Revue SQL/migration/schema        |
@@ -1058,6 +1062,8 @@ Definis dans `opencode.jsonc` (champ `agent`) — **26 entrees**: le primary plu
 
 - **Le conductor n'ecrit pas.** `tools.write: false`, `tools.edit: false`, `permission.edit/write: deny`; sa Task allowlist enumere chaque specialiste, `*: deny` bloque le reste. `instructions/subagent-routing.md` impose un Task-first gate.
 - **Flux canonique:** `planner → (tdd-guide → coder) ou coder → code-reviewer → verify → git-specialist`.
+  - Fonctionnalite: `planner` → `/tdd` (RED) → `coder` (GREEN) → `/verify` → `/pr` → `/cop-review` → `ship-merge`.
+  - Refactor: `planner` → `/tdd refactor` (characterization tests, verts immediatement, puis geles) → `coder` (restructure sans modifier ces tests) → `/blast-radius` → `/verify` (baseline contre treatment sur le meme pin) → `/pr` → `/cop-review` → `ship-merge`.
 - **Brief contract (6 champs):** `TASK`, `FILES`, `CHANGE`, `DONE-WHEN` (commande executable), `OUT OF SCOPE`, `CONTEXT ALREADY RESOLVED` + `BUDGET`.
 - **Questions:** chaque ambiguite taggee `[BLOCKING]` ou `[NON-BLOCKING]`; le conductor tente de resoudre depuis le repo avant de demander.
 - **Verification gate:** aucun "done" sans preuve fraiche (build/lint/tests executes, sortie collee).
@@ -1085,13 +1091,13 @@ Chemins possibles: requete normale (routage via Task), mention `@agent`, command
 | `/git`             | git-specialist       | Operations git encadrees (branche/commit). |
 | `/push-changes`    | git-specialist       | Commit + push (avec garde sur upstream).   |
 | `/plan`            | planner              | Plan d'implementation.                     |
-| `/tdd`             | tdd-guide            | Cycle TDD avec coverage.                   |
+| `/tdd`             | tdd-guide            | Cycle TDD. `/tdd refactor` fige le comportement actuel. |
 | `/api-spec`        | api-spec-architect   | Generation de specs OpenAPI 3.1.           |
 | `/cop-review`      | code-reviewer        | Revue pre-merge directe; selectionne le guide du stack. |
 | `/security`        | security-reviewer    | Audit securite.                            |
 | `/gdpr-review`     | gdpr-specialist      | Audit conformite GDPR/CNIL.                |
 | `/build-fix`       | build-error-resolver | Resolution build/TS errors.                |
-| `/e2e`             | e2e-runner           | Generation/run tests E2E.                  |
+| `/e2e`             | e2e-runner           | Tests E2E depuis l'override projet ou le runner decouvert. |
 | `/refactor-clean`  | refactor-cleaner     | Nettoyage code mort.                       |
 | `/orchestrate`     | planner              | Orchestration multi-agents.                |
 | `/verify`          | (conductor)          | Boucle de verification.                    |
@@ -1110,11 +1116,11 @@ Non epinglees (16): `/checkpoint`, `/pm2`, `/setup-pm`, `/ecosystem-audit`, `/cr
 
 ### Skills
 
-**70 skills** listes ci-dessous. `scripts/sync-skills.sh` calcule l'union canonique (root `skills/` ∪ `.claude/skills/`, root gagne), exclut le runtime `skills/skill-creator/`, et copie vers chaque cible. Attribution dans [`skills/THIRD_PARTY_NOTICES.md`](skills/THIRD_PARTY_NOTICES.md).
+**71 skills** listes ci-dessous. `scripts/sync-skills.sh` calcule l'union canonique (root `skills/` ∪ `.claude/skills/`, root gagne), exclut le runtime `skills/skill-creator/`, et copie vers chaque cible. Attribution dans [`skills/THIRD_PARTY_NOTICES.md`](skills/THIRD_PARTY_NOTICES.md).
 
 - **Planification & design (5):** `socratic-design`, `chimera`, `api-spec-openapi`, `why`, `blast-radius`.
 - **Revue & qualite (6):** `comment-judge`, `interfectio-commentarum`, `verify-this`, `create-verification-skill`, `test-behavior-not-implementation`, `ai-ecosystem-audit`.
-- **TDD & tests (2):** `tdd-workflow`, `tdd`.
+- **TDD & tests (3):** `tdd-workflow`, `tdd`, `e2e`.
 - **CI & git (5):** `fix-ci`, `fix-merge-conflicts`, `get-pr-comments`, `loop-on-ci`, `git-workflow`.
 - **Angular (4):** `angular-clean-architecture`, `angular-ddd`, `angular-cop`, `angular-accessibility`.
 - **.NET (3):** `dotnet-clean-architecture`, `dotnet-ddd`, `dotnet-cop`.
@@ -1126,7 +1132,7 @@ Non epinglees (16): `/checkpoint`, `/pm2`, `/setup-pm`, `/ecosystem-audit`, `/cr
 - **Harness & config (5):** `config-sync`, `harness-parity`, `skill-authoring`, `treetopia`, `strategic-compact`.
 - **Securite (1):** `security-review`. **Conformite (1):** `gdpr-compliance`. **Domaine (2):** `flurryx`, `transloco`. **Standards (1):** `coding-standards`.
 
-Les ensembles PostgreSQL et Playwright sont des **playbooks projet specifiques a gc.platform**. `skill-creator` est runtime-only, git-ignore et jamais synchronise.
+Les ensembles PostgreSQL et Playwright sont des **playbooks projet specifiques a gc.platform**. `/e2e` et `e2e-runner` ne supposent pas cette stack : ils lisent `e2e.json` ou decouvrent la commande de demarrage, les ports et le runner (`skills/e2e`). Les playbooks Playwright ne se chargent que si l'override les nomme. `"enabled": false` desactive `/e2e`. Un consommateur qui n'en veut pas omet `playwright-e2e-authoring` et `playwright-e2e-review` au vendoring. `skill-creator` est runtime-only, git-ignore et jamais synchronise.
 
 <a id="instructions-fr"></a>
 
@@ -1196,7 +1202,7 @@ Deux repertoires, une source de verite: le **lab** (ton clone de ce repo) et le 
 - `scripts/sync-skills.sh` calcule l'union canonique et copie vers chaque harness.
 - `scripts/skill-drift-check.sh` — detecteur read-only de drift entre copies de skills; sort non-zero en cas de divergence.
 - Le skill `config-sync` fait la meme propagation cote agent.
-- `install-cursor.sh` génère un plugin Cursor (`node scripts/build-cursor-plugin.mjs` -> `plugins/fmflurry-harness/`) et le copie dans `~/.cursor/plugins/local/fmflurry-harness`, puis Developer: Reload Window dans Cursor. Options : `--yes`, `--link` (symlink au lieu de copie), `--migrate-legacy` (sauvegarde puis supprime ce que l'ancien installeur a copié dans `~/.cursor`, en gardant vos propres entrées), `--uninstall`, `--no-backup`. Limites : pas de liste d'outils par agent, routage du conductor par instruction uniquement, hooks Notification non supportés.
+- `install-cursor.sh` génère un plugin Cursor (`node scripts/build-cursor-plugin.mjs` -> `plugins/fmflurry-harness/`) et le copie dans `~/.cursor/plugins/local/fmflurry-harness`, puis Developer: Reload Window dans Cursor. Il installe aussi le CLI `agent-harness`, avec le même helper que `install.sh` : scripts dans `~/.local/share/fmflurry-harness/scripts/agent-harness`, wrapper `~/.local/bin/agent-harness`. Un second passage affiche ces chemins et n'ajoute pas une seconde commande. Options : `--yes`, `--link` (symlink au lieu de copie), `--migrate-legacy` (sauvegarde puis supprime ce que l'ancien installeur a copié dans `~/.cursor`, en gardant vos propres entrées), `--uninstall`, `--no-backup`. Limites : pas de liste d'outils par agent, routage du conductor par instruction uniquement, hooks Notification non supportés.
 
 **Parite:** les harnesses sont *synces a l'install*, pas identiques en continu. Aujourd'hui `skills/` = 69 alors que `.claude/skills/` = 52: lancer `settings-sync --skills-only` pour reconcilier.
 
@@ -1235,11 +1241,11 @@ Le mode autonome permet à l'agent de mener un objectif de la clarification jusq
 
 Le run est une boucle, tenue par `skills/ship/SKILL.md` : implémenter, vérifier, pousser une PR brouillon, revue locale, CI, puis `agent-harness ship-merge`. Un blocage que l'agent peut corriger (un finding Important confirmé, un check en échec, un conflit, une branche en retard, un fil non résolu, un refus de fusion) le renvoie vers la correction, puis vers une nouvelle revue, puis vers la fusion. Il se termine en `done` (PR fusionnée et worktree du goal retiré) ou escaladé.
 
-**Comment le lancer.** Le texte du goal est l'argument de `/ship`. Le flag est aussi `agent-harness autonomy on|off|status` (`scripts/agent-harness/autonomy.sh`). `install.sh` installe ce wrapper dans `~/.local/bin/agent-harness` quand Claude Code ou OpenCode est une cible d'install. `install-cursor.sh` ne le fait pas.
+**Comment le lancer.** Le texte du goal est l'argument de `/ship`. Le flag est aussi `agent-harness autonomy on|off|status` (`scripts/agent-harness/autonomy.sh`). `install.sh` installe ce wrapper dans `~/.local/bin/agent-harness` quand Claude Code ou OpenCode est une cible d'install. `install-cursor.sh` installe le même wrapper, qui pointe vers `~/.local/share/fmflurry-harness`.
 
 - **Claude Code.** Il n'y a pas de `.claude/commands/ship.md`. `/ship <goal>` est le skill `ship`, `skills/ship/SKILL.md`. `install.sh` lance `scripts/sync-skills.sh`, qui le copie vers `~/.claude/skills/ship`. `/autonomous on|off|status` est `skills/autonomous/SKILL.md` (`disable-model-invocation: true`, donc invoqué par l'utilisateur). La règle de comportement est `.claude/rules/common/autonomy.md`. Le hook Stop est `.claude/hooks/ship-stop-gate.sh`, branché depuis `.claude/settings.json`.
 - **OpenCode.** `/ship` et `/autonomous` sont épinglés dans `opencode.jsonc` (`command.ship`, `command.autonomous`), tous deux sur `conductor`, templates `commands/ship.md` et `commands/autonomous.md`. La règle chargée au démarrage est `instructions/autonomy.md`. `plugins/autonomy.ts` bloque l'outil `question`, injecte le contexte d'autonomie, refuse les commandes git interdites, et relance la session racine quand le stop gate bloque. La bascule de la barre latérale est `tui-plugins/autonomy-status.tsx` (enregistrée dans `tui.json`) : palette « Toggle autonomous mode », `/autonomy-toggle`, ou `<leader>u`.
-- **Cursor.** `/ship <goal>` est `plugins/fmflurry-harness/commands/ship.md` (construit depuis `commands/ship.md` par `scripts/build-cursor-plugin.mjs`). Il charge `plugins/fmflurry-harness/skills/ship/SKILL.md`. `/autonomous` est `plugins/fmflurry-harness/commands/autonomous.md` et `plugins/fmflurry-harness/skills/autonomous/SKILL.md`. La règle toujours active est `plugins/fmflurry-harness/rules/autonomy.mdc`. L'entrée `stop` de `plugins/fmflurry-harness/hooks/hooks.json` lance `hooks/scripts/ship-stop-gate.sh`. Ce hook appelle `agent-harness` seulement si la commande est déjà sur le `PATH`.
+- **Cursor.** `/ship <goal>` est `plugins/fmflurry-harness/commands/ship.md` (construit depuis `commands/ship.md` par `scripts/build-cursor-plugin.mjs`). Il charge `plugins/fmflurry-harness/skills/ship/SKILL.md`. `/autonomous` est `plugins/fmflurry-harness/commands/autonomous.md` et `plugins/fmflurry-harness/skills/autonomous/SKILL.md`. La règle toujours active est `plugins/fmflurry-harness/rules/autonomy.mdc`. L'entrée `stop` de `plugins/fmflurry-harness/hooks/hooks.json` lance `hooks/scripts/ship-stop-gate.sh`. Ce hook appelle `agent-harness` depuis le `PATH`. `install-cursor.sh` installe cette commande dans `~/.local/bin/agent-harness`.
 
 **Boucle de revue.** L'étape 7 de `skills/ship/SKILL.md` relit `git diff <base>...HEAD` avec `code-reviewer`, `security-reviewer`, et le cop du stack quand il s'applique (`angular-cop` ou `dotnet-cop` ; `database-reviewer` si le SQL a changé). L'agent confirme chaque finding contre le code. Seul un finding Important confirmé bloque. Nit et Pre-existing ne bloquent pas. Les tags viennent du `REVIEW.md` du dépôt quand il existe, sinon de Finding tags dans `.claude/agents/code-reviewer.md`. Après les correctifs, un commentaire de synthèse est publié (`skills/ship/references/review-format.md`). Ce commentaire est une trace d'audit. `ship-merge` ne le lit pas.
 

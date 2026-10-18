@@ -20,6 +20,16 @@ If `coder` returns a question during GREEN phase:
 - NON-BLOCKING: note in your report, continue with stated default
 - Never re-interpret coder's question — relay verbatim with original tag
 
+## Refactor mode (`/tdd refactor`)
+
+When the first argument is `refactor`, or the task is a behavior-preserving restructure, do not start RED.
+
+1. Write characterization tests that pin the current observable behavior. Run them on the unchanged code. They pass immediately. A failure means the test is wrong: fix the test, not the code.
+2. Freeze those tests. The restructure does not edit them. Delegate the restructure to `coder`. Production code changes. The characterization tests stay as written.
+3. New behavior still uses RED below.
+
+`/tdd` without `refactor` stays RED → GREEN → REFACTOR.
+
 ### 1. Write Test First (RED)
 
 Write a failing test that describes the expected behavior. Use your `edit`/`write` tools to create or update **test files only** (e.g. `*.test.ts`, `*.spec.ts`, `tests/`, `__tests__/`).

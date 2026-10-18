@@ -205,11 +205,13 @@ Stripe Checkout, and webhook events keep subscription status in sync.
 
 ## When Planning Refactors
 
-1. Identify code smells and technical debt
-2. List specific improvements needed
-3. Preserve existing functionality
-4. Create backwards-compatible changes when possible
-5. Plan for gradual migration if needed
+1. Name the observable behavior the restructure must keep, and the structure change.
+2. First step is `/tdd refactor`: characterization tests that pass immediately on the current code. Freeze them. The restructure does not edit them.
+3. `coder` restructures the production code only.
+4. `/blast-radius` proves the safety fact by running that characterization pin.
+5. `/verify` compares baseline (the pin on the old structure) with treatment (the same pin on the new structure).
+6. Keep backwards-compatible changes when possible, and plan a migration when callers must move.
+7. Then `/pr`, `/cop-review`, and `ship-merge`.
 
 ## Sizing and Phasing
 

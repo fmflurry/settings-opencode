@@ -114,6 +114,22 @@ install_plugin() {
     fi
 }
 
+install_cursor_cli() {
+    # shellcheck disable=SC1091
+    source "$REPO_DIR/scripts/lib/install-agent-harness.sh"
+    local root
+    root="$(agent_harness_cursor_root)"
+    install_agent_harness_tree "$root/scripts/agent-harness"
+    install_agent_harness_wrapper "$root"
+    info "Use agent-harness from ${AGENT_HARNESS_BIN_DIR:-$HOME/.local/bin} (add that directory to PATH if the command is not found)."
+}
+
+uninstall_cursor_cli() {
+    # shellcheck disable=SC1091
+    source "$REPO_DIR/scripts/lib/install-agent-harness.sh"
+    uninstall_agent_harness_cli "$(agent_harness_cursor_root)"
+}
+
 uninstall_plugin() {
     step "Uninstall $PLUGIN_DST"
     if [ ! -e "$PLUGIN_DST" ] && [ ! -L "$PLUGIN_DST" ]; then
@@ -205,12 +221,14 @@ require_node
 
 if [ "$DO_UNINSTALL" = "1" ]; then
     uninstall_plugin
+    uninstall_cursor_cli
     exit 0
 fi
 
 build_plugin
 [ "$DO_MIGRATE" = "1" ] && migrate_legacy
 install_plugin
+install_cursor_cli
 
 step "Next steps"
 info "Reload Cursor (Developer: Reload Window)"

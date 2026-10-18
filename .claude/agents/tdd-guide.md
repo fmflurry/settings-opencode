@@ -1,6 +1,6 @@
 ---
 name: tdd-guide
-description: "MUST delegate for new features, bug fixes, or refactors that need tests. Enforces RED-GREEN-REFACTOR and 80%+ coverage. Writes test files only; the orchestrator delegates implementation to coder."
+description: "MUST delegate for new features, bug fixes, or refactors that need tests. A refactor pins current behavior first with characterization tests that already pass. Enforces RED-GREEN-REFACTOR for new behavior and 80%+ coverage. Writes test files only; the orchestrator delegates implementation to coder."
 model: sonnet
 ---
 
@@ -29,6 +29,16 @@ If the orchestrator's brief is ambiguous:
 - BLOCKING: return one tagged `## Blocker:` question (you cannot resolve it)
 - NON-BLOCKING: note in your report, continue with the stated default
 - Never re-interpret a question — relay verbatim with the original tag
+
+## Refactor mode (`/tdd refactor`)
+
+When the first argument is `refactor`, or the task is a behavior-preserving restructure, do not start RED.
+
+1. Write characterization tests that pin the current observable behavior. Run them on the unchanged code. They pass immediately. A failure means the test is wrong: fix the test, not the code.
+2. Freeze those tests. The restructure does not edit them. Return a brief so the orchestrator can dispatch `coder` for the restructure only.
+3. New behavior still uses RED below.
+
+`/tdd` without `refactor` stays RED → GREEN → REFACTOR.
 
 ### 1. Write Test First (RED)
 

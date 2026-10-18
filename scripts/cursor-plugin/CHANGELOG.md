@@ -2,6 +2,10 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.7] - 2026-10-18
+
+- The autonomy git guard denies a git or rm command it cannot parse: command substitution, backticks, ANSI-C quoting, brace expansion of a git word, and a base ref hidden by a line continuation. While autonomous, `git -c` and `GIT_CONFIG_*` are rejected; `--config-env` and `alias.*` are rejected in every mode. `--git-dir`, `--work-tree`, `GIT_DIR`, and `GIT_WORK_TREE` count when deciding which branch a push updates. Removing a worktree's `.git` metadata is denied, including without `-r`.
+
 ## [0.4.6] - 2026-10-18
 
 - `socratic-design` prototypes any question a spike under 30 minutes can settle, and presents that result instead of asking. An L-sized task is restated in the agent's own words, and that restatement is confirmed, before planning.

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { PluginInput } from "@opencode-ai/plugin";
-import { GATE_TIMEOUT_MS, blockReason, denyReason, runHook, runHookText } from "./lib/autonomy-hooks.ts";
+import { GATE_TIMEOUT_MS, bashGuardRejection, blockReason, runHook, runHookText } from "./lib/autonomy-hooks.ts";
 
 const AUTONOMY_FLAG = ".claude/state/autonomy.on";
 const NOTIFY_SCRIPT = path.join(os.homedir(), ".config/opencode/scripts/agent-harness/notify.sh");
@@ -58,8 +58,9 @@ export const AutonomyPlugin = async ({ $, client, directory }: PluginInput) => {
       if (tool !== "bash") return;
       const args = output.args as { command?: unknown } | null;
       if (typeof args?.command !== "string") return;
-      const reason = denyReason(
-        await runHook("autonomy-git-guard.sh", { tool_input: { command: args.command }, cwd: directory }, opts),
+      const reason = await bashGuardRejection(
+        { tool_input: { command: args.command }, cwd: directory },
+        opts,
       );
       if (reason) throw new Error(reason);
     },

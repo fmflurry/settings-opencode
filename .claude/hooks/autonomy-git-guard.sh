@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# PreToolUse (Bash): in every mode, deny worktree removal (orca/git/rm) except via agent-harness worktree-rm or teardown-merged-worktree, and shell-function or env injection into agent-harness commands; while autonomous, also deny merges, pushes to a base branch (forced or not) and shell edits of protected paths. Fails open.
-# Quotes are stripped before tokenising so a quoted argument cannot hide a refspec; the cost is over-denying odd quoting.
+# PreToolUse (Bash): in every mode, deny worktree removal (orca/git/rm) except via agent-harness worktree-rm or teardown-merged-worktree, and shell-function or env injection into agent-harness commands; while autonomous, also deny merges, pushes to a base branch (forced or not) and shell edits of protected paths. Fails open on empty input or missing jq.
+# A quote-aware scan denies git and rm words it cannot parse (substitution, ANSI-C quoting, brace expansion). The legacy tokenizer still strips quotes so a quoted ref cannot hide.
 input="$(cat)"
 command -v jq >/dev/null 2>&1 || exit 0
 cmd="$(jq -r '.tool_input.command // empty' <<<"$input" 2>/dev/null)"
@@ -39,12 +39,36 @@ deny_harness_env() { emit deny "Blocked by git-guard: run agent-harness as one p
 deny_harness_cmd() { emit deny "Blocked by git-guard: agent-harness ship-init and teardown-merged-worktree take exactly their documented arguments as one plain command."; }
 deny_alias() { emit deny "Blocked by git-guard: git aliases can smuggle worktree removal; do not define or pass alias.* settings."; }
 deny_branch_delete() { emit deny "Blocked by git-guard: branch deletion only via agent-harness cleanup <pr> after merge."; }
+deny_config() { emit deny "Blocked by git-guard: git config injection (-c, --config-env, GIT_CONFIG_*) is not allowed."; }
+deny_unparsed() { emit deny "Blocked by git-guard: cannot parse this command safely (substitution, expansion, or ANSI-C quoting)."; }
 is_protected_token() {
   local t="${1//[<>]/}"
   t="${t#of=}"
   [[ "$t" =~ $TOKEN_RE ]]
 }
 any_protected() { local t; for t in "$@"; do is_protected_token "$t" && return 0; done; return 1; }
+
+# Prints the branch a push would update. Returns 1 when a location override
+# (--git-dir, --work-tree, GIT_DIR, GIT_WORK_TREE) does not resolve. Callers
+# must deny in the parent shell: deny inside $(...) only exits the subshell.
+resolve_head() {
+  local gdir="$1" cur=""
+  if [ "$SAW_LOC" = 1 ] || [ -n "${GIT_DIR_VAL:-}" ] || [ -n "${GIT_WT_VAL:-}" ]; then
+    local -a ea=()
+    [ -n "${GIT_DIR_VAL:-}" ] && ea+=(GIT_DIR="$GIT_DIR_VAL")
+    [ -n "${GIT_WT_VAL:-}" ] && ea+=(GIT_WORK_TREE="$GIT_WT_VAL")
+    if [ "${#ea[@]}" -gt 0 ]; then
+      cur="$(cd "$cwd" 2>/dev/null && env "${ea[@]}" git ${GIT_LOC+"${GIT_LOC[@]}"} rev-parse --abbrev-ref HEAD 2>/dev/null)" || true
+    else
+      cur="$(cd "$cwd" 2>/dev/null && git ${GIT_LOC+"${GIT_LOC[@]}"} rev-parse --abbrev-ref HEAD 2>/dev/null)" || true
+    fi
+    [ -n "$cur" ] || return 1
+    printf '%s' "$cur"
+    return 0
+  fi
+  cur="$(git -C "$gdir" rev-parse --abbrev-ref HEAD 2>/dev/null)" || true
+  printf '%s' "$cur"
+}
 
 check_push() {
   local gdir="$1" a ref cur; shift
@@ -68,7 +92,8 @@ check_push() {
     is_base "$ref" && deny
   done
   if [ "${#pos[@]}" -le 1 ] || { [ "${#pos[@]}" -eq 2 ] && [ "${pos[1]}" = HEAD ]; }; then
-    cur="$(git -C "$gdir" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+    if [ "$CD_BASE" = "?" ] && [ "$SAW_LOC" != 1 ] && [ -z "$GIT_DIR_VAL" ]; then deny; fi
+    cur="$(resolve_head "$gdir")" || deny
     is_base "$cur" && deny
   fi
 }
@@ -80,6 +105,7 @@ worktree_destroy_in() {
     [ "$git_seen" = 1 ] && [ "${t[k]}" = worktree ] || continue
     case "${t[k + 1]}" in
       remove | move) return 0 ;;
+      *'$'* | *'`'* | *'{'*'}'*) return 0 ;;
       prune)
         for x in "${t[@]:k+2}"; do [[ "$x" =~ ^(-n|-nv|-vn|--dry-run)$ ]] && return 1; done
         return 0 ;;
@@ -90,21 +116,39 @@ worktree_destroy_in() {
 
 check_git() {
   local gdir="$cwd" n=$# a kv sub="" j=2
+  [ -n "$CD_BASE" ] && [ "$CD_BASE" != "?" ] && gdir="$CD_BASE"
   local args=("$@")
+  GIT_LOC=(); SAW_LOC=0
   while [ "$j" -le "$n" ]; do
     a="${args[$((j - 1))]}"
     case "$a" in
-      -C) kv="${args[$j]:-}"; case "$kv" in /*) gdir="$kv" ;; *) gdir="$gdir/$kv" ;; esac; j=$((j + 2)) ;;
-      --git-dir | --work-tree | --namespace | --exec-path | --super-prefix | --config-env) j=$((j + 2)) ;;
+      -C)
+        kv="${args[$j]:-}"
+        [[ "$kv" == *'$'* || "$kv" == *'`'* ]] && [ "$AUTO" = 1 ] && deny_unparsed
+        case "$kv" in /*) gdir="$kv" ;; *) gdir="$gdir/$kv" ;; esac
+        GIT_LOC+=(-C "$kv"); j=$((j + 2)) ;;
+      --git-dir | --work-tree)
+        kv="${args[$j]:-}"
+        [[ "$kv" == *'$'* || "$kv" == *'`'* ]] && deny_unparsed
+        GIT_LOC+=("$a" "$kv"); SAW_LOC=1; j=$((j + 2)) ;;
+      --git-dir=* | --work-tree=*)
+        [[ "$a" == *'$'* || "$a" == *'`'* ]] && deny_unparsed
+        GIT_LOC+=("$a"); SAW_LOC=1; j=$((j + 1)) ;;
+      --namespace | --exec-path | --super-prefix) j=$((j + 2)) ;;
+      --namespace=* | --exec-path=* | --super-prefix=*) j=$((j + 1)) ;;
+      --config-env | --config-env=*) deny_config ;;
       -c)
         kv="${args[$j]:-}"
         grep -Eqi '^alias\.' <<<"$kv" && deny_alias
-        [ "$AUTO" = 1 ] && grep -Eqi '^alias\.|^core\.(hookspath|pager|sshcommand)' <<<"$kv" && deny
+        [ "$AUTO" = 1 ] && deny_config
         j=$((j + 2)) ;;
       -*) j=$((j + 1)) ;;
       *) sub="$a"; j=$((j + 1)); break ;;
     esac
   done
+  case "$sub" in
+    *'$'* | *'`'* | *'{'*'}'*) deny_unparsed ;;
+  esac
   local rest=("${args[@]:$((j - 1))}")
   case "$sub" in
     commit | tag | stash | log | notes) ;;
@@ -242,6 +286,21 @@ glob_hits_worktree() {
   [[ "$d/" =~ /orca/workspaces(/[^/]+)?/$ ]]
 }
 
+is_git_dir_path() {
+  local p="${1%/}" a wt
+  case "$p" in
+    .git | .git/* | */.git | */.git/*) ;;
+    *) return 1 ;;
+  esac
+  unknown_base_relative "$p" && return 0
+  a="$(norm_path "$p" "${CD_BASE:-$cwd}")"
+  load_wts
+  for wt in "${WTS[@]}"; do
+    [ "$a" = "$wt/.git" ] || [[ "$a" == "$wt/.git/"* ]] && return 0
+  done
+  return 1
+}
+
 check_rm_worktree() {
   local a rec=0 args=()
   for a in "$@"; do
@@ -253,6 +312,7 @@ check_rm_worktree() {
       *) args+=("$a") ;;
     esac
   done
+  for a in "${args[@]}"; do is_git_dir_path "$a" && deny_worktree; done
   [ "$rec" = 1 ] || return 0
   [ "$XARGS" = 1 ] && deny_worktree
   for a in "${args[@]}"; do
@@ -276,7 +336,7 @@ check_destroyers() {
     rsync) [ "$del" = 1 ] || return 0 ;;
     mv) [ "${#nf[@]}" -gt 0 ] && nf=("${nf[@]:0:$((${#nf[@]} - 1))}") ;;
   esac
-  for a in "${nf[@]}"; do is_worktree_path "$a" && deny_worktree; done
+  for a in "${nf[@]}"; do is_worktree_path "$a" && deny_worktree; is_git_dir_path "$a" && deny_worktree; done
   return 0
 }
 
@@ -286,6 +346,7 @@ check_find_worktree() {
   for a in "$@"; do
     case "$a" in -* | '(' | '!') break ;; esac
     is_worktree_path "$a" && deny_worktree
+    is_git_dir_path "$a" && deny_worktree
   done
   return 0
 }
@@ -425,6 +486,287 @@ check_harness_cmd() {
   return 0
 }
 
+# Backslash-newline is removed before quote processing. Join it first so a base ref
+# cannot hide on the next line. $() and ANSI-C are not interpreted: a git or rm
+# command that needs their result is denied.
+join_continuations() {
+  local s="$1" out="" i=0 n=${#1} c q=0
+  while [ "$i" -lt "$n" ]; do
+    c="${s:i:1}"
+    if [ "$q" = 1 ] || [ "$q" = 3 ]; then
+      if [ "$q" = 3 ] && [ "$c" = "\\" ] && [ $((i + 1)) -lt "$n" ]; then
+        out+="$c${s:i+1:1}"; i=$((i + 2)); continue
+      fi
+      [ "$c" = "'" ] && q=0
+      out+="$c"; i=$((i + 1)); continue
+    fi
+    if [ "$q" = 2 ]; then
+      if [ "$c" = "\\" ] && [ "${s:i+1:1}" = $'\n' ]; then i=$((i + 2)); continue; fi
+      if [ "$c" = "\\" ] && [ $((i + 1)) -lt "$n" ]; then
+        out+="$c${s:i+1:1}"; i=$((i + 2)); continue
+      fi
+      [ "$c" = '"' ] && q=0
+      out+="$c"; i=$((i + 1)); continue
+    fi
+    if [ "$c" = "\\" ] && [ "${s:i+1:1}" = $'\n' ]; then i=$((i + 2)); continue; fi
+    if [ "$c" = "\\" ] && [ $((i + 1)) -lt "$n" ]; then
+      out+="$c${s:i+1:1}"; i=$((i + 2)); continue
+    fi
+    if [ "$c" = "'" ]; then q=1; out+="$c"; i=$((i + 1)); continue; fi
+    if [ "$c" = '"' ]; then q=2; out+="$c"; i=$((i + 1)); continue; fi
+    if [ "$c" = '$' ] && [ "${s:i+1:1}" = "'" ]; then q=3; out+="$c"; i=$((i + 1)); continue; fi
+    out+="$c"; i=$((i + 1))
+  done
+  printf '%s' "$out"
+}
+
+literalize() {
+  local s="$1" out="" i=0 n=${#1} c q=0 nx
+  while [ "$i" -lt "$n" ]; do
+    c="${s:i:1}"
+    if [ "$q" = 1 ]; then
+      [ "$c" = "'" ] && q=0 || out+="$c"
+      i=$((i + 1)); continue
+    fi
+    if [ "$q" = 2 ]; then
+      if [ "$c" = "\\" ] && [ $((i + 1)) -lt "$n" ]; then
+        nx="${s:i+1:1}"
+        case "$nx" in
+          '$' | '`' | '"' | '\\') out+="$nx" ;;
+          *) out+="$nx" ;;
+        esac
+        i=$((i + 2)); continue
+      fi
+      [ "$c" = '"' ] && q=0 || out+="$c"
+      i=$((i + 1)); continue
+    fi
+    if [ "$c" = "'" ]; then q=1; i=$((i + 1)); continue; fi
+    if [ "$c" = '"' ]; then q=2; i=$((i + 1)); continue; fi
+    if [ "$c" = "\\" ] && [ $((i + 1)) -lt "$n" ]; then out+="${s:i+1:1}"; i=$((i + 2)); continue; fi
+    out+="$c"; i=$((i + 1))
+  done
+  printf '%s' "$out"
+}
+
+note_assign_idx() {
+  local idx="$1" persist="${2:-}" w name val
+  w="${words[$idx]}"
+  name="${w%%=*}"
+  case "$name" in
+    GIT_DIR | GIT_WORK_TREE | GIT_CONFIG | GIT_CONFIG_* | GIT_NAMESPACE) ;;
+    *) return 0 ;;
+  esac
+  if [ "${exp_f[$idx]}" = 1 ] || [ "${brace_f[$idx]}" = 1 ]; then GIT_ENV_U=1; return 0; fi
+  val="$(literalize "${w#*=}")"
+  case "$name" in
+    GIT_DIR) GIT_DIR_VAL="$val"; [ "$persist" = 1 ] && P_GIT_DIR="$val" ;;
+    GIT_WORK_TREE) GIT_WT_VAL="$val"; [ "$persist" = 1 ] && P_GIT_WT="$val" ;;
+    *) GIT_CFG_RISK=1; [ "$persist" = 1 ] && P_GIT_CFG=1 ;;
+  esac
+}
+
+screen_git() {
+  local i="$1" w gdir="$cwd" sub="" sub_u=0 opt_u=0 opt val
+  local -a lit=()
+  [ -n "$SR_CD" ] && [ "$SR_CD" != "?" ] && gdir="$SR_CD"
+  GIT_LOC=(); SAW_LOC=0
+  while [ "$i" -lt "${#words[@]}" ]; do
+    w="${words[$i]}"
+    if [ "${exp_f[$i]}" = 1 ] || [ "${brace_f[$i]}" = 1 ]; then sub_u=1; break; fi
+    case "$w" in
+      -C | --git-dir | --work-tree | --namespace | --exec-path | --super-prefix | -c | --config-env)
+        opt="$w"; i=$((i + 1))
+        [ "$i" -ge "${#words[@]}" ] && break
+        if [ "${exp_f[$i]}" = 1 ] || [ "${brace_f[$i]}" = 1 ]; then opt_u=1; i=$((i + 1)); continue; fi
+        val="$(literalize "${words[$i]}")"
+        case "$opt" in
+          -C)
+            case "$val" in /*) gdir="$val" ;; *) gdir="$gdir/$val" ;; esac
+            GIT_LOC+=(-C "$val") ;;
+          --git-dir | --work-tree) GIT_LOC+=("$opt" "$val"); SAW_LOC=1 ;;
+          --config-env) deny_config ;;
+          -c)
+            grep -Eqi '^alias\.' <<<"$val" && deny_alias
+            [ "$AUTO" = 1 ] && deny_config ;;
+        esac
+        i=$((i + 1)); continue ;;
+      --git-dir=* | --work-tree=*)
+        if [ "${exp_f[$i]}" = 1 ] || [ "${brace_f[$i]}" = 1 ]; then opt_u=1; else GIT_LOC+=("$(literalize "$w")"); SAW_LOC=1; fi
+        i=$((i + 1)); continue ;;
+      --config-env=*) deny_config ;;
+      --namespace=* | --exec-path=* | --super-prefix=* | -*) i=$((i + 1)); continue ;;
+      *) sub="$(literalize "$w")"; i=$((i + 1)); break ;;
+    esac
+  done
+  [ "$sub_u" = 1 ] && deny_unparsed
+  if [ "$opt_u" = 1 ] && { [ "$AUTO" = 1 ] || [ "$sub" = worktree ]; }; then deny_unparsed; fi
+  if [ "$GIT_ENV_U" = 1 ] && { [ "$AUTO" = 1 ] || [ "$sub" = worktree ]; }; then deny_unparsed; fi
+  [ "$AUTO" = 1 ] && [ "$GIT_CFG_RISK" = 1 ] && deny_config
+  case "$sub" in
+    worktree)
+      while [ "$i" -lt "${#words[@]}" ]; do
+        [ "${exp_f[$i]}" = 1 ] || [ "${brace_f[$i]}" = 1 ] && deny_unparsed
+        i=$((i + 1))
+      done ;;
+    push)
+      [ "$AUTO" = 1 ] || return 0
+      while [ "$i" -lt "${#words[@]}" ]; do
+        [ "${exp_f[$i]}" = 1 ] || [ "${brace_f[$i]}" = 1 ] && deny_unparsed
+        lit+=("$(literalize "${words[$i]}")")
+        i=$((i + 1))
+      done
+      local saved_cd="${CD_BASE:-}"
+      [ -n "$SR_CD" ] && CD_BASE="$SR_CD"
+      check_push "$gdir" ${lit+"${lit[@]}"}
+      CD_BASE="$saved_cd" ;;
+  esac
+}
+
+screen_rm() {
+  local i="$1"
+  while [ "$i" -lt "${#words[@]}" ]; do
+    [ "${exp_f[$i]}" = 1 ] && deny_unparsed
+    i=$((i + 1))
+  done
+}
+
+screen_segment() {
+  local i=0 w b u wb vf o j found
+  GIT_DIR_VAL="${P_GIT_DIR:-}"
+  GIT_WT_VAL="${P_GIT_WT:-}"
+  GIT_CFG_RISK="${P_GIT_CFG:-0}"
+  GIT_ENV_U=0
+  while [ "$i" -lt "${#words[@]}" ]; do
+    w="${words[$i]}"; u=0
+    [ "${exp_f[$i]}" = 1 ] || [ "${brace_f[$i]}" = 1 ] && u=1
+    if [ "$u" = 0 ] && [[ "$w" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then note_assign_idx "$i"; i=$((i + 1)); continue; fi
+    b="${w##*/}"
+    if [ "$u" = 0 ]; then b="$(literalize "$b")"; fi
+    if [ "$u" = 0 ] && is_prefix_keyword "$b"; then i=$((i + 1)); continue; fi
+    if [ "$u" = 0 ] && [[ "$b" =~ ^(env|sudo|command|exec|nice|nohup|xargs|timeout|time)$ ]]; then
+      wb="$b"; i=$((i + 1))
+      vf="$(prefix_value_flags "$wb")"
+      while [ "$i" -lt "${#words[@]}" ] && [[ "${words[$i]}" == -* ]]; do
+        o="${words[$i]}"; i=$((i + 1))
+        [ "$o" = -- ] && break
+        [[ " $vf " == *" $o "* ]] && i=$((i + 1))
+      done
+      if [ "$wb" = env ]; then
+        while [ "$i" -lt "${#words[@]}" ] && [[ "${words[$i]}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do
+          note_assign_idx "$i"; i=$((i + 1))
+        done
+      fi
+      [ "$wb" = timeout ] && i=$((i + 1))
+      continue
+    fi
+    if [ "$u" = 0 ] && [[ "$b" =~ ^(bash|sh|zsh|dash)$ ]]; then
+      j=$((i + 1)); found=0
+      while [ "$j" -lt "${#words[@]}" ] && [[ "${words[$j]}" == -* && "${words[$j]}" != -- ]]; do
+        [[ "${words[$j]}" =~ ^-[A-Za-z]*c[A-Za-z]*$ ]] && { found=1; break; }
+        [[ "${words[$j]}" =~ ^-[oO]$ ]] && j=$((j + 1))
+        j=$((j + 1))
+      done
+      if [ "$found" = 1 ]; then
+        j=$((j + 1))
+        if [ "$j" -lt "${#words[@]}" ] && { [ "${exp_f[$j]}" = 1 ] || [ "${brace_f[$j]}" = 1 ]; }; then deny_unparsed; fi
+      fi
+      return 0
+    fi
+    if [ "$u" = 0 ] && [ "$b" = export ]; then
+      i=$((i + 1))
+      while [ "$i" -lt "${#words[@]}" ]; do
+        [[ "${words[$i]}" == -* ]] && { i=$((i + 1)); continue; }
+        [[ "${words[$i]}" == *=* ]] && { note_assign_idx "$i" 1; i=$((i + 1)); continue; }
+        break
+      done
+      return 0
+    fi
+    if [ "$u" = 0 ] && { [ "$b" = cd ] || [ "$b" = pushd ]; }; then
+      local tgt="${words[$((i + 1))]:-$HOME}" tu=0
+      if [ $((i + 1)) -lt "${#words[@]}" ] && { [ "${exp_f[$((i + 1))]}" = 1 ] || [ "${brace_f[$((i + 1))]}" = 1 ]; }; then tu=1; fi
+      if [ "$SR_CD" = "?" ] || [ "$tu" = 1 ] || [[ "$tgt" == -* ]]; then SR_CD="?"
+      else
+        tgt="$(literalize "$tgt")"
+        SR_CD="$(norm_path "$tgt" "${SR_CD:-$cwd}")"
+        SR_CD="${SR_CD:-/}"
+      fi
+      return 0
+    fi
+    break
+  done
+  [ "$i" -lt "${#words[@]}" ] || return 0
+  if [ "${exp_f[$i]}" = 1 ] || [ "${brace_f[$i]}" = 1 ]; then deny_unparsed; fi
+  w="${words[$i]}"; b="$(literalize "${w##*/}")"
+  i=$((i + 1))
+  case "$b" in
+    git) screen_git "$i" ;;
+    rm) screen_rm "$i" ;;
+  esac
+}
+
+flush_sr_word() {
+  if [ -n "$sr_word" ] || [ "$sr_exp" = 1 ] || [ "$sr_brace" = 1 ]; then
+    if [ "$sr_exp" = 0 ] && [ "$sr_brace" = 0 ] && [[ "$sr_word" != *\'* && "$sr_word" != *\"* ]] \
+      && { [[ "$sr_word" == *'{'*','*'}'* ]] || [[ "$sr_word" == *'{'*'..'*'}'* ]]; }; then
+      sr_brace=1
+    fi
+    words+=("$sr_word"); exp_f+=("$sr_exp"); brace_f+=("$sr_brace")
+  fi
+  sr_word=""; sr_exp=0; sr_brace=0
+}
+
+flush_sr_seg() {
+  flush_sr_word
+  [ "${#words[@]}" -gt 0 ] && screen_segment
+  words=(); exp_f=(); brace_f=()
+}
+
+screen_raw() {
+  local s="$1" i=0 c
+  local n=${#s}
+  local sr_word="" sr_exp=0 sr_brace=0 q=0
+  words=(); exp_f=(); brace_f=()
+  P_GIT_DIR=""; P_GIT_WT=""; P_GIT_CFG=0
+  SR_CD=""
+  while [ "$i" -lt "$n" ]; do
+    c="${s:i:1}"
+    if [ "$q" = 1 ]; then
+      sr_word+="$c"; [ "$c" = "'" ] && q=0
+      i=$((i + 1)); continue
+    fi
+    if [ "$q" = 3 ]; then
+      sr_exp=1
+      if [ "$c" = "\\" ] && [ $((i + 1)) -lt "$n" ]; then sr_word+="$c${s:i+1:1}"; i=$((i + 2)); continue; fi
+      sr_word+="$c"; [ "$c" = "'" ] && q=0
+      i=$((i + 1)); continue
+    fi
+    if [ "$q" = 2 ]; then
+      [ "$c" = '$' ] || [ "$c" = '`' ] && sr_exp=1
+      if [ "$c" = "\\" ] && [ $((i + 1)) -lt "$n" ]; then sr_word+="$c${s:i+1:1}"; i=$((i + 2)); continue; fi
+      sr_word+="$c"; [ "$c" = '"' ] && q=0
+      i=$((i + 1)); continue
+    fi
+    case "$c" in
+      \\)
+        if [ $((i + 1)) -lt "$n" ]; then sr_word+="$c${s:i+1:1}"; i=$((i + 2)); else sr_word+="$c"; i=$((i + 1)); fi ;;
+      "'") q=1; sr_word+="$c"; i=$((i + 1)) ;;
+      '"') q=2; sr_word+="$c"; i=$((i + 1)) ;;
+      '$')
+        sr_exp=1
+        if [ "${s:i+1:1}" = "'" ]; then q=3; fi
+        sr_word+="$c"; i=$((i + 1)) ;;
+      '`') sr_exp=1; sr_word+="$c"; i=$((i + 1)) ;;
+      ' ' | $'\t' | $'\r') flush_sr_word; i=$((i + 1)) ;;
+      $'\n' | ';' | '&' | '|') flush_sr_seg; i=$((i + 1)) ;;
+      *) sr_word+="$c"; i=$((i + 1)) ;;
+    esac
+  done
+  flush_sr_seg
+}
+
+cmd="$(join_continuations "$cmd")"
+screen_raw "$cmd"
+
 if [[ "$cmd" == *agent-harness* ]] && { [ "$AUTO" = 1 ] || [[ "$cmd" =~ worktree-rm|teardown-merged-worktree|ship-init ]]; }; then
   unquoted="$(tr -d "'\"" <<<"$cmd")"
   grep -Eq "$HARNESS_ENV_RE" <<<"$unquoted" && deny_harness_env
@@ -446,9 +788,18 @@ while IFS= read -r seg; do
   [ "$AUTO" = 1 ] && check_redirects "${toks[@]}"
 
   i=0 has_assign=0 XARGS=0 pref=0
+  GIT_DIR_VAL="" GIT_WT_VAL="" GIT_CFG_RISK=0 GIT_ENV_U=0 SAW_LOC=0
+  GIT_LOC=()
   while [ "$i" -lt "${#toks[@]}" ]; do
     t="${toks[$i]}"; b="${t##*/}"
-    if [[ "$t" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then has_assign=1; i=$((i + 1))
+    if [[ "$t" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+      has_assign=1
+      case "${BASH_REMATCH[1]}" in
+        GIT_DIR) GIT_DIR_VAL="${BASH_REMATCH[2]}"; [[ "$GIT_DIR_VAL" == *'$'* ]] && GIT_ENV_U=1 ;;
+        GIT_WORK_TREE) GIT_WT_VAL="${BASH_REMATCH[2]}"; [[ "$GIT_WT_VAL" == *'$'* ]] && GIT_ENV_U=1 ;;
+        GIT_CONFIG | GIT_CONFIG_* | GIT_NAMESPACE) GIT_CFG_RISK=1 ;;
+      esac
+      i=$((i + 1))
     elif is_prefix_keyword "$b"; then i=$((i + 1))
     elif [[ "$b" =~ ^(env|sudo|command|exec|nice|nohup|xargs|timeout|time)$ ]]; then
       pref=1
@@ -507,7 +858,10 @@ while IFS= read -r seg; do
   if check_cleanup "$has_assign" "$c0" "${ct[@]:1}"; then continue; fi
 
   case "$c0" in
-    git) check_git "${ct[@]}" ;;
+    git)
+      [ "$AUTO" = 1 ] && [ "${GIT_CFG_RISK:-0}" = 1 ] && deny_config
+      [ "$AUTO" = 1 ] && [ "${GIT_ENV_U:-0}" = 1 ] && deny_unparsed
+      check_git "${ct[@]}" ;;
     gh) check_gh "${ct[@]}" ;;
     tee | mv | cp | rm | ln | install | truncate | touch | rsync) any_protected "${ct[@]:1}" && deny ;;
     sed)

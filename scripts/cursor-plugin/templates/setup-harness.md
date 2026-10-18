@@ -1,6 +1,6 @@
 ---
 name: setup-harness
-description: "Write the per-tier Cursor model files used by the conductor. Defaults are Grok 4.7."
+description: "Write the per-tier Cursor model files used by the conductor. Defaults are Grok 4.7. Also offer the project pull request template."
 disable-model-invocation: true
 ---
 
@@ -54,3 +54,22 @@ If a slug is not in that set, ignore it and use the tier default. Log why: the s
    ```
 
 3. Tell the user both files apply to new chats, and to pick Grok 4.7 xhigh in the model picker for the main (conductor) chat, because a plugin cannot set the parent model.
+4. Offer `.github/pull_request_template.md` to the project. If that file exists, leave it. If it is missing, write the template below and tell the user the path.
+
+```markdown
+## Summary
+
+What changed, and why.
+
+## Risk
+
+What can go wrong, who it affects, and how you would notice.
+
+## How to revert
+
+The revert commit, the flag, or the deploy step that undoes this change.
+
+## Tier
+
+T1 (low), T2, or T3 (sensitive). Tier comes from blast radius, protected paths, and diff size. It is not a finding tag. T3 needs a cross-check and a human review.
+```

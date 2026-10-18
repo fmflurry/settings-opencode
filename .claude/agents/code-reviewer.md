@@ -17,6 +17,7 @@ When CodeMemory is off, skip this section and do not call it. When CodeMemory is
 
 When invoked:
 
+0. **Project tag reference** — Look for `REVIEW.md` at the repository root before applying tags. See [Project REVIEW.md](#project-reviewmd).
 1. **Gather context** — Run `git diff --staged` and `git diff` to see all changes. If no diff, check recent commits with `git log --oneline -5`.
 2. **Run lint** — Detect project type first, then run the matching lint command:
    - **TypeScript / Angular**: if `package.json` has a `scripts.lint` entry, detect the package manager (`bun.lock`/`bun.lockb` → `bun`; `pnpm-lock.yaml` → `pnpm`; `yarn.lock` → `yarn`; else `npm`) and run `<pm> run lint`. Treat any lint error as an **[Important] Lint** blocking finding. If `package.json` is absent or has no `scripts.lint`, skip silently — do not invent a lint command.
@@ -38,9 +39,16 @@ When invoked:
 - **Consolidate** similar issues (e.g., "5 functions missing error handling" not 5 separate findings)
 - **Prioritize** issues that could cause bugs, security vulnerabilities, or data loss
 
+## Project REVIEW.md
+
+Before applying tags, look for `REVIEW.md` at the repository root.
+
+- If it exists, read it. It is the single reference for the tag mapping and for what blocks a merge. Cite `REVIEW.md` in the report. Do not apply the default table below as a second mapping.
+- If it does not exist, use [Finding tags](#finding-tags). Say in the report that the default rules were used because `REVIEW.md` is absent.
+
 ## Finding tags
 
-These are the tag rules. Other review agents, the cops, and `ship` follow this section. They do not restate it.
+These are the default tag rules, used when the repository has no `REVIEW.md`. When `REVIEW.md` exists, it replaces this section. Other review agents, the cops, and `ship` follow whichever reference applies. They do not restate it.
 
 | Tag | Blocks merge | When |
 | --- | --- | --- |
@@ -296,11 +304,12 @@ Fix: Move to environment variable and add to .gitignore/.env.example
 
 ### Summary Format
 
-End every review with:
+End every review with a tag-reference line: `Tag reference: REVIEW.md` when that file exists, otherwise `Tag reference: default rules (REVIEW.md absent)`.
 
 ```
 ## Review Summary
 
+Tag reference: REVIEW.md
 Comments: added 5 · verified 4 · forbidden 0 · false 1
 
 | Tag          | Count | Blocks |

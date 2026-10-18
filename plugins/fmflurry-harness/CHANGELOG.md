@@ -2,6 +2,11 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.2] - 2026-10-18
+
+- Pull request template with Risk, How to revert, and Tier. `/setup-harness` offers that template to a project that does not have one.
+- The reviewer reads `REVIEW.md` when the repository has one and uses it as the single reference for the tag mapping. Otherwise it uses the default tag rules.
+
 ## [0.4.1] - 2026-10-17
 
 - Enforcement ladder: code, then lint, tests, or static analysis, then a prose rule, then human review. A prose rule carries `why-not-tooled:`.

@@ -566,6 +566,12 @@
       "agent": "git-specialist",
       "subtask": true,
     },
+    "pr": {
+      "description": "Open a pull request with the repo template, after reading REVIEW.md for the tag mapping",
+      "template": "{file:commands/pr.md}\n\n$ARGUMENTS",
+      "agent": "git-specialist",
+      "subtask": true,
+    },
     "push-changes": {
       "description": "Commit relevant changes and push through the git workflow",
       "template": "{file:commands/git.md}\n\nExecute this git task:\nCommit the relevant changes with a compliant conventional commit message and push the current branch to its remote. Before pushing, inspect every local commit that would be published: compare against the tracked upstream when one exists, otherwise compare against the branch point from the repository default branch and stop if unrelated committed work would also be published. If no upstream exists and the published commit set is correct, push with upstream tracking. If there is nothing to commit, do not create an empty commit. If hooks fail or the push is ambiguous, stop and report the blocker.\n\nAdditional context: $ARGUMENTS",

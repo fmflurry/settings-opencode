@@ -808,6 +808,39 @@ check "git-guard allows bare force-with-lease on a feature branch" allowed "git 
 check "git-guard allows bare force on a feature branch" allowed "git push --force"
 check "git-guard allows force push origin HEAD on a feature branch" allowed "git push --force origin HEAD"
 check "git-guard allows push origin HEAD on a feature branch" allowed "git push origin HEAD"
+check "git-guard allows a dollar sign in a commit message" allowed 'git commit -m "cost is $5"'
+check "git-guard allows a dollar sign in a single-quoted commit message" allowed "git commit -m 'cost is \$5'"
+check "git-guard denies command substitution in a push ref" denied 'git push origin $(echo master)'
+check "git-guard denies a double-quoted command substitution in a push ref" denied 'git push origin "$(echo master)"'
+check "git-guard denies backticks in a push ref" denied 'git push origin `echo master`'
+check "git-guard denies a backtick inside a push ref" denied 'git push origin ma`echo ster`'
+check "git-guard denies a command substitution inside a push ref" denied 'git push origin ma$(echo s)ter'
+check "git-guard denies ANSI-C quoted git" denied "$(printf '%s' "\$'git' push origin master")"
+check "git-guard denies ANSI-C quoted push" denied "$(printf '%s' "git \$'push' origin master")"
+check "git-guard denies an ANSI-C split subcommand" denied "$(printf '%s' "git pu\$'sh' origin master")"
+check "git-guard denies brace expansion of a base ref" denied 'git push origin ma{ster,in}'
+check "git-guard denies a base ref hidden by a line continuation" denied "$(printf 'git push origin \\\nmaster')"
+check "git-guard denies an assignment substitution in front of a base push" denied 'FOO=$(date) git push origin master'
+check "git-guard denies -c push.default on a bare push" denied 'git -c push.default=matching push'
+check "git-guard denies -c push.default even with an explicit feature ref" denied 'git -c push.default=matching push origin feat'
+check "git-guard denies -c remote.push" denied 'git -c remote.origin.push=refs/heads/master:refs/heads/master push origin feat'
+check "git-guard denies --config-env equals form" denied 'git --config-env=push.default=VAR push'
+check "git-guard denies --config-env split form" denied 'git --config-env push.default=VAR push'
+check "git-guard denies GIT_CONFIG_COUNT injection" denied 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=push.default GIT_CONFIG_VALUE_0=matching git push'
+check "git-guard denies GIT_CONFIG_PARAMETERS injection" denied 'GIT_CONFIG_PARAMETERS=push.default=matching git push'
+git init -q -b master "$TMP/baserepo"
+( cd "$TMP/baserepo" && git config user.email t@t && git config user.name t && echo z >z && git add z && git commit -qm Z )
+check "git-guard denies a bare push through --git-dir of a base repo" denied "git --git-dir $TMP/baserepo/.git push"
+check "git-guard denies a bare push through --git-dir= of a base repo" denied "git --git-dir=$TMP/baserepo/.git push"
+check "git-guard denies --git-dir plus --work-tree of a base repo" denied "git --git-dir=$TMP/baserepo/.git --work-tree=$TMP/baserepo push"
+check "git-guard denies -C of a feature repo combined with --git-dir of a base repo" denied "git -C $TMP/work --git-dir=$TMP/baserepo/.git push"
+check "git-guard denies a GIT_DIR prefix pointing at a base repo" denied "GIT_DIR=$TMP/baserepo/.git git push"
+check "git-guard denies env GIT_DIR pointing at a base repo" denied "env GIT_DIR=$TMP/baserepo/.git git push"
+check "git-guard denies an exported GIT_DIR pointing at a base repo" denied "export GIT_DIR=$TMP/baserepo/.git; git push"
+check "git-guard denies cd to a base repo before a bare push" denied "cd $TMP/baserepo && git push"
+check "git-guard denies a bare push when --git-dir does not resolve" denied "git --git-dir=$TMP/no-such-git push"
+check "git-guard allows a bare push through --git-dir of the feature repo" allowed "git --git-dir=$TMP/work/.git push"
+check "git-guard allows a bare push through -C of the feature repo" allowed "git -C $TMP/work push"
 check "git-guard fails open on empty input" bash -c 'echo "{}" | bash "$1" | test -z "$(cat)"' _ "$HOOKS/autonomy-git-guard.sh"
 rm -f "$TMP/state/autonomy.on"
 while IFS= read -r c; do check "git-guard (flag off) allows: $c" allowed "$c"; done <<<"$DENY_CMDS"
@@ -819,6 +852,12 @@ while IFS= read -r c; do check "git-guard (flag off) allows: $c" allowed "$c"; d
 git -C "$TMP/work" checkout -q master
 check "git-guard (flag off) allows bare push on the base branch" allowed "git push"
 git -C "$TMP/work" checkout -q feat
+check "git-guard (flag off) allows a push substitution" allowed 'git push origin $(echo master)'
+check "git-guard (flag off) allows -c push.default" allowed 'git -c push.default=matching push origin master'
+check "git-guard (flag off) denies ANSI-C quoted git" denied "$(printf '%s' "\$'git' push origin master")"
+check "git-guard (flag off) denies ANSI-C quoted push" denied "$(printf '%s' "git \$'push' origin master")"
+check "git-guard (flag off) denies --config-env" denied 'git --config-env=push.default=VAR status'
+check "git-guard (flag off) denies --config-env split form" denied 'git --config-env alias.x=VAR status'
 
 WGF="$(mktemp -d)"; WGF="$(cd -P "$WGF" && pwd)"
 mkdir -p "$WGF/main" "$WGF/st"
@@ -877,6 +916,13 @@ wg allow "$WM" "rm -rf build/{x,y}"
 wg allow "$WM" "agent-harness worktree-rm /x"
 wg allow "$WGF/st" "find . -name x -delete"
 wg allow "$WM" "git commit -m 'doc git worktree remove'"
+wg deny "$WM" 'git worktree ${x:-remove} /p'
+wg deny "$WM" 'git worktree $x /p'
+wg deny "$WS" 'rm -f .git'
+wg deny "$WS" 'rm .git'
+wg deny "$WM" "rm -rf $WS/.git"
+wg deny "$WM" "rm -rf $WS/.git/"
+wg deny "$WM" 'rm -rf $(echo /no/such/worktree)'
 rm -rf "$WGF"
 
 # ---- worktree-rm

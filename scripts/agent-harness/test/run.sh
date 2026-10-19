@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2016
 set -uo pipefail
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 FX="$TMP/fx"; mkdir -p "$FX" "$TMP/state" "$TMP/proj/.claude"
@@ -876,7 +877,7 @@ probe_decision() { # mode cmd
   rm -f "$TMP/state/autonomy.on"; [ "$1" = on ] && flag_on
   local d; d="$(decision "$2")"; echo "${d:-allow}"
 }
-PROBE_CMDS="$(cat <<'CMDS'
+IFS= read -r -d '' PROBE_CMDS <<'CMDS' || true
 allow|allow|git reset --har
 allow|allow|git reset --ha HEAD~1
 allow|allow|git commit --no-verif -m x
@@ -974,12 +975,16 @@ deny|allow|git push origin $'ma\x69n'
 deny|allow|git push origin "ma"\@NL@in
 deny|allow|git push origin "a@NL@:main
 CMDS
-)"
+PROBE_CMDS="${PROBE_CMDS%$'\n'}"
+PROBE_HOME="$TMP/probehome"; mkdir -p "$PROBE_HOME/Workspace/isagri"
+git clone -q "$TMP/baserepo" "$PROBE_HOME/Workspace/isagri/gc.platform" 2>/dev/null
+REAL_HOME="$HOME"; export HOME="$PROBE_HOME"
 while IFS='|' read -r p_on p_off p_cmd; do
   p_cmd="${p_cmd//@B@/$PROBE_BASE}"; p_cmd="${p_cmd//@NL@/$'\n'}"
   check "git-guard probe (flag on) $p_on: $p_cmd" test "$(probe_decision on "$p_cmd")" = "$p_on"
   check "git-guard probe (flag off) $p_off: $p_cmd" test "$(probe_decision off "$p_cmd")" = "$p_off"
 done <<<"$PROBE_CMDS"
+export HOME="$REAL_HOME"
 perf_guard() { # name expected file [limit_ms]
   local json="$TMP/perf.json" t0 t1 out dec ms limit="${4:-1000}"
   jq -Rs --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:.}}' <"$3" >"$json"
@@ -1052,6 +1057,70 @@ for ush in bash /bin/bash; do
   command -v "$ush" >/dev/null 2>&1 || continue
   check "git-guard does not share a branch lookup between non-ASCII paths that differ after the first byte ($ush)" test "$(uni_decision "$ush")" = deny
 done
+OSTYPE_WIN=msys
+winguard() { # command -> decision with the hook told it runs under Git Bash
+  ( cd "$GUARD_CWD" && jq -n --arg c "$1" --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | OSTYPE="$OSTYPE_WIN" "$GUARD_BASH" "$HOOKS/autonomy-git-guard.sh" ) \
+    | { jq -r '.hookSpecificOutput.permissionDecision // empty'; echo; } | head -1 | sed 's/^$/allow/'
+}
+flag_on
+while IFS= read -r c; do
+  check "git-guard (Git Bash) denies: $c" test "$(winguard "$c")" = deny
+done <<'WINCMDS'
+git.exe push origin main
+GIT.EXE push origin main
+git push origin main
+/usr/bin/git push origin main
+/mingw64/bin/git.exe push origin master
+"/c/Program Files/Git/cmd/git.exe" push origin main
+"C:\Program Files\Git\cmd\git.exe" push origin main
+'C:\Program Files\Git\cmd\GIT.EXE' push origin main
+/usr/bin/gh.exe pr merge 1
+gh.exe pr merge 1
+echo x > .CLAUDE/settings.json
+echo x > ".claude\settings.json"
+WINCMDS
+check "git-guard (Git Bash) allows an ordinary command" test "$(winguard 'git.exe status')" = allow
+rm -f "$TMP/state/autonomy.on"
+eval "$(sed -n '/^winconv() {/,/^}/p' "$HOOKS/autonomy-git-guard.sh")"
+while IFS='|' read -r in want; do
+  winconv "$in"
+  check "winconv maps $in to $want" test "$WP" = "$want"
+done <<'WINCONV'
+C:\Users\me\x|/c/Users/me/x
+C:/Users/me|/c/Users/me
+d:|/d
+\\?\C:\a\b|/c/a/b
+//?/C:/a/b|/c/a/b
+//./D:/a|/d/a
+/cygdrive/c/x/y|/c/x/y
+/cygdrive/D|/d
+/c/x|/c/x
+rel\a|rel/a
+WINCONV
+hook_commands() { jq -r '[.. | objects | select(has("command")) | .command] | .[]' "$1"; }
+check_registered_hooks() { # file regex script-dir: every command runs through bash and names a script that exists
+  local file="$1" re="$2" dir="$3" c n=0 bad=0
+  while IFS= read -r c; do
+    n=$((n + 1))
+    if [[ "$c" =~ $re ]] && [ -f "$dir/${BASH_REMATCH[1]}" ]; then :; else bad=$((bad + 1)); echo "  hook command not runnable through bash: $c"; fi
+  done < <(hook_commands "$file")
+  [ "$n" -gt 0 ] && [ "$bad" -eq 0 ]
+}
+check "claude settings register every hook as bash <existing script>" \
+  check_registered_hooks "$HERE/.claude/settings.json" '^bash ~/\.claude/hooks/([A-Za-z0-9_.-]+\.sh)$' "$HERE/.claude/hooks"
+check "cursor hooks.json registers every hook as bash <adapter> <existing script>" \
+  check_registered_hooks "$HERE/plugins/fmflurry-harness/hooks/hooks.json" \
+  '^bash \$\{CURSOR_PLUGIN_ROOT\}/hooks/scripts/cursor-adapter\.sh \$\{CURSOR_PLUGIN_ROOT\}/hooks/scripts/([A-Za-z0-9_.-]+\.sh) [A-Za-z]+$' \
+  "$HERE/plugins/fmflurry-harness/hooks/scripts"
+INSTALL_JQ="$(sed -n '/^        def bashify/,/^    '"'"' "\$settings"/p' "$HERE/install.sh" | sed '$d')"
+install_merge() { jq --arg h "~/.claude/hooks" --arg mod /m --arg modTilde "~/.claude/mods/autonomy-status" "$INSTALL_JQ" <<<"$1"; }
+LEGACY_SETTINGS='{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"~/.claude/hooks/autonomy-git-guard.sh"},{"type":"command","command":"/opt/own/hook.sh"}]}]}}'
+for seed in '{}' "$LEGACY_SETTINGS"; do
+  merged="$(install_merge "$seed")"
+  check "installer registers hooks through bash (seed ${seed:0:20})" test -n "$merged" -a "$(jq -r '[.. | objects | select(has("command")) | .command | select(test("\\.claude/hooks/")) | select(startswith("bash ") | not)] | length' <<<"$merged")" = 0
+  check "installer registers the git guard once (seed ${seed:0:20})" test "$(jq -r '[.. | objects | select(has("command")) | .command | select(endswith("autonomy-git-guard.sh"))] | length' <<<"$merged")" = 1
+done
+check "installer leaves a user's own hook command alone" test "$(install_merge "$LEGACY_SETTINGS" | jq -r '[.. | objects | select(has("command")) | .command | select(. == "/opt/own/hook.sh")] | length')" = 1
 FAKE_AWK_DIR="$TMP/fakeawk"; mkdir -p "$FAKE_AWK_DIR"
 REAL_AWK="$(command -v awk)"
 fake_awk() { # body
@@ -1091,9 +1160,15 @@ wg_decision() { # mode cwd cmd
   rm -f "$WGF/st/autonomy.on"; [ "$1" = on ] && : >"$WGF/st/autonomy.on"
   local out
   out="$(jq -n --arg c "$3" --arg w "$2" '{tool_input:{command:$c},cwd:$w}' \
-    | AGENT_HARNESS_TEST=1 AGENT_STATE_DIR="$WGF/st" CLAUDE_PROJECT_DIR="$WGF/main" bash "$HOOKS/autonomy-git-guard.sh")"
+    | AGENT_HARNESS_TEST=1 AGENT_STATE_DIR="$WGF/st" CLAUDE_PROJECT_DIR="$WGF/main" "$GUARD_BASH" "$HOOKS/autonomy-git-guard.sh")"
   [ -n "$out" ] || { echo allow; return; }
   jq -r '.hookSpecificOutput.permissionDecision // "allow"' <<<"$out"
+}
+wg_rel_decision() {
+  rm -f "$WGF/st/autonomy.on"
+  jq -n --arg c "rm -rf ../sib" --arg w "$WGF/main" '{tool_input:{command:$c},cwd:$w}' \
+    | AGENT_HARNESS_TEST=1 AGENT_STATE_DIR="$WGF/st" CLAUDE_PROJECT_DIR="$WGF/main" "$NORM_SHELL" "$HOOKS/autonomy-git-guard.sh" \
+    | jq -r '.hookSpecificOutput.permissionDecision // "allow"'
 }
 wg() { local exp="$1" cwd="$2" m; shift 2; for m in off on; do check "git-guard worktree ($m) $exp: $*" test "$(wg_decision "$m" "$cwd" "$*")" = "$exp"; done; }
 WM="$WGF/main"; WS="$WGF/sib"
@@ -1106,6 +1181,10 @@ wg deny "$WM" "git --git-dir .git worktree remove /p"
 wg deny "$WM" "git -c alias.x='worktree remove' x /p"
 wg deny "$WM" "git config alias.wr 'worktree remove'"
 wg deny "$WM" "rm -rf ../sib"
+for ush in bash /bin/bash; do
+  command -v "$ush" >/dev/null 2>&1 || continue
+  check "git-guard resolves a .. segment in a relative path ($ush)" test "$(NORM_SHELL="$ush" wg_rel_decision)" = deny
+done
 wg deny "$WS" "rm -rf ."
 wg deny "$WS" "rm -rf *"
 wg deny "$WM" "cd $WGF/orca/workspaces/r && rm -rf w"

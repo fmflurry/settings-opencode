@@ -1,9 +1,9 @@
 # Review summary format
 
-The thorough local review (ship stage 8) ends with one PR comment. A human reads it to audit the run. Nothing in
+The thorough local review (ship stage 6) is summarised in one PR comment. A human reads it to audit the run. Nothing in
 the merge path reads it. `ship-merge` does not treat it as proof of review. It is not a GitHub status.
 
-The agent posts the comment once, when the review ends (after the last round), with
+The agent posts the comment once, right after `gh pr create` (stage 7), with
 `gh pr comment <n> --body-file <body-file>`.
 
 ## Verdict lines
@@ -14,7 +14,7 @@ The agent posts the comment once, when the review ends (after the last round), w
 | Concerns | `⚠️ Review: concerns` | `<!-- agent-review sha=<head-sha> verdict=concerns -->` |
 
 - `pass` only when no Important finding is open at the head SHA.
-- `concerns` is posted when an Important finding is still open after round 3. Escalate at the same time.
+- `concerns` is posted when an Important finding is still open when the loop stops (repeated findings or the ceiling). Escalate at the same time.
 - `<head-sha>` is the SHA the review read, taken with `git rev-parse HEAD` at the start of the last round.
 
 ## Body
@@ -27,7 +27,7 @@ The agent posts the comment once, when the review ends (after the last round), w
 - angular-cop: <n/a, no Angular or TS changed | summary>
 - dotnet-cop: <n/a, no .NET changed | summary>
 - database-reviewer: <n/a, no SQL changed | summary>
-- rounds: <n of 3>
+- rounds: <n>
 
 Non-blocking follow-ups:
 - <one line each, same list as the PR body>

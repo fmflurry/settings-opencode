@@ -24,9 +24,10 @@ The main checkout is never used for goal work.
 
 1. **Init (first action).** `agent-harness ship-init <type> <scope> <desc> --goal "<text>"` creates a dedicated
    worktree and branch from the latest `origin/<base>`, then registers `{v, goal, slug, branch, path, base, via, pr, head_oid, status,
-   reason, report, created_at}` and writes `branch` and `slug` into `goal.json`. It prints the worktree path on stdout and
-   `slug=<slug>` on stderr. Resume an existing PR with `agent-harness ship-init --adopt <pr>`.
-2. **Cycle.** Implement, verify, PR, review, CI, merge.
+   reason, report, created_at}` and writes `branch`, `slug` and `base` into `goal.json`. It prints the worktree path on stdout and
+   `slug=<slug>` on stderr. Resume an existing PR with `agent-harness ship-init --adopt <pr>`; if that PR is still a
+   draft, run `gh pr ready <pr>` before `ship-merge`, which refuses drafts.
+2. **Cycle.** Implement, verify, local review, local fix loop, push and open the PR, CI, merge.
 3. **Report before merge.** Render the show-me summary into the worktree, commit it in the PR, embed it in the PR body.
    Do this on the success path and on the blocked path.
 4. **Merged.** `agent-harness ship-merge <pr>` merges, then runs `agent-harness teardown-merged-worktree <pr>` for a
@@ -44,13 +45,18 @@ In autonomous mode the run is a loop, not a checklist. It repeats until the PR m
 
 1. **Implement.** Tests first, then code, through `tdd-guide` and `coder`, inside the goal worktree.
 2. **Verify.** Run the project checks yourself.
-3. **Push and open the PR** (draft).
-4. **Thorough local review** of the PR diff.
-5. **CI.** Wait for the required checks and the optional review status. Read the review threads.
-6. **Merge** with `agent-harness ship-merge`. This is the only merge path. It checks hard facts. Its refusal is input
-   to the loop, not the end of the run.
+3. **Thorough local review** of the diff (`code-reviewer`, `security-reviewer`, the stack cop, `database-reviewer` when
+   SQL changed). Record each verdict with `agent-harness goal review code|security pass|fail`.
+4. **Local fix loop.** Fix confirmed findings, re-run the checks, review again, until both verdicts pass.
+5. **Push and open the PR** (ready, not draft). The push guard denies a push or `gh pr create` without both passing
+   verdicts for the exact diff.
+6. **CI.** Wait for the required checks and the optional review status. Read the review threads. Failing checks go
+   through `loop-on-ci` and `fix-ci`; comments are addressed one by one.
+7. **Merge** with `agent-harness ship-merge`, then teardown. This is the only merge path. It checks hard facts. Its
+   refusal is input to the loop, not the end of the run.
 
-Any blocker (see [Blockers](#blockers)) sends the run back to **fix**, then **review again**, then **retry the merge**.
+Any blocker (see [Blockers](#blockers)) sends the run back to **fix**, then **review again locally**, then **push**,
+then **CI again**, then **retry the merge**. A CI or comment fix is never pushed unreviewed.
 The run ends only in one of two states: `done` (the PR is merged and torn down), or escalated (a human-only blocker or
 the no-progress rule, see [Stop conditions](#stop-conditions)).
 
@@ -88,26 +94,34 @@ Check the mode with `agent-harness autonomy status`. The rules behind both modes
    brief contract rule, and the FILES paths sit under the goal worktree. Commits go through `git-specialist`.
 5. **Verify.** Run the verification yourself with `git -C <wt>` or in the worktree, not through a subagent's
    self-report. Commands are in [lifecycle.md](references/lifecycle.md#5-verify).
-6. **Draft the PR.** Dispatch `git-specialist` to push the branch and open a draft PR with the body sections
-   `## Content`, `## QA tests`, `## Locked decisions`, `## Non-blocking follow-ups`. Put every assumption under
-   `## Locked decisions`. Then `agent-harness goal pr <n>`.
-7. **Thorough review (local).** Still draft. Dispatch in one message, so they run in parallel, each on
-   `git diff <base>...HEAD`: `code-reviewer` (correctness), `security-reviewer` (auth, secrets, input, CI,
+6. **Thorough review and fix (local).** Nothing is pushed yet. Dispatch in one message, so they run in parallel, each
+   on `git diff <base>...HEAD`: `code-reviewer` (correctness), `security-reviewer` (auth, secrets, input, CI,
    permissions), and the stack cop when it applies: `angular-cop` for Angular/TS, `dotnet-cop` for .NET.
    `database-reviewer` when SQL changed. Verify each finding against the code and drop the ones you cannot confirm.
-   Every confirmed Important finding is a blocker: fix it, push through `git-specialist`, run
-   `agent-harness goal sha <sha>`, then review again on the new diff. Nit and Pre-existing findings do not block.
-   The tag rules are in the code-reviewer agent (Finding tags). The review/fix loop is capped at 3 rounds.
-   Run `agent-harness goal bump` before each fix round. The no-progress rule below still applies and can escalate
-   sooner. When `goal bump` exits 3, stop. The goal is already escalated. Tell the user the remaining confirmed
-   Important findings and do not start another fix round. When the review ends, post one summary PR comment in the format of
+   Record each verdict with `agent-harness goal review code pass|fail` and `agent-harness goal review security pass|fail`.
+   Every confirmed Important finding is a blocker: fix it locally, re-run the local checks, then review again on the
+   new diff. Nit and Pre-existing findings do not block. The tag rules are in the code-reviewer agent (Finding tags).
+   Before each fix round pipe the confirmed findings (`<reviewer>:<path>` or `ci:<check>`, one per line) to
+   `agent-harness goal bump`. It stops the run (exit 3, goal escalated) when the same findings come back after a fix
+   round, or at the safety ceiling of 10 rounds. Tell the user the remaining confirmed Important findings and do not
+   start another fix round. The push guard denies `git push` and `gh pr create` while the active goal has no passing
+   code and security review for the exact diff being pushed. Any change to that diff, including a rebase conflict
+   resolution, needs a new review. A commit that touches only `docs/agent-reports/` does not.
+7. **Push and open the PR.** Dispatch `git-specialist` to push the branch and open the PR, ready (not draft), with the
+   body sections `## Content`, `## QA tests`, `## Locked decisions`, `## Non-blocking follow-ups`. Put every
+   assumption under `## Locked decisions`. Then `agent-harness goal pr <n>` and `agent-harness goal sha <sha>`. Right
+   after `gh pr create`, post the review summary comment in the format of
    [review-format.md](references/review-format.md). It is an audit trail for a human. It is not a GitHub status, and
    `ship-merge` does not read it.
-8. **Mark ready.** `gh pr ready <n>`. `ship-merge` refuses drafts and never marks a PR ready, so this step is required.
+8. **Re-review before every later push.** The review gate applies to each push after the PR exists. Every CI or comment
+   fix is: fix locally, re-run the local checks, review the new diff locally (the reviewers may review only
+   `git diff <last-reviewed-sha>..HEAD`) and record `agent-harness goal review code|security pass`, then push, then CI
+   again, then retry `ship-merge`. The report commit (stage 11) is exempt: it changes only `docs/agent-reports/`.
 9. **Wait for CI.** `gh pr checks <n> --watch`. On a failed check, use the `loop-on-ci` skill, which routes failures
    through the `fix-ci` skill. When the repo sets `reviewStatus`, also check that status on the head. On a failure,
-   fix the cause, push through `git-specialist`, then `agent-harness goal sha <sha>`. Run `agent-harness goal bump`
-   before each fix round. Exit 3 means the 3-round cap is hit: stop and tell the user the remaining findings.
+   fix the cause, re-review (stage 8), push through `git-specialist`, then `agent-harness goal sha <sha>`. Pipe the
+   failing checks (`ci:<check>`) to `agent-harness goal bump` before each fix round. Exit 3 means the same failures
+   repeated or the ceiling is hit: stop and tell the user the remaining findings.
 10. **Comments.** Run the `get-pr-comments` skill to list open threads. Address each one with a fix or a reply that
     says why not, then resolve the threads you addressed. See lifecycle step 10.
 11. **Report.** Generate the show-me HTML, render it with `agent-harness report <slug|branch> <html>` into the worktree at
@@ -134,7 +148,7 @@ A blocker is anything that stops the merge or the review from going green. Class
 
 The agent fixes these itself, pushes, and runs the loop again. Do not notify for them.
 
-- **Review findings.** Confirmed Important findings from stage 7. Nit and Pre-existing findings go under
+- **Review findings.** Confirmed Important findings from stage 6. Nit and Pre-existing findings go under
   `## Non-blocking follow-ups`. Pre-existing findings never block.
 - **Failing tests, lint or build.** Fix the diff. Never skip or disable a test to get past it.
 - **CI failures caused by code or config in the repo.** This includes workflow and CI config when the cause lies
@@ -160,7 +174,7 @@ blocked path in [Stop conditions](#stop-conditions), and stop.
 - A product decision that the repo cannot answer.
 - An action on the forbidden list (see Hard limits).
 - The no-progress cap is reached (see Stop conditions).
-- The review/fix cap (3 rounds) is reached. Tell the user the remaining Important findings (see Stop conditions).
+- The same findings repeat after a fix round, or the safety ceiling of 10 rounds is reached. Tell the user the remaining Important findings (see Stop conditions).
 
 ## Stop conditions
 
@@ -175,7 +189,8 @@ active and the PR is unmerged. Do not end the turn to wait for a fix you can mak
   failure as the iteration before. The same non-review blocker with the same failure also counts. Escalate with
   `agent-harness goal escalate "<reason>"` and notify failure, then the blocked path. A new failure, a new finding, or a
   green check counts as progress.
-- **Review/fix cap.** `agent-harness goal bump` exits 3 when fix rounds reach 3. Stop. Tell the user the remaining
+- **Repeated findings.** `agent-harness goal bump` exits 3 when the same findings (fingerprint of the stdin lines)
+  repeat after a fix round, or when fix rounds reach the safety ceiling of 10. Stop. Tell the user the remaining
   confirmed Important findings. Do not start another fix round. The no-progress rule above can still escalate earlier.
 - **Safety stop.** The Stop gate escalates after 5 NO-PROGRESS blocks or 30 blocks in total. Treat it as escalated, then
   the blocked path. A `goal bump` exit 3 is the same kind of stop: the Important findings that remain go to the user, and the loop ends.

@@ -58,15 +58,16 @@ These stay forbidden in every mode:
 The flag does not authorise any action not listed above, and it does not authorise a merge that the gate refused.
 
 **(e) Loop until done or escalated.** The run is a loop: ship, review, fix blockers, review again, merge, repeat. Each
-iteration runs implement, verify, push, review, CI, then `agent-harness ship-merge`. A refusal or a blocker sends the
-run back to fix, then review again, then retry the merge. The run ends in one of two states: the goal is `done` (PR
-merged), or it is escalated. Escalate only when a human-only blocker stops it, or when a full loop iteration makes no
-progress (the same blocker and the same failure as the one before). Record the reason with
-`agent-harness goal escalate "<reason>"`. The Stop hook (`ship-stop-gate`) blocks an early stop while the goal is
-active and the PR is unmerged. It escalates after five no-progress blocks or 30 blocks in total, and it fails open
-when the host cannot be read. Review/fix rounds stop at 3. `agent-harness goal bump` exits 3 at that ceiling.
-Stop and tell the user the remaining findings. Do not start another fix round. The no-progress rule still escalates
-earlier. Do not work around the loop by ending the turn.
+iteration runs implement, verify, local review, push, CI, then `agent-harness ship-merge`. A refusal or a blocker sends
+the run back to fix, then local review again, then push, CI and the merge retry. The push guard denies `git push` and
+`gh pr create` until `agent-harness goal review code|security pass` is recorded for the exact diff. The run ends in
+one of two states: the goal is `done` (PR merged), or it is escalated. Escalate only when a human-only blocker stops
+it, or when a full loop iteration makes no progress (the same blocker and the same failure as the one before). Record
+the reason with `agent-harness goal escalate "<reason>"`. The Stop hook (`ship-stop-gate`) blocks an early stop while
+the goal is active and the PR is unmerged. It escalates after five no-progress blocks or 30 blocks in total, and it
+fails open when the host cannot be read. The review/fix loop stops when the same findings repeat (fingerprint piped to
+`agent-harness goal bump`, exit 3), with a safety ceiling of 10 rounds. Stop and tell the user the remaining findings.
+Do not start another fix round. Do not work around the loop by ending the turn.
 
 ## Scope
 

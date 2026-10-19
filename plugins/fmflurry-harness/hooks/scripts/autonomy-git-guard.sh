@@ -75,7 +75,7 @@ alts="$(cfg '(.protectedPaths // []) | map(ltrimstr("^")) | join("|")')"
 alts="${alts:-$DEFAULT_ALTS}"
 ALTS_DEFAULT=0
 [ "$alts" = "$DEFAULT_ALTS" ] && ALTS_DEFAULT=1
-AUTONOMY_FLAG='\.claude/state/autonomy\.on'
+AUTONOMY_FLAG='\.claude/state/(autonomy\.on|goal\.json)'
 TOKEN_RE="(^|/)(${alts})|${AUTONOMY_FLAG}"
 if [ "$WIN" = 1 ]; then lc "$TOKEN_RE"; TOKEN_RE="$LCV"; fi
 LOOSE_RE="$(sed -E 's/\$(\||$)/\1/g' <<<"$alts")|${AUTONOMY_FLAG}"
@@ -92,10 +92,18 @@ deny_alias() { emit deny "Blocked by git-guard: git aliases can smuggle worktree
 deny_branch_delete() { emit deny "Blocked by git-guard: branch deletion only via agent-harness cleanup <pr> after merge."; }
 deny_config() { emit deny "Blocked by git-guard: git config injection (-c, --config-env, GIT_CONFIG_*) is not allowed."; }
 deny_unparsed() { emit deny "Blocked by git-guard: cannot parse this command safely (substitution, expansion, or ANSI-C quoting)."; }
+deny_review() { emit deny "Blocked by git-guard: $1"; }
 is_protected_token() {
   local t="${1//[<>]/}"
   if [ "$WIN" = 1 ]; then t="${t//\\//}"; lc "$t"; t="$LCV"; fi
   t="${t#of=}"
+  case "${t##*/}" in
+    [Gg][Oo][Aa][Ll].[Jj][Ss][Oo][Nn] | [Aa][Uu][Tt][Oo][Nn][Oo][Mm][Yy].[Oo][Nn])
+      cd_sync
+      [ "${CD_BASE:-}" = "?" ] && return 0
+      norm_path "$t" "${CD_BASE:-$cwd}"
+      [[ "$NP" == */.claude/state/* ]] && return 0 ;;
+  esac
   [[ "$t" =~ $TOKEN_RE ]]
 }
 any_protected() {
@@ -168,6 +176,82 @@ resolve_head() {
   return "$st"
 }
 
+GATE_DIR="" GATE_BASE=""
+gate_git() {
+  if [ "$SAW_LOC" = 1 ] || [ -n "${GIT_DIR_VAL:-}" ] || [ -n "${GIT_WT_VAL:-}" ]; then
+    (
+      cd "$cwd" 2>/dev/null || exit 1
+      [ -z "${GIT_DIR_VAL:-}" ] || export GIT_DIR="$GIT_DIR_VAL"
+      [ -z "${GIT_WT_VAL:-}" ] || export GIT_WORK_TREE="$GIT_WT_VAL"
+      git ${GIT_LOC+"${GIT_LOC[@]}"} "$@"
+    )
+  else
+    git -C "$GATE_DIR" "$@"
+  fi
+}
+
+# Gated while autonomy is on and the goal is active; an unreadable goal.json fails closed.
+# Sets GATE_BASE from goal.json.
+gate_on() {
+  local goal="$STATE_DIR/goal.json" st=""
+  [ "$AUTO" = 1 ] && [ -f "$goal" ] || return 1
+  { read -r st; read -r GATE_BASE; } < <(jqr '(.status // ""), (.base // "")' "$goal" 2>/dev/null)
+  [ "$st" = active ] || [ -z "$st" ]
+}
+
+# The recipe is repeated in scripts/agent-harness/goal.sh (hooks must not source lib.sh): keep both identical.
+# Sets GKEY to the hash of the byte-exact diff a push would publish, ignoring the harness's own report artifacts.
+# Flags override diff.* config so a repo setting cannot change or empty the diff.
+gate_key() {
+  local rev="$1" b mb="" k=""
+  for b in "$GATE_BASE" "$(gate_git symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')" "$BASE_A" "$BASE_B"; do
+    [ -n "$b" ] || continue
+    mb="$(gate_git merge-base "origin/$b" "$rev" 2>/dev/null)" && [ -n "$mb" ] && break
+    mb=""
+  done
+  [ -n "$mb" ] || return 1
+  k="$(set -o pipefail; gate_git -c core.quotepath=true diff --no-ext-diff --no-textconv --binary --full-index --no-color --no-renames --no-relative -O/dev/null --src-prefix=a/ --dst-prefix=b/ --diff-algorithm=myers -U3 --inter-hunk-context=0 --submodule=short --ignore-submodules=none "$mb" "$rev" -- ':/' ':(top,exclude)docs/agent-reports' 2>/dev/null | gate_git hash-object --stdin 2>/dev/null)" || return 1
+  case "$k" in e69de29bb2d1d6434b8b29ae775ad8c2e48c5391 | 473a0f4c3be8a93681a267e3b1e9a7dcda1185436fe141f7749120a303721813) k=empty ;; esac
+  [ -n "$k" ] || return 1
+  GKEY="$k"
+}
+
+# $1 = directory the command runs in ("?" when unknown); the rest = pushed source revs ("HEAD" when none).
+review_gate() {
+  local goal="$STATE_DIR/goal.json" src ok
+  GATE_DIR="$1"; shift
+  [ "$#" -gt 0 ] || set -- HEAD
+  for src in "$@"; do
+    if [ "$GATE_DIR" = "?" ] || ! gate_key "$src"; then
+      deny_review "cannot compute review key for '$src' (unknown directory, or no origin/<base> to diff against). Run from the goal worktree after \`git fetch origin\`, then push again."
+    fi
+    ok="$(jqr --arg k "$GKEY" '((.reviews // {})[$k] // {}) | ((.code.verdict == "pass") and (.security.verdict == "pass"))' "$goal" 2>/dev/null)"
+    [ "$ok" = true ] || deny_review "review the diff before pushing: no passing code and security review is recorded for it (key $GKEY). Run the local reviewers, record each verdict with \`agent-harness goal review code|security pass|fail\`, fix findings, then push again."
+  done
+}
+
+# Pushes of backup/* refs are the safety net before a rewrite and are never gated.
+push_gate() {
+  local gd="$1" a src dst; shift
+  local -a srcs=()
+  gate_on || return 0
+  GATE_DIR="$gd"
+  if [ "$#" -eq 0 ]; then
+    if [ -n "$(gate_git config --get-regexp '^remote\..*\.push$' 2>/dev/null)" ] || [ "$(gate_git config --get push.default 2>/dev/null)" = matching ]; then
+      deny_review "a push without an explicit refspec follows remote.<name>.push or push.default=matching, which can publish a branch other than the reviewed one: name the branch."
+    fi
+  fi
+  for a in "$@"; do
+    a="${a#+}"
+    dst="${a##*:}"; dst="${dst#refs/heads/}"
+    case "$dst" in backup/*) [[ "$dst" == *..* ]] || continue ;; esac
+    src="${a%%:*}"
+    [ -z "$src" ] || srcs+=("$src")
+  done
+  [ "$#" -eq 0 ] || [ "${#srcs[@]}" -gt 0 ] || return 0
+  review_gate "$gd" ${srcs+"${srcs[@]}"}
+}
+
 check_push() {
   local gdir="$1" a ref; shift
   local pos=()
@@ -186,6 +270,15 @@ check_push() {
       esac
     done
   fi
+  local skip=1
+  for a in "$@"; do [[ "$a" == --repo || "$a" == --repo=* ]] && skip=0; done
+  if [ "$((${#pos[@]} - skip))" -le 0 ] && [ "$gdir" != "?" ]; then
+    GATE_DIR="$gdir"
+    local mo
+    mo="$(gate_git config --type=bool --get-regexp '^remote\..*\.mirror$' 2>&1)" || [[ "$mo" != *[Bb]ool* ]] || mo="invalid true"
+    [[ "$mo" == *' true' || "$mo" == *' true'$'\n'* ]] &&
+      deny_review "a bare push follows remote.<name>.mirror, which is a hidden --mirror (or an unreadable value): name the branch."
+  fi
   local pj=" ${pos[*]} "
   if [[ "$pj" == *[:+]* || "$pj" == *refs/heads/* || "$pj" == *" $BASE_A "* || "$pj" == *" $BASE_B "* ]]; then
     for a in "${pos[@]}"; do
@@ -201,6 +294,9 @@ check_push() {
     resolve_head "$gdir" || deny
     is_base "$RH_CUR" && deny
   fi
+  local gd="$gdir"
+  [ "$CD_BASE" = "?" ] && [ "$SAW_LOC" != 1 ] && [ -z "$GIT_DIR_VAL" ] && gd="?"
+  push_gate "$gd" ${pos[@]+"${pos[@]:$skip}"}
 }
 
 worktree_destroy_in() {
@@ -264,6 +360,10 @@ check_git() {
   if [ "$sub" = config ]; then
     for a in "${rest[@]}"; do case "$a" in --get | --get-all | --get-regexp | --list | -l) return 0 ;; esac; done
     for a in "${rest[@]}"; do [[ "$a" == alias.* ]] && deny_alias; done
+    for a in "${rest[@]}"; do
+      a="$(printf '%s' "$a" | tr '[:upper:]' '[:lower:]')"
+      [[ "$a" == remote.*.push || "$a" == remote.*.mirror || "$a" == push.default ]] && gate_on && deny_review "while a goal is active, remote.<name>.push, remote.<name>.mirror and push.default decide what a bare push publishes: do not set them."
+    done
   fi
   [ "$AUTO" = 1 ] || return 0
   case "$sub" in
@@ -294,6 +394,14 @@ gh_has() {
 check_gh() {
   local line="$*" t method=0
   gh_has ' pr( .*)? merge( |$)' && deny
+  if gh_has ' pr( .*)? (create|new)( |$)' && gate_on; then
+    gh_has ' (--head|-H)' && deny_review "gh pr create --head/-H can publish a branch other than the reviewed one: run it from the goal worktree without them."
+    local gd="$cwd"
+    cd_sync
+    [ -n "${CD_BASE:-}" ] && gd="$CD_BASE"
+    GIT_LOC=(); SAW_LOC=0
+    review_gate "$gd"
+  fi
   gh_has ' api( |$)' || return 0
   gh_has 'pulls/[0-9]+/merge|mergePullRequest|repos/[^ ]*/merges|query=@' && deny
   gh_has 'deleteRef' && deny_branch_delete
@@ -605,6 +713,7 @@ check_ship_merge() {
         [[ "${rest[$i]:-}" =~ ^(squash|rebase|merge)$ ]] || deny ;;
       --method=*) [ "$seen_method" = 0 ] || deny; seen_method=1
         [[ "${rest[$i]#--method=}" =~ ^(squash|rebase|merge)$ ]] || deny ;;
+      [0-9]'>' | '>') [ "$i" -eq $((${#rest[@]} - 1)) ] || deny ;; # the segment splitter cuts N>&M at the ampersand
       *) deny ;;
     esac
     i=$((i + 1))
@@ -789,7 +898,8 @@ function fw(   i, j, r, br, n, m2, piece, qs, lw, lb, lv, ps, lws, lbs, e1, e2, 
         if (lbs == "git") { md = xs ? 0 : 2; gp = !xs }
         else if (lbs == "rm") md = 3
         else if (lbs == "gh") md = 4
-        else if (lbs == "cd" || lbs == "pushd") md = 5
+        else if (lbs == "cd") md = 5
+        else if (lbs == "pushd") { md = 5; pd = 1 }
         else if (lbs == "popd") { md = 5; pop = 1 }
         else if (!(lbs in SK)) md = 1
       }
@@ -797,7 +907,7 @@ function fw(   i, j, r, br, n, m2, piece, qs, lw, lb, lv, ps, lws, lbs, e1, e2, 
       if (!ex && !br && substr(W, 1, 1) != "-" && lws != "worktree" && lws != "push") md = 1
       else md = 0
     } else if (md == 3 && ex) md = 0
-    else if (md == 4 && (index(lws, "merge") || index(lws, "api"))) md = 0
+    else if (md == 4 && (index(lws, "merge") || index(lws, "api") || index(lws, "create") || index(lws, "new"))) md = 0
     if (md != 1) {
       nk++
       if (fastw) { e1 = W; e2 = W; e3 = lbs; e4 = W }
@@ -824,8 +934,8 @@ function fsg(   i, txt, hdr) {
   fw()
   if (md == 5 && nk > 0) {
     if (pop) txt = "c\nk\nx\n"
-    else if (nk == 1) txt = "c\nh\nx\n"
-    else if (ae[2] != 0 || abr[2] != 0 || substr(aw[2], 1, 1) == "-") txt = "c\nk\nx\n"
+    else if (nk == 1) txt = pd ? "c\nk\nx\n" : "c\nh\nx\n"
+    else if (ae[2] != 0 || abr[2] != 0 || substr(aw[2], 1, 1) == "-" || (pd && (substr(aw[2], 1, 1) == "+" || aw[2] ~ /^[0-9]*[<>]/))) txt = "c\nk\nx\n"
     else txt = "c\n" (index(al[2], BS) ? "P" : "p") "\nx" al[2] "\n"
     if (substr(txt, 1, 3) == "c\np") {
       if (substr(al[2], 1, 1) == "/") ncb = 0
@@ -847,7 +957,7 @@ function fsg(   i, txt, hdr) {
       prevtxt = txt
     }
   }
-  nk = 0; bs = 0; nw = 0; md = 0; gp = 0; pop = 0
+  nk = 0; bs = 0; nw = 0; md = 0; gp = 0; pop = 0; pd = 0
 }
 function pushargs_ok(a, from, n,   i, t, np, pos) {
   if (!pushfast) return 0
@@ -908,7 +1018,7 @@ function segfeed(s,   n, i, parts) {
 function maybe_prot(t) {
   if (win) t = tolower(t)
   return index(t, ".github/") || index(t, ".claude/") || index(t, ".opencode/") || index(t, "tools/agent-harness/") \
-    || index(t, "tools/ci/") || index(t, "opencode.jsonc") || index(t, "agents.md") || index(t, "claude.md") \
+    || index(t, "tools/ci/") || index(tolower(t), "goal.json") || index(tolower(t), "autonomy.on") || index(t, "opencode.jsonc") || index(t, "agents.md") || index(t, "claude.md") \
     || index(t, "AGENTS.md") || index(t, "CLAUDE.md")
 }
 function segkeep(s,   t, k, b, i, a, n, ps) {
@@ -932,7 +1042,8 @@ function segkeep(s,   t, k, b, i, a, n, ps) {
   if (b == "cd" || b == "pushd") {
     k = split(s, a, " ")
     if (k > 2) return 1
-    if (k == 2) { sub(/[)}]+$/, "", a[2]); cdtgt = a[2] } else cdtgt = ""
+    if (k == 2) { sub(/[)}]+$/, "", a[2]); cdtgt = a[2]; if (b == "pushd" && (substr(a[2], 1, 1) == "+" || a[2] ~ /^[0-9]*[<>]/)) cdtgt = "-" }
+    else cdtgt = (b == "pushd") ? "-" : ""
     return 2
   }
   if (b == "rm") {
@@ -941,7 +1052,7 @@ function segkeep(s,   t, k, b, i, a, n, ps) {
     for (i = 2; i <= k; i++) if (index(a[i], "r") || index(a[i], "R") || index(a[i], ".") || index(a[i], "/")) return 1
     return 0
   }
-  if (b == "gh") return (index(s, "merge") || index(s, "api")) ? 1 : 0
+  if (b == "gh") return (index(s, "merge") || index(s, "api") || index(s, "create") || index(s, "new")) ? 1 : 0
   if (b in LK) return 1
   if (b in PY || b ~ /^python[0-9]/) return pytag ? 3 : !pyinert
   if (b != "git") return 0
@@ -1033,7 +1144,7 @@ function joinrec(rec, more,   L, n, p, ch, m, lim, i, c, del) {
 BEGIN {
   n = split("if then elif else do while until ! { ( builtin eval env sudo command exec nice nohup xargs timeout time bash sh zsh dash export cd pushd rm gh", ps, " ")
   for (i = 1; i <= n; i++) SK[ps[i]] = 1
-  n = split("if then elif else do while until ! { ( builtin eval env sudo command exec nice nohup xargs timeout time bash sh zsh dash agent-harness agent-harness.sh worktree-rm.sh teardown-merged-worktree.sh ship-init.sh ship-merge.sh cleanup.sh orca rm mv trash rsync find cd pushd gh tee cp ln install truncate touch sed dd", ps, " ")
+  n = split("if then elif else do while until ! { ( builtin eval env sudo command exec nice nohup xargs timeout time bash sh zsh dash agent-harness agent-harness.sh worktree-rm.sh teardown-merged-worktree.sh ship-init.sh ship-merge.sh cleanup.sh orca rm mv trash rsync find cd pushd gh tee cp ln install truncate touch sed dd sponge", ps, " ")
   for (i = 1; i <= n; i++) LK[ps[i]] = 1
   n = split("push reset branch update-ref send-pack commit checkout restore config worktree", ps, " ")
   for (i = 1; i <= n; i++) GD[ps[i]] = 1
@@ -1168,7 +1279,11 @@ screen_gh() {
     lit+=("${lit_f[$i]}")
     i=$((i + 1))
   done
+  local saved_cd="${CD_BASE:-}"
+  sr_sync
+  [ -n "$SR_CD" ] && CD_BASE="$SR_CD"
   check_gh "${lit[@]}"
+  CD_BASE="$saved_cd"
 }
 
 screen_segment() {
@@ -1235,7 +1350,7 @@ screen_segment() {
       local tgt="${words[$((i + 1))]:-$HOME}" tu=0
       if [ $((i + 1)) -lt "${#words[@]}" ] && { [ "${exp_f[$((i + 1))]}" = 1 ] || [ "${brace_f[$((i + 1))]}" = 1 ]; }; then tu=1; fi
       if [ "$SR_CD" = "?" ]; then :
-      elif [ "$tu" = 1 ] || [[ "$tgt" == -* ]]; then SR_CD="?"; SR_PEND=(); SR_VER=$((SR_VER + 1))
+      elif [ "$tu" = 1 ] || [[ "$tgt" == -* ]] || { [ "$b" = pushd ] && { [ $((i + 1)) -ge "${#words[@]}" ] || [[ "$tgt" == +* || "$tgt" =~ ^[0-9]*[\<\>] ]]; }; }; then SR_CD="?"; SR_PEND=(); SR_VER=$((SR_VER + 1))
       else
         if [ $((i + 1)) -lt "${#words[@]}" ]; then tgt="${lit_f[$((i + 1))]}"; else [ -n "${HOME_LIT+x}" ] || home_lit; tgt="$HOME_LIT"; fi
         sr_cd_set "$tgt"
@@ -1271,6 +1386,7 @@ P_GIT_DIR=""; P_GIT_WT=""; P_GIT_CFG=0
 SR_CD=""
 pushfast=1
 case "$BASE_A$BASE_B" in *\\* | *\"* | *\'* | *$'\n'*) pushfast=0 ;; esac
+gate_on && pushfast=0
 merged=0
 if [[ "$cmd" != *\\* ]]; then
   # Without a backslash the legacy tokenizer's text is the command with quotes removed and "$(", backticks
@@ -1448,7 +1564,10 @@ while [ "$LI" -lt "$nlines" ]; do
     python | python[0-9]* | perl | node | ruby)
       ensure_pyrm
       [ "$PYRM_HIT" = 1 ] && deny_worktree ;;
-    cd | pushd) legacy_cd "${ct[1]:-}"; continue ;;
+    cd) legacy_cd "${ct[1]:-}"; continue ;;
+    pushd)
+      case "${ct[1]:-}" in "" | +* | [0-9]\>* | \>* | \<*) legacy_cd "-" ;; *) legacy_cd "${ct[1]}" ;; esac
+      continue ;;
     popd) legacy_cd "-"; continue ;;
   esac
   if [ "$HC" = 1 ] && check_harness_cmd teardown-merged-worktree pr "$has_assign" "$c0" "${ct[@]:1}"; then continue; fi
@@ -1464,7 +1583,7 @@ while [ "$LI" -lt "$nlines" ]; do
       [ "$AUTO" = 1 ] && [ "${GIT_ENV_U:-0}" = 1 ] && deny_unparsed
       check_git "${ct[@]}" ;;
     gh) check_gh "${ct[@]}" ;;
-    tee | mv | cp | rm | ln | install | truncate | touch | rsync) any_protected "${ct[@]:1}" && deny ;;
+    tee | sponge | mv | cp | rm | ln | install | truncate | touch | rsync) any_protected "${ct[@]:1}" && deny ;;
     sed)
       for a in "${ct[@]:1}"; do
         if [[ "$a" =~ ^-[A-Za-z]*i || "$a" = --in-place* ]]; then any_protected "${ct[@]:1}" && deny; break; fi

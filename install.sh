@@ -449,6 +449,10 @@ copy_claude_allowlist() {
             --exclude='__mocks__' \
             "$src/$managed" "$dst/$(dirname "$managed")/"
     done
+    # rsync keeps the source mode, so a hook stored without its exec bit would install unrunnable.
+    if [ -d "$dst/hooks" ]; then
+        chmod +x "$dst"/hooks/*.sh 2>/dev/null || true
+    fi
     # Fresh and Claude-only installs need the canonical baseline before the
     # runtime merger adds its one managed hook. Existing user settings are
     # deliberately never replaced.
@@ -461,7 +465,7 @@ copy_claude_allowlist() {
 localize_claude_settings_hooks() {
     local settings_file="$1" tmp grep_status
 
-    if grep -qF '"~/.claude/' "$settings_file"; then
+    if grep -qE '"~/\.claude/|bash ~/\.claude/' "$settings_file"; then
         :
     else
         grep_status=$?
@@ -472,7 +476,7 @@ localize_claude_settings_hooks() {
     info "rewriting hook paths for --local mode"
     tmp="$(mktemp "${settings_file}.XXXXXX")"
     cp -p "$settings_file" "$tmp"
-    sed 's|"~/.claude/|"./.claude/|g' "$settings_file" > "$tmp"
+    sed 's|"~/.claude/|"./.claude/|g; s|bash ~/.claude/|bash ./.claude/|g' "$settings_file" > "$tmp"
     mv "$tmp" "$settings_file"
     ok "hook paths localized in $settings_file"
 }
@@ -1133,24 +1137,37 @@ merge_agent_harness_settings() {
         return 0
     fi
 
+    local hook_name
+    for hook_name in autonomy-context autonomy-ask-guard autonomy-git-guard orca-notify ship-stop-gate; do
+        if [ ! -f "$TARGET_CLAUDE/hooks/$hook_name.sh" ]; then
+            err "registered hook script is missing: $TARGET_CLAUDE/hooks/$hook_name.sh"
+            exit 1
+        fi
+        chmod +x "$TARGET_CLAUDE/hooks/$hook_name.sh" 2>/dev/null || true
+    done
+
     local hooks_dir="~/.claude/hooks" mod_dir="$TARGET_CLAUDE/mods/autonomy-status"
     [ "$LOCAL_MODE" = "1" ] && hooks_dir="./.claude/hooks"
 
     local tmp
     tmp="$(mktemp "$settings.XXXXXX")"
     cp -p "$settings" "$tmp"
-    if ! jq --arg h "$hooks_dir" --arg mod "$mod_dir" --arg modTilde "~/.claude/mods/autonomy-status" '
+    local managed_hooks f
+    managed_hooks="$(for f in "$REPO_DIR"/.claude/hooks/*.sh; do basename "$f" .sh; done | jq -Rsc 'split("\n") | map(select(. != ""))')"
+    if ! jq --argjson managed "$managed_hooks" --arg h "$hooks_dir" --arg mod "$mod_dir" --arg modTilde "~/.claude/mods/autonomy-status" '
+        def bashify: (.command? // "") as $c | if ($c | test("^[^ ]*\\.claude/hooks/[^ /]+\\.sh$")) and ($managed | index($c | split("/") | last | sub("\\.sh$"; ""))) then .command = "bash " + $c else . end;
         def addhook($ev; $m; $cmd):
             if ([.hooks[$ev][]?.hooks[]?.command] | index($cmd)) then .
             else .hooks[$ev] = ((.hooks[$ev] // []) + [
                 (if $m == "" then {} else {matcher: $m} end) + {hooks: [{type: "command", command: $cmd}]}
             ]) end;
-        addhook("SessionStart"; ""; $h + "/autonomy-context.sh")
-        | addhook("UserPromptSubmit"; ""; $h + "/autonomy-context.sh")
-        | addhook("PreToolUse"; "AskUserQuestion"; $h + "/autonomy-ask-guard.sh")
-        | addhook("PreToolUse"; "Bash"; $h + "/autonomy-git-guard.sh")
-        | addhook("Notification"; "permission_prompt|idle_prompt"; $h + "/orca-notify.sh")
-        | addhook("Stop"; ""; $h + "/ship-stop-gate.sh")
+        .hooks = ((.hooks // {}) | with_entries(.value |= (if type == "array" then map(if (.hooks | type) == "array" then .hooks |= map(bashify) else . end) else . end)))
+        | addhook("SessionStart"; ""; "bash " + $h + "/autonomy-context.sh")
+        | addhook("UserPromptSubmit"; ""; "bash " + $h + "/autonomy-context.sh")
+        | addhook("PreToolUse"; "AskUserQuestion"; "bash " + $h + "/autonomy-ask-guard.sh")
+        | addhook("PreToolUse"; "Bash"; "bash " + $h + "/autonomy-git-guard.sh")
+        | addhook("Notification"; "permission_prompt|idle_prompt"; "bash " + $h + "/orca-notify.sh")
+        | addhook("Stop"; ""; "bash " + $h + "/ship-stop-gate.sh")
         | .permissions.allow = (if ((.permissions.allow // []) | index("Bash(agent-harness *)")) then .permissions.allow else ((.permissions.allow // []) + ["Bash(agent-harness *)"]) end)
         | .env.CLAUDE_CODE_PLUGIN_DIRS = (
             (.env.CLAUDE_CODE_PLUGIN_DIRS // "") as $cur

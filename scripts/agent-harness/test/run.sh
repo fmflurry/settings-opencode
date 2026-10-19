@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2016
 set -uo pipefail
+# A native jq.exe ends lines with CRLF, which would break every string comparison below.
+case "${OSTYPE:-}" in msys* | cygwin* | win32*) jq() { command jq "$@" | tr -d '\r'; } ;; esac
+# Only the jq calls that build hook input skip MSYS path conversion; native git needs it for /tmp paths.
+jqn() { MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq "$@"; }
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 FX="$TMP/fx"; mkdir -p "$FX" "$TMP/state" "$TMP/proj/.claude"
@@ -76,6 +80,19 @@ green_fixtures() {
 }
 mutate() { jq "$1" "$FX/$2" >"$FX/t" && mv "$FX/t" "$FX/$2"; }
 
+ONLY="${RUN_ONLY:-}"
+GUARD_BASH="${GUARD_BASH:-bash}"
+EMPTY_JSON='{}'
+fresh_work() {
+  ( cd "$TMP/work" && git worktree prune && git checkout -q -f master && git reset -q --hard origin/master \
+    && git branch -q --set-upstream-to=origin/master master \
+    && { git branch -q -D feat || true; } \
+    && for b in $(git for-each-ref --format='%(refname:short)' refs/heads/backup); do git branch -q -D "$b"; done \
+    && git checkout -q -b feat && echo "b$RANDOM" >b && git add b && git commit -qm B ) >/dev/null 2>&1
+  HEAD_SHA="$(git -C "$TMP/work" rev-parse HEAD)"
+}
+
+if [ "$ONLY" != guard ]; then
 # ---- dispatcher
 DISP="$H/agent-harness.sh"
 DREPO="$TMP/disp"; git init -q "$DREPO"
@@ -267,14 +284,6 @@ jq '.stop_blocks = 3' "$TMP/state/goal.json" >"$TMP/g" && mv "$TMP/g" "$TMP/stat
 mutate '.headRefOid="newhead"' view.json; stop >/dev/null
 check "stop-gate keeps stop_blocks across head change" test "$(jq -r .stop_blocks "$TMP/state/goal.json")" = 3
 
-fresh_work() {
-  ( cd "$TMP/work" && git worktree prune && git checkout -q -f master && git reset -q --hard origin/master \
-    && git branch -q --set-upstream-to=origin/master master \
-    && { git branch -q -D feat || true; } \
-    && for b in $(git for-each-ref --format='%(refname:short)' refs/heads/backup); do git branch -q -D "$b"; done \
-    && git checkout -q -b feat && echo "b$RANDOM" >b && git add b && git commit -qm B ) >/dev/null 2>&1
-  HEAD_SHA="$(git -C "$TMP/work" rev-parse HEAD)"
-}
 
 # ---- ship-merge (configured: base master, required gate+export, tltb-review by the bot)
 merge() { ( cd "$TMP/work" && bash "$H/ship-merge.sh" "$@" ) >"$FX/out" 2>&1; }
@@ -599,11 +608,12 @@ check "goal backup-add rejects non-backup name" test $rc -eq 2
 goalw backup-add backup/missing; rc=$?
 check "goal backup-add rejects missing branch" test $rc -eq 2
 check "goal backup-add rejected names not recorded" test "$(jq -c '.backup_branches' "$TMP/state/goal.json")" = '["backup/feat-1"]'
+fi
 reset; fresh_work
 
 # ---- git-guard
 GUARD_CWD="$TMP/work"
-guard_in() { ( cd "$GUARD_CWD" && jq -n --arg c "$1" --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | bash "$HOOKS/autonomy-git-guard.sh" ); }
+guard_in() { ( cd "$GUARD_CWD" && jqn -n --arg c "$1" --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | "$GUARD_BASH" "$HOOKS/autonomy-git-guard.sh" ); }
 decision() { jq -r '.hookSpecificOutput.permissionDecision // ""' <<<"$(guard_in "$1")"; }
 denied() { [ "$(decision "$1")" = deny ]; }
 asked() { [ "$(decision "$1")" = ask ]; }
@@ -865,6 +875,302 @@ check "git-guard (flag off) denies ANSI-C quoted push" denied "$(printf '%s' "gi
 check "git-guard (flag off) denies --config-env" denied 'git --config-env=push.default=VAR status'
 check "git-guard (flag off) denies --config-env split form" denied 'git --config-env alias.x=VAR status'
 
+PROBE_BASE="$TMP/baserepo"
+probe_decision() { # mode cmd
+  rm -f "$TMP/state/autonomy.on"; [ "$1" = on ] && flag_on
+  local d; d="$(decision "$2")"; echo "${d:-allow}"
+}
+IFS= read -r -d '' PROBE_CMDS <<'CMDS' || true
+allow|allow|git reset --har
+allow|allow|git reset --ha HEAD~1
+allow|allow|git commit --no-verif -m x
+allow|allow|git push --no-ver origin feat
+allow|allow|git push --mirro origin
+allow|allow|git push --al origin
+allow|allow|git push --delet origin feat
+allow|allow|git push --prun origin
+allow|allow|git branch --del feat
+deny|allow|git branch -D feat
+allow|allow|git push origin main~0
+allow|allow|git push origin main^0
+deny|allow|git push origin refs/heads/main:refs/heads/main
+allow|allow|git push origin heads/main
+allow|allow|git push origin HEAD:heads/main
+allow|allow|git push origin HEAD:refs/heads//main
+deny|allow|git push origin tag main
+allow|allow|git push origin
+allow|allow|git push
+allow|allow|git push origin HEAD
+allow|allow|git push origin @
+deny|allow|git update-ref -d refs/heads/feat
+allow|allow|git update-ref refs/heads/main HEAD
+deny|allow|git push --force-with-lease origin main
+deny|allow|git push origin +HEAD:main
+deny|allow|git -c core.hooksPath=/dev/null commit -m x
+allow|allow|git commit -n -m x
+allow|allow|git merge feat
+allow|allow|git pull origin main
+deny|allow|git push origin HEAD:main HEAD:feat
+deny|allow|git push origin feat main
+deny|allow|git push origin --repo=x main
+deny|allow|git -C @B@ push origin
+deny|allow|GIT_DIR=@B@/.git git push origin
+deny|allow|git --git-dir=@B@/.git push origin
+deny|allow|cd @B@ && git push origin
+deny|allow|cd @B@; git push origin HEAD
+deny|allow|pushd @B@ && git push
+deny|allow|export GIT_DIR=@B@/.git; git push origin
+deny|allow|env GIT_DIR=@B@/.git git push origin
+deny|allow|(cd @B@ && git push)
+deny|allow|echo $(cd @B@ && git push)
+deny|allow|cd ~/Workspace/isagri/gc.platform && git push
+allow|allow|cd ../../../../Workspace/isagri/gc.platform && git push
+allow|allow|echo main | xargs git push origin
+deny|allow|cd /tmp && cd @B@ && git push
+deny|allow|git --git-dir @B@/.git push
+deny|allow|cd "@B@" && git push
+deny|allow|cd $HOME/Workspace/isagri/gc.platform && git push
+deny|allow|git push origin `echo main`
+deny|allow|git push origin $'main'
+deny|allow|git push origin {main,feat}
+deny|allow|git push origin m{a,}in
+deny|allow|git push origin "$B"
+deny|allow|B=main; git push origin $B
+deny|allow|sh -c 'cd @B@ && git push'
+deny|deny|a=git; $a push origin main
+deny|allow|command git push origin main
+deny|allow|\git push origin main
+deny|allow|/usr/bin/git push origin main
+deny|allow|git push origin ma''in
+deny|allow|nohup git push origin main
+deny|allow|time git push origin main
+deny|allow|timeout 5 git push origin main
+deny|allow|sudo -u x git push origin main
+deny|allow|exec git push origin main
+deny|allow|git push origin main&
+deny|allow|git push origin main|cat
+deny|allow|git push -- origin main
+deny|allow|git -c x=y push origin main
+deny|allow|git push --repo origin main
+allow|allow|git -C @B@ worktree list
+allow|allow|GIT_WORK_TREE=@B@ git push origin
+allow|allow|git --work-tree=@B@ push
+allow|allow|git config remote.origin.push HEAD:main
+allow|allow|git config push.default upstream
+allow|allow|git branch -u origin/main
+allow|allow|git config core.hooksPath /dev/null
+deny|allow|gh alias set m "pr merge"
+allow|allow|gh m 1
+deny|allow|gh pr merge 1
+deny|allow|gh -R o/r pr merge 1
+deny|allow|X='a b' gh pr merge 1
+deny|allow|gh api -X PUT repos/o/r/pulls/1/merge
+deny|allow|gh api repos/o/r/pulls/1/merge -X PUT
+deny|allow|gh api --method=put repos/o/r/pulls/1/merge
+deny|allow|gh api repos/o/r/pulls/1/merge -f merge_method=squash
+deny|allow|gh api repos/o/r/git/refs/heads/feat -X DELETE
+deny|allow|gh api graphql -f query='mutation{mergePullRequest(input:{pullRequestId:"x"}){clientMutationId}}'
+allow|allow|gh pr review 1 --approve
+deny|allow|git push origin "main
+deny|allow|git push origin 'main
+allow|allow|git push origin main\
+deny|allow|git push origin $'ma\x69n'
+deny|allow|git push origin "ma"\@NL@in
+deny|allow|git push origin "a@NL@:main
+CMDS
+PROBE_CMDS="${PROBE_CMDS%$'\n'}"
+PROBE_HOME="$TMP/probehome"; mkdir -p "$PROBE_HOME/Workspace/isagri"
+git clone -q "$TMP/baserepo" "$PROBE_HOME/Workspace/isagri/gc.platform" 2>/dev/null
+REAL_HOME="$HOME"; export HOME="$PROBE_HOME"
+while IFS='|' read -r p_on p_off p_cmd; do
+  p_cmd="${p_cmd//@B@/$PROBE_BASE}"; p_cmd="${p_cmd//@NL@/$'\n'}"
+  check "git-guard probe (flag on) $p_on: $p_cmd" test "$(probe_decision on "$p_cmd")" = "$p_on"
+  check "git-guard probe (flag off) $p_off: $p_cmd" test "$(probe_decision off "$p_cmd")" = "$p_off"
+done <<<"$PROBE_CMDS"
+export HOME="$REAL_HOME"
+perf_guard() { # name expected file [limit_ms]
+  local json="$TMP/perf.json" t0 t1 out dec ms limit="${4:-1000}"
+  jq -Rs --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:.}}' <"$3" >"$json"
+  t0="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
+  out="$(cd "$GUARD_CWD" && "$GUARD_BASH" "$HOOKS/autonomy-git-guard.sh" <"$json")"
+  t1="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
+  ms="$(perl -e 'printf "%d", ($ARGV[1] - $ARGV[0]) * 1000' "$t0" "$t1")"
+  dec="$(jq -r '.hookSpecificOutput.permissionDecision // "allow"' <<<"${out:-$EMPTY_JSON}")"
+  echo "perf: $1 -> $dec in ${ms}ms (limit ${limit}ms)"
+  check "git-guard perf decision: $1" test "$dec" = "$2"
+  check "git-guard perf under ${limit}ms: $1" test "$ms" -lt "$limit"
+}
+perf_input() { # file prefix lineText lines suffix
+  { printf '%s' "$2"; perl -e 'print "$ARGV[0]\n" x $ARGV[1]' "$3" "$4"; printf '%s' "$5"; } >"$1"
+}
+reset; flag_on
+PF="$TMP/perf.cmd"
+{ printf 'echo '; perl -e 'print "a" x 200000'; printf ' && git push origin main'; } >"$PF"
+perf_guard "200K one-liner then push to base" deny "$PF"
+perf_input "$PF" $'cat <<EOF\n' 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' 5000 'EOF'
+perf_guard "5000-line heredoc without git" allow "$PF"
+perf_input "$PF" '' 'git status' 5000 ''
+perf_guard "5000 lines of git status" allow "$PF"
+{ printf 'gh pr create --body "'; perl -e 'print "a" x 200000'; printf '"'; } >"$PF"
+perf_guard "gh pr create with 200K body" allow "$PF"
+{ printf "echo '"; perl -e 'print "a" x 200000'; printf "'"; } >"$PF"
+perf_guard "200K single-quoted word" allow "$PF"
+perf_input "$PF" '' 'python -c x' 5000 ''
+perf_guard "5000 lines of python -c x" allow "$PF"
+perf_input "$PF" $'cat <<EOF\n' 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' 2000 $'EOF\ngit push origin main'
+perf_guard "push to base after 2000-line heredoc" deny "$PF"
+perf_input "$PF" '' 'cd /tmp' 5000 ''
+perf_guard "5000 lines of cd /tmp" allow "$PF"
+perf_input "$PF" '' 'export A=b' 5000 ''
+perf_guard "5000 lines of export A=b" allow "$PF"
+perf_input "$PF" '' 'rm -f x' 5000 ''
+perf_guard "5000 lines of rm -f x" allow "$PF"
+perf_input "$PF" '' 'echo x > /tmp/f' 5000 ''
+perf_guard "5000 lines of echo x > /tmp/f" allow "$PF"
+perf_input "$PF" '' 'gh pr view 1' 5000 ''
+perf_guard "5000 lines of gh pr view 1" allow "$PF"
+perf_seq() { # file template count; $i in the template is the line number
+  perl -e '$c = shift; $n = shift; for $i (1 .. $n) { ($l = $c) =~ s/\$i/$i/g; print "$l\n" }' "$2" "$3" >"$1"
+}
+perf_seq "$PF" 'cd /tmp/d$i' 2000
+perf_guard "2000 distinct cd lines" allow "$PF"
+perf_seq "$PF" 'cd /tmp/d$i' 8000
+perf_guard "8000 distinct cd lines" allow "$PF" 2000
+perf_seq "$PF" 'git -C /tmp/d$i push origin feat' 2000
+perf_guard "2000 distinct git -C push lines (non-existent dirs)" allow "$PF"
+PUSHREPO="$TMP/pushrepo"
+git init -q -b feat/perf "$PUSHREPO" && git -C "$PUSHREPO" -c user.email=a@b -c user.name=n commit -q --allow-empty -m i
+for i in $(seq 1 1000); do mkdir -p "$PUSHREPO/sd$i"; done
+perf_seq "$PF" "git -C $PUSHREPO/sd\$i push origin feat" 1000
+perf_guard "1000 distinct git -C push lines with an explicit destination (existing dirs, no branch lookup)" allow "$PF"
+perf_seq "$PF" "git -C $PUSHREPO/sd\$i push" 20
+perf_guard "20 distinct bare git -C push lines (existing dirs, one branch lookup each)" allow "$PF"
+perf_seq "$PF" 'rm -f x$i' 5000
+perf_guard "5000 distinct rm lines" allow "$PF"
+{ printf 'echo "\n'; perl -e 'print "aaaaa\n" x 200000'; printf '"'; } >"$PF"
+perf_guard "echo with a 200K-line quoted body" allow "$PF" 1500
+UNI="$TMP/uni"; UA="$UNI/$(printf '\303\251')"; UB="$UNI/$(printf '\303\243')"
+git init -q -b feat/uni "$UA" && git -C "$UA" -c user.email=a@b -c user.name=n commit -q --allow-empty -m i
+git init -q -b master "$UB" && git -C "$UB" -c user.email=a@b -c user.name=n commit -q --allow-empty -m i
+uni_decision() { # shell
+  ( cd "$GUARD_CWD" && jqn -n --arg c "git -C \"$UA\" push; git -C \"$UB\" push" --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | "$1" "$HOOKS/autonomy-git-guard.sh" ) \
+    | jq -r '.hookSpecificOutput.permissionDecision // "allow"'
+}
+for ush in bash /bin/bash; do
+  command -v "$ush" >/dev/null 2>&1 || continue
+  check "git-guard does not share a branch lookup between non-ASCII paths that differ after the first byte ($ush)" test "$(uni_decision "$ush")" = deny
+done
+OSTYPE_WIN=msys
+winguard() { # command -> decision with the hook told it runs under Git Bash
+  ( cd "$GUARD_CWD" && jqn -n --arg c "$1" --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | OSTYPE="$OSTYPE_WIN" "$GUARD_BASH" "$HOOKS/autonomy-git-guard.sh" ) \
+    | { jq -r '.hookSpecificOutput.permissionDecision // empty'; echo; } | head -1 | sed 's/^$/allow/'
+}
+flag_on
+while IFS= read -r c; do
+  check "git-guard (Git Bash) denies: $c" test "$(winguard "$c")" = deny
+done <<'WINCMDS'
+git.exe push origin main
+GIT.EXE push origin main
+git push origin main
+/usr/bin/git push origin main
+/mingw64/bin/git.exe push origin master
+"/c/Program Files/Git/cmd/git.exe" push origin main
+"C:\Program Files\Git\cmd\git.exe" push origin main
+'C:\Program Files\Git\cmd\GIT.EXE' push origin main
+/usr/bin/gh.exe pr merge 1
+gh.exe pr merge 1
+echo x > .CLAUDE/settings.json
+echo x > ".claude\settings.json"
+WINCMDS
+check "git-guard (Git Bash) allows an ordinary command" test "$(winguard 'git.exe status')" = allow
+rm -f "$TMP/state/autonomy.on"
+eval "$(sed -n '/^winconv() {/,/^}/p' "$HOOKS/autonomy-git-guard.sh")"
+while IFS='|' read -r in want; do
+  winconv "$in"
+  check "winconv maps $in to $want" test "$WP" = "$want"
+done <<'WINCONV'
+C:\Users\me\x|/c/Users/me/x
+C:/Users/me|/c/Users/me
+d:|/d
+\\?\C:\a\b|/c/a/b
+//?/C:/a/b|/c/a/b
+//./D:/a|/d/a
+/cygdrive/c/x/y|/c/x/y
+/cygdrive/D|/d
+/c/x|/c/x
+rel\a|rel/a
+WINCONV
+hook_commands() { jq -r '[.. | objects | select(has("command")) | .command] | .[]' "$1" | tr -d '\r'; }
+check_registered_hooks() { # file regex script-dir: every command runs through bash and names a script that exists
+  local file="$1" re="$2" dir="$3" c n=0 bad=0
+  while IFS= read -r c; do
+    n=$((n + 1))
+    if [[ "$c" =~ $re ]] && [ -f "$dir/${BASH_REMATCH[1]}" ]; then :; else bad=$((bad + 1)); echo "  hook command not runnable through bash: $c"; fi
+  done < <(hook_commands "$file")
+  [ "$n" -gt 0 ] && [ "$bad" -eq 0 ]
+}
+check "claude settings register every hook as bash <existing script>" \
+  check_registered_hooks "$HERE/.claude/settings.json" '^bash ~/\.claude/hooks/([A-Za-z0-9_.-]+\.sh)$' "$HERE/.claude/hooks"
+check "cursor hooks.json registers every hook as bash <adapter> <existing script>" \
+  check_registered_hooks "$HERE/plugins/fmflurry-harness/hooks/hooks.json" \
+  '^bash \$\{CURSOR_PLUGIN_ROOT\}/hooks/scripts/cursor-adapter\.sh \$\{CURSOR_PLUGIN_ROOT\}/hooks/scripts/([A-Za-z0-9_.-]+\.sh) [A-Za-z]+$' \
+  "$HERE/plugins/fmflurry-harness/hooks/scripts"
+registered_guard_runs() { # the command registered for the git guard, run for real with a benign payload
+  local c script out rc
+  c="$(hook_commands "$HERE/.claude/settings.json" | grep 'autonomy-git-guard\.sh$' | head -1)"
+  [[ "$c" =~ ^bash\ ~/(.*)$ ]] || return 1
+  script="$HERE/${BASH_REMATCH[1]}"
+  out="$(cd "$GUARD_CWD" && jqn -n --arg c 'git status' --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | bash -c 'bash "$1"' _ "$script" 2>&1)"
+  rc=$?
+  [ "$rc" -eq 0 ] && [[ "$out" != *"Permission denied"* ]]
+}
+check "the registered git guard command runs through bash" registered_guard_runs
+INSTALL_JQ="$(sed -n '/^        def bashify/,/^    '"'"' "\$settings"/p' "$HERE/install.sh" | sed '$d')"
+MANAGED_HOOKS="$(for f in "$HERE"/.claude/hooks/*.sh; do basename "$f" .sh; done | jq -Rsc 'split("\n") | map(select(. != ""))')"
+install_merge() { jq --argjson managed "$MANAGED_HOOKS" --arg h "~/.claude/hooks" --arg mod /m --arg modTilde "~/.claude/mods/autonomy-status" "$INSTALL_JQ" <<<"$1"; }
+LEGACY_SETTINGS='{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"~/.claude/hooks/autonomy-git-guard.sh"},{"type":"command","command":"/opt/own/hook.sh"}]}]}}'
+for seed in '{}' "$LEGACY_SETTINGS"; do
+  merged="$(install_merge "$seed")"
+  check "installer registers hooks through bash (seed ${seed:0:20})" test -n "$merged" -a "$(jq -r '[.. | objects | select(has("command")) | .command | select(test("\\.claude/hooks/")) | select(startswith("bash ") | not)] | length' <<<"$merged")" = 0
+  check "installer registers the git guard once (seed ${seed:0:20})" test "$(jq -r '[.. | objects | select(has("command")) | .command | select(endswith("autonomy-git-guard.sh"))] | length' <<<"$merged")" = 1
+done
+check "installer leaves a user's own hook command alone" test "$(install_merge "$LEGACY_SETTINGS" | jq -r '[.. | objects | select(has("command")) | .command | select(. == "/opt/own/hook.sh")] | length')" = 1
+OWN_SETTINGS='{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"~/.claude/hooks/own.sh"},{"type":"command","command":"~/.claude/hooks/autonomy-git-guard.sh"}]}]}}'
+check "installer leaves a user's own ~/.claude/hooks/own.sh unwrapped" test "$(install_merge "$OWN_SETTINGS" | jq -r '[.. | objects | select(has("command")) | .command | select(. == "~/.claude/hooks/own.sh")] | length')" = 1
+check "installer wraps the repo-managed guard it migrates" test "$(install_merge "$OWN_SETTINGS" | jq -r '[.. | objects | select(has("command")) | .command | select(. == "bash ~/.claude/hooks/autonomy-git-guard.sh")] | length')" = 1
+LOCAL_SETTINGS="$TMP/local-settings.json"
+printf '%s\n' '{"hooks":{"A":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/autonomy-git-guard.sh"}]}]},"p":"~/.claude/mods/x"}' >"$LOCAL_SETTINGS"
+( info() { :; }; ok() { :; }; eval "$(sed -n '/^localize_claude_settings_hooks() {/,/^}/p' "$HERE/install.sh")"; localize_claude_settings_hooks "$LOCAL_SETTINGS" )
+check "installer --local rewrites bash ~/.claude/ hook paths" test "$(jq -r '.hooks.A[0].hooks[0].command' "$LOCAL_SETTINGS" | tr -d '\r')" = "bash ./.claude/hooks/autonomy-git-guard.sh"
+FAKE_AWK_DIR="$TMP/fakeawk"; mkdir -p "$FAKE_AWK_DIR"
+REAL_AWK="$(command -v awk)"
+fake_awk() { # body
+  printf '#!/bin/sh\n%s\n' "$1" >"$FAKE_AWK_DIR/awk"; chmod +x "$FAKE_AWK_DIR/awk"
+}
+awk_fault_cases=(
+  'exit 2'
+  'kill -9 $$'
+  'case "$*" in *mode=seg*) exit 2 ;; esac; exec "$REAL_AWK" "$@"'
+  'case "$*" in *mode=join*) exit 0 ;; esac; exec "$REAL_AWK" "$@"'
+  'case "$*" in *mode=scan*) exit 0 ;; esac; exec "$REAL_AWK" "$@"'
+  'case "$*" in *mode=seg*) exit 0 ;; esac; exec "$REAL_AWK" "$@"'
+  'case "$*" in *mode=join*) ;; *) exec "$REAL_AWK" "$@" ;; esac; "$REAL_AWK" "$@" >"$FAKE_AWK_DIR/o"; head -c "$(($(wc -c <"$FAKE_AWK_DIR/o") / 2))" "$FAKE_AWK_DIR/o"'
+  'case "$*" in *mode=scan*) ;; *) exec "$REAL_AWK" "$@" ;; esac; "$REAL_AWK" "$@" >"$FAKE_AWK_DIR/o"; head -c "$(($(wc -c <"$FAKE_AWK_DIR/o") / 2))" "$FAKE_AWK_DIR/o"'
+  'case "$*" in *mode=seg*) ;; *) exec "$REAL_AWK" "$@" ;; esac; "$REAL_AWK" "$@" >"$FAKE_AWK_DIR/o"; head -c "$(($(wc -c <"$FAKE_AWK_DIR/o") / 2))" "$FAKE_AWK_DIR/o"'
+)
+guard_fake() { ( cd "$GUARD_CWD" && jqn -n --arg c "$1" --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | PATH="$FAKE_AWK_DIR:$PATH" "$GUARD_BASH" "$HOOKS/autonomy-git-guard.sh" ); }
+denied_fake() { [ "$(jq -r '.hookSpecificOutput.permissionDecision // ""' <<<"$(guard_fake "$1")")" = deny ]; }
+for fa in "${awk_fault_cases[@]}"; do
+  fake_awk "REAL_AWK='$REAL_AWK'; FAKE_AWK_DIR='$FAKE_AWK_DIR'; $fa"
+  flag_on
+  check "git-guard fails closed on awk fault (flag on, $fa): push to base" denied_fake "git push origin main"
+  check "git-guard fails closed on awk fault (flag on, $fa): rm -rf worktree" denied_fake "rm -rf $GUARD_CWD"
+  check "git-guard fails closed on awk fault (flag on, $fa): protected write" denied_fake "echo x > .claude/foo"
+  rm -f "$TMP/state/autonomy.on"
+  check "git-guard fails closed on awk fault (flag off, $fa): git worktree remove" denied_fake "git worktree remove x"
+done
+rm -f "$TMP/state/autonomy.on"
+
 WGF="$(mktemp -d)"; WGF="$(cd -P "$WGF" && pwd)"
 mkdir -p "$WGF/main" "$WGF/st"
 git -C "$WGF/main" init -q . && git -C "$WGF/main" -c user.email=a@b -c user.name=n commit -q --allow-empty -m i
@@ -874,11 +1180,40 @@ mkdir -p "$WGF/sib/node_modules" "$WGF/sib/build"
 wg_decision() { # mode cwd cmd
   rm -f "$WGF/st/autonomy.on"; [ "$1" = on ] && : >"$WGF/st/autonomy.on"
   local out
-  out="$(jq -n --arg c "$3" --arg w "$2" '{tool_input:{command:$c},cwd:$w}' \
-    | AGENT_HARNESS_TEST=1 AGENT_STATE_DIR="$WGF/st" CLAUDE_PROJECT_DIR="$WGF/main" bash "$HOOKS/autonomy-git-guard.sh")"
+  out="$(jqn -n --arg c "$3" --arg w "$2" '{tool_input:{command:$c},cwd:$w}' \
+    | AGENT_HARNESS_TEST=1 AGENT_STATE_DIR="$WGF/st" CLAUDE_PROJECT_DIR="$WGF/main" "$GUARD_BASH" "$HOOKS/autonomy-git-guard.sh")"
   [ -n "$out" ] || { echo allow; return; }
   jq -r '.hookSpecificOutput.permissionDecision // "allow"' <<<"$out"
 }
+wg_rel_decision() {
+  rm -f "$WGF/st/autonomy.on"
+  jqn -n --arg c "rm -rf ../sib" --arg w "$WGF/main" '{tool_input:{command:$c},cwd:$w}' \
+    | AGENT_HARNESS_TEST=1 AGENT_STATE_DIR="$WGF/st" CLAUDE_PROJECT_DIR="$WGF/main" "$NORM_SHELL" "$HOOKS/autonomy-git-guard.sh" \
+    | jq -r '.hookSpecificOutput.permissionDecision // "allow"'
+}
+wg_escaped_field() { # shell cmd -> "<decision> stderr-bytes"
+  local out err
+  : >"$WGF/st/autonomy.on"
+  err="$WGF/err"
+  out="$(jqn -n --arg c "$2" --arg w "$WGF/main" '{tool_input:{command:$c},cwd:$w}' \
+    | AGENT_HARNESS_TEST=1 AGENT_STATE_DIR="$WGF/st" CLAUDE_PROJECT_DIR="$WGF/main" "$1" "$HOOKS/autonomy-git-guard.sh" 2>"$err")"
+  printf '%s %s' "$(jq -r '.hookSpecificOutput.permissionDecision // "allow"' <<<"$out")" "$(wc -c <"$err" | tr -d ' ')"
+}
+for esc_sh in "$GUARD_BASH" /bin/bash; do
+  [ -x "$esc_sh" ] || continue
+  for esc_cmd in 'git push origin ma\in' 'git push origin "ma\in"' 'git -C /tmp/a\ b push origin main'; do
+    check "git-guard escaped field denies with empty stderr ($esc_sh): $esc_cmd" test "$(wg_escaped_field "$esc_sh" "$esc_cmd")" = "deny 0"
+  done
+done
+rm -f "$WGF/st/autonomy.on"
+check "git-guard popd makes the directory unknown (on): pushd feature; popd; git push from main denies" \
+  test "$(wg_decision on "$WGF/main" "pushd $WGF/sib >/dev/null; popd >/dev/null; git push")" = deny
+check "git-guard popd makes the directory unknown (on): popd with no preceding pushd denies" \
+  test "$(wg_decision on "$WGF/main" "popd; git push")" = deny
+check "git-guard popd makes the directory unknown (on): multi-line form denies" \
+  test "$(wg_decision on "$WGF/main" "$(printf 'pushd %s\npopd\ngit push' "$WGF/sib")")" = deny
+check "git-guard pushd to a feature worktree alone still allows a bare push (on)" \
+  test "$(wg_decision on "$WGF/main" "pushd $WGF/sib >/dev/null; git push")" = allow
 wg() { local exp="$1" cwd="$2" m; shift 2; for m in off on; do check "git-guard worktree ($m) $exp: $*" test "$(wg_decision "$m" "$cwd" "$*")" = "$exp"; done; }
 WM="$WGF/main"; WS="$WGF/sib"
 wg deny "$WM" "if true; then git worktree remove /p; fi"
@@ -890,6 +1225,10 @@ wg deny "$WM" "git --git-dir .git worktree remove /p"
 wg deny "$WM" "git -c alias.x='worktree remove' x /p"
 wg deny "$WM" "git config alias.wr 'worktree remove'"
 wg deny "$WM" "rm -rf ../sib"
+for ush in bash /bin/bash; do
+  command -v "$ush" >/dev/null 2>&1 || continue
+  check "git-guard resolves a .. segment in a relative path ($ush)" test "$(NORM_SHELL="$ush" wg_rel_decision)" = deny
+done
 wg deny "$WS" "rm -rf ."
 wg deny "$WS" "rm -rf *"
 wg deny "$WM" "cd $WGF/orca/workspaces/r && rm -rf w"
@@ -972,6 +1311,7 @@ now_ms() { echo $(($(date +%s) * 1000)); }
 dirty_main() { echo "edit" >>"$WMAIN/tracked"; echo u >"$WMAIN/untracked.txt"; }
 DESTROY_HOOK='git -C "$WMAIN" reset -q --hard && git -C "$WMAIN" clean -qfd'
 
+if [ "$ONLY" != guard ]; then
 wtfx; out="$(wtrm "$WT" 2>&1)"; rc=$?
 check "worktree-rm: dry run exits 3" test $rc -eq 3
 check "worktree-rm: dry run leaves target in place" test -d "$WT"
@@ -1109,6 +1449,7 @@ wtfx; out="$( cd "$WMAIN" && ORCA_BIN="$TMP/orcawt" bash "$DISP" worktree-rm "$W
 check "dispatcher: worktree-rm forwards (dry run exits 3)" test $rc -eq 3
 check "dispatcher: worktree-rm forwarded target intact" test -d "$WT"
 
+fi
 # ---- worktree guard (every mode)
 wtfx; reset; GUARD_CWD="$WMAIN"
 G_DENY=(
@@ -1139,6 +1480,7 @@ done
 GUARD_CWD="$TMP/work"
 
 
+if [ "$ONLY" != guard ]; then
 # ---- goal worktree lifecycle (fake gh/orca on PATH, no env seams)
 LROOT="$(cd "$TMP" && pwd -P)/lw"; mkdir -p "$LROOT" "$TMP/lbin" "$TMP/lsleep"
 ln -sf "$TMP/gh" "$TMP/lbin/gh"
@@ -1618,7 +1960,7 @@ out="$(cd "$LT" && env -u CLAUDE_PROJECT_DIR -u AGENT_STATE_DIR -u AGENT_HARNESS
 check "autonomy-context hook run from the worktree sees the main flag and goal" bash -c 'grep -q "AUTONOMOUS MODE ON" <<<"$1" && grep -q "status=escalated" <<<"$1"' _ "$out"
 out="$(cd "$LT" && echo '{"tool_input":{"questions":[{"question":"q"}]}}' | env -u CLAUDE_PROJECT_DIR -u AGENT_STATE_DIR -u AGENT_HARNESS_TEST bash "$HOOKS/autonomy-ask-guard.sh")"
 check "ask-guard run from the worktree denies via the main flag" grep -q '"permissionDecision": *"deny"' <<<"$out"
-out="$(cd "$LT" && jq -n --arg c "gh pr merge 1" '{cwd:"'"$LT"'",tool_input:{command:$c}}' | env -u CLAUDE_PROJECT_DIR -u AGENT_STATE_DIR -u AGENT_HARNESS_TEST bash "$HOOKS/autonomy-git-guard.sh")"
+out="$(cd "$LT" && jqn -n --arg c "gh pr merge 1" '{cwd:"'"$LT"'",tool_input:{command:$c}}' | env -u CLAUDE_PROJECT_DIR -u AGENT_STATE_DIR -u AGENT_HARNESS_TEST bash "$HOOKS/autonomy-git-guard.sh")"
 check "git-guard run from the worktree uses the main flag" grep -q '"permissionDecision": *"deny"' <<<"$out"
 rm -f "$LM/.claude/state/autonomy.on"
 
@@ -1792,6 +2134,7 @@ check "goal.sh launches notify with bash -p" test "$(grep -c 'bash -p "$NOTIFY"'
 check "verify-this picks up the generated override and runs its commands" \
   node --test "$HERE/scripts/agent-harness/test/verify-override.test.mjs"
 
+fi
 reset
 echo "tests: $pass passed, $failn failed"
 [ "$failn" -eq 0 ]

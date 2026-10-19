@@ -2,6 +2,16 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.9] - 2026-10-19
+
+- The autonomy git guard scan is rewritten as linear awk passes with a bounded number of forks. Commands of 200K characters or 5000 lines are decided in under a second, and decisions are unchanged except two: a relative path with `..` is resolved correctly under bash 3.2 (see below), and `popd` now makes the directory unknown, so a later `git push` is judged as after an unresolvable `cd`.
+- The guard denies with "cannot parse" when `awk` is missing, when an awk pass fails or is killed, and when its output is empty or truncated.
+- The guard converts Windows path spellings (`C:\a\b`, `C:/a/b`) and asks a native `jq.exe` for LF output under Git Bash, and its branch-lookup cache only keys plain-ASCII paths.
+- Hooks are registered as `bash <script>` in `.claude/settings.json`, in the settings the installer merges (existing direct entries are migrated) and in the Cursor hooks, and the git guard is tracked executable, so a lost exec bit can no longer silently disable a guard. The installer migrates only this repo's own hook scripts (a user's own hook command is left as written), marks copied hooks executable, and stops when a registered hook script is missing.
+- Under bash 3.2 (the macOS system bash) a relative path with `..` was resolved wrongly, so `rm -rf ../<worktree>` could be allowed. It is now resolved correctly; the 0.4.8 guard has the same flaw.
+- Under Git Bash the guard recognises `git.exe` and `gh.exe`, case-insensitive command names, `C:\...`, `//?/C:/...` and `/cygdrive/c/...` paths, and compares paths without case.
+- A `git-guard` CI workflow runs the guard tests and `test-hooks.sh` on Linux (mawk and gawk), macOS and Windows Git Bash, and a seeded differential against the 0.4.8 guard on the Linux and macOS runners.
+
 ## [0.4.8] - 2026-10-18
 
 - `/tdd refactor` pins current behavior with characterization tests that pass immediately. The restructure does not edit those tests. Planner, blast-radius, and `/verify` use that pin as the baseline.

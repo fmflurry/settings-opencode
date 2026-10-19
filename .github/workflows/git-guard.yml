@@ -1,0 +1,70 @@
+name: git-guard
+
+on:
+  push:
+    branches: [master]
+    paths: &paths
+      - '.claude/hooks/**'
+      - 'plugins/**/hooks/**'
+      - 'scripts/agent-harness/**'
+      - 'scripts/cursor-plugin/test-hooks.sh'
+      - '.github/workflows/git-guard.yml'
+  pull_request:
+    branches: [master]
+    paths: *paths
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: guard (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: ubuntu mawk, os: ubuntu-latest, awk: mawk }
+          - { name: ubuntu gawk, os: ubuntu-latest, awk: gawk }
+          - { name: macos, os: macos-latest, awk: system }
+          - { name: windows git bash, os: windows-latest, awk: system }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+      - name: Put gawk first on PATH as awk
+        if: matrix.awk == 'gawk'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gawk
+          mkdir -p "$RUNNER_TEMP/gawkbin"
+          ln -s "$(command -v gawk)" "$RUNNER_TEMP/gawkbin/awk"
+          echo "$RUNNER_TEMP/gawkbin" >> "$GITHUB_PATH"
+      - name: Tool versions
+        run: |
+          bash --version | sed -n 1p
+          (awk --version || awk -W version) 2>&1 | head -1
+          jq --version
+          git --version
+      - name: Guard tests
+        run: RUN_ONLY=guard bash scripts/agent-harness/test/run.sh
+      - name: Guard tests under the system bash 3.2
+        if: runner.os == 'macOS'
+        run: GUARD_BASH=/bin/bash RUN_ONLY=guard bash scripts/agent-harness/test/run.sh
+      - name: Hook tests
+        run: bash scripts/cursor-plugin/test-hooks.sh
+      - name: Guard phase profile (informational)
+        if: always()
+        run: bash scripts/agent-harness/test/guard-profile.sh
+      # The 0.4.8 guard does not strip the CRLF a native jq.exe writes, so it is not a valid baseline on Windows.
+      - name: Differential against the 0.4.8 guard
+        if: runner.os != 'Windows'
+        run: node scripts/agent-harness/test/guard-differential.mjs

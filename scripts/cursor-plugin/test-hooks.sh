@@ -6,7 +6,7 @@ repo="$(cd "$here/../.." && pwd)"
 scripts="$repo/plugins/fmflurry-harness/hooks/scripts"
 fixtures="$here/fixtures"
 
-[ -x "$scripts/cursor-adapter.sh" ] || node "$repo/scripts/build-cursor-plugin.mjs" >/dev/null || exit 1
+[ -f "$scripts/cursor-adapter.sh" ] || node "$repo/scripts/build-cursor-plugin.mjs" >/dev/null || exit 1
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -30,7 +30,7 @@ check() {
   local name="$1" got="$2" want="$3"
   if [ "$got" = "$want" ]; then echo "ok   $name"; else echo "FAIL $name: got [$got] want [$want]"; fail=1; fi
 }
-adapter() { "$scripts/cursor-adapter.sh" "$scripts/$1" "$2"; }
+adapter() { "$BASH" "$scripts/cursor-adapter.sh" "$scripts/$1" "$2"; }
 
 out="$(adapter pre-tool-use.sh beforeShellExecution < "$fixtures/before-shell-execution.json")"; rc=$?
 check "rm -rf / is warn-only -> allow (exit)" "$rc" "0"
@@ -59,7 +59,7 @@ check "malformed stdin stop: empty object" "$(jq -c . <<<"$out")" '{}'
 out="$(printf '' | adapter rtk-rewrite.sh preToolUse)"
 check "empty stdin: allow" "$(jq -c . <<<"$out")" '{"permission":"allow"}'
 
-out="$("$scripts/cursor-adapter.sh" "$scripts/missing.sh" preToolUse < "$fixtures/pre-tool-use.json")"
+out="$(bash "$scripts/cursor-adapter.sh" "$scripts/missing.sh" preToolUse < "$fixtures/pre-tool-use.json")"
 check "missing script: allow" "$(jq -c . <<<"$out")" '{"permission":"allow"}'
 
 out="$(FMFLURRY_CODEMEMORY=off adapter prefer-code-memory.sh preToolUse < "$fixtures/pre-tool-use.json")"
@@ -83,10 +83,10 @@ cat > "$work/ask-hook.sh" <<'HOOK'
 cat >/dev/null
 printf '{"hookSpecificOutput":{"permissionDecision":"ask","permissionDecisionReason":"confirm this merge"}}'
 HOOK
-out="$("$scripts/cursor-adapter.sh" "$work/ask-hook.sh" beforeShellExecution < "$fixtures/before-shell-execution.json")"
+out="$(bash "$scripts/cursor-adapter.sh" "$work/ask-hook.sh" beforeShellExecution < "$fixtures/before-shell-execution.json")"
 check "ask on beforeShellExecution -> ask (not allow)" "$(jq -r .permission <<<"$out")" "ask"
 check "ask on beforeShellExecution carries the reason" "$(jq -r .user_message <<<"$out")" "confirm this merge"
-out="$("$scripts/cursor-adapter.sh" "$work/ask-hook.sh" preToolUse < "$fixtures/pre-tool-use.json")"
+out="$(bash "$scripts/cursor-adapter.sh" "$work/ask-hook.sh" preToolUse < "$fixtures/pre-tool-use.json")"
 check "ask on preToolUse -> deny (Cursor preToolUse has no ask)" "$(jq -r .permission <<<"$out")" "deny"
 check "ask on preToolUse carries the reason" "$(jq -r .user_message <<<"$out")" "confirm this merge"
 

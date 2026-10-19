@@ -48,7 +48,7 @@ CLAUDE_FILE_PATH="$(printf '%s' "$PAYLOAD" | jq -r '.tool_input.file_path // .to
 export CLAUDE_TOOL_NAME CLAUDE_TOOL_ARGS CLAUDE_FILE_PATH
 
 ERR_FILE="$(mktemp 2>/dev/null)" || allow_and_exit
-OUT="$(printf '%s' "$PAYLOAD" | bash "$SCRIPT" 2>"$ERR_FILE")"
+OUT="$(printf '%s' "$PAYLOAD" | "${BASH:-bash}" "$SCRIPT" 2>"$ERR_FILE")"
 RC=$?
 ERR="$(cat "$ERR_FILE" 2>/dev/null)"
 rm -f "$ERR_FILE"

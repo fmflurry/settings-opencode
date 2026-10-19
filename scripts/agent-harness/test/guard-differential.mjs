@@ -74,6 +74,14 @@ const frag = () => {
   return w
 }
 const cases = [...fixed]
+for (const end of [repo, '..', '../x', '-', '~', '', '$X', '-P /tmp']) {
+  for (const tail of ['git push', 'git push origin HEAD', 'rm -rf .', 'git -C . push']) {
+    for (const head of ['', 'cd rel\n', 'cd -x\n', 'cd $Y\n', 'pushd ..\n']) {
+      cases.push(`${head}cd /tmp/a\ncd /tmp/b\ncd ${repo}\ncd /tmp/c\ncd ${end}\n${tail}`)
+      cases.push(`${head}cd /tmp/a; cd sub; cd /tmp/b && cd ${end}; ${tail}`)
+    }
+  }
+}
 for (let i = 0; i < randomCases; i++) {
   let c = ''
   const n = 1 + Math.floor(rnd() * 8)

@@ -807,15 +807,27 @@ function emitarr(a, n,   i) {
   for (i = 1; i <= n; i++) print a[i] US
   print "E\n"
 }
+function cdflush(   i) {
+  for (i = 1; i <= ncb; i++) print cb[i]
+  ncb = 0
+}
+function cdsafe(t) { return t != "" && index(t, "$") == 0 && substr(t, 1, 1) != "-" }
 function fsg(   i, txt, hdr) {
   fw()
   if (md == 5 && nk > 0) {
     if (nk == 1) txt = "c\nh\nx\n"
     else if (ae[2] != 0 || abr[2] != 0 || substr(aw[2], 1, 1) == "-") txt = "c\nk\nx\n"
     else txt = "c\n" (index(al[2], BS) ? "P" : "p") "\nx" al[2] "\n"
-    if (!((txt == prevc) && (txt ~ /^c\nk/ || substr(al[2], 1, 1) == "/"))) print txt
+    if (substr(txt, 1, 3) == "c\np") {
+      if (substr(al[2], 1, 1) == "/") ncb = 0
+      cb[++ncb] = txt
+    } else {
+      cdflush()
+      if (!((txt == prevc) && (txt ~ /^c\nk/ || substr(al[2], 1, 1) == "/"))) print txt
+    }
     prevc = txt
   } else if (md == 0 && nk > 0 && !(gp && screen_push_inert())) {
+    cdflush()
     txt = ""
     if (nk <= 16) for (i = 1; i <= nk; i++) txt = txt aw[i] US ae[i] US abr[i] US al[i] US ab2[i] US av[i] RSEP
     prevc = ""
@@ -853,6 +865,8 @@ function screen_push_inert(   i) {
 function segemit(line,   r, pfx) {
   r = segkeep(line)
   if (r == 2) {
+    if (substr(cdtgt, 1, 1) == "/" && cdsafe(cdtgt))
+      while (ns > 0 && substr(sg[ns], 1, 1) == "\034" && cdsafe(substr(sg[ns], 2))) ns--
     if (!(ns > 0 && sg[ns] == "\034" cdtgt && substr(cdtgt, 1, 1) == "/")) sg[++ns] = "\034" cdtgt
   }
   else if (r) {
@@ -862,7 +876,10 @@ function segemit(line,   r, pfx) {
   }
 }
 function segfeed(s,   n, i, parts) {
-  if (s !~ SEGSPECIAL) { segemit(s); return }
+  if (s !~ SEGSPECIAL) {
+    if (s ~ /^[A-Za-z0-9_]+$/) { n = win ? tolower(s) : s; if (!(n in ALLB) && n !~ /^python/) return }
+    segemit(s); return
+  }
   gsub("[\047\"]", "", s)
   gsub(/\$\(/, ";", s)
   gsub(/`/, ";", s)
@@ -1009,7 +1026,7 @@ BEGIN {
   for (k in PY) ALLB[k] = 1
   ALLB["git"] = 1; ALLB["gh"] = 1; ALLB["rm"] = 1; ALLB["cd"] = 1; ALLB["pushd"] = 1
   SPECIAL = "[\\\\\047\"\n\037/={]"
-  CH = 512; SQ = "\047"; US = "\037"; RSEP = "\036"; DQ = "\""; BS = "\\"; q = 0; ex = 0; nk = 0; ns = 0; lbuf = ""; prevc = ""; bs = 0; prevtxt = ""; ORS = "" }
+  CH = 512; SQ = "\047"; US = "\037"; RSEP = "\036"; DQ = "\""; BS = "\\"; q = 0; ex = 0; nk = 0; ns = 0; lbuf = ""; prevc = ""; bs = 0; prevtxt = ""; ncb = 0; ORS = "" }
 mode == "seg" { segemit($0); next }
 mode == "lit" { acc = (NR > 1) ? acc "\n" $0 : $0; next }
 {
@@ -1021,8 +1038,8 @@ END {
   if (mode == "lit") { print stripnl(lit(acc)) "\n" US "LEND\n"; exit }
   if (hv) { if (mode == "join") joinrec(prev, 0); else scanrec(prev, 0) }
   if (mode == "join") print "\n" US "JEND"
-  if (mode == "scan") { fsg(); print US "SCANEND\n" }
-  if (mode == "both") { fsg(); print US "SCANEND\n" }
+  if (mode == "scan") { fsg(); cdflush(); print US "SCANEND\n" }
+  if (mode == "both") { fsg(); cdflush(); print US "SCANEND\n" }
   if (mode == "both" || mode == "seg") {
     for (i = 1; i <= ns; i++) print sg[i] "\n"
     print US "SEND\n"

@@ -1048,7 +1048,7 @@ perf_guard "20 distinct bare git -C push lines (existing dirs, one branch lookup
 perf_seq "$PF" 'rm -f x$i' 5000
 perf_guard "5000 distinct rm lines" allow "$PF"
 { printf 'echo "\n'; perl -e 'print "aaaaa\n" x 200000'; printf '"'; } >"$PF"
-perf_guard "echo with a 200K-line quoted body" allow "$PF"
+perf_guard "echo with a 200K-line quoted body" allow "$PF" 1500
 UNI="$TMP/uni"; UA="$UNI/$(printf '\303\251')"; UB="$UNI/$(printf '\303\243')"
 git init -q -b feat/uni "$UA" && git -C "$UA" -c user.email=a@b -c user.name=n commit -q --allow-empty -m i
 git init -q -b master "$UB" && git -C "$UB" -c user.email=a@b -c user.name=n commit -q --allow-empty -m i

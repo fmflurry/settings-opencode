@@ -46,9 +46,11 @@ winconv() {
     WP="/$d${BASH_REMATCH[2]}"
   fi
 }
-cmd="$(jqr '.tool_input.command // empty' <<<"$input" 2>/dev/null)"
+if [ "$WIN" = 1 ]; then fields="$(jq -jb '(.cwd // ""), "\u0001", (.tool_input.command // "")' <<<"$input" 2>/dev/null)"
+else fields="$(jq -j '(.cwd // ""), "\u0001", (.tool_input.command // "")' <<<"$input" 2>/dev/null)"; fi
+cwd="${fields%%$'\001'*}"
+cmd="${fields:$((${#cwd} + 1))}"
 [ -n "$cmd" ] || exit 0
-cwd="$(jqr '.cwd // empty' <<<"$input" 2>/dev/null)"
 cwd="${cwd:-$PWD}"
 if [ "$WIN" = 1 ]; then winconv "$cwd"; cwd="$WP"; fi
 gg_mark input
@@ -676,10 +678,15 @@ check_harness_cmd() {
 # Modes: join drops backslash-newline outside single quotes; scan prints, per kept segment, a header
 # ("1" when a field holds %b escapes, "r" when it repeats the previous segment) and six lines of
 # US-separated entries (raw, exp, brace, lit, litbase, litval), each ending in a sentinel entry, with
-# "\" LF US escaped as \\ \n \0037; a leading cd or pushd becomes a "c" header plus a kind line and a
-# target line; seg keeps only legacy-tokenizer segments that can reach a check
-# (scan drops the same no-op segments); lit unquotes stdin. Every mode ends with a sentinel the caller checks.
-# Input is walked in bounded chunks because BSD awk's substr is O(length).
+# "\" LF US escaped as \\ \n \0037. A leading cd, pushd or popd becomes a "c" record: header line "c",
+# a kind line (h = HOME, k = unknown directory, p/P = literal target, P holding %b escapes) and a
+# value line prefixed "x". Consecutive literal cd records collapse: an absolute target discards the
+# literal records before it. seg keeps only legacy-tokenizer segments that can reach a check (scan
+# drops the same no-op segments); a cd there is a "\034"-prefixed digest, python-class segments are
+# tagged "\036". both runs scan and seg in one pass over a command without a backslash. lit unquotes
+# stdin. Every mode ends with a sentinel the caller checks. Input is read line by line and walked in
+# bounded chunks because BSD awk substr is O(length); in both mode, lines inside a quote that cannot
+# change scan state or reach a check are skipped without further work.
 # After "$" the next quote closes the quote state at once, so "$'" never opens ANSI-C quoting here.
 GG_AWK='
 function apush(id, s,   k) {
@@ -783,6 +790,7 @@ function fw(   i, j, r, br, n, m2, piece, qs, lw, lb, lv, ps, lws, lbs, e1, e2, 
         else if (lbs == "rm") md = 3
         else if (lbs == "gh") md = 4
         else if (lbs == "cd" || lbs == "pushd") md = 5
+        else if (lbs == "popd") { md = 5; pop = 1 }
         else if (!(lbs in SK)) md = 1
       }
     } else if (md == 2) {
@@ -815,7 +823,8 @@ function cdsafe(t) { return t != "" && index(t, "$") == 0 && substr(t, 1, 1) != 
 function fsg(   i, txt, hdr) {
   fw()
   if (md == 5 && nk > 0) {
-    if (nk == 1) txt = "c\nh\nx\n"
+    if (pop) txt = "c\nk\nx\n"
+    else if (nk == 1) txt = "c\nh\nx\n"
     else if (ae[2] != 0 || abr[2] != 0 || substr(aw[2], 1, 1) == "-") txt = "c\nk\nx\n"
     else txt = "c\n" (index(al[2], BS) ? "P" : "p") "\nx" al[2] "\n"
     if (substr(txt, 1, 3) == "c\np") {
@@ -838,7 +847,7 @@ function fsg(   i, txt, hdr) {
       prevtxt = txt
     }
   }
-  nk = 0; bs = 0; nw = 0; md = 0; gp = 0
+  nk = 0; bs = 0; nw = 0; md = 0; gp = 0; pop = 0
 }
 function pushargs_ok(a, from, n,   i, t, np, pos) {
   if (!pushfast) return 0
@@ -875,6 +884,15 @@ function segemit(line,   r, pfx) {
     sg[++ns] = pfx line
   }
 }
+function plainq(s,   w, c) {
+  if (s ~ PLAINX) return 0
+  if (!match(s, /^[A-Za-z0-9_]+/)) return 0
+  c = substr(s, RLENGTH + 1, 1)
+  if (c != "" && c != " " && c != "\t") return 0
+  w = substr(s, 1, RLENGTH)
+  if (win) w = tolower(w)
+  return !(w in ALLB) && w !~ /^python/
+}
 function segfeed(s,   n, i, parts) {
   if (s !~ SEGSPECIAL) {
     if (s ~ /^[A-Za-z0-9_]+$/) { n = win ? tolower(s) : s; if (!(n in ALLB) && n !~ /^python/) return }
@@ -910,6 +928,7 @@ function segkeep(s,   t, k, b, i, a, n, ps) {
   if (t == "" || t ~ ASG) return 1
   n = split(t, ps, "/"); b = ps[n]
   if (win) b = stripexe(tolower(b))
+  if (b == "popd") { cdtgt = "-"; return 2 }
   if (b == "cd" || b == "pushd") {
     k = split(s, a, " ")
     if (k > 2) return 1
@@ -1022,15 +1041,21 @@ BEGIN {
   for (i = 1; i <= n; i++) PY[ps[i]] = 1
   ASG = "^[A-Za-z_][A-Za-z0-9_]*="
   SEGSPECIAL = "[\047\"`;&|$]"
+  PLAINX = "[\047\"`;&|$>\\\\]"
+  isseg = (mode == "seg"); islit = (mode == "lit"); isboth = (mode == "both")
   for (k in LK) ALLB[k] = 1
   for (k in PY) ALLB[k] = 1
-  ALLB["git"] = 1; ALLB["gh"] = 1; ALLB["rm"] = 1; ALLB["cd"] = 1; ALLB["pushd"] = 1
+  ALLB["git"] = 1; ALLB["gh"] = 1; ALLB["rm"] = 1; ALLB["cd"] = 1; ALLB["pushd"] = 1; ALLB["popd"] = 1
   SPECIAL = "[\\\\\047\"\n\037/={]"
   CH = 512; SQ = "\047"; US = "\037"; RSEP = "\036"; DQ = "\""; BS = "\\"; q = 0; ex = 0; nk = 0; ns = 0; lbuf = ""; prevc = ""; bs = 0; prevtxt = ""; ncb = 0; ORS = "" }
-mode == "seg" { segemit($0); next }
-mode == "lit" { acc = (NR > 1) ? acc "\n" $0 : $0; next }
+isseg { segemit($0); next }
+islit { acc = (NR > 1) ? acc "\n" $0 : $0; next }
 {
-  if (mode == "both") segfeed($0)
+  if (isboth) {
+    if (hv) { scanrec(prev, 1); hv = 0 }
+    if ((q == 1 || q == 2) && nw > 0 && md == 1 && $0 !~ PLAINX && plainq($0)) next
+    segfeed($0)
+  }
   if (hv) { if (mode == "join") joinrec(prev, 1); else scanrec(prev, 1) }
   prev = $0; hv = 1
 }
@@ -1232,7 +1257,7 @@ screen_segment() {
 
 # awk output reaches bash as one string split in memory: a read loop costs a syscall per line, which is
 # slow under MSYS2, and a pipe is read one byte at a time.
-gg_lines() { local IFS=$'\n'; GGL=($1); LI=0; }
+gg_lines() { local IFS=$'\n'; set -f; GGL=($1); LI=0; }
 
 command -v awk >/dev/null 2>&1 || deny_unparsed
 if [[ "$cmd" == *\\* ]]; then
@@ -1248,8 +1273,9 @@ pushfast=1
 case "$BASE_A$BASE_B" in *\\* | *\"* | *\'* | *$'\n'*) pushfast=0 ;; esac
 merged=0
 if [[ "$cmd" != *\\* ]]; then
-  # Without a backslash the legacy tokenizer's text is only quotes removed and ;&| made line breaks,
-  # so one awk pass yields both the quote-aware scan and the filtered legacy segments.
+  # Without a backslash the legacy tokenizer's text is the command with quotes removed and "$(", backticks
+  # and ;&| turned into line breaks, so one awk pass yields both the quote-aware scan and the filtered
+  # legacy segments.
   merged=1
   both_out="$(LC_ALL=C awk -v mode=both -v pytag=1 -v win="$WIN" -v altsdef="$ALTS_DEFAULT" -v pushfast="$pushfast" -v basea="$BASE_A" -v baseb="$BASE_B" "$GG_AWK" <<<"$cmd")" || deny_unparsed
   gg_lines "$both_out"
@@ -1423,6 +1449,7 @@ while [ "$LI" -lt "$nlines" ]; do
       ensure_pyrm
       [ "$PYRM_HIT" = 1 ] && deny_worktree ;;
     cd | pushd) legacy_cd "${ct[1]:-}"; continue ;;
+    popd) legacy_cd "-"; continue ;;
   esac
   if [ "$HC" = 1 ] && check_harness_cmd teardown-merged-worktree pr "$has_assign" "$c0" "${ct[@]:1}"; then continue; fi
   if [ "$HC" = 1 ] && check_harness_cmd ship-init init "$has_assign" "$c0" "${ct[@]:1}"; then continue; fi

@@ -976,8 +976,8 @@ while IFS='|' read -r p_on p_off p_cmd; do
   check "git-guard probe (flag on) $p_on: $p_cmd" test "$(probe_decision on "$p_cmd")" = "$p_on"
   check "git-guard probe (flag off) $p_off: $p_cmd" test "$(probe_decision off "$p_cmd")" = "$p_off"
 done <<<"$PROBE_CMDS"
-perf_guard() { # name expected file
-  local json="$TMP/perf.json" t0 t1 out dec ms
+perf_guard() { # name expected file [limit_ms]
+  local json="$TMP/perf.json" t0 t1 out dec ms limit="${4:-1000}"
   jq -Rs --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:.}}' <"$3" >"$json"
   t0="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
   out="$(cd "$GUARD_CWD" && bash "$HOOKS/autonomy-git-guard.sh" <"$json")"
@@ -986,7 +986,7 @@ perf_guard() { # name expected file
   dec="$(jq -r '.hookSpecificOutput.permissionDecision // "allow"' <<<"${out:-{\}}")"
   echo "perf: $1 -> $dec in ${ms}ms"
   check "git-guard perf decision: $1" test "$dec" = "$2"
-  check "git-guard perf under 1000ms: $1 (took ${ms}ms)" test "$ms" -lt 1000
+  check "git-guard perf under ${limit}ms: $1 (took ${ms}ms)" test "$ms" -lt "$limit"
 }
 perf_input() { # file prefix lineText lines suffix
   { printf '%s' "$2"; perl -e 'print "$ARGV[0]\n" x $ARGV[1]' "$3" "$4"; printf '%s' "$5"; } >"$1"
@@ -1017,6 +1017,38 @@ perf_input "$PF" '' 'echo x > /tmp/f' 5000 ''
 perf_guard "5000 lines of echo x > /tmp/f" allow "$PF"
 perf_input "$PF" '' 'gh pr view 1' 5000 ''
 perf_guard "5000 lines of gh pr view 1" allow "$PF"
+perf_seq() { # file template count; $i in the template is the line number
+  perl -e '$c = shift; $n = shift; for $i (1 .. $n) { ($l = $c) =~ s/\$i/$i/g; print "$l\n" }' "$2" "$3" >"$1"
+}
+perf_seq "$PF" 'cd /tmp/d$i' 2000
+perf_guard "2000 distinct cd lines" allow "$PF"
+perf_seq "$PF" 'cd /tmp/d$i' 8000
+perf_guard "8000 distinct cd lines" allow "$PF" 2000
+perf_seq "$PF" 'git -C /tmp/d$i push origin feat' 2000
+perf_guard "2000 distinct git -C push lines" allow "$PF"
+perf_seq "$PF" 'rm -f x$i' 5000
+perf_guard "5000 distinct rm lines" allow "$PF"
+{ printf 'echo "\n'; perl -e 'print "aaaaa\n" x 200000'; printf '"'; } >"$PF"
+perf_guard "echo with a 200K-line quoted body" allow "$PF"
+FAKE_AWK_DIR="$TMP/fakeawk"; mkdir -p "$FAKE_AWK_DIR"
+REAL_AWK="$(command -v awk)"
+fake_awk() { # body
+  printf '#!/bin/sh\n%s\n' "$1" >"$FAKE_AWK_DIR/awk"; chmod +x "$FAKE_AWK_DIR/awk"
+}
+guard_fake() { ( cd "$GUARD_CWD" && jq -n --arg c "$1" --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | PATH="$FAKE_AWK_DIR:$PATH" bash "$HOOKS/autonomy-git-guard.sh" ); }
+denied_fake() { [ "$(jq -r '.hookSpecificOutput.permissionDecision // ""' <<<"$(guard_fake "$1")")" = deny ]; }
+for fa in 'exit 2' 'kill -9 $$' "case \"\$*\" in *mode=seg*) exit 2 ;; esac; exec \"$REAL_AWK\" \"\$@\""; do
+  fake_awk "$fa"
+  check "git-guard fails closed on awk failure (flag on, $fa): push to base" denied_fake "git push origin $(git -C "$GUARD_CWD" rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
+  check "git-guard fails closed on awk failure (flag on, $fa): rm -rf worktree" denied_fake "rm -rf $GUARD_CWD"
+  check "git-guard fails closed on awk failure (flag on, $fa): protected write" denied_fake "echo x > .claude/foo"
+done
+rm -f "$TMP/state/autonomy.on"
+for fa in 'exit 2' 'kill -9 $$' "case \"\$*\" in *mode=seg*) exit 2 ;; esac; exec \"$REAL_AWK\" \"\$@\""; do
+  fake_awk "$fa"
+  check "git-guard fails closed on awk failure (flag off, $fa): git worktree remove" denied_fake "git worktree remove x"
+done
+flag_on
 rm -f "$TMP/state/autonomy.on"
 
 WGF="$(mktemp -d)"; WGF="$(cd -P "$WGF" && pwd)"

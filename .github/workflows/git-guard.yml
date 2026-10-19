@@ -61,6 +61,8 @@ jobs:
         run: GUARD_BASH=/bin/bash RUN_ONLY=guard bash scripts/agent-harness/test/run.sh
       - name: Hook tests
         run: bash scripts/cursor-plugin/test-hooks.sh
+      - name: Guard phase profile (informational)
+        run: bash scripts/agent-harness/test/guard-profile.sh
       # The 0.4.8 guard does not strip the CRLF a native jq.exe writes, so it is not a valid baseline on Windows.
       - name: Differential against the 0.4.8 guard
         if: runner.os != 'Windows'

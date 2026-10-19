@@ -833,6 +833,24 @@ function screen_push_inert(   i) {
   if (i > nk || substr(aw[i], 1, 1) == "-" || al[i] != "push") return 0
   return pushargs_ok(al, i + 1, nk)
 }
+function segemit(line,   r, pfx) {
+  r = segkeep(line)
+  if (r == 2) sg[++ns] = "\034" cdtgt
+  else if (r) {
+    pfx = (substr(line, 1, 1) == "\034" || substr(line, 1, 1) == "\035" || substr(line, 1, 1) == "\036" || substr(line, 1, 1) == US) ? "\035" : ""
+    if (r == 3) pfx = "\036" pfx
+    sg[++ns] = pfx line
+  }
+}
+function segfeed(s,   n, i, parts) {
+  if (s !~ SEGSPECIAL) { segemit(s); return }
+  gsub("[\047\"]", "", s)
+  gsub(/\$\(/, ";", s)
+  gsub(/`/, ";", s)
+  gsub(/[;&|]/, "\n", s)
+  n = split(s, parts, "\n")
+  for (i = 1; i <= n; i++) segemit(parts[i])
+}
 function maybe_prot(t) {
   if (win) t = tolower(t)
   return index(t, ".github/") || index(t, ".claude/") || index(t, ".opencode/") || index(t, "tools/agent-harness/") \
@@ -870,7 +888,7 @@ function segkeep(s,   t, k, b, i, a, n, ps) {
   }
   if (b == "gh") return (index(s, "merge") || index(s, "api")) ? 1 : 0
   if (b in LK) return 1
-  if (b in PY || b ~ /^python[0-9]/) return !pyinert
+  if (b in PY || b ~ /^python[0-9]/) return pytag ? 3 : !pyinert
   if (b != "git") return 0
   k = split(s, a, " ")
   for (i = 1; i <= k; i++) { sub(/[)}]+$/, "", a[i]); if (a[i] == "worktree") return 1 }
@@ -967,28 +985,29 @@ BEGIN {
   n = split("python perl node ruby", ps, " ")
   for (i = 1; i <= n; i++) PY[ps[i]] = 1
   ASG = "^[A-Za-z_][A-Za-z0-9_]*="
+  SEGSPECIAL = "[\047\"`;&|$]"
   for (k in LK) ALLB[k] = 1
   for (k in PY) ALLB[k] = 1
   ALLB["git"] = 1; ALLB["gh"] = 1; ALLB["rm"] = 1; ALLB["cd"] = 1; ALLB["pushd"] = 1
   SPECIAL = "[\\\\\047\"\n\037/={]"
-  CH = 512; SQ = "\047"; US = "\037"; RSEP = "\036"; DQ = "\""; BS = "\\"; q = 0; ex = 0; nk = 0; lbuf = ""; prevc = ""; bs = 0; prevtxt = ""; ORS = "" }
-mode == "seg" {
-  r = segkeep($0)
-  if (r == 2) print "\034" cdtgt "\n"
-  else if (r) {
-    pfx = (substr($0, 1, 1) == "\034" || substr($0, 1, 1) == "\035") ? "\035" : ""
-    print pfx $0 "\n"
-  }
-  next
-}
+  CH = 512; SQ = "\047"; US = "\037"; RSEP = "\036"; DQ = "\""; BS = "\\"; q = 0; ex = 0; nk = 0; ns = 0; lbuf = ""; prevc = ""; bs = 0; prevtxt = ""; ORS = "" }
+mode == "seg" { segemit($0); next }
 mode == "lit" { acc = (NR > 1) ? acc "\n" $0 : $0; next }
-{ if (hv) { if (mode == "join") joinrec(prev, 1); else scanrec(prev, 1) }; prev = $0; hv = 1 }
+{
+  if (mode == "both") segfeed($0)
+  if (hv) { if (mode == "join") joinrec(prev, 1); else scanrec(prev, 1) }
+  prev = $0; hv = 1
+}
 END {
   if (mode == "lit") { print stripnl(lit(acc)) "\n" US "LEND\n"; exit }
   if (hv) { if (mode == "join") joinrec(prev, 0); else scanrec(prev, 0) }
   if (mode == "join") print "\n" US "JEND"
-  if (mode == "scan") { fsg(); print "e\n" }
-  if (mode == "seg") print US "SEND\n"
+  if (mode == "scan") { fsg(); print US "SCANEND\n" }
+  if (mode == "both") { fsg(); print US "SCANEND\n" }
+  if (mode == "both" || mode == "seg") {
+    for (i = 1; i <= ns; i++) print sg[i] "\n"
+    print US "SEND\n"
+  }
 }
 '
 
@@ -1187,21 +1206,31 @@ P_GIT_DIR=""; P_GIT_WT=""; P_GIT_CFG=0
 SR_CD=""
 pushfast=1
 case "$BASE_A$BASE_B" in *\\* | *\"* | *\'* | *$'\n'*) pushfast=0 ;; esac
-scan_out="$(LC_ALL=C awk -v mode=scan -v win="$WIN" -v pushfast="$pushfast" -v basea="$BASE_A" -v baseb="$BASE_B" "$GG_AWK" <<<"$cmd")" || deny_unparsed
+merged=0
+if [[ "$cmd" != *\\* ]]; then
+  # Without a backslash the legacy tokenizer's text is only quotes removed and ;&| made line breaks,
+  # so one awk pass yields both the quote-aware scan and the filtered legacy segments.
+  merged=1
+  both_out="$(LC_ALL=C awk -v mode=both -v pytag=1 -v win="$WIN" -v altsdef="$ALTS_DEFAULT" -v pushfast="$pushfast" -v basea="$BASE_A" -v baseb="$BASE_B" "$GG_AWK" <<<"$cmd")" || deny_unparsed
+  exec 3<<<"$both_out"
+else
+  scan_out="$(LC_ALL=C awk -v mode=scan -v win="$WIN" -v pushfast="$pushfast" -v basea="$BASE_A" -v baseb="$BASE_B" "$GG_AWK" <<<"$cmd")" || deny_unparsed
+  exec 3<<<"$scan_out"
+fi
 scan_ended=0
 SK_CD=-1 SK_DIR="" SK_WT="" SK_CFG=""
-while IFS= read -r rec_h; do
+while IFS= read -r -u 3 rec_h; do
   case "$rec_h" in
-    e) scan_ended=1; continue ;;
+    $'\037SCANEND') scan_ended=1; break ;;
     c)
-      IFS= read -r c_kind; IFS= read -r c_val
+      IFS= read -r -u 3 c_kind; IFS= read -r -u 3 c_val
       screen_cd "$c_kind" "$c_val"
       continue ;;
     r)
       if [ "$SR_VER" = "$SK_CD" ] && [ "$P_GIT_DIR" = "$SK_DIR" ] && [ "$P_GIT_WT" = "$SK_WT" ] && [ "$P_GIT_CFG" = "$SK_CFG" ]; then continue; fi ;;
     *)
-      IFS=$'\037' read -ra words; IFS=$'\037' read -ra exp_f; IFS=$'\037' read -ra brace_f
-      IFS=$'\037' read -ra lit_f; IFS=$'\037' read -ra litb_f; IFS=$'\037' read -ra litv_f
+      IFS=$'\037' read -u 3 -ra words; IFS=$'\037' read -u 3 -ra exp_f; IFS=$'\037' read -u 3 -ra brace_f
+      IFS=$'\037' read -u 3 -ra lit_f; IFS=$'\037' read -u 3 -ra litb_f; IFS=$'\037' read -u 3 -ra litv_f
       [ "${#words[@]}" -gt 0 ] && unset "words[$((${#words[@]} - 1))]"
       if [ "$rec_h" = 1 ]; then
         for ((rec_k = 0; rec_k < ${#words[@]}; rec_k++)); do
@@ -1212,7 +1241,7 @@ while IFS= read -r rec_h; do
   esac
   SK_CD="$SR_VER" SK_DIR="$P_GIT_DIR" SK_WT="$P_GIT_WT" SK_CFG="$P_GIT_CFG"
   screen_segment
-done <<<"$scan_out"
+done
 [ "$scan_ended" = 1 ] || deny_unparsed
 
 if [[ "$cmd" == *agent-harness* ]] && { [ "$AUTO" = 1 ] || [[ "$cmd" =~ worktree-rm|teardown-merged-worktree|ship-init ]]; }; then
@@ -1224,6 +1253,7 @@ fi
 if [[ "$cmd" == *worktree-rm* ]] && grep -Eq '(^|[^[:alnum:]_])(export|declare +-x|set +-a)( |$)' <<<"$cmd"; then deny_worktree; fi
 [[ "$cmd" == *--confirmed* && "$cmd" == *worktree-rm* ]] && ASKED_WT=1
 
+if [ "$merged" = 0 ]; then
 legacy_cmd="$cmd"
 # Inside quotes a backslash in a Windows path is literal, so the legacy tokenizer reads it as a separator.
 [ "$WIN" = 1 ] && legacy_cmd="$(sed -E 's#\\([^"\\ $`'"'"'])#/\1#g' <<<"$cmd")"
@@ -1237,11 +1267,23 @@ else
   [ "$PYRM_HIT" = 0 ] && { [ "$AUTO" = 0 ] || [ "$LOOSE_HIT" = 0 ]; } && pyinert=1
 fi
 segments="$(LC_ALL=C awk -v mode=seg -v win="$WIN" -v altsdef="$ALTS_DEFAULT" -v pyinert="$pyinert" -v pushfast="$pushfast" -v basea="$BASE_A" -v baseb="$BASE_B" "$GG_AWK" <<<"$segments")" || deny_unparsed
-[[ "$segments" == $'\037SEND' || "$segments" == *$'\n\037SEND' ]] || deny_unparsed
-segments="${segments%$'\037SEND'}"
-PSEG=""; PIN=""
-while IFS= read -r seg; do
+exec 3<<<"$segments"
+fi
+PSEG=""; PIN=""; PYI=""
+seg_ended=0
+while IFS= read -r -u 3 seg; do
   case "$seg" in
+    $'\037SEND') seg_ended=1; break ;;
+    $'\036'*)
+      if [ -z "$PYI" ]; then
+        ensure_pyrm
+        [ "$AUTO" = 1 ] && ensure_loose
+        PYI=0
+        [ "$PYRM_HIT" = 0 ] && { [ "$AUTO" = 0 ] || [ "$LOOSE_HIT" = 0 ]; } && PYI=1
+      fi
+      [ "$PYI" = 1 ] && continue
+      seg="${seg#?}"
+      case "$seg" in $'\034'* | $'\035'*) seg="${seg#?}" ;; esac ;;
     $'\034'*) legacy_cd "${seg#?}"; continue ;;
     $'\035'*) seg="${seg#?}" ;;
   esac
@@ -1352,7 +1394,9 @@ while IFS= read -r seg; do
     dd) any_protected "${ct[@]:1}" && deny ;;
     python | python[0-9]* | perl | node | ruby) interpreter_inline_hits_protected "${ct[@]:1}" && deny ;;
   esac
-done <<<"$segments"
+done
+exec 3<&-
+[ "$seg_ended" = 1 ] || deny_unparsed
 
 [ "$ASKED_WT" = 1 ] && emit ask "worktree-rm --confirmed removes a worktree: confirm the human named this removal."
 [ "$ASKED" = 1 ] && emit ask "ship-merge --confirmed merges with autonomy rails relaxed and deletes the merged branch: confirm with the user."

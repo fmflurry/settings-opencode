@@ -87,9 +87,11 @@ const run = (shell, script, command, mode) => new Promise((done, fail) => {
   const env = { ...process.env, AGENT_HARNESS_TEST: '1', AGENT_STATE_DIR: states[mode], CLAUDE_PROJECT_DIR: repo }
   const child = spawn(shell, [script], { cwd: repo, env })
   const out = []
+  const err = []
   child.stdout.on('data', (d) => out.push(d))
+  child.stderr.on('data', (d) => err.push(d))
   child.on('error', fail)
-  child.on('close', (code) => done({ code, out: Buffer.concat(out).toString() }))
+  child.on('close', (code) => done({ code, out: Buffer.concat(out).toString(), err: Buffer.concat(err).toString() }))
   child.stdin.end(JSON.stringify({ cwd: repo, tool_input: { command } }))
 })
 
@@ -99,6 +101,7 @@ const jobs = []
 for (const shell of shells) for (const mode of ['on', 'off']) for (const command of cases) jobs.push({ shell, mode, command })
 
 const diffs = []
+const stderrRuns = []
 const seen = { deny: 0, ask: 0, allow: 0 }
 let next = 0
 const worker = async () => {
@@ -107,6 +110,7 @@ const worker = async () => {
     const [a, b] = await Promise.all([run(shell, baseline, command, mode), run(shell, current, command, mode)])
     seen[b.out.includes('"deny"') ? 'deny' : b.out.includes('"ask"') ? 'ask' : 'allow']++
     if (a.code !== b.code || a.out !== b.out) diffs.push({ shell, mode, command, a, b })
+    if (b.err !== '') stderrRuns.push({ shell, mode, command, err: b.err })
   }
 }
 await Promise.all(Array.from({ length: 4 }, worker))
@@ -119,4 +123,6 @@ for (const d of diffs.slice(0, 10)) {
   console.log(`baseline exit ${d.a.code}: ${d.a.out.slice(-200)}`)
   console.log(`current  exit ${d.b.code}: ${d.b.out.slice(-200)}`)
 }
-process.exit(diffs.length === 0 ? 0 : 1)
+console.log(`current hook runs with stderr output: ${stderrRuns.length}`)
+for (const s of stderrRuns.slice(0, 10)) console.log(`--- ${s.shell} autonomy ${s.mode}: ${JSON.stringify(s.command)}\n${s.err.slice(0, 200)}`)
+process.exit(diffs.length === 0 && stderrRuns.length === 0 ? 0 : 1)

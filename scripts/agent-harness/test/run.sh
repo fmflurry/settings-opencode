@@ -1183,6 +1183,21 @@ wg_rel_decision() {
     | AGENT_HARNESS_TEST=1 AGENT_STATE_DIR="$WGF/st" CLAUDE_PROJECT_DIR="$WGF/main" "$NORM_SHELL" "$HOOKS/autonomy-git-guard.sh" \
     | jq -r '.hookSpecificOutput.permissionDecision // "allow"'
 }
+wg_escaped_field() { # shell cmd -> "<decision> stderr-bytes"
+  local out err
+  : >"$WGF/st/autonomy.on"
+  err="$WGF/err"
+  out="$(jqn -n --arg c "$2" --arg w "$WGF/main" '{tool_input:{command:$c},cwd:$w}' \
+    | AGENT_HARNESS_TEST=1 AGENT_STATE_DIR="$WGF/st" CLAUDE_PROJECT_DIR="$WGF/main" "$1" "$HOOKS/autonomy-git-guard.sh" 2>"$err")"
+  printf '%s %s' "$(jq -r '.hookSpecificOutput.permissionDecision // "allow"' <<<"$out")" "$(wc -c <"$err" | tr -d ' ')"
+}
+for esc_sh in "$GUARD_BASH" /bin/bash; do
+  [ -x "$esc_sh" ] || continue
+  for esc_cmd in 'git push origin ma\in' 'git push origin "ma\in"' 'git -C /tmp/a\ b push origin main'; do
+    check "git-guard escaped field denies with empty stderr ($esc_sh): $esc_cmd" test "$(wg_escaped_field "$esc_sh" "$esc_cmd")" = "deny 0"
+  done
+done
+rm -f "$WGF/st/autonomy.on"
 wg() { local exp="$1" cwd="$2" m; shift 2; for m in off on; do check "git-guard worktree ($m) $exp: $*" test "$(wg_decision "$m" "$cwd" "$*")" = "$exp"; done; }
 WM="$WGF/main"; WS="$WGF/sib"
 wg deny "$WM" "if true; then git worktree remove /p; fi"

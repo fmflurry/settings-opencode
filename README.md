@@ -786,10 +786,10 @@ Autonomous mode lets the agent take one goal from clarification to a merged PR. 
 With the flag off, the agent asks before each irreversible step, and a merge needs `--confirmed`. Turning the flag
 on does not start work (`skills/autonomous/SKILL.md`).
 
-The run is a loop, owned by `skills/ship/SKILL.md`: implement, verify, push a draft PR, local review, CI, then
+The run is a loop, owned by `skills/ship/SKILL.md`: implement, verify, local review, push and open the PR, CI, then
 `agent-harness ship-merge`. A blocker the agent can fix (a confirmed Important finding, a failing check, a
-conflict, a stale branch, an unresolved thread, a merge refusal) sends it back to fix, then review again, then
-merge. It ends as `done` (the PR is merged and the goal worktree is torn down) or escalated.
+conflict, a stale branch, an unresolved thread, a merge refusal) sends it back to fix, then local review again, then
+push, CI and the merge retry. It ends as `done` (the PR is merged and the goal worktree is torn down) or escalated.
 
 **How to launch it.** The goal text is the argument of `/ship`. The flag is also
 `agent-harness autonomy on|off|status` (`scripts/agent-harness/autonomy.sh`). `install.sh` installs that wrapper
@@ -813,25 +813,30 @@ at `~/.local/bin/agent-harness` when Claude Code or OpenCode is an install targe
   `plugins/fmflurry-harness/hooks/hooks.json` runs `hooks/scripts/ship-stop-gate.sh`. That hook calls
   `agent-harness` from `PATH`. `install-cursor.sh` installs that command at `~/.local/bin/agent-harness`.
 
-**Review loop.** Stage 7 of `skills/ship/SKILL.md` reviews `git diff <base>...HEAD` with `code-reviewer`,
+**Review loop.** Stage 6 of `skills/ship/SKILL.md` reviews `git diff <base>...HEAD` with `code-reviewer`,
 `security-reviewer`, and the stack cop when it applies (`angular-cop` or `dotnet-cop`; `database-reviewer` when
 SQL changed). The agent confirms each finding against the code. Only a confirmed Important finding blocks. Nit
 and Pre-existing do not. Tags come from the repo's `REVIEW.md` when it exists, otherwise from Finding tags in
-`.claude/agents/code-reviewer.md`. After the fixes it posts one summary comment
-(`skills/ship/references/review-format.md`). That comment is an audit trail. `ship-merge` does not read it.
+`.claude/agents/code-reviewer.md`. Each verdict is recorded with `agent-harness goal review code|security pass|fail`.
+The push guard (`.claude/hooks/autonomy-git-guard.sh`) denies `git push` and `gh pr create` while an active goal has no
+passing code and security verdict for the exact diff (a hash of the diff against `origin/<base>`, ignoring
+`docs/agent-reports/`); pushes to `backup/*` and the report commit are not gated. After the PR is opened it posts one
+summary comment (`skills/ship/references/review-format.md`). That comment is an audit trail. `ship-merge` does not read
+it. Every later CI or comment fix is reviewed locally before its push.
 
-**3-round cap.** `scripts/agent-harness/goal.sh` and `scripts/agent-harness/ship-init.sh` set
-`max_fix_iterations` to 3. Before each fix round the skill runs `agent-harness goal bump`, which adds 1 to
-`fix_iterations`. When the count reaches 3 the command marks the goal `escalated`, runs
-`agent-harness notify failure`, and exits 3. The skill does not start that round. The same bump is used before
-a CI fix round (stage 9 of `skills/ship/SKILL.md`).
+**Repeated findings.** Before each fix round the skill pipes the confirmed findings (`<reviewer>:<path>` or
+`ci:<check>`, one per line) to `agent-harness goal bump`. It normalises them (lowercase, line numbers stripped,
+sorted, deduplicated) and fingerprints the set. When the fingerprint equals the previous round's, the command marks the
+goal `escalated` (`no progress`), runs `agent-harness notify failure`, and exits 3. `goal.sh` and `ship-init.sh` also
+set a safety ceiling of `max_fix_iterations` 10. Empty stdin exits 2. The same bump is used before a CI fix round
+(stage 9 of `skills/ship/SKILL.md`).
 
 **No-progress rule.** Two checks share the name. They are not the same test.
 
 - `skills/ship/SKILL.md` (Stop conditions) treats a full loop iteration as no progress when the same Important
   finding and the same failure remain, or the same non-review blocker fails the same way. A new failure, a new
-  finding, or a green check counts as progress. The agent then runs `agent-harness goal escalate`. No script
-  compares finding text. That check is the skill's instruction.
+  finding, or a green check counts as progress. The agent then runs `agent-harness goal escalate`. For review
+  findings `goal bump` also compares a fingerprint of the findings between rounds.
 - `.claude/hooks/ship-stop-gate.sh` (Cursor copy: `plugins/fmflurry-harness/hooks/scripts/ship-stop-gate.sh`)
   increments `stop_blocks` when the PR head SHA is unchanged. At 5 it escalates with
   `no progress after 5 stop blocks`. A changed head increments `total_blocks` only. At 30 total blocks it
@@ -912,9 +917,9 @@ not opinions. A refusal is input to the loop: the agent fixes the cause and retr
 
 It then merges pinned to the head SHA. For a goal registered by `ship-init`, it runs `agent-harness teardown-merged-worktree <pr>`, which removes the goal worktree, the remote and local head branch, and the registry file, under the checks in the worktree destruction rule. It never touches the main checkout (`cleanup --no-checkout`), and the goal state (`goal.json`, `autonomy.on`) lives in the main checkout whichever worktree runs the command. For an unregistered PR it runs `agent-harness cleanup <pr>`: that deletes the PR's head branch on the remote and locally (the local branch only when fully merged), deletes the goal's recorded backup branches, and switches the checkout to the updated base. Cleanup never removes a worktree; it reports one that holds the branch. `--keep-branch` keeps the head branch. The merge method is chosen with `--method squash|rebase|merge`; without it the script uses `mergeMethod` from `.claude/agent-harness.json`, else the repo's first allowed method (squash, rebase, merge). A method the repo disallows is refused.
 
-**Review.** Ship stage 8 runs a thorough local review: `code-reviewer`, `security-reviewer`, and the stack cop
-(`angular-cop` or `dotnet-cop`) on the PR diff. The agent fixes confirmed Important findings, re-runs the
-review after each fix (capped at 3 review/fix rounds; the no-progress rule can still escalate earlier; hitting the cap stops and escalates with the remaining Important findings), and posts one summary comment for a human to audit. That review is a quality step, not a merge
+**Review.** Ship stage 6 runs a thorough local review before any push: `code-reviewer`, `security-reviewer`, and the stack cop
+(`angular-cop` or `dotnet-cop`) on the diff. The agent fixes confirmed Important findings and re-runs the
+review after each fix (the loop stops when the same findings repeat, with a safety ceiling of 10 rounds; it then escalates with the remaining Important findings). The push guard denies a push or `gh pr create` without a recorded pass. The agent posts one summary comment for a human to audit after opening the PR. That review is a quality step, not a merge
 rail. No GitHub status is created, and `ship-merge` does not trust the comment.
 
 **Push rules.** Pushes to the base branch are forbidden in every mode, with or without force. `git push --mirror`, `--all`, and `--no-verify` are forbidden too. Force pushes (`--force`, `--force-with-lease`, `-f`, `+refspec`) are allowed on other branches.
@@ -1239,7 +1244,7 @@ bump the plugin version + changelog in any PR touching plugin sources.
 
 Le mode autonome permet à l'agent de mener un objectif de la clarification jusqu'à une PR fusionnée. Activez-le, puis lancez `/ship <goal>`. Avec le flag désactivé, l'agent demande avant chaque étape irréversible, et une fusion nécessite `--confirmed`. Activer le flag ne démarre aucun travail (`skills/autonomous/SKILL.md`).
 
-Le run est une boucle, tenue par `skills/ship/SKILL.md` : implémenter, vérifier, pousser une PR brouillon, revue locale, CI, puis `agent-harness ship-merge`. Un blocage que l'agent peut corriger (un finding Important confirmé, un check en échec, un conflit, une branche en retard, un fil non résolu, un refus de fusion) le renvoie vers la correction, puis vers une nouvelle revue, puis vers la fusion. Il se termine en `done` (PR fusionnée et worktree du goal retiré) ou escaladé.
+Le run est une boucle, tenue par `skills/ship/SKILL.md` : implémenter, vérifier, revue locale, pousser et ouvrir la PR, CI, puis `agent-harness ship-merge`. Un blocage que l'agent peut corriger (un finding Important confirmé, un check en échec, un conflit, une branche en retard, un fil non résolu, un refus de fusion) le renvoie vers la correction, puis vers une nouvelle revue locale, puis vers le push, la CI et une nouvelle tentative de fusion. Il se termine en `done` (PR fusionnée et worktree du goal retiré) ou escaladé.
 
 **Comment le lancer.** Le texte du goal est l'argument de `/ship`. Le flag est aussi `agent-harness autonomy on|off|status` (`scripts/agent-harness/autonomy.sh`). `install.sh` installe ce wrapper dans `~/.local/bin/agent-harness` quand Claude Code ou OpenCode est une cible d'install. `install-cursor.sh` installe le même wrapper, qui pointe vers `~/.local/share/fmflurry-harness`.
 
@@ -1247,13 +1252,13 @@ Le run est une boucle, tenue par `skills/ship/SKILL.md` : implémenter, vérifie
 - **OpenCode.** `/ship` et `/autonomous` sont épinglés dans `opencode.jsonc` (`command.ship`, `command.autonomous`), tous deux sur `conductor`, templates `commands/ship.md` et `commands/autonomous.md`. La règle chargée au démarrage est `instructions/autonomy.md`. `plugins/autonomy.ts` bloque l'outil `question`, injecte le contexte d'autonomie, refuse les commandes git interdites, et relance la session racine quand le stop gate bloque. La bascule de la barre latérale est `tui-plugins/autonomy-status.tsx` (enregistrée dans `tui.json`) : palette « Toggle autonomous mode », `/autonomy-toggle`, ou `<leader>u`.
 - **Cursor.** `/ship <goal>` est `plugins/fmflurry-harness/commands/ship.md` (construit depuis `commands/ship.md` par `scripts/build-cursor-plugin.mjs`). Il charge `plugins/fmflurry-harness/skills/ship/SKILL.md`. `/autonomous` est `plugins/fmflurry-harness/commands/autonomous.md` et `plugins/fmflurry-harness/skills/autonomous/SKILL.md`. La règle toujours active est `plugins/fmflurry-harness/rules/autonomy.mdc`. L'entrée `stop` de `plugins/fmflurry-harness/hooks/hooks.json` lance `hooks/scripts/ship-stop-gate.sh`. Ce hook appelle `agent-harness` depuis le `PATH`. `install-cursor.sh` installe cette commande dans `~/.local/bin/agent-harness`.
 
-**Boucle de revue.** L'étape 7 de `skills/ship/SKILL.md` relit `git diff <base>...HEAD` avec `code-reviewer`, `security-reviewer`, et le cop du stack quand il s'applique (`angular-cop` ou `dotnet-cop` ; `database-reviewer` si le SQL a changé). L'agent confirme chaque finding contre le code. Seul un finding Important confirmé bloque. Nit et Pre-existing ne bloquent pas. Les tags viennent du `REVIEW.md` du dépôt quand il existe, sinon de Finding tags dans `.claude/agents/code-reviewer.md`. Après les correctifs, un commentaire de synthèse est publié (`skills/ship/references/review-format.md`). Ce commentaire est une trace d'audit. `ship-merge` ne le lit pas.
+**Boucle de revue.** L'étape 6 de `skills/ship/SKILL.md` relit `git diff <base>...HEAD` avec `code-reviewer`, `security-reviewer`, et le cop du stack quand il s'applique (`angular-cop` ou `dotnet-cop` ; `database-reviewer` si le SQL a changé). L'agent confirme chaque finding contre le code. Seul un finding Important confirmé bloque. Nit et Pre-existing ne bloquent pas. Les tags viennent du `REVIEW.md` du dépôt quand il existe, sinon de Finding tags dans `.claude/agents/code-reviewer.md`. Chaque verdict est enregistré avec `agent-harness goal review code|security pass|fail`. Le garde de push (`.claude/hooks/autonomy-git-guard.sh`) refuse `git push` et `gh pr create` tant qu'un goal actif n'a pas de verdicts code et sécurité positifs pour le diff exact (un hash du diff contre `origin/<base>`, hors `docs/agent-reports/`) ; les pushes vers `backup/*` et le commit de rapport ne sont pas gardés. Une fois la PR ouverte, un commentaire de synthèse est publié (`skills/ship/references/review-format.md`). Ce commentaire est une trace d'audit. `ship-merge` ne le lit pas. Chaque correctif CI ou de commentaire ultérieur est relu localement avant son push.
 
-**Plafond de 3 tours.** `scripts/agent-harness/goal.sh` et `scripts/agent-harness/ship-init.sh` posent `max_fix_iterations` à 3. Avant chaque tour de correctif, le skill lance `agent-harness goal bump`, qui ajoute 1 à `fix_iterations`. Quand le compte atteint 3, la commande marque le goal `escalated`, lance `agent-harness notify failure`, et sort avec le code 3. Le skill ne démarre pas ce tour. Le même bump est utilisé avant un tour de correctif CI (étape 9 de `skills/ship/SKILL.md`).
+**Findings répétés.** Avant chaque tour de correctif, le skill envoie les findings confirmés (`<reviewer>:<path>` ou `ci:<check>`, un par ligne) sur l'entrée standard de `agent-harness goal bump`. La commande les normalise (minuscules, numéros de ligne retirés, tri, dédoublonnage) et en calcule une empreinte. Quand l'empreinte égale celle du tour précédent, elle marque le goal `escalated` (`no progress`), lance `agent-harness notify failure`, et sort avec le code 3. `goal.sh` et `ship-init.sh` posent aussi un plafond de sécurité `max_fix_iterations` à 10. Une entrée vide sort avec le code 2. Le même bump est utilisé avant un tour de correctif CI (étape 9 de `skills/ship/SKILL.md`).
 
 **Règle d'absence de progrès.** Deux contrôles portent ce nom. Ce n'est pas le même test.
 
-- `skills/ship/SKILL.md` (Stop conditions) traite une itération complète comme sans progrès quand le même finding Important et le même échec restent, ou quand le même blocage hors revue échoue de la même façon. Un nouvel échec, un nouveau finding, ou un check vert compte comme un progrès. L'agent lance alors `agent-harness goal escalate`. Aucun script ne compare le texte des findings. Ce contrôle est l'instruction du skill.
+- `skills/ship/SKILL.md` (Stop conditions) traite une itération complète comme sans progrès quand le même finding Important et le même échec restent, ou quand le même blocage hors revue échoue de la même façon. Un nouvel échec, un nouveau finding, ou un check vert compte comme un progrès. L'agent lance alors `agent-harness goal escalate`. Pour les findings de revue, `goal bump` compare aussi une empreinte des findings entre deux tours.
 - `.claude/hooks/ship-stop-gate.sh` (copie Cursor : `plugins/fmflurry-harness/hooks/scripts/ship-stop-gate.sh`) incrémente `stop_blocks` quand le SHA de tête de la PR est inchangé. À 5, il escalade avec `no progress after 5 stop blocks`. Une tête changée n'incrémente que `total_blocks`. À 30 blocs au total, il escalade. Tant que le goal est actif et que la PR n'est pas fusionnée, le hook bloque un arrêt anticipé. Si GitHub est illisible et que ces plafonds ne sont pas atteints, le hook sort 0. OpenCode n'a pas de hook Stop. `plugins/autonomy.ts` lance le même script sur `session.idle` d'une session racine et relance avec la raison (`instructions/autonomy.md`).
 
 **Quand ça escalade.** `skills/ship/SKILL.md` (Human-only) s'arrête pour des identifiants manquants, des limites de compte ou de facturation, une panne externe, une décision produit que le dépôt ne peut pas trancher, ou une action de la liste interdite. Il s'arrête aussi sur la règle d'absence de progrès du skill, sur la sortie 3 de `goal bump`, et sur les plafonds du stop gate ci-dessus. Un finding gitleaks ou une exposition de secret arrête le run pour `security-reviewer` et une rotation. Un résultat `Wait or cancel` du contrôle des PR ouvertes escalade (`skills/open-pr-check/SKILL.md`). Le chemin bloqué conserve le worktree, la branche et le registre (`skills/ship/SKILL.md`, Blocked path).
@@ -1317,7 +1322,7 @@ Ensuite, la fusion est épinglée au SHA de la tête, puis `agent-harness teardo
 
 **Règles de push.** Les pushes vers la branche de base sont interdits dans tous les modes, avec ou sans force. `git push --mirror`, `--all` et `--no-verify` sont aussi interdits. Les force pushes (`--force`, `--force-with-lease`, `-f`, `+refspec`) sont autorisés sur les autres branches.
 
-**Revue.** L'étape 8 du ship lance une revue locale approfondie : `code-reviewer`, `security-reviewer`, et le cop du stack (`angular-cop` ou `dotnet-cop`) sur le diff de la PR. L'agent corrige les findings Important confirmés, relance la revue après chaque correction (plafond de 3 tours de revue/correctif ; la règle d'absence de progrès peut encore escalader plus tôt ; au plafond, l'agent s'arrête et escalade avec les findings Important restants), et publie un commentaire de synthèse que l'humain peut auditer. Cette revue est une étape de qualité, pas un garde-fou de fusion. Aucun status GitHub n'est créé, et `ship-merge` ne fait pas confiance à ce commentaire.
+**Revue.** L'étape 6 du ship lance une revue locale approfondie avant tout push : `code-reviewer`, `security-reviewer`, et le cop du stack (`angular-cop` ou `dotnet-cop`) sur le diff. L'agent corrige les findings Important confirmés, relance la revue après chaque correction (la boucle s'arrête quand les mêmes findings reviennent, avec un plafond de sécurité de 10 tours ; l'agent escalade alors avec les findings Important restants). Le garde de push refuse un push ou `gh pr create` sans verdict positif enregistré. L'agent publie, après l'ouverture de la PR, un commentaire de synthèse que l'humain peut auditer. Cette revue est une étape de qualité, pas un garde-fou de fusion. Aucun status GitHub n'est créé, et `ship-merge` ne fait pas confiance à ce commentaire.
 
 **Notifications.** Le run notifie seulement quand un humain doit agir, ou quand l'objectif se termine : `question` quand il doit s'arrêter pour une réponse, `waiting` sur un prompt de permission ou d'inactivité, `failure` en cas d'escalade, et `done` quand la PR est fusionnée. Aucune notification de progression.
 

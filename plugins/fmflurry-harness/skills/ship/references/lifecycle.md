@@ -33,7 +33,7 @@ agent-harness ship-init --adopt <pr>                                  # resume a
   `goal.json` tracks one goal at a time: a second `ship-init` repoints it and prints a note.
 - The stop gate mirrors `status` and `reason` (escalated or done) into the registry as well.
 - Read the registry for `path` before dispatching any subagent. Do not infer the path from the branch name.
-- Never reuse a branch that already has an open PR you did not create. Use `--adopt` for an existing PR of this goal.
+- Never reuse a branch that already has an open PR you did not create. Use `--adopt` for an existing PR of this goal. After `--adopt` on a draft PR, run `gh pr ready <pr>` before `ship-merge`.
 
 Worktree creation is allowed while the autonomy flag is on (autonomy rule, rule d). Removing a worktree is never done
 by this stage.
@@ -90,15 +90,40 @@ Run these yourself, in `<wt>`. Paste the last ~15 lines of each output, or state
 Lint and format failures block the same way build failures do. Fix the diff, then re-run. Two failed passes that do
 not reduce the error count: stop and escalate.
 
-## 6. Draft the PR
+## 6. Thorough review and fix (local, before any push)
+
+Nothing is pushed yet. The push guard denies `git push` and `gh pr create` while the active goal lacks a passing code
+review and a passing security review for the exact diff being pushed (the diff against `origin/<base>`, ignoring
+`docs/agent-reports/`).
+
+- Dispatch in one message, so they run in parallel, each on `git -C <wt> diff <base>...HEAD`:
+  - `code-reviewer`: correctness, regressions, tests.
+  - `security-reviewer`: auth, secrets, input, CI workflows, permissions.
+  - `angular-cop` when Angular or TypeScript changed; `dotnet-cop` when .NET changed.
+  - `database-reviewer` when SQL changed.
+  - `/code-review` is optional, if available.
+- Verify each finding against the code. Drop the findings you cannot confirm.
+- Record each verdict from `<wt>`: `agent-harness goal review code pass|fail` and
+  `agent-harness goal review security pass|fail`. The command computes the diff key itself; the latest verdict per kind
+  wins. Any change to the diff (a new commit, a rebase whose conflict resolution changes the diff) needs a new review.
+- Fix every confirmed Important finding locally, re-run the local checks, and review the new diff. Repeat until no
+  confirmed Important finding remains. Nit and Pre-existing findings do not block. Before each fix round pipe the
+  confirmed findings (`<reviewer>:<path>` or `ci:<check>`, one per line) to `agent-harness goal bump`. Line numbers,
+  case and order do not matter. It exits 3 and escalates when the same findings come back after a fix round, or at the
+  safety ceiling of 10 rounds. Then stop and tell the user the remaining Important findings. Do not start another fix
+  round.
+
+## 7. Push and open the PR
 
 Dispatch `git-specialist` with `<wt>`, the branch name, the base (`<base>`), an English conventional-commit title, and
 a body file. It runs these commands from `<wt>`:
 
 ```bash
 git -C <wt> push -u origin <type>/<scope>-<short-description>
-gh pr create --draft --base <base> --title "<type>: <description>" --body-file <body-file>
+gh pr create --base <base> --title "<type>: <description>" --body-file <body-file>
 ```
+
+The PR is created ready, not draft. `gh pr create --head` and `-H` are denied while a goal is active.
 
 The body file has four sections. Write `None.` under any section that is empty:
 
@@ -116,38 +141,30 @@ The body file has four sections. Write `None.` under any section that is empty:
 <Nit and Pre-existing findings not fixed, and other follow-ups>
 ```
 
-Then record the PR: `agent-harness goal pr <n>`.
+Then record the PR and the head: `agent-harness goal pr <n>`, `agent-harness goal sha <sha>`.
 
-## 7. Thorough review (local, still draft)
-
-- Dispatch in one message, so they run in parallel, each on `git -C <wt> diff <base>...HEAD`:
-  - `code-reviewer`: correctness, regressions, tests.
-  - `security-reviewer`: auth, secrets, input, CI workflows, permissions.
-  - `angular-cop` when Angular or TypeScript changed; `dotnet-cop` when .NET changed.
-  - `database-reviewer` when SQL changed.
-  - `/code-review` is optional, if available.
-- Verify each finding against the code. Drop the findings you cannot confirm.
-- Fix every confirmed Important finding, push through `git-specialist`, run
-  `agent-harness goal sha <new-sha>`, and re-run the review on the new diff. Repeat until no confirmed Important
-  finding remains, up to 3 review/fix rounds. Nit and Pre-existing findings do not block. Run `agent-harness goal bump`
-  before each fix round. The no-progress rule in SKILL.md still applies (the same Important finding and the same
-  failure survive a full loop iteration). When `goal bump` exits 3, stop and escalate to the user with the remaining
-  Important findings. Do not start another fix round.
-- When the review ends, post one summary PR comment in the format of [review-format.md](review-format.md):
-
-  ```bash
-  gh pr comment <n> --body-file <body-file>
-  ```
-
-- The comment is an audit trail for a human. It is not a GitHub status. Nothing in the merge path reads it.
-
-## 8. Mark ready
+Right after `gh pr create`, post the review summary as one PR comment in the format of
+[review-format.md](review-format.md):
 
 ```bash
-gh pr ready <n>
+gh pr comment <n> --body-file <body-file>
 ```
 
-`ship-merge` refuses drafts and does not mark a PR ready, so run this step yourself.
+The comment is an audit trail for a human. It is not a GitHub status. Nothing in the merge path reads it.
+
+## 8. Re-review before every later push
+
+The gate applies to every push after the PR exists. Nothing after the push changes: CI wait, `loop-on-ci` and `fix-ci`,
+PR comments, the report, `agent-harness ship-merge` and teardown all stay. Every CI or comment fix is:
+
+1. Fix locally.
+2. Re-run the local checks.
+3. Review the new diff locally and record `agent-harness goal review code|security pass`. The reviewers may review
+   only `git diff <last-reviewed-sha>..HEAD`.
+4. Push, then `agent-harness goal sha <sha>`.
+5. Wait for CI again, then retry `ship-merge`.
+
+The report commit (stage 11) is exempt: it changes only `docs/agent-reports/`, which the review key ignores.
 
 ## 9. CI and optional review status
 
@@ -161,11 +178,11 @@ gh pr ready <n>
 
 - CI: use the `loop-on-ci` skill. It watches the required checks with `gh pr checks --required --watch --fail-fast`.
   Minimal manual loop, if the skill is unavailable: for a failed run, `gh run view <run-id> --log-failed`. Fix the
-  cause, push, then `agent-harness goal sha`. Route each failure through the `fix-ci` skill.
+  cause, review it locally (stage 8), push, then `agent-harness goal sha`. Route each failure through the `fix-ci` skill.
 - Review status failure (`reviewStatus` configured and not `success`): read the status description and the repo's
-  check logs, fix the cause, push, then `agent-harness goal sha`. Nit and Pre-existing findings go under
+  check logs, fix the cause, review it locally (stage 8), push, then `agent-harness goal sha`. Nit and Pre-existing findings go under
   `## Non-blocking follow-ups`.
-- Before each fix round: `agent-harness goal bump`. Exit 3 means the 3-round cap is hit: stop and tell the user the remaining findings. `goal bump` already escalates and notifies. Do not start another fix round.
+- Before each fix round pipe the failing checks (`ci:<check>`) to `agent-harness goal bump`. Exit 3 means the same failures repeated or the ceiling of 10 is hit: stop and tell the user the remaining findings. `goal bump` already escalates and notifies. Do not start another fix round.
 - Flaky check: re-run the failed job once with `gh run rerun <run-id> --failed`. A second failure is real.
 - Blocker classification (which CI failures the agent fixes, and which are human-only) is in the SKILL.md "Blockers"
   section. A CI failure caused by repo code or repo config, including workflow files, is fixed by the agent. A missing

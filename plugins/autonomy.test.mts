@@ -33,6 +33,36 @@ test("git guard denies a push to the base branch when autonomy is on", async () 
   assert.ok(denyReason(result));
 });
 
+test("bash guard rejection denies a push when an active goal has no review verdicts", async () => {
+  const { opts, state, root } = setup();
+  const repoDir = path.join(root, "reviewed");
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: repoDir, stdio: "ignore" });
+  execFileSync("git", ["init", "-q", "--bare", path.join(root, "origin.git")], { stdio: "ignore" });
+  execFileSync("git", ["clone", "-q", path.join(root, "origin.git"), repoDir], { stdio: "ignore" });
+  git("config", "user.email", "t@t");
+  git("config", "user.name", "t");
+  git("checkout", "-q", "-b", "master");
+  fs.writeFileSync(path.join(repoDir, "a"), "a");
+  git("add", "a");
+  git("commit", "-qm", "A");
+  git("push", "-q", "origin", "master");
+  git("checkout", "-q", "-b", "feat");
+  fs.writeFileSync(path.join(repoDir, "b"), "b");
+  git("add", "b");
+  git("commit", "-qm", "B");
+  fs.writeFileSync(path.join(state, "autonomy.on"), "");
+  execFileSync("bash", [path.join(repo, "scripts/agent-harness/goal.sh"), "set", "review gate goal"], {
+    cwd: repoDir,
+    env: { ...process.env, CLAUDE_PROJECT_DIR: repoDir, ...opts.env },
+    stdio: "ignore",
+  });
+  const reason = await bashGuardRejection(
+    { tool_input: { command: "git push -u origin feat" }, cwd: repoDir },
+    { ...opts, directory: repoDir },
+  );
+  assert.match(reason ?? "", /review/i);
+});
+
 test("stop gate blocks when a goal is active without a PR", async () => {
   const { opts, state } = setup();
   fs.writeFileSync(path.join(state, "autonomy.on"), "");

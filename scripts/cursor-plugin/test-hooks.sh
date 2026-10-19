@@ -90,4 +90,18 @@ out="$(bash "$scripts/cursor-adapter.sh" "$work/ask-hook.sh" preToolUse < "$fixt
 check "ask on preToolUse -> deny (Cursor preToolUse has no ask)" "$(jq -r .permission <<<"$out")" "deny"
 check "ask on preToolUse carries the reason" "$(jq -r .user_message <<<"$out")" "confirm this merge"
 
+guard="$repo/.claude/hooks/autonomy-git-guard.sh"
+rg="$work/review-gate"; rgs="$work/review-gate-state"
+mkdir -p "$rgs"
+git init -q --bare "$rg.git"
+git clone -q "$rg.git" "$rg" 2>/dev/null
+( cd "$rg" && git config user.email t@t && git config user.name t && git checkout -q -b master && echo a >a && git add a && git commit -qm A \
+  && git push -q origin master && git checkout -q -b feat && echo b >b && git add b && git commit -qm B ) >/dev/null 2>&1
+: >"$rgs/autonomy.on"
+( cd "$rg" && AGENT_HARNESS_TEST=1 AGENT_STATE_DIR="$rgs" CLAUDE_PROJECT_DIR="$rg" bash "$repo/scripts/agent-harness/goal.sh" set "review gate goal" ) >/dev/null 2>&1
+payload="$(jq -nc --arg c "git push -u origin feat" --arg d "$rg" '{command:$c,cwd:$d,hook_event_name:"beforeShellExecution",conversation_id:"c"}')"
+out="$(printf '%s' "$payload" | AGENT_HARNESS_TEST=1 AGENT_STATE_DIR="$rgs" CLAUDE_PROJECT_DIR="$rg" "$BASH" "$scripts/cursor-adapter.sh" "$guard" beforeShellExecution)"
+check "unreviewed active goal: push denied through the cursor adapter" "$(jq -r .permission <<<"$out")" "deny"
+check "unreviewed active goal: cursor denial names the review" "$(jq -r '.user_message | test("review"; "i")' <<<"$out")" "true"
+
 exit "$fail"

@@ -229,16 +229,44 @@ check "autonomy-context prints goal" grep -q 'Goal: ctx goal' <<<"$out"
 reset
 bash "$H/goal.sh" set "ship it" "crit a" "crit b"
 check "goal criteria array" test "$(jq '.criteria | length' "$TMP/state/goal.json")" = 2
-check "goal default fix cap is 3" test "$(jq -r .max_fix_iterations "$TMP/state/goal.json")" = 3
+check "goal default fix ceiling is 10" test "$(jq -r .max_fix_iterations "$TMP/state/goal.json")" = 10
 jq '.max_fix_iterations = 2' "$TMP/state/goal.json" >"$TMP/g" && mv "$TMP/g" "$TMP/state/goal.json"
-bash "$H/goal.sh" bump; check "bump within max" test $? -eq 0
-ORCA_WORKTREE_ID='repo::/p' bash "$H/goal.sh" bump; rc=$?
+printf 'code:a.sh\n' | bash "$H/goal.sh" bump; check "bump within max" test $? -eq 0
+printf 'code:b.sh\n' | ORCA_WORKTREE_ID='repo::/p' bash "$H/goal.sh" bump; rc=$?
 check "bump past max exits 3" test $rc -eq 3
 check "bump past max escalates" test "$(jq -r .status "$TMP/state/goal.json")" = escalated
 check "bump past max notifies" grep -q 'failure:' "$FX/orca.log"
 check "bump past max records reason" test "$(jq -r .reason "$TMP/state/goal.json")" = "fix iterations exhausted (2)"
 reset
-bash "$H/goal.sh" bump; check "bump with no goal file exits 0" test $? -eq 0
+printf 'code:a.sh\n' | bash "$H/goal.sh" bump; check "bump with no goal file exits 0" test $? -eq 0
+
+# bump takes a findings fingerprint on stdin, stops on a repeat, ceiling is 10
+bumpfp() { printf '%b' "$1" | bash "$H/goal.sh" bump >/dev/null 2>&1; }
+reset; bash "$H/goal.sh" set g-fp
+bumpfp 'code:src/a.sh:12\nci:Gate\n'; check "bump first fingerprint exits 0" test $? -eq 0
+bumpfp 'code:src/a.sh:12\nci:Gate\n'; rc=$?
+check "bump same fingerprint twice exits 3" test $rc -eq 3
+check "bump same fingerprint escalates" test "$(jq -r .status "$TMP/state/goal.json")" = escalated
+check "bump same fingerprint reason says no progress" grep -q 'no progress' "$TMP/state/goal.json"
+reset; bash "$H/goal.sh" set g-fp2
+bumpfp 'Code:src/a.sh:12\nci:gate\n'
+bumpfp 'ci:GATE\nCODE:src/a.sh:99\nci:gate\n'; rc=$?
+check "bump reordered, relined, duplicated fingerprint is the same (exit 3)" test $rc -eq 3
+reset; bash "$H/goal.sh" set g-fp3
+bumpfp 'code:src/a.sh\n'
+bumpfp 'code:src/b.sh\n'; check "bump different fingerprint exits 0" test $? -eq 0
+check "bump different fingerprint stays active" test "$(jq -r .status "$TMP/state/goal.json")" = active
+reset; bash "$H/goal.sh" set g-fp4
+allok=0; for l in a b c d e f g h i; do bumpfp "code:file-$l\n" || allok=1; done
+check "bump 9 distinct fingerprints all exit 0" test $allok -eq 0
+bumpfp 'code:file-j\n'; rc=$?
+check "bump 10th round hits the ceiling (exit 3)" test $rc -eq 3
+check "bump ceiling escalates" test "$(jq -r .status "$TMP/state/goal.json")" = escalated
+reset; bash "$H/goal.sh" set g-fp5
+bash "$H/goal.sh" bump </dev/null >/dev/null 2>&1; rc=$?
+check "bump with empty stdin exits 2" test $rc -eq 2
+check "bump with empty stdin leaves goal active" test "$(jq -r .status "$TMP/state/goal.json")" = active
+reset
 bash "$H/goal.sh" set g2
 bash "$H/goal.sh" escalate "needs a human"; rc=$?
 check "escalate exits 0" test $rc -eq 0
@@ -1214,6 +1242,210 @@ check "git-guard popd makes the directory unknown (on): multi-line form denies" 
   test "$(wg_decision on "$WGF/main" "$(printf 'pushd %s\npopd\ngit push' "$WGF/sib")")" = deny
 check "git-guard pushd to a feature worktree alone still allows a bare push (on)" \
   test "$(wg_decision on "$WGF/main" "pushd $WGF/sib >/dev/null; git push")" = allow
+PD="pushd $WGF/main >/dev/null; pushd $WGF/sib >/dev/null"
+check "git-guard pushd rotation (on): pushd; git push denies" \
+  test "$(wg_decision on "$WGF/main" "$PD; pushd >/dev/null; git push")" = deny
+check "git-guard pushd rotation (on): pushd +1; git push denies" \
+  test "$(wg_decision on "$WGF/main" "$PD; pushd +1 >/dev/null; git push")" = deny
+check "git-guard pushd rotation (on): pushd -1; git push denies" \
+  test "$(wg_decision on "$WGF/main" "$PD; pushd -1 >/dev/null; git push")" = deny
+rm -f "$WGF/st/autonomy.on"
+
+# ---- review gate before push
+reset; flag_on; fresh_work
+GUARD_CWD="$TMP/work"
+gate_reason() { jq -r '.hookSpecificOutput.permissionDecisionReason // ""' <<<"$(guard_in "$1")"; }
+gkey() { local d="$1" mb k; mb="$(git -C "$d" merge-base origin/master HEAD)"; k="$(git -C "$d" -c core.quotepath=true diff --no-ext-diff --no-textconv --binary --full-index --no-color --no-renames --no-relative -O/dev/null --src-prefix=a/ --dst-prefix=b/ --diff-algorithm=myers -U3 --inter-hunk-context=0 --submodule=short --ignore-submodules=none "$mb" HEAD -- ':/' ':(top,exclude)docs/agent-reports' | git -C "$d" hash-object --stdin)"; [ "$k" = e69de29bb2d1d6434b8b29ae775ad8c2e48c5391 ] && k=empty; echo "$k"; }
+rv() { ( cd "$GUARD_CWD" && bash "$H/goal.sh" review "$@" ) >/dev/null 2>&1; }
+gate_goal() { reset; flag_on; fresh_work; GUARD_CWD="$TMP/work"; ( cd "$TMP/work" && bash "$H/goal.sh" set gate-goal ); }
+rv_both() { rv code pass; rv security pass; }
+
+gate_goal
+check "review gate: no verdicts denies git push -u origin feat/x" denied "git push -u origin feat/x"
+check "review gate: no verdicts denies git push of the branch" denied "git push -u origin feat"
+check "review gate: no verdicts denies quote-aware git push \"origin\"" denied 'git push "origin" feat/x'
+check "review gate: denial reason names the review" grep -qi 'review' <<<"$(gate_reason 'git push -u origin feat')"
+rv code pass
+check "review gate: code pass alone still denies" denied "git push -u origin feat"
+rv security pass
+check "review gate: code and security pass allow" allowed "git push -u origin feat"
+rv security fail
+check "review gate: a later security fail denies" denied "git push -u origin feat"
+
+gate_goal; rv_both
+( cd "$TMP/work" && echo n >n2 && git add n2 && git commit -qm N ) >/dev/null 2>&1
+check "review gate: a new commit after review denies" denied "git push -u origin feat"
+gate_goal; rv_both
+( cd "$TMP/work" && mkdir -p docs/agent-reports && echo png >docs/agent-reports/x.png && git add docs/agent-reports/x.png && git commit -qm R ) >/dev/null 2>&1
+check "review gate: a commit touching only docs/agent-reports allows" allowed "git push -u origin feat"
+
+rb_build() {
+  rm -rf "$TMP/rb" "$TMP/rb.git" "$TMP/rb-o"; git init -q --bare "$TMP/rb.git"; git clone -q "$TMP/rb.git" "$TMP/rb" 2>/dev/null
+  ( cd "$TMP/rb" && git config user.email t@t && git config user.name t && git checkout -q -b master && echo a >a && git add a && git commit -qm A \
+    && git push -q origin master && git checkout -q -b feat && echo mine >b && git add b && git commit -qm B ) >/dev/null 2>&1
+  git clone -q "$TMP/rb.git" "$TMP/rb-o" 2>/dev/null
+  ( cd "$TMP/rb-o" && git config user.email t@t && git config user.name t && git checkout -q master ) >/dev/null 2>&1
+  reset; flag_on; GUARD_CWD="$TMP/rb"
+  ( cd "$TMP/rb" && git fetch -q origin && bash "$H/goal.sh" set rb-goal )
+}
+rb_move() { ( cd "$TMP/rb-o" && echo "$2" >"$1" && git add "$1" && git commit -qm M && git push -q origin HEAD:master ) >/dev/null 2>&1; }
+rb_build; rv_both; rb_move m x
+( cd "$TMP/rb" && git fetch -q origin && git rebase -q origin/master ) >/dev/null 2>&1
+RB_SHA="$(git -C "$TMP/rb" rev-parse HEAD)"
+check "review gate: clean rebase onto moved base keeps the verdicts" allowed "git push --force-with-lease=feat:$RB_SHA origin feat"
+rb_build; rv_both; rb_move b theirs
+( cd "$TMP/rb" && git fetch -q origin && { git rebase -q origin/master || true; } && echo resolved >b && git add b && GIT_EDITOR=true git rebase --continue ) >/dev/null 2>&1
+RB_SHA="$(git -C "$TMP/rb" rev-parse HEAD)"
+check "review gate: rebase whose conflict resolution changes the diff denies" denied "git push --force-with-lease=feat:$RB_SHA origin feat"
+GUARD_CWD="$TMP/work"
+
+gate_goal; ( cd "$TMP/work" && git branch backup/foo ) >/dev/null 2>&1
+check "review gate: push to backup/* allows while unreviewed" allowed "git push origin backup/foo"
+gate_goal; rm -f "$TMP/state/autonomy.on"
+check "review gate: autonomy off is not gated" allowed "git push -u origin feat"
+reset; flag_on; fresh_work
+check "review gate: no goal.json is not gated" allowed "git push -u origin feat"
+gate_goal; bash "$H/goal.sh" escalate "needs a human"
+check "review gate: escalated goal is not gated" allowed "git push -u origin feat"
+gate_goal; jq '.status = "done"' "$TMP/state/goal.json" >"$TMP/g" && mv "$TMP/g" "$TMP/state/goal.json"
+check "review gate: done goal is not gated" allowed "git push -u origin feat"
+
+gate_goal
+check "review gate: gh pr create unreviewed denies" denied "gh pr create --fill"
+check "review gate: gh pr create --head denies" denied "gh pr create --head x --fill"
+check "review gate: gh pr create -H denies" denied "gh pr create -H x --fill"
+rv_both
+check "review gate: gh pr create reviewed allows" allowed "gh pr create --fill"
+check "review gate: gh pr create --head still denies when reviewed" denied "gh pr create --head x --fill"
+
+NR="$TMP/nr"; rm -rf "$NR"; git init -q "$NR"
+( cd "$NR" && git config user.email t@t && git config user.name t && git checkout -q -b feat && echo a >a && git add a && git commit -qm A \
+  && git remote add origin "$TMP/origin.git" ) >/dev/null 2>&1
+reset; flag_on; ( cd "$NR" && bash "$H/goal.sh" set nr-goal ); GUARD_CWD="$NR"
+check "review gate: no origin/<base> ref denies" denied "git push origin feat"
+check "review gate: no origin/<base> ref reason says cannot compute review key" grep -q 'cannot compute review key' <<<"$(gate_reason 'git push origin feat')"
+GUARD_CWD="$TMP/work"
+
+gate_goal
+check "review gate: shell redirect into goal.json denies" denied "echo x > .claude/state/goal.json"
+check "review gate: jq redirect into goal.json denies" denied "jq . a > .claude/state/goal.json"
+
+gate_goal
+( cd "$TMP/work" && bash "$H/goal.sh" review bogus pass ) >/dev/null 2>&1; rc=$?
+check "goal review: unknown kind exits 2" test $rc -eq 2
+( cd "$TMP/work" && bash "$H/goal.sh" review code maybe ) >/dev/null 2>&1; rc=$?
+check "goal review: unknown verdict exits 2" test $rc -eq 2
+rv_both
+GK="$(gkey "$TMP/work")"; GH_SHA="$(git -C "$TMP/work" rev-parse HEAD)"
+check "goal review: recorded key equals the guard's key" test "$(jq -r '.reviews | keys[0] // ""' "$TMP/state/goal.json")" = "$GK"
+check "goal review: code entry carries verdict and HEAD sha" test "$(jq -r --arg k "$GK" '.reviews[$k].code | .verdict + "|" + .sha' "$TMP/state/goal.json")" = "pass|$GH_SHA"
+check "goal review: security entry carries verdict and HEAD sha" test "$(jq -r --arg k "$GK" '.reviews[$k].security | .verdict + "|" + .sha' "$TMP/state/goal.json")" = "pass|$GH_SHA"
+check "goal review: entries carry a timestamp" test -n "$(jq -r --arg k "$GK" '.reviews[$k].code.at // empty' "$TMP/state/goal.json")"
+check "goal review: push allowed right after recording" allowed "git push -u origin feat"
+
+gate_goal
+check "review gate: git -C . push origin feat denies unreviewed" denied "git -C . push origin feat"
+check "review gate: git -C <work> push origin feat denies unreviewed" denied "git -C $TMP/work push origin feat"
+check "review gate: git -C <work> push of backup/* allows" allowed "git -C $TMP/work push origin backup/foo"
+rv_both
+check "review gate: git -C <work> push origin feat allows when reviewed" allowed "git -C $TMP/work push origin feat"
+
+gate_goal; rv_both
+( cd "$TMP/work" && printf '%s \n' "$(cat b)" >b && git add b && git commit -qm W ) >/dev/null 2>&1
+check "review gate: a whitespace-only change after review denies" denied "git push -u origin feat"
+gate_goal
+( cd "$TMP/work" && printf '\000a' >bin && git add bin && git commit -qm B1 ) >/dev/null 2>&1
+rv_both
+( cd "$TMP/work" && printf '\000b' >bin && git add bin && git commit -qm B2 ) >/dev/null 2>&1
+check "review gate: a binary change after review denies" denied "git push -u origin feat"
+gate_goal; rv_both
+( cd "$TMP/work" && git config diff.external true && git config diff.noprefix true )
+check "review gate: diff.external and noprefix config do not change the key" allowed "git push -u origin feat"
+( cd "$TMP/work" && echo n3 >n3 && git add n3 && git commit -qm N3 ) >/dev/null 2>&1
+check "review gate: a new commit still denies with diff.external set" denied "git push -u origin feat"
+( cd "$TMP/work" && git config --unset diff.external && git config --unset diff.noprefix )
+
+gate_goal; rv_both
+( cd "$TMP/work" && git config remote.origin.push refs/heads/other:refs/heads/feat )
+check "review gate: remote.origin.push without a refspec denies" denied "git push origin"
+check "review gate: remote.origin.push with an explicit branch allows" allowed "git push origin feat"
+( cd "$TMP/work" && git config --unset remote.origin.push && git config push.default matching )
+check "review gate: push.default matching without a refspec denies" denied "git push origin"
+( cd "$TMP/work" && git config --unset push.default )
+
+gate_goal; rv_both
+( cd "$TMP/work" && git branch -f other master ) >/dev/null 2>&1
+check "review gate: setting remote.origin.push while gated denies" denied "git config remote.origin.push refs/heads/other:refs/heads/feat"
+check "review gate: setting push.default while gated denies" denied "git config push.default matching"
+check "review gate: --repo form cannot hide an unreviewed source" denied "git push --repo=origin other:feat"
+check "review gate: a .. path cannot pass as backup/*" denied "git push origin other:backup/../feat"
+check "review gate: a real backup/* destination allows" allowed "git push origin other:backup/x"
+
+reset; flag_on; fresh_work; GUARD_CWD="$TMP/work"
+( cd "$TMP/work" && git config remote.origin.mirror true )
+check "mirror remote: bare git push denies without a goal" denied "git push"
+check "mirror remote: git push origin denies without a goal" denied "git push origin"
+check "mirror remote: an explicit branch still allows" allowed "git push origin feat"
+gate_goal; rv_both
+check "mirror remote: bare git push denies with a reviewed goal" denied "git push"
+check "mirror remote: git push origin denies with a reviewed goal" denied "git push origin"
+( cd "$TMP/work" && git config --unset remote.origin.mirror )
+check "mirror remote: without the config a reviewed push allows" allowed "git push origin feat"
+for mv in 2 -1 yes on bogus; do
+  ( cd "$TMP/work" && git config remote.origin.mirror "$mv" )
+  check "mirror remote: mirror = $mv makes a bare push deny" denied "git push origin"
+done
+( cd "$TMP/work" && git config --unset remote.origin.mirror )
+cp "$TMP/work/.git/config" "$TMP/work-config.keep"
+awk '{print} /^\[remote "origin"\]/{print "\tmirror"}' "$TMP/work-config.keep" >"$TMP/work/.git/config"
+check "mirror remote: a valueless mirror key makes a bare push deny" denied "git push origin"
+cp "$TMP/work-config.keep" "$TMP/work/.git/config"
+for mv in false 0 no off; do
+  ( cd "$TMP/work" && git config remote.origin.mirror "$mv" )
+  check "mirror remote: mirror = $mv leaves a reviewed bare push allowed" allowed "git push origin"
+done
+( cd "$TMP/work" && git config --unset remote.origin.mirror )
+check "protected state: GOAL.JSON in upper case after cd .claude/state denies" denied "cd .claude/state && echo x > GOAL.JSON"
+check "protected state: Autonomy.On in mixed case after cd .claude/state denies" denied "cd .claude/state && echo x > Autonomy.On"
+check "review gate: setting remote.origin.mirror while gated denies" denied "git config remote.origin.mirror true"
+check "review gate: upper-case PUSH.DEFAULT is denied while gated" denied "git config PUSH.DEFAULT matching"
+check "review gate: mixed-case Remote.origin.Push is denied while gated" denied "git config Remote.origin.Push refs/heads/x:refs/heads/feat"
+check "review gate: upper-case remote.origin.MIRROR is denied while gated" denied "git config remote.origin.MIRROR true"
+SEP="$TMP/sep"; rm -rf "$SEP"; git init -q "$SEP"; ( cd "$SEP" && git config remote.origin.push refs/heads/x:refs/heads/y )
+check "review gate: git -C <other repo> reads that repo's remote.origin.push" grep -q 'remote' <<<"$(gate_reason "git -C $SEP push origin")"
+check "review gate: git -C <other repo> with remote.origin.push denies" denied "git -C $SEP push origin"
+
+gate_goal
+check "protected state: ./goal.json after cd .claude/state denies" denied "cd .claude/state && echo x > ./goal.json"
+check "protected state: state/goal.json after cd .claude denies" denied "cd .claude && echo x > state/goal.json"
+check "protected state: ../state/autonomy.on after cd .claude/hooks denies" denied "cd .claude/hooks && echo x > ../state/autonomy.on"
+check "protected state: tee into ./goal.json after cd .claude/state denies" denied "cd .claude/state && echo x | tee ./goal.json"
+
+gate_goal
+check "review gate: gh pr new unreviewed denies" denied "gh pr new --fill"
+rv_both
+check "review gate: gh pr new reviewed allows" allowed "gh pr new --fill"
+check "review gate: gh pr new --head denies" denied "gh pr new --head x --fill"
+
+gate_goal; cp "$TMP/state/goal.json" "$TMP/g.keep"; printf 'not json' >"$TMP/state/goal.json"
+check "review gate: unreadable goal.json denies a push" denied "git push -u origin feat"
+cp "$TMP/g.keep" "$TMP/state/goal.json"
+gate_goal
+check "protected state: cd .claude/state then redirect into goal.json denies" denied "cd .claude/state && echo x > goal.json"
+check "protected state: cd .claude/state then redirect into autonomy.on denies" denied "cd .claude/state && echo > autonomy.on"
+check "protected state: sponge into goal.json denies" denied "cd .claude/state && echo x | sponge goal.json"
+check "protected state: a goal.json outside .claude/state is not protected" allowed "echo x > goal.json"
+reset; fresh_work; flag_on; bash "$H/goal.sh" set g-ceil
+jq 'del(.max_fix_iterations) | .fix_iterations = 9' "$TMP/state/goal.json" >"$TMP/g" && mv "$TMP/g" "$TMP/state/goal.json"
+printf 'code:z\n' | bash "$H/goal.sh" bump >/dev/null 2>&1; rc=$?
+check "bump without a stored ceiling defaults to 10" test $rc -eq 3
+
+reset; flag_on
+check "git-guard ship-merge piped through tail allows (on)" allowed "agent-harness ship-merge 38 2>&1 | tail -15"
+check "git-guard cd then ship-merge piped through tail allows (on)" allowed "cd /x && agent-harness ship-merge 38 | tail -3"
+check "git-guard gh pr merge piped through tail still denies" denied "gh pr merge 1 | tail"
+rm -f "$TMP/state/autonomy.on"
+reset; fresh_work
 wg() { local exp="$1" cwd="$2" m; shift 2; for m in off on; do check "git-guard worktree ($m) $exp: $*" test "$(wg_decision "$m" "$cwd" "$*")" = "$exp"; done; }
 WM="$WGF/main"; WS="$WGF/sib"
 wg deny "$WM" "if true; then git worktree remove /p; fi"
@@ -1568,7 +1800,7 @@ check "ship-init git: registry schema" test "$(lreg $LS '[.v, .goal, .branch, .p
 check "ship-init git: registry has a creation time" test -n "$(lreg $LS '.created_at // empty')"
 check "ship-init git: nothing tracked or untracked in main" test -z "$(git -C "$LM" status --porcelain)"
 check "ship-init git: registry file is not tracked" test -z "$(git -C "$LM" ls-files agent-harness .git)"
-check "ship-init git: fix cap is 3" test "$(jq -r .max_fix_iterations "$LM/.claude/state/goal.json")" = 3
+check "ship-init git: fix ceiling is 10" test "$(jq -r .max_fix_iterations "$LM/.claude/state/goal.json")" = 10
 LH ship-init fix ui other-goal >"$FX/out" 2>&1; rc=$?
 LT2="$LROOT/main-wt/fix-ui-other-goal"
 check "two concurrent goals: second ship-init succeeds" test $rc -eq 0

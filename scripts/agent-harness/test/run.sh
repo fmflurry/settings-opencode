@@ -1126,7 +1126,8 @@ registered_guard_runs() { # the command registered for the git guard, run for re
 }
 check "the registered git guard command runs through bash" registered_guard_runs
 INSTALL_JQ="$(sed -n '/^        def bashify/,/^    '"'"' "\$settings"/p' "$HERE/install.sh" | sed '$d')"
-install_merge() { jq --arg h "~/.claude/hooks" --arg mod /m --arg modTilde "~/.claude/mods/autonomy-status" "$INSTALL_JQ" <<<"$1"; }
+MANAGED_HOOKS="$(for f in "$HERE"/.claude/hooks/*.sh; do basename "$f" .sh; done | jq -Rsc 'split("\n") | map(select(. != ""))')"
+install_merge() { jq --argjson managed "$MANAGED_HOOKS" --arg h "~/.claude/hooks" --arg mod /m --arg modTilde "~/.claude/mods/autonomy-status" "$INSTALL_JQ" <<<"$1"; }
 LEGACY_SETTINGS='{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"~/.claude/hooks/autonomy-git-guard.sh"},{"type":"command","command":"/opt/own/hook.sh"}]}]}}'
 for seed in '{}' "$LEGACY_SETTINGS"; do
   merged="$(install_merge "$seed")"
@@ -1134,6 +1135,13 @@ for seed in '{}' "$LEGACY_SETTINGS"; do
   check "installer registers the git guard once (seed ${seed:0:20})" test "$(jq -r '[.. | objects | select(has("command")) | .command | select(endswith("autonomy-git-guard.sh"))] | length' <<<"$merged")" = 1
 done
 check "installer leaves a user's own hook command alone" test "$(install_merge "$LEGACY_SETTINGS" | jq -r '[.. | objects | select(has("command")) | .command | select(. == "/opt/own/hook.sh")] | length')" = 1
+OWN_SETTINGS='{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"~/.claude/hooks/own.sh"},{"type":"command","command":"~/.claude/hooks/autonomy-git-guard.sh"}]}]}}'
+check "installer leaves a user's own ~/.claude/hooks/own.sh unwrapped" test "$(install_merge "$OWN_SETTINGS" | jq -r '[.. | objects | select(has("command")) | .command | select(. == "~/.claude/hooks/own.sh")] | length')" = 1
+check "installer wraps the repo-managed guard it migrates" test "$(install_merge "$OWN_SETTINGS" | jq -r '[.. | objects | select(has("command")) | .command | select(. == "bash ~/.claude/hooks/autonomy-git-guard.sh")] | length')" = 1
+LOCAL_SETTINGS="$TMP/local-settings.json"
+printf '%s\n' '{"hooks":{"A":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/autonomy-git-guard.sh"}]}]},"p":"~/.claude/mods/x"}' >"$LOCAL_SETTINGS"
+( info() { :; }; ok() { :; }; eval "$(sed -n '/^localize_claude_settings_hooks() {/,/^}/p' "$HERE/install.sh")"; localize_claude_settings_hooks "$LOCAL_SETTINGS" )
+check "installer --local rewrites bash ~/.claude/ hook paths" test "$(jq -r '.hooks.A[0].hooks[0].command' "$LOCAL_SETTINGS" | tr -d '\r')" = "bash ./.claude/hooks/autonomy-git-guard.sh"
 FAKE_AWK_DIR="$TMP/fakeawk"; mkdir -p "$FAKE_AWK_DIR"
 REAL_AWK="$(command -v awk)"
 fake_awk() { # body
@@ -1198,6 +1206,14 @@ for esc_sh in "$GUARD_BASH" /bin/bash; do
   done
 done
 rm -f "$WGF/st/autonomy.on"
+check "git-guard popd makes the directory unknown (on): pushd feature; popd; git push from main denies" \
+  test "$(wg_decision on "$WGF/main" "pushd $WGF/sib >/dev/null; popd >/dev/null; git push")" = deny
+check "git-guard popd makes the directory unknown (on): popd with no preceding pushd denies" \
+  test "$(wg_decision on "$WGF/main" "popd; git push")" = deny
+check "git-guard popd makes the directory unknown (on): multi-line form denies" \
+  test "$(wg_decision on "$WGF/main" "$(printf 'pushd %s\npopd\ngit push' "$WGF/sib")")" = deny
+check "git-guard pushd to a feature worktree alone still allows a bare push (on)" \
+  test "$(wg_decision on "$WGF/main" "pushd $WGF/sib >/dev/null; git push")" = allow
 wg() { local exp="$1" cwd="$2" m; shift 2; for m in off on; do check "git-guard worktree ($m) $exp: $*" test "$(wg_decision "$m" "$cwd" "$*")" = "$exp"; done; }
 WM="$WGF/main"; WS="$WGF/sib"
 wg deny "$WM" "if true; then git worktree remove /p; fi"

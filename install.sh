@@ -1143,7 +1143,7 @@ merge_agent_harness_settings() {
             err "registered hook script is missing: $TARGET_CLAUDE/hooks/$hook_name.sh"
             exit 1
         fi
-        chmod +x "$TARGET_CLAUDE/hooks/$hook_name.sh"
+        chmod +x "$TARGET_CLAUDE/hooks/$hook_name.sh" 2>/dev/null || true
     done
 
     local hooks_dir="~/.claude/hooks" mod_dir="$TARGET_CLAUDE/mods/autonomy-status"
@@ -1152,8 +1152,10 @@ merge_agent_harness_settings() {
     local tmp
     tmp="$(mktemp "$settings.XXXXXX")"
     cp -p "$settings" "$tmp"
-    if ! jq --arg h "$hooks_dir" --arg mod "$mod_dir" --arg modTilde "~/.claude/mods/autonomy-status" '
-        def bashify: if ((.command? // "") | test("^[^ ]*\\.claude/hooks/[^ /]+\\.sh$")) then .command = "bash " + .command else . end;
+    local managed_hooks f
+    managed_hooks="$(for f in "$REPO_DIR"/.claude/hooks/*.sh; do basename "$f" .sh; done | jq -Rsc 'split("\n") | map(select(. != ""))')"
+    if ! jq --argjson managed "$managed_hooks" --arg h "$hooks_dir" --arg mod "$mod_dir" --arg modTilde "~/.claude/mods/autonomy-status" '
+        def bashify: (.command? // "") as $c | if ($c | test("^[^ ]*\\.claude/hooks/[^ /]+\\.sh$")) and ($managed | index($c | split("/") | last | sub("\\.sh$"; ""))) then .command = "bash " + $c else . end;
         def addhook($ev; $m; $cmd):
             if ([.hooks[$ev][]?.hooks[]?.command] | index($cmd)) then .
             else .hooks[$ev] = ((.hooks[$ev] // []) + [

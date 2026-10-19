@@ -50,7 +50,7 @@ jobs:
           echo "$RUNNER_TEMP/gawkbin" >> "$GITHUB_PATH"
       - name: Tool versions
         run: |
-          bash --version | head -1
+          bash --version | sed -n 1p
           (awk --version || awk -W version) 2>&1 | head -1
           jq --version
           git --version

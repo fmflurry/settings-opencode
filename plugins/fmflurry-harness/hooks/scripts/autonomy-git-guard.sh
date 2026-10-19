@@ -3,11 +3,27 @@
 # A quote-aware scan denies git and rm words it cannot parse (substitution, ANSI-C quoting, brace expansion), and, while autonomous, feeds gh to the same scan so a quoted assignment cannot hide gh pr merge. The legacy tokenizer still strips quotes so a quoted ref cannot hide.
 input="$(cat)"
 set -f
+export LC_ALL=C
 command -v jq >/dev/null 2>&1 || exit 0
-cmd="$(jq -r '.tool_input.command // empty' <<<"$input" 2>/dev/null)"
+WIN=0
+case "${OSTYPE:-}" in msys* | cygwin* | win32*) WIN=1 ;; esac
+# A native jq.exe under MSYS2 or Cygwin writes CRLF unless told to stay binary.
+jqr() { if [ "$WIN" = 1 ]; then jq -rb "$@"; else jq -r "$@"; fi; }
+# Windows spellings (C:\a\b, C:/a/b) become the /c/a/b form that bash and cd -P report.
+winconv() {
+  local d lc=abcdefghijklmnopqrstuvwxyz uc=ABCDEFGHIJKLMNOPQRSTUVWXYZ idx
+  WP="${1//\\//}"
+  if [[ "$WP" =~ ^([A-Za-z]):(/.*)?$ ]]; then
+    d="${BASH_REMATCH[1]}"; idx="${uc%%"$d"*}"
+    [ "${#idx}" -lt 26 ] && d="${lc:${#idx}:1}"
+    WP="/$d${BASH_REMATCH[2]}"
+  fi
+}
+cmd="$(jqr '.tool_input.command // empty' <<<"$input" 2>/dev/null)"
 [ -n "$cmd" ] || exit 0
-cwd="$(jq -r '.cwd // empty' <<<"$input" 2>/dev/null)"
+cwd="$(jqr '.cwd // empty' <<<"$input" 2>/dev/null)"
 cwd="${cwd:-$PWD}"
+if [ "$WIN" = 1 ]; then winconv "$cwd"; cwd="$WP"; fi
 
 ROOT="$(git -C "${CLAUDE_PROJECT_DIR:-$PWD}" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')"
 [ -n "$ROOT" ] || ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
@@ -17,7 +33,7 @@ AUTO=0
 [ -f "$STATE_DIR/autonomy.on" ] && AUTO=1
 
 CONFIG_FILE="$ROOT/.claude/agent-harness.json"
-cfg() { [ -f "$CONFIG_FILE" ] || return 0; jq -r "$1" "$CONFIG_FILE" 2>/dev/null || true; }
+cfg() { [ -f "$CONFIG_FILE" ] || return 0; jqr "$1" "$CONFIG_FILE" 2>/dev/null || true; }
 
 base_cfg="$(cfg '.base // empty')"
 if [ -n "$base_cfg" ]; then BASE_A="$base_cfg"; BASE_B="$base_cfg"; else BASE_A=main; BASE_B=master; fi
@@ -47,6 +63,7 @@ deny_config() { emit deny "Blocked by git-guard: git config injection (-c, --con
 deny_unparsed() { emit deny "Blocked by git-guard: cannot parse this command safely (substitution, expansion, or ANSI-C quoting)."; }
 is_protected_token() {
   local t="${1//[<>]/}"
+  [ "$WIN" = 1 ] && t="${t//\\//}"
   t="${t#of=}"
   [[ "$t" =~ $TOKEN_RE ]]
 }
@@ -58,11 +75,13 @@ any_protected() {
 }
 
 # The same directory is resolved by the quote-aware scan and again by the legacy loop; the result is
-# kept in a variable named after the hex-encoded path so the second lookup costs no fork.
+# kept in a variable named after the path. Only paths of plain ASCII characters are cached, so two
+# different paths can never share a name in any locale.
 rh_name() {
-  local p="$1" i c
-  RH_N=RHC_
-  for ((i = 0; i < ${#p}; i++)); do printf -v c '%x_' "'${p:i:1}"; RH_N+="$c"; done
+  local p="$1"
+  [[ "$p" != *[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/._-]* ]] || return 1
+  p="${p//_/_u}"; p="${p//\//_s}"; p="${p//./_d}"; p="${p//-/_h}"
+  RH_N="RHC_$p"
 }
 
 # Sets RH_CUR to the branch a push would update. Returns 1 when a location override
@@ -86,8 +105,7 @@ resolve_head() {
     [ -n "$cur" ] || st=1
   else
     if [ -d "$gdir" ]; then
-      if [ "${#gdir}" -lt 256 ]; then
-        rh_name "$gdir"
+      if [ "${#gdir}" -lt 256 ] && rh_name "$gdir"; then
         if [ -n "${!RH_N+x}" ]; then cur="${!RH_N}"
         else
           cur="$(git -C "$gdir" rev-parse --abbrev-ref HEAD 2>/dev/null)" || true
@@ -332,8 +350,9 @@ phys_dir() {
 }
 
 norm_path() {
-  local p="${1/#\~/$HOME}" out=() seg d
-  case "$p" in /*) ;; *) p="${2:-$cwd}/$p" ;; esac
+  local p="${1/#\~/$HOME}" base="${2:-$cwd}" out=() seg d
+  if [ "$WIN" = 1 ]; then winconv "$p"; p="$WP"; winconv "$base"; base="$WP"; fi
+  case "$p" in /*) ;; *) p="$base/$p" ;; esac
   if [[ "$p" == *//* || "$p" == */./* || "$p" == */../* || "$p" == */. || "$p" == */.. ]]; then
     local IFS=/
     for seg in $p; do

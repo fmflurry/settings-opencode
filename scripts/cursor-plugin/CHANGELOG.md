@@ -6,6 +6,8 @@ Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cur
 
 - The autonomy git guard scan is rewritten as linear awk passes with a bounded number of forks. Commands of 200K characters or 5000 lines are decided in under a second, and the decisions are unchanged.
 - The guard denies with "cannot parse" when `awk` is missing, when an awk pass fails or is killed, and when its output is empty or truncated.
+- The guard converts Windows path spellings (`C:\a\b`, `C:/a/b`) and asks a native `jq.exe` for LF output under Git Bash, and its branch-lookup cache only keys plain-ASCII paths.
+- A `git-guard` CI workflow runs the guard tests and `test-hooks.sh` on Linux (mawk and gawk), macOS and Windows Git Bash, and a seeded differential against the 0.4.8 guard on the Linux and macOS runners.
 
 ## [0.4.8] - 2026-10-18
 

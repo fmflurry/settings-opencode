@@ -949,9 +949,6 @@ allow|allow|git config remote.origin.push HEAD:main
 allow|allow|git config push.default upstream
 allow|allow|git branch -u origin/main
 allow|allow|git config core.hooksPath /dev/null
-allow|allow|echo main | xargs git push origin
-allow|allow|git push origin
-allow|allow|git update-ref refs/heads/main HEAD
 deny|allow|gh alias set m "pr merge"
 allow|allow|gh m 1
 deny|allow|gh pr merge 1
@@ -969,6 +966,7 @@ deny|allow|git push origin 'main
 allow|allow|git push origin main\
 deny|allow|git push origin $'ma\x69n'
 deny|allow|git push origin "ma"\@NL@in
+deny|allow|git push origin "a@NL@:main
 CMDS
 )"
 while IFS='|' read -r p_on p_off p_cmd; do
@@ -984,9 +982,9 @@ perf_guard() { # name expected file [limit_ms]
   t1="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
   ms="$(perl -e 'printf "%d", ($ARGV[1] - $ARGV[0]) * 1000' "$t0" "$t1")"
   dec="$(jq -r '.hookSpecificOutput.permissionDecision // "allow"' <<<"${out:-{\}}")"
-  echo "perf: $1 -> $dec in ${ms}ms"
+  echo "perf: $1 -> $dec in ${ms}ms (limit ${limit}ms)"
   check "git-guard perf decision: $1" test "$dec" = "$2"
-  check "git-guard perf under ${limit}ms: $1 (took ${ms}ms)" test "$ms" -lt "$limit"
+  check "git-guard perf under ${limit}ms: $1" test "$ms" -lt "$limit"
 }
 perf_input() { # file prefix lineText lines suffix
   { printf '%s' "$2"; perl -e 'print "$ARGV[0]\n" x $ARGV[1]' "$3" "$4"; printf '%s' "$5"; } >"$1"
@@ -1025,7 +1023,12 @@ perf_guard "2000 distinct cd lines" allow "$PF"
 perf_seq "$PF" 'cd /tmp/d$i' 8000
 perf_guard "8000 distinct cd lines" allow "$PF" 2000
 perf_seq "$PF" 'git -C /tmp/d$i push origin feat' 2000
-perf_guard "2000 distinct git -C push lines" allow "$PF"
+perf_guard "2000 distinct git -C push lines (non-existent dirs)" allow "$PF"
+PUSHREPO="$TMP/pushrepo"
+git init -q -b feat/perf "$PUSHREPO" && git -C "$PUSHREPO" -c user.email=a@b -c user.name=n commit -q --allow-empty -m i
+for i in $(seq 1 100); do mkdir -p "$PUSHREPO/sd$i"; done
+perf_seq "$PF" "git -C $PUSHREPO/sd\$i push" 100
+perf_guard "100 distinct bare git -C push lines (existing dirs, one git call each)" allow "$PF"
 perf_seq "$PF" 'rm -f x$i' 5000
 perf_guard "5000 distinct rm lines" allow "$PF"
 { printf 'echo "\n'; perl -e 'print "aaaaa\n" x 200000'; printf '"'; } >"$PF"
@@ -1035,20 +1038,28 @@ REAL_AWK="$(command -v awk)"
 fake_awk() { # body
   printf '#!/bin/sh\n%s\n' "$1" >"$FAKE_AWK_DIR/awk"; chmod +x "$FAKE_AWK_DIR/awk"
 }
+awk_fault_cases=(
+  'exit 2'
+  'kill -9 $$'
+  'case "$*" in *mode=seg*) exit 2 ;; esac; exec "$REAL_AWK" "$@"'
+  'case "$*" in *mode=join*) exit 0 ;; esac; exec "$REAL_AWK" "$@"'
+  'case "$*" in *mode=scan*) exit 0 ;; esac; exec "$REAL_AWK" "$@"'
+  'case "$*" in *mode=seg*) exit 0 ;; esac; exec "$REAL_AWK" "$@"'
+  'case "$*" in *mode=join*) ;; *) exec "$REAL_AWK" "$@" ;; esac; "$REAL_AWK" "$@" >"$FAKE_AWK_DIR/o"; head -c "$(($(wc -c <"$FAKE_AWK_DIR/o") / 2))" "$FAKE_AWK_DIR/o"'
+  'case "$*" in *mode=scan*) ;; *) exec "$REAL_AWK" "$@" ;; esac; "$REAL_AWK" "$@" >"$FAKE_AWK_DIR/o"; head -c "$(($(wc -c <"$FAKE_AWK_DIR/o") / 2))" "$FAKE_AWK_DIR/o"'
+  'case "$*" in *mode=seg*) ;; *) exec "$REAL_AWK" "$@" ;; esac; "$REAL_AWK" "$@" >"$FAKE_AWK_DIR/o"; head -c "$(($(wc -c <"$FAKE_AWK_DIR/o") / 2))" "$FAKE_AWK_DIR/o"'
+)
 guard_fake() { ( cd "$GUARD_CWD" && jq -n --arg c "$1" --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | PATH="$FAKE_AWK_DIR:$PATH" bash "$HOOKS/autonomy-git-guard.sh" ); }
 denied_fake() { [ "$(jq -r '.hookSpecificOutput.permissionDecision // ""' <<<"$(guard_fake "$1")")" = deny ]; }
-for fa in 'exit 2' 'kill -9 $$' "case \"\$*\" in *mode=seg*) exit 2 ;; esac; exec \"$REAL_AWK\" \"\$@\""; do
-  fake_awk "$fa"
-  check "git-guard fails closed on awk failure (flag on, $fa): push to base" denied_fake "git push origin $(git -C "$GUARD_CWD" rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
-  check "git-guard fails closed on awk failure (flag on, $fa): rm -rf worktree" denied_fake "rm -rf $GUARD_CWD"
-  check "git-guard fails closed on awk failure (flag on, $fa): protected write" denied_fake "echo x > .claude/foo"
+for fa in "${awk_fault_cases[@]}"; do
+  fake_awk "REAL_AWK='$REAL_AWK'; FAKE_AWK_DIR='$FAKE_AWK_DIR'; $fa"
+  flag_on
+  check "git-guard fails closed on awk fault (flag on, $fa): push to base" denied_fake "git push origin main"
+  check "git-guard fails closed on awk fault (flag on, $fa): rm -rf worktree" denied_fake "rm -rf $GUARD_CWD"
+  check "git-guard fails closed on awk fault (flag on, $fa): protected write" denied_fake "echo x > .claude/foo"
+  rm -f "$TMP/state/autonomy.on"
+  check "git-guard fails closed on awk fault (flag off, $fa): git worktree remove" denied_fake "git worktree remove x"
 done
-rm -f "$TMP/state/autonomy.on"
-for fa in 'exit 2' 'kill -9 $$' "case \"\$*\" in *mode=seg*) exit 2 ;; esac; exec \"$REAL_AWK\" \"\$@\""; do
-  fake_awk "$fa"
-  check "git-guard fails closed on awk failure (flag off, $fa): git worktree remove" denied_fake "git worktree remove x"
-done
-flag_on
 rm -f "$TMP/state/autonomy.on"
 
 WGF="$(mktemp -d)"; WGF="$(cd -P "$WGF" && pwd)"

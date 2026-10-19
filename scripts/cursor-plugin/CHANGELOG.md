@@ -4,8 +4,8 @@ Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cur
 
 ## [0.4.9] - 2026-10-19
 
-- The autonomy git guard scan is rewritten as one linear awk pass with a bounded number of forks. Commands of 200K characters or 5000 lines are decided in under a second, and the decisions are unchanged.
-- The guard fails closed: it denies with "cannot parse" when `awk` is missing, exits non-zero, is killed, or returns no output for the command.
+- The autonomy git guard scan is rewritten as linear awk passes with a bounded number of forks. Commands of 200K characters or 5000 lines are decided in under a second, and the decisions are unchanged.
+- The guard denies with "cannot parse" when `awk` is missing, when an awk pass fails or is killed, and when its output is empty or truncated.
 
 ## [0.4.8] - 2026-10-18
 

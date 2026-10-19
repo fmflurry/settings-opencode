@@ -76,6 +76,19 @@ green_fixtures() {
 }
 mutate() { jq "$1" "$FX/$2" >"$FX/t" && mv "$FX/t" "$FX/$2"; }
 
+ONLY="${RUN_ONLY:-}"
+GUARD_BASH="${GUARD_BASH:-bash}"
+EMPTY_JSON='{}'
+fresh_work() {
+  ( cd "$TMP/work" && git worktree prune && git checkout -q -f master && git reset -q --hard origin/master \
+    && git branch -q --set-upstream-to=origin/master master \
+    && { git branch -q -D feat || true; } \
+    && for b in $(git for-each-ref --format='%(refname:short)' refs/heads/backup); do git branch -q -D "$b"; done \
+    && git checkout -q -b feat && echo "b$RANDOM" >b && git add b && git commit -qm B ) >/dev/null 2>&1
+  HEAD_SHA="$(git -C "$TMP/work" rev-parse HEAD)"
+}
+
+if [ "$ONLY" != guard ]; then
 # ---- dispatcher
 DISP="$H/agent-harness.sh"
 DREPO="$TMP/disp"; git init -q "$DREPO"
@@ -267,14 +280,6 @@ jq '.stop_blocks = 3' "$TMP/state/goal.json" >"$TMP/g" && mv "$TMP/g" "$TMP/stat
 mutate '.headRefOid="newhead"' view.json; stop >/dev/null
 check "stop-gate keeps stop_blocks across head change" test "$(jq -r .stop_blocks "$TMP/state/goal.json")" = 3
 
-fresh_work() {
-  ( cd "$TMP/work" && git worktree prune && git checkout -q -f master && git reset -q --hard origin/master \
-    && git branch -q --set-upstream-to=origin/master master \
-    && { git branch -q -D feat || true; } \
-    && for b in $(git for-each-ref --format='%(refname:short)' refs/heads/backup); do git branch -q -D "$b"; done \
-    && git checkout -q -b feat && echo "b$RANDOM" >b && git add b && git commit -qm B ) >/dev/null 2>&1
-  HEAD_SHA="$(git -C "$TMP/work" rev-parse HEAD)"
-}
 
 # ---- ship-merge (configured: base master, required gate+export, tltb-review by the bot)
 merge() { ( cd "$TMP/work" && bash "$H/ship-merge.sh" "$@" ) >"$FX/out" 2>&1; }
@@ -599,11 +604,12 @@ check "goal backup-add rejects non-backup name" test $rc -eq 2
 goalw backup-add backup/missing; rc=$?
 check "goal backup-add rejects missing branch" test $rc -eq 2
 check "goal backup-add rejected names not recorded" test "$(jq -c '.backup_branches' "$TMP/state/goal.json")" = '["backup/feat-1"]'
+fi
 reset; fresh_work
 
 # ---- git-guard
 GUARD_CWD="$TMP/work"
-guard_in() { ( cd "$GUARD_CWD" && jq -n --arg c "$1" --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | bash "$HOOKS/autonomy-git-guard.sh" ); }
+guard_in() { ( cd "$GUARD_CWD" && jq -n --arg c "$1" --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | "$GUARD_BASH" "$HOOKS/autonomy-git-guard.sh" ); }
 decision() { jq -r '.hookSpecificOutput.permissionDecision // ""' <<<"$(guard_in "$1")"; }
 denied() { [ "$(decision "$1")" = deny ]; }
 asked() { [ "$(decision "$1")" = ask ]; }
@@ -978,10 +984,10 @@ perf_guard() { # name expected file [limit_ms]
   local json="$TMP/perf.json" t0 t1 out dec ms limit="${4:-1000}"
   jq -Rs --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:.}}' <"$3" >"$json"
   t0="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
-  out="$(cd "$GUARD_CWD" && bash "$HOOKS/autonomy-git-guard.sh" <"$json")"
+  out="$(cd "$GUARD_CWD" && "$GUARD_BASH" "$HOOKS/autonomy-git-guard.sh" <"$json")"
   t1="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
   ms="$(perl -e 'printf "%d", ($ARGV[1] - $ARGV[0]) * 1000' "$t0" "$t1")"
-  dec="$(jq -r '.hookSpecificOutput.permissionDecision // "allow"' <<<"${out:-{\}}")"
+  dec="$(jq -r '.hookSpecificOutput.permissionDecision // "allow"' <<<"${out:-$EMPTY_JSON}")"
   echo "perf: $1 -> $dec in ${ms}ms (limit ${limit}ms)"
   check "git-guard perf decision: $1" test "$dec" = "$2"
   check "git-guard perf under ${limit}ms: $1" test "$ms" -lt "$limit"
@@ -1026,13 +1032,26 @@ perf_seq "$PF" 'git -C /tmp/d$i push origin feat' 2000
 perf_guard "2000 distinct git -C push lines (non-existent dirs)" allow "$PF"
 PUSHREPO="$TMP/pushrepo"
 git init -q -b feat/perf "$PUSHREPO" && git -C "$PUSHREPO" -c user.email=a@b -c user.name=n commit -q --allow-empty -m i
-for i in $(seq 1 100); do mkdir -p "$PUSHREPO/sd$i"; done
-perf_seq "$PF" "git -C $PUSHREPO/sd\$i push" 100
-perf_guard "100 distinct bare git -C push lines (existing dirs, one git call each)" allow "$PF"
+for i in $(seq 1 1000); do mkdir -p "$PUSHREPO/sd$i"; done
+perf_seq "$PF" "git -C $PUSHREPO/sd\$i push origin feat" 1000
+perf_guard "1000 distinct git -C push lines with an explicit destination (existing dirs, no branch lookup)" allow "$PF"
+perf_seq "$PF" "git -C $PUSHREPO/sd\$i push" 20
+perf_guard "20 distinct bare git -C push lines (existing dirs, one branch lookup each)" allow "$PF"
 perf_seq "$PF" 'rm -f x$i' 5000
 perf_guard "5000 distinct rm lines" allow "$PF"
 { printf 'echo "\n'; perl -e 'print "aaaaa\n" x 200000'; printf '"'; } >"$PF"
 perf_guard "echo with a 200K-line quoted body" allow "$PF"
+UNI="$TMP/uni"; UA="$UNI/$(printf '\303\251')"; UB="$UNI/$(printf '\303\243')"
+git init -q -b feat/uni "$UA" && git -C "$UA" -c user.email=a@b -c user.name=n commit -q --allow-empty -m i
+git init -q -b master "$UB" && git -C "$UB" -c user.email=a@b -c user.name=n commit -q --allow-empty -m i
+uni_decision() { # shell
+  ( cd "$GUARD_CWD" && jq -n --arg c "git -C \"$UA\" push; git -C \"$UB\" push" --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | "$1" "$HOOKS/autonomy-git-guard.sh" ) \
+    | jq -r '.hookSpecificOutput.permissionDecision // "allow"'
+}
+for ush in bash /bin/bash; do
+  command -v "$ush" >/dev/null 2>&1 || continue
+  check "git-guard does not share a branch lookup between non-ASCII paths that differ after the first byte ($ush)" test "$(uni_decision "$ush")" = deny
+done
 FAKE_AWK_DIR="$TMP/fakeawk"; mkdir -p "$FAKE_AWK_DIR"
 REAL_AWK="$(command -v awk)"
 fake_awk() { # body
@@ -1049,7 +1068,7 @@ awk_fault_cases=(
   'case "$*" in *mode=scan*) ;; *) exec "$REAL_AWK" "$@" ;; esac; "$REAL_AWK" "$@" >"$FAKE_AWK_DIR/o"; head -c "$(($(wc -c <"$FAKE_AWK_DIR/o") / 2))" "$FAKE_AWK_DIR/o"'
   'case "$*" in *mode=seg*) ;; *) exec "$REAL_AWK" "$@" ;; esac; "$REAL_AWK" "$@" >"$FAKE_AWK_DIR/o"; head -c "$(($(wc -c <"$FAKE_AWK_DIR/o") / 2))" "$FAKE_AWK_DIR/o"'
 )
-guard_fake() { ( cd "$GUARD_CWD" && jq -n --arg c "$1" --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | PATH="$FAKE_AWK_DIR:$PATH" bash "$HOOKS/autonomy-git-guard.sh" ); }
+guard_fake() { ( cd "$GUARD_CWD" && jq -n --arg c "$1" --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | PATH="$FAKE_AWK_DIR:$PATH" "$GUARD_BASH" "$HOOKS/autonomy-git-guard.sh" ); }
 denied_fake() { [ "$(jq -r '.hookSpecificOutput.permissionDecision // ""' <<<"$(guard_fake "$1")")" = deny ]; }
 for fa in "${awk_fault_cases[@]}"; do
   fake_awk "REAL_AWK='$REAL_AWK'; FAKE_AWK_DIR='$FAKE_AWK_DIR'; $fa"
@@ -1169,6 +1188,7 @@ now_ms() { echo $(($(date +%s) * 1000)); }
 dirty_main() { echo "edit" >>"$WMAIN/tracked"; echo u >"$WMAIN/untracked.txt"; }
 DESTROY_HOOK='git -C "$WMAIN" reset -q --hard && git -C "$WMAIN" clean -qfd'
 
+if [ "$ONLY" != guard ]; then
 wtfx; out="$(wtrm "$WT" 2>&1)"; rc=$?
 check "worktree-rm: dry run exits 3" test $rc -eq 3
 check "worktree-rm: dry run leaves target in place" test -d "$WT"
@@ -1306,6 +1326,7 @@ wtfx; out="$( cd "$WMAIN" && ORCA_BIN="$TMP/orcawt" bash "$DISP" worktree-rm "$W
 check "dispatcher: worktree-rm forwards (dry run exits 3)" test $rc -eq 3
 check "dispatcher: worktree-rm forwarded target intact" test -d "$WT"
 
+fi
 # ---- worktree guard (every mode)
 wtfx; reset; GUARD_CWD="$WMAIN"
 G_DENY=(
@@ -1336,6 +1357,7 @@ done
 GUARD_CWD="$TMP/work"
 
 
+if [ "$ONLY" != guard ]; then
 # ---- goal worktree lifecycle (fake gh/orca on PATH, no env seams)
 LROOT="$(cd "$TMP" && pwd -P)/lw"; mkdir -p "$LROOT" "$TMP/lbin" "$TMP/lsleep"
 ln -sf "$TMP/gh" "$TMP/lbin/gh"
@@ -1989,6 +2011,7 @@ check "goal.sh launches notify with bash -p" test "$(grep -c 'bash -p "$NOTIFY"'
 check "verify-this picks up the generated override and runs its commands" \
   node --test "$HERE/scripts/agent-harness/test/verify-override.test.mjs"
 
+fi
 reset
 echo "tests: $pass passed, $failn failed"
 [ "$failn" -eq 0 ]

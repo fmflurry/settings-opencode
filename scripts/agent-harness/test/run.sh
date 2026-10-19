@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2016
 set -uo pipefail
-export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+# Only the jq calls that build hook input skip MSYS path conversion; native git needs it for /tmp paths.
+jqn() { MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq "$@"; }
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 FX="$TMP/fx"; mkdir -p "$FX" "$TMP/state" "$TMP/proj/.claude"
@@ -610,7 +611,7 @@ reset; fresh_work
 
 # ---- git-guard
 GUARD_CWD="$TMP/work"
-guard_in() { ( cd "$GUARD_CWD" && jq -n --arg c "$1" --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | "$GUARD_BASH" "$HOOKS/autonomy-git-guard.sh" ); }
+guard_in() { ( cd "$GUARD_CWD" && jqn -n --arg c "$1" --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | "$GUARD_BASH" "$HOOKS/autonomy-git-guard.sh" ); }
 decision() { jq -r '.hookSpecificOutput.permissionDecision // ""' <<<"$(guard_in "$1")"; }
 denied() { [ "$(decision "$1")" = deny ]; }
 asked() { [ "$(decision "$1")" = ask ]; }
@@ -1050,7 +1051,7 @@ UNI="$TMP/uni"; UA="$UNI/$(printf '\303\251')"; UB="$UNI/$(printf '\303\243')"
 git init -q -b feat/uni "$UA" && git -C "$UA" -c user.email=a@b -c user.name=n commit -q --allow-empty -m i
 git init -q -b master "$UB" && git -C "$UB" -c user.email=a@b -c user.name=n commit -q --allow-empty -m i
 uni_decision() { # shell
-  ( cd "$GUARD_CWD" && jq -n --arg c "git -C \"$UA\" push; git -C \"$UB\" push" --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | "$1" "$HOOKS/autonomy-git-guard.sh" ) \
+  ( cd "$GUARD_CWD" && jqn -n --arg c "git -C \"$UA\" push; git -C \"$UB\" push" --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | "$1" "$HOOKS/autonomy-git-guard.sh" ) \
     | jq -r '.hookSpecificOutput.permissionDecision // "allow"'
 }
 for ush in bash /bin/bash; do
@@ -1059,7 +1060,7 @@ for ush in bash /bin/bash; do
 done
 OSTYPE_WIN=msys
 winguard() { # command -> decision with the hook told it runs under Git Bash
-  ( cd "$GUARD_CWD" && jq -n --arg c "$1" --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | OSTYPE="$OSTYPE_WIN" "$GUARD_BASH" "$HOOKS/autonomy-git-guard.sh" ) \
+  ( cd "$GUARD_CWD" && jqn -n --arg c "$1" --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | OSTYPE="$OSTYPE_WIN" "$GUARD_BASH" "$HOOKS/autonomy-git-guard.sh" ) \
     | { jq -r '.hookSpecificOutput.permissionDecision // empty'; echo; } | head -1 | sed 's/^$/allow/'
 }
 flag_on
@@ -1137,7 +1138,7 @@ awk_fault_cases=(
   'case "$*" in *mode=scan*) ;; *) exec "$REAL_AWK" "$@" ;; esac; "$REAL_AWK" "$@" >"$FAKE_AWK_DIR/o"; head -c "$(($(wc -c <"$FAKE_AWK_DIR/o") / 2))" "$FAKE_AWK_DIR/o"'
   'case "$*" in *mode=seg*) ;; *) exec "$REAL_AWK" "$@" ;; esac; "$REAL_AWK" "$@" >"$FAKE_AWK_DIR/o"; head -c "$(($(wc -c <"$FAKE_AWK_DIR/o") / 2))" "$FAKE_AWK_DIR/o"'
 )
-guard_fake() { ( cd "$GUARD_CWD" && jq -n --arg c "$1" --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | PATH="$FAKE_AWK_DIR:$PATH" "$GUARD_BASH" "$HOOKS/autonomy-git-guard.sh" ); }
+guard_fake() { ( cd "$GUARD_CWD" && jqn -n --arg c "$1" --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | PATH="$FAKE_AWK_DIR:$PATH" "$GUARD_BASH" "$HOOKS/autonomy-git-guard.sh" ); }
 denied_fake() { [ "$(jq -r '.hookSpecificOutput.permissionDecision // ""' <<<"$(guard_fake "$1")")" = deny ]; }
 for fa in "${awk_fault_cases[@]}"; do
   fake_awk "REAL_AWK='$REAL_AWK'; FAKE_AWK_DIR='$FAKE_AWK_DIR'; $fa"
@@ -1159,14 +1160,14 @@ mkdir -p "$WGF/sib/node_modules" "$WGF/sib/build"
 wg_decision() { # mode cwd cmd
   rm -f "$WGF/st/autonomy.on"; [ "$1" = on ] && : >"$WGF/st/autonomy.on"
   local out
-  out="$(jq -n --arg c "$3" --arg w "$2" '{tool_input:{command:$c},cwd:$w}' \
+  out="$(jqn -n --arg c "$3" --arg w "$2" '{tool_input:{command:$c},cwd:$w}' \
     | AGENT_HARNESS_TEST=1 AGENT_STATE_DIR="$WGF/st" CLAUDE_PROJECT_DIR="$WGF/main" "$GUARD_BASH" "$HOOKS/autonomy-git-guard.sh")"
   [ -n "$out" ] || { echo allow; return; }
   jq -r '.hookSpecificOutput.permissionDecision // "allow"' <<<"$out"
 }
 wg_rel_decision() {
   rm -f "$WGF/st/autonomy.on"
-  jq -n --arg c "rm -rf ../sib" --arg w "$WGF/main" '{tool_input:{command:$c},cwd:$w}' \
+  jqn -n --arg c "rm -rf ../sib" --arg w "$WGF/main" '{tool_input:{command:$c},cwd:$w}' \
     | AGENT_HARNESS_TEST=1 AGENT_STATE_DIR="$WGF/st" CLAUDE_PROJECT_DIR="$WGF/main" "$NORM_SHELL" "$HOOKS/autonomy-git-guard.sh" \
     | jq -r '.hookSpecificOutput.permissionDecision // "allow"'
 }
@@ -1916,7 +1917,7 @@ out="$(cd "$LT" && env -u CLAUDE_PROJECT_DIR -u AGENT_STATE_DIR -u AGENT_HARNESS
 check "autonomy-context hook run from the worktree sees the main flag and goal" bash -c 'grep -q "AUTONOMOUS MODE ON" <<<"$1" && grep -q "status=escalated" <<<"$1"' _ "$out"
 out="$(cd "$LT" && echo '{"tool_input":{"questions":[{"question":"q"}]}}' | env -u CLAUDE_PROJECT_DIR -u AGENT_STATE_DIR -u AGENT_HARNESS_TEST bash "$HOOKS/autonomy-ask-guard.sh")"
 check "ask-guard run from the worktree denies via the main flag" grep -q '"permissionDecision": *"deny"' <<<"$out"
-out="$(cd "$LT" && jq -n --arg c "gh pr merge 1" '{cwd:"'"$LT"'",tool_input:{command:$c}}' | env -u CLAUDE_PROJECT_DIR -u AGENT_STATE_DIR -u AGENT_HARNESS_TEST bash "$HOOKS/autonomy-git-guard.sh")"
+out="$(cd "$LT" && jqn -n --arg c "gh pr merge 1" '{cwd:"'"$LT"'",tool_input:{command:$c}}' | env -u CLAUDE_PROJECT_DIR -u AGENT_STATE_DIR -u AGENT_HARNESS_TEST bash "$HOOKS/autonomy-git-guard.sh")"
 check "git-guard run from the worktree uses the main flag" grep -q '"permissionDecision": *"deny"' <<<"$out"
 rm -f "$LM/.claude/state/autonomy.on"
 

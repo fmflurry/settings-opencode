@@ -230,6 +230,49 @@ review_gate() {
   done
 }
 
+# Sets PCFG to the push-relevant config lines of the repository at GATE_DIR with one git call, cached per
+# repository like resolve_head. A bare push reads it for the mirror check; the gate reads it too.
+PCFG_RE='^(remote\..*\.(mirror|push)|push\.default)$'
+push_cfg() {
+  local v="" have=0 out=""
+  PCFG=""
+  if [ "$SAW_LOC" != 1 ] && [ -z "${GIT_DIR_VAL:-}" ] && [ -z "${GIT_WT_VAL:-}" ] && [ -d "$GATE_DIR" ] && rh_key "$GATE_DIR"; then
+    v="RHP${RH_N#RHC}"
+    if [ -n "${!v+x}" ]; then PCFG="${!v}"; return 0; fi
+    have=1
+  fi
+  [ -n "$GG_PROF" ] && GG_GIT=$((GG_GIT + 1))
+  out="$(gate_git config --get-regexp "$PCFG_RE" 2>/dev/null)" || true
+  [ "$have" = 0 ] || printf -v "$v" '%s' "$out"
+  PCFG="$out"
+}
+
+# True unless every remote.<name>.mirror is clearly false: git also reads non-zero integers and a valueless key as true.
+mirror_on() {
+  local line v re='^remote\..*\.mirror( (.*))?$' zero='^[+-]?0+[kKmMgG]?$' hexzero='^[+-]?0[xX]0*[kKmMgG]?$'
+  while IFS= read -r line; do
+    [[ "$line" =~ $re ]] || continue
+    [ -n "${BASH_REMATCH[1]}" ] || return 0
+    v="${BASH_REMATCH[2]}"
+    case "$v" in
+      [Ff][Aa][Ll][Ss][Ee] | [Nn][Oo] | [Oo][Ff][Ff] | '') ;;
+      *) [[ "$v" =~ $zero || "$v" =~ $hexzero ]] || return 0 ;;
+    esac
+  done <<<"$PCFG"
+  return 1
+}
+
+redirected_push() {
+  local line re='^remote\..*\.push( |$)' def='^push\.default (.*)$'
+  while IFS= read -r line; do
+    [[ "$line" =~ $re ]] && return 0
+    if [[ "$line" =~ $def ]]; then
+      case "${BASH_REMATCH[1]}" in [Mm][Aa][Tt][Cc][Hh][Ii][Nn][Gg]) return 0 ;; esac
+    fi
+  done <<<"$PCFG"
+  return 1
+}
+
 # Pushes of backup/* refs are the safety net before a rewrite and are never gated.
 push_gate() {
   local gd="$1" a src dst; shift
@@ -237,7 +280,8 @@ push_gate() {
   gate_on || return 0
   GATE_DIR="$gd"
   if [ "$#" -eq 0 ]; then
-    if [ -n "$(gate_git config --get-regexp '^remote\..*\.push$' 2>/dev/null)" ] || [ "$(gate_git config --get push.default 2>/dev/null)" = matching ]; then
+    push_cfg
+    if redirected_push; then
       deny_review "a push without an explicit refspec follows remote.<name>.push or push.default=matching, which can publish a branch other than the reviewed one: name the branch."
     fi
   fi
@@ -274,10 +318,8 @@ check_push() {
   for a in "$@"; do [[ "$a" == --repo || "$a" == --repo=* ]] && skip=0; done
   if [ "$((${#pos[@]} - skip))" -le 0 ] && [ "$gdir" != "?" ]; then
     GATE_DIR="$gdir"
-    local mo
-    mo="$(gate_git config --type=bool --get-regexp '^remote\..*\.mirror$' 2>&1)" || [[ "$mo" != *[Bb]ool* ]] || mo="invalid true"
-    [[ "$mo" == *' true' || "$mo" == *' true'$'\n'* ]] &&
-      deny_review "a bare push follows remote.<name>.mirror, which is a hidden --mirror (or an unreadable value): name the branch."
+    push_cfg
+    mirror_on && deny_review "a bare push follows remote.<name>.mirror, which is a hidden --mirror (or a value that is not clearly false): name the branch."
   fi
   local pj=" ${pos[*]} "
   if [[ "$pj" == *[:+]* || "$pj" == *refs/heads/* || "$pj" == *" $BASE_A "* || "$pj" == *" $BASE_B "* ]]; then
@@ -362,6 +404,7 @@ check_git() {
     for a in "${rest[@]}"; do [[ "$a" == alias.* ]] && deny_alias; done
     for a in "${rest[@]}"; do
       a="$(printf '%s' "$a" | tr '[:upper:]' '[:lower:]')"
+      [ "$AUTO" = 1 ] && [[ "$a" == remote.*.mirror ]] && deny_review "remote.<name>.mirror makes a bare push a hidden --mirror, which is forbidden: do not set it."
       [[ "$a" == remote.*.push || "$a" == remote.*.mirror || "$a" == push.default ]] && gate_on && deny_review "while a goal is active, remote.<name>.push, remote.<name>.mirror and push.default decide what a bare push publishes: do not set them."
     done
   fi
@@ -379,6 +422,7 @@ check_git() {
       done ;;
     update-ref) for a in "${rest[@]}"; do [[ "$a" =~ ^(-d|--delete|--stdin)$ ]] && deny_branch_delete; done ;;
     send-pack) deny_branch_delete ;;
+    remote) for a in "${rest[@]}"; do [[ "$a" == --mirror || "$a" == --mirror=* ]] && deny_review "git remote add --mirror creates a hidden --mirror push, which is forbidden."; done ;;
     commit) for a in "${rest[@]}"; do [ "$a" = --no-verify ] && deny; done ;;
     checkout | restore) any_protected "${rest[@]}" && deny ;;
   esac
@@ -1146,7 +1190,7 @@ BEGIN {
   for (i = 1; i <= n; i++) SK[ps[i]] = 1
   n = split("if then elif else do while until ! { ( builtin eval env sudo command exec nice nohup xargs timeout time bash sh zsh dash agent-harness agent-harness.sh worktree-rm.sh teardown-merged-worktree.sh ship-init.sh ship-merge.sh cleanup.sh orca rm mv trash rsync find cd pushd gh tee cp ln install truncate touch sed dd sponge", ps, " ")
   for (i = 1; i <= n; i++) LK[ps[i]] = 1
-  n = split("push reset branch update-ref send-pack commit checkout restore config worktree", ps, " ")
+  n = split("push reset branch update-ref send-pack commit checkout restore config worktree remote", ps, " ")
   for (i = 1; i <= n; i++) GD[ps[i]] = 1
   n = split("python perl node ruby", ps, " ")
   for (i = 1; i <= n; i++) PY[ps[i]] = 1

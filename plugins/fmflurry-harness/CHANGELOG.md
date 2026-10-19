@@ -2,6 +2,15 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.10] - 2026-10-19
+
+- Review gate before push. While autonomy is on and the goal is active, the git guard denies `git push` and `gh pr create` unless `agent-harness goal review code pass` and `agent-harness goal review security pass` are both recorded for the exact diff being pushed (a hash of the diff against `origin/<base>`, ignoring `docs/agent-reports/`). Pushes to `backup/*` are allowed, `gh pr create --head` and `-H` are denied, and the guard fails closed when it cannot compute the key or cannot read `goal.json`. The key is a hash of the byte-exact diff (`--binary --full-index`, no external diff or textconv, diff config overridden), so whitespace-only and binary changes need a new review. A push with no explicit refspec is denied while `remote.<name>.push` is set or `push.default` is `matching`. `gh pr new` is gated like `gh pr create`. Writes to `goal.json` and `autonomy.on` by relative path from `.claude/state`, or through `sponge`, are denied.
+- New `agent-harness goal review <code|security> <pass|fail>` records a verdict for the current diff in `goal.json` (and the registry). The latest verdict per kind wins.
+- `agent-harness goal bump` now reads the findings on stdin (`<reviewer>:<path>` or `ci:<check>`, one per line; empty stdin exits 2). It escalates with exit 3 when the same findings come back after a fix round, and the fix-round ceiling is 10 instead of 3 for new goals (an existing `goal.json` keeps its stored `max_fix_iterations`; a missing value means 10). `ship-init` writes `base`, `last_fingerprint` and `reviews` into `goal.json`.
+- The ship loop reviews locally before the first push, opens the PR ready (not draft), and reviews every CI or comment fix locally before its push. CI, `loop-on-ci`, `fix-ci`, `ship-merge` and teardown are unchanged.
+- `pushd` with no argument, `pushd +N` and `pushd -N` rotate the directory stack, so the directory becomes unknown, like `popd`.
+- `agent-harness ship-merge <pr> 2>&1 | tail` is no longer denied; `gh pr merge | tail` still is.
+
 ## [0.4.9] - 2026-10-19
 
 - The autonomy git guard scan is rewritten as linear awk passes with a bounded number of forks. Commands of 200K characters or 5000 lines are decided in under a second, and decisions are unchanged except two: a relative path with `..` is resolved correctly under bash 3.2 (see below), and `popd` now makes the directory unknown, so a later `git push` is judged as after an unresolvable `cd`.

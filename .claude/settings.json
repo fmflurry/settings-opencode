@@ -49,7 +49,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/pre-tool-use.sh"
+            "command": "bash ~/.claude/hooks/pre-tool-use.sh"
           }
         ]
       },
@@ -58,7 +58,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/fmflurry/.claude/hooks/rtk-rewrite.sh"
+            "command": "bash ~/.claude/hooks/rtk-rewrite.sh"
           }
         ]
       },
@@ -67,7 +67,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/prefer-code-memory.sh"
+            "command": "bash ~/.claude/hooks/prefer-code-memory.sh"
           }
         ]
       },
@@ -76,7 +76,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/tool-budget.sh"
+            "command": "bash ~/.claude/hooks/tool-budget.sh"
           }
         ]
       },
@@ -85,7 +85,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/autonomy-ask-guard.sh"
+            "command": "bash ~/.claude/hooks/autonomy-ask-guard.sh"
           }
         ]
       },
@@ -94,7 +94,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/autonomy-git-guard.sh"
+            "command": "bash ~/.claude/hooks/autonomy-git-guard.sh"
           }
         ]
       }
@@ -105,7 +105,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/stop.sh"
+            "command": "bash ~/.claude/hooks/stop.sh"
           }
         ]
       },
@@ -113,7 +113,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/ship-stop-gate.sh"
+            "command": "bash ~/.claude/hooks/ship-stop-gate.sh"
           }
         ]
       }
@@ -124,7 +124,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/notification.sh"
+            "command": "bash ~/.claude/hooks/notification.sh"
           }
         ]
       },
@@ -133,7 +133,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/orca-notify.sh"
+            "command": "bash ~/.claude/hooks/orca-notify.sh"
           }
         ]
       }
@@ -144,7 +144,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/subagent-stop.sh"
+            "command": "bash ~/.claude/hooks/subagent-stop.sh"
           }
         ]
       }
@@ -154,7 +154,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/autonomy-context.sh"
+            "command": "bash ~/.claude/hooks/autonomy-context.sh"
           }
         ]
       }
@@ -164,7 +164,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/autonomy-context.sh"
+            "command": "bash ~/.claude/hooks/autonomy-context.sh"
           }
         ]
       }

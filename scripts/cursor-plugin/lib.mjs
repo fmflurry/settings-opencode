@@ -306,7 +306,7 @@ export function buildHooks(settings, include) {
         if (h.type !== 'command' || !h.command) continue;
         const script = path.basename(h.command);
         if (!include.includes(script)) continue;
-        const hook = { command: `${HOOK_SCRIPTS_DIR}/cursor-adapter.sh ${HOOK_SCRIPTS_DIR}/${script} ${event}` };
+        const hook = { command: `bash ${HOOK_SCRIPTS_DIR}/cursor-adapter.sh ${HOOK_SCRIPTS_DIR}/${script} ${event}` };
         if (matcher) hook.matcher = matcher;
         if (typeof h.timeout === 'number') hook.timeout = h.timeout;
         (hooks[event] ??= []).push(hook);

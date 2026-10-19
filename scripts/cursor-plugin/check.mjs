@@ -115,7 +115,7 @@ if (fs.existsSync(hooksPath)) {
   for (const [event, entries] of Object.entries(hooksFile.hooks ?? {})) {
     if (!config.cursorHookEvents.includes(event)) errors.push(`hooks.json: unknown Cursor event: ${event}`);
     for (const { command = '' } of entries) {
-      if (!command.startsWith(rootPrefix)) errors.push(`hooks.json: ${event}: command lacks \${CURSOR_PLUGIN_ROOT} prefix: ${command}`);
+      if (!command.startsWith(`bash ${rootPrefix}`)) errors.push(`hooks.json: ${event}: command must start with "bash \${CURSOR_PLUGIN_ROOT}/": ${command}`);
       for (const ref of command.split(/\s+/).filter((t) => t.startsWith(rootPrefix))) {
         const file = path.join(out, ref.slice(rootPrefix.length));
         if (!fs.existsSync(file)) errors.push(`hooks.json: ${event}: missing script ${ref}`);

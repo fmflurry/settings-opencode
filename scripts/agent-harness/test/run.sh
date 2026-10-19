@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2016
 set -uo pipefail
+# A native jq.exe ends lines with CRLF, which would break every string comparison below.
+case "${OSTYPE:-}" in msys* | cygwin* | win32*) jq() { command jq "$@" | tr -d '\r'; } ;; esac
 # Only the jq calls that build hook input skip MSYS path conversion; native git needs it for /tmp paths.
 jqn() { MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq "$@"; }
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -1098,7 +1100,7 @@ d:|/d
 /c/x|/c/x
 rel\a|rel/a
 WINCONV
-hook_commands() { jq -r '[.. | objects | select(has("command")) | .command] | .[]' "$1"; }
+hook_commands() { jq -r '[.. | objects | select(has("command")) | .command] | .[]' "$1" | tr -d '\r'; }
 check_registered_hooks() { # file regex script-dir: every command runs through bash and names a script that exists
   local file="$1" re="$2" dir="$3" c n=0 bad=0
   while IFS= read -r c; do
@@ -1113,6 +1115,16 @@ check "cursor hooks.json registers every hook as bash <adapter> <existing script
   check_registered_hooks "$HERE/plugins/fmflurry-harness/hooks/hooks.json" \
   '^bash \$\{CURSOR_PLUGIN_ROOT\}/hooks/scripts/cursor-adapter\.sh \$\{CURSOR_PLUGIN_ROOT\}/hooks/scripts/([A-Za-z0-9_.-]+\.sh) [A-Za-z]+$' \
   "$HERE/plugins/fmflurry-harness/hooks/scripts"
+registered_guard_runs() { # the command registered for the git guard, run for real with a benign payload
+  local c script out rc
+  c="$(hook_commands "$HERE/.claude/settings.json" | grep 'autonomy-git-guard\.sh$' | head -1)"
+  [[ "$c" =~ ^bash\ ~/(.*)$ ]] || return 1
+  script="$HERE/${BASH_REMATCH[1]}"
+  out="$(cd "$GUARD_CWD" && jqn -n --arg c 'git status' --arg d "$GUARD_CWD" '{cwd:$d,tool_input:{command:$c}}' | bash -c 'bash "$1"' _ "$script" 2>&1)"
+  rc=$?
+  [ "$rc" -eq 0 ] && [[ "$out" != *"Permission denied"* ]]
+}
+check "the registered git guard command runs through bash" registered_guard_runs
 INSTALL_JQ="$(sed -n '/^        def bashify/,/^    '"'"' "\$settings"/p' "$HERE/install.sh" | sed '$d')"
 install_merge() { jq --arg h "~/.claude/hooks" --arg mod /m --arg modTilde "~/.claude/mods/autonomy-status" "$INSTALL_JQ" <<<"$1"; }
 LEGACY_SETTINGS='{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"~/.claude/hooks/autonomy-git-guard.sh"},{"type":"command","command":"/opt/own/hook.sh"}]}]}}'

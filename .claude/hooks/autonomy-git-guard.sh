@@ -12,7 +12,17 @@ case "${OSTYPE:-}" in msys* | cygwin* | win32*) WIN=1; GREP_CI=-i ;; esac
 jqr() { if [ "$WIN" = 1 ]; then jq -rb "$@"; else jq -r "$@"; fi; }
 # Windows spellings (C:\a\b, C:/a/b, //?/C:/a, /cygdrive/c/a) become the /c/a/b form that bash and cd -P
 # report; NTFS ignores case, so every path comparison is made on lowercase text there.
-if [ "$WIN" = 1 ]; then eval 'lc() { LCV="${1,,}"; }'; fi
+if [ "$WIN" = 1 ]; then
+  if [ "${BASH_VERSINFO[0]:-3}" -ge 4 ]; then
+    eval 'lc() { LCV="${1,,}"; }'
+  else
+    lc() {
+      local u=ABCDEFGHIJKLMNOPQRSTUVWXYZ l=abcdefghijklmnopqrstuvwxyz i
+      LCV="$1"
+      for ((i = 0; i < 26; i++)); do LCV="${LCV//${u:i:1}/${l:i:1}}"; done
+    }
+  fi
+fi
 winconv() {
   local d lc=abcdefghijklmnopqrstuvwxyz uc=ABCDEFGHIJKLMNOPQRSTUVWXYZ idx
   WP="${1//\\//}"

@@ -30,7 +30,7 @@ check() {
   local name="$1" got="$2" want="$3"
   if [ "$got" = "$want" ]; then echo "ok   $name"; else echo "FAIL $name: got [$got] want [$want]"; fail=1; fi
 }
-adapter() { bash "$scripts/cursor-adapter.sh" "$scripts/$1" "$2"; }
+adapter() { "$BASH" "$scripts/cursor-adapter.sh" "$scripts/$1" "$2"; }
 
 out="$(adapter pre-tool-use.sh beforeShellExecution < "$fixtures/before-shell-execution.json")"; rc=$?
 check "rm -rf / is warn-only -> allow (exit)" "$rc" "0"

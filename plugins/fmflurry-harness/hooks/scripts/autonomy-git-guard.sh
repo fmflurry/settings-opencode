@@ -8,6 +8,19 @@ command -v jq >/dev/null 2>&1 || exit 0
 WIN=0
 GREP_CI=
 case "${OSTYPE:-}" in msys* | cygwin* | win32*) WIN=1; GREP_CI=-i ;; esac
+# Opt-in timing for diagnosis; it only writes to stderr and is read from the hook's own environment.
+GG_PROF=""
+gg_mark() {
+  [ -n "$GG_PROF" ] || return 0
+  local n="${EPOCHREALTIME//[.,]/}"
+  printf 'guard-profile: %-12s +%7d us  (total %d us)\n' "$1" $((n - GG_TL)) $((n - GG_T0)) >&2
+  GG_TL=$n
+}
+gg_end() { gg_mark end; printf 'guard-profile: git lookups %d\n' "$GG_GIT" >&2; }
+if [ "${AGENT_HARNESS_GUARD_PROFILE:-}" = 1 ] && [ -n "${EPOCHREALTIME:-}" ]; then
+  GG_PROF=1; GG_T0="${EPOCHREALTIME//[.,]/}"; GG_TL=$GG_T0; GG_GIT=0
+  trap gg_end EXIT
+fi
 # A native jq.exe under MSYS2 or Cygwin writes CRLF unless told to stay binary.
 jqr() { if [ "$WIN" = 1 ]; then jq -rb "$@"; else jq -r "$@"; fi; }
 # Windows spellings (C:\a\b, C:/a/b, //?/C:/a, /cygdrive/c/a) become the /c/a/b form that bash and cd -P
@@ -38,6 +51,7 @@ cmd="$(jqr '.tool_input.command // empty' <<<"$input" 2>/dev/null)"
 cwd="$(jqr '.cwd // empty' <<<"$input" 2>/dev/null)"
 cwd="${cwd:-$PWD}"
 if [ "$WIN" = 1 ]; then winconv "$cwd"; cwd="$WP"; fi
+gg_mark input
 
 ROOT="$(git -C "${CLAUDE_PROJECT_DIR:-$PWD}" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')"
 [ -n "$ROOT" ] || ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
@@ -127,8 +141,10 @@ resolve_head() {
     [ -n "${GIT_DIR_VAL:-}" ] && ea+=(GIT_DIR="$GIT_DIR_VAL")
     [ -n "${GIT_WT_VAL:-}" ] && ea+=(GIT_WORK_TREE="$GIT_WT_VAL")
     if [ "${#ea[@]}" -gt 0 ]; then
+      [ -n "$GG_PROF" ] && GG_GIT=$((GG_GIT + 1))
       cur="$(cd "$cwd" 2>/dev/null && env "${ea[@]}" git ${GIT_LOC+"${GIT_LOC[@]}"} rev-parse --abbrev-ref HEAD 2>/dev/null)" || true
     else
+      [ -n "$GG_PROF" ] && GG_GIT=$((GG_GIT + 1))
       cur="$(cd "$cwd" 2>/dev/null && git ${GIT_LOC+"${GIT_LOC[@]}"} rev-parse --abbrev-ref HEAD 2>/dev/null)" || true
     fi
     [ -n "$cur" ] || st=1
@@ -137,6 +153,7 @@ resolve_head() {
       if rh_key "$gdir"; then
         if [ -n "${!RH_N+x}" ]; then cur="${!RH_N}"
         else
+          [ -n "$GG_PROF" ] && GG_GIT=$((GG_GIT + 1))
           cur="$(git -C "$gdir" rev-parse --abbrev-ref HEAD 2>/dev/null)" || true
           printf -v "$RH_N" '%s' "$cur"
         fi
@@ -793,9 +810,9 @@ function emitarr(a, n,   i) {
 function fsg(   i, txt, hdr) {
   fw()
   if (md == 5 && nk > 0) {
-    if (nk == 1) txt = "c\nh\n\n"
-    else if (ae[2] != 0 || abr[2] != 0 || substr(aw[2], 1, 1) == "-") txt = "c\nk\n\n"
-    else txt = "c\n" (index(al[2], BS) ? "P" : "p") "\n" al[2] "\n"
+    if (nk == 1) txt = "c\nh\nx\n"
+    else if (ae[2] != 0 || abr[2] != 0 || substr(aw[2], 1, 1) == "-") txt = "c\nk\nx\n"
+    else txt = "c\n" (index(al[2], BS) ? "P" : "p") "\nx" al[2] "\n"
     if (!((txt == prevc) && (txt ~ /^c\nk/ || substr(al[2], 1, 1) == "/"))) print txt
     prevc = txt
   } else if (md == 0 && nk > 0 && !(gp && screen_push_inert())) {
@@ -835,7 +852,9 @@ function screen_push_inert(   i) {
 }
 function segemit(line,   r, pfx) {
   r = segkeep(line)
-  if (r == 2) sg[++ns] = "\034" cdtgt
+  if (r == 2) {
+    if (!(ns > 0 && sg[ns] == "\034" cdtgt && substr(cdtgt, 1, 1) == "/")) sg[++ns] = "\034" cdtgt
+  }
   else if (r) {
     pfx = (substr(line, 1, 1) == "\034" || substr(line, 1, 1) == "\035" || substr(line, 1, 1) == "\036" || substr(line, 1, 1) == US) ? "\035" : ""
     if (r == 3) pfx = "\036" pfx
@@ -1194,6 +1213,10 @@ screen_segment() {
   esac
 }
 
+# awk output reaches bash as one string split in memory: a read loop costs a syscall per line, which is
+# slow under MSYS2, and a pipe is read one byte at a time.
+gg_lines() { local IFS=$'\n'; GGL=($1); LI=0; }
+
 command -v awk >/dev/null 2>&1 || deny_unparsed
 if [[ "$cmd" == *\\* ]]; then
   cmd="$(LC_ALL=C awk -v mode=join "$GG_AWK" <<<"$cmd")" || deny_unparsed
@@ -1212,30 +1235,38 @@ if [[ "$cmd" != *\\* ]]; then
   # so one awk pass yields both the quote-aware scan and the filtered legacy segments.
   merged=1
   both_out="$(LC_ALL=C awk -v mode=both -v pytag=1 -v win="$WIN" -v altsdef="$ALTS_DEFAULT" -v pushfast="$pushfast" -v basea="$BASE_A" -v baseb="$BASE_B" "$GG_AWK" <<<"$cmd")" || deny_unparsed
-  exec 3<<<"$both_out"
+  gg_lines "$both_out"
 else
   scan_out="$(LC_ALL=C awk -v mode=scan -v win="$WIN" -v pushfast="$pushfast" -v basea="$BASE_A" -v baseb="$BASE_B" "$GG_AWK" <<<"$cmd")" || deny_unparsed
-  exec 3<<<"$scan_out"
+  gg_lines "$scan_out"
 fi
+gg_mark awk
 scan_ended=0
+nlines=${#GGL[@]}
 SK_CD=-1 SK_DIR="" SK_WT="" SK_CFG=""
-while IFS= read -r -u 3 rec_h; do
+while [ "$LI" -lt "$nlines" ]; do
+  rec_h="${GGL[LI]}"; LI=$((LI + 1))
   case "$rec_h" in
     $'\037SCANEND') scan_ended=1; break ;;
     c)
-      IFS= read -r -u 3 c_kind; IFS= read -r -u 3 c_val
+      c_kind="${GGL[LI]}"; c_val="${GGL[LI + 1]#x}"; LI=$((LI + 2))
       screen_cd "$c_kind" "$c_val"
       continue ;;
     r)
       if [ "$SR_VER" = "$SK_CD" ] && [ "$P_GIT_DIR" = "$SK_DIR" ] && [ "$P_GIT_WT" = "$SK_WT" ] && [ "$P_GIT_CFG" = "$SK_CFG" ]; then continue; fi ;;
     *)
-      IFS=$'\037' read -u 3 -ra words; IFS=$'\037' read -u 3 -ra exp_f; IFS=$'\037' read -u 3 -ra brace_f
-      IFS=$'\037' read -u 3 -ra lit_f; IFS=$'\037' read -u 3 -ra litb_f; IFS=$'\037' read -u 3 -ra litv_f
+      IFS=$'\037'
+      words=(${GGL[LI]}); exp_f=(${GGL[LI + 1]}); brace_f=(${GGL[LI + 2]})
+      lit_f=(${GGL[LI + 3]}); litb_f=(${GGL[LI + 4]}); litv_f=(${GGL[LI + 5]})
+      IFS=$' \t\n'
+      LI=$((LI + 6))
       [ "${#words[@]}" -gt 0 ] && unset "words[$((${#words[@]} - 1))]"
       if [ "$rec_h" = 1 ]; then
         for ((rec_k = 0; rec_k < ${#words[@]}; rec_k++)); do
-          printf -v "words[$rec_k]" '%b' "${words[rec_k]}"; printf -v "lit_f[$rec_k]" '%b' "${lit_f[rec_k]}"
-          printf -v "litb_f[$rec_k]" '%b' "${litb_f[rec_k]}"; printf -v "litv_f[$rec_k]" '%b' "${litv_f[rec_k]}"
+          printf -v rec_t '%b' "${words[rec_k]}"; words[rec_k]=$rec_t
+          printf -v rec_t '%b' "${lit_f[rec_k]}"; lit_f[rec_k]=$rec_t
+          printf -v rec_t '%b' "${litb_f[rec_k]}"; litb_f[rec_k]=$rec_t
+          printf -v rec_t '%b' "${litv_f[rec_k]}"; litv_f[rec_k]=$rec_t
         done
       fi ;;
   esac
@@ -1243,6 +1274,7 @@ while IFS= read -r -u 3 rec_h; do
   screen_segment
 done
 [ "$scan_ended" = 1 ] || deny_unparsed
+gg_mark scan_loop
 
 if [[ "$cmd" == *agent-harness* ]] && { [ "$AUTO" = 1 ] || [[ "$cmd" =~ worktree-rm|teardown-merged-worktree|ship-init ]]; }; then
   unquoted="$(tr -d "'\"" <<<"$cmd")"
@@ -1267,11 +1299,13 @@ else
   [ "$PYRM_HIT" = 0 ] && { [ "$AUTO" = 0 ] || [ "$LOOSE_HIT" = 0 ]; } && pyinert=1
 fi
 segments="$(LC_ALL=C awk -v mode=seg -v win="$WIN" -v altsdef="$ALTS_DEFAULT" -v pyinert="$pyinert" -v pushfast="$pushfast" -v basea="$BASE_A" -v baseb="$BASE_B" "$GG_AWK" <<<"$segments")" || deny_unparsed
-exec 3<<<"$segments"
+gg_lines "$segments"
 fi
 PSEG=""; PIN=""; PYI=""
 seg_ended=0
-while IFS= read -r -u 3 seg; do
+nlines=${#GGL[@]}
+while [ "$LI" -lt "$nlines" ]; do
+  seg="${GGL[LI]}"; LI=$((LI + 1))
   case "$seg" in
     $'\037SEND') seg_ended=1; break ;;
     $'\036'*)
@@ -1395,8 +1429,8 @@ while IFS= read -r -u 3 seg; do
     python | python[0-9]* | perl | node | ruby) interpreter_inline_hits_protected "${ct[@]:1}" && deny ;;
   esac
 done
-exec 3<&-
 [ "$seg_ended" = 1 ] || deny_unparsed
+gg_mark legacy_loop
 
 [ "$ASKED_WT" = 1 ] && emit ask "worktree-rm --confirmed removes a worktree: confirm the human named this removal."
 [ "$ASKED" = 1 ] && emit ask "ship-merge --confirmed merges with autonomy rails relaxed and deletes the merged branch: confirm with the user."

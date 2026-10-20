@@ -2,6 +2,15 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.12] - 2026-10-20
+
+- Teardown after merge. `ship-merge` now records `merged` in the goal registry as well as `goal.json`, and `teardown-merged-worktree` no longer stops on an `escalated` or `blocked` registry status when the PR is MERGED (every other check still applies; an unmerged escalated or blocked goal is still never torn down).
+- The stop gate allows the stop, without counting a block, when the PR state cannot be read (gh error or auth), as the autonomy rule documents. Before, an unreadable state counted as no progress and escalated the goal.
+- `gh` runs through `direnv exec <repo-root> <pinned gh>` when the repo has an `.envrc` and `direnv` is on PATH, in `ship-merge`, `teardown-merged-worktree`, `cleanup`, `ship-init` and the stop gate, so the repo's gh account is used instead of the personal token. Only the environment comes from `.envrc`; the `gh` binary stays the pinned one, and a `gh` that is not an absolute path never goes through direnv. An approved `.envrc` and the files it sources (`.envrc.local`, `.env`) are trusted.
+- The git guard protects `.envrc` like the other harness files (shell writes are denied while autonomy is on) and denies `direnv allow`, `direnv permit`, `direnv grant` and `direnv edit` (editing approves the file) while autonomy is on, so an agent cannot plant and approve code that the harness scripts would load.
+- When the PR state is unreadable the stop gate also prints `ship-stop-gate: PR state unreadable; allowing stop` and sends a `waiting` notification.
+- `goal set` never replaces the `branch` or `slug` of an existing goal (active, escalated or done) with the cwd's branch. Only `ship-init` binds a goal to a branch.
+
 ## [0.4.11] - 2026-10-20
 
 - Removed the `compress` skill (`/caveman:compress`). Its bundled scripts were flagged for reading credentials (#40), and nothing else in the harness used it.

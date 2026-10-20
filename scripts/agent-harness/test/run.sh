@@ -825,6 +825,14 @@ while IFS= read -r c; do check "git-guard allows: $c" allowed "$c"; done <<<"$SH
 while IFS= read -r c; do check "git-guard asks: $c" asked "$c"; done <<<"$ASK_CMDS"
 while IFS= read -r c; do check "git-guard allows: $c" allowed "$c"; done <<<"$CLEAN_ALLOW_CMDS"
 while IFS= read -r c; do check "git-guard denies: $c" denied "$c"; done <<<"$CLEAN_DENY_CMDS"
+for c in 'echo x > .envrc' 'echo x >> ./sub/.envrc' 'cp /tmp/x .envrc' 'sed -i s/a/b/ .envrc' 'direnv allow' 'direnv allow .' 'direnv permit' 'direnv grant' 'bash -c "direnv allow"' 'direnv edit' 'direnv edit .' 'EDITOR=true direnv edit .' 'command direnv edit .' '/usr/bin/direnv edit .' 'env EDITOR=true direnv edit'; do
+  check "git-guard denies (autonomy on): $c" denied "$c"
+done
+check "git-guard allows direnv status (autonomy on)" allowed "direnv status"
+check "git-guard allows direnv exec (autonomy on)" allowed "direnv exec . true"
+reset
+for c in 'echo x > .envrc' 'direnv allow' 'direnv edit' 'EDITOR=true direnv edit .'; do check "git-guard allows with autonomy off: $c" allowed "$c"; done
+flag_on
 check "git-guard denies unknown merge method" denied "agent-harness ship-merge 12 --method octopus"
 check "git-guard denies --method without value" denied "agent-harness ship-merge 12 --method"
 echo '{"base":"trunk"}' >"$CFG"
@@ -1934,7 +1942,7 @@ lw_td_refuses "the main checkout"; check "teardown main checkout: still the main
 lw_td git; lw_set_reg '.branch = "feat/forged"'; lw_td_refuses "a registered branch that is not the PR head"
 lw_td git; lw_set_reg 'del(.path)'; lw_td_refuses "an entry without a path"
 lw_td git; rm "$FX/view.json"; lw_td_refuses "an unreadable PR"
-lw_td git; LCWD="$T" LH goal escalate "stuck" >/dev/null 2>&1; lw_td_refuses "an escalated goal"
+lw_td git; LCWD="$T" LH goal escalate "stuck" >/dev/null 2>&1; view_mut '.state="OPEN"'; lw_td_refuses "an escalated goal"
 check "teardown escalated goal: names the reason" grep -q 'escalated' "$FX/out"
 lw_td orca; echo $(( $(date +%s) * 1000 )) >"$FX/orca.activity"; lw_td_refuses "recent orca activity"
 lw_td orca; : >"$FX/orca.noactivity"; lw_td_refuses "unreadable orca activity"
@@ -2025,8 +2033,8 @@ lw_td git; LCWD="$T" LH goal escalate "stuck" >/dev/null 2>&1
 view_mut '.state="OPEN" | .files=[{path:"client/a.gd"}]'
 LH ship-merge 5 --confirmed >"$FX/out" 2>&1; rc=$?
 check "ship-merge with an escalated goal: still exits 0 after the merge" test $rc -eq 0
-check "ship-merge with an escalated goal: worktree kept" test -d "$T"
-check "ship-merge with an escalated goal: prints the rerun command" grep -qF 'rerun: agent-harness teardown-merged-worktree 5' "$FX/out"
+check "ship-merge with an escalated goal: worktree removed once merged" test ! -e "$T"
+check "ship-merge with an escalated goal: registry removed" test ! -e "$(lreg_file feat-td-x)"
 lw_fixture git
 ( cd "$LM" && git checkout -q -b feat/plain && echo p >p && git add p && git commit -qm P && git push -q origin HEAD && git checkout -q master ) >/dev/null 2>&1
 PLAIN_HEAD="$(git -C "$LM" rev-parse feat/plain)"
@@ -2242,7 +2250,6 @@ for gate in "${STOP_COPIES[@]}"; do
   lw_stop "$gate" >/dev/null 2>&1
   check "stop-gate ($gl) escalation: goal.json escalated" test "$(jq -r .status "$(lw_goal_file)")" = escalated
   check "stop-gate ($gl) escalation: mirrored status and reason in the registry" test "$(lreg feat-td-x '[.status, (.reason | startswith("no progress after 5 stop blocks"))] | join("|")')" = "escalated|true"
-  view_mut '.state="MERGED"'
   lw_td_run 5; rc=$?
   check "teardown refuses a goal the stop gate escalated: exits 1" test $rc -eq 1
   check "teardown refuses a goal the stop gate escalated: says escalated" grep -q 'is escalated' "$FX/out"
@@ -2252,9 +2259,9 @@ for gate in "${STOP_COPIES[@]}"; do
   check "stop-gate ($gl) done: goal.json done" test "$(jq -r .status "$(lw_goal_file)")" = "done"
   check "stop-gate ($gl) done: mirrored status in the registry" test "$(lreg feat-td-x .status)" = "done"
 done
-lw_td git; lw_set_reg '.status = "blocked"'; lw_td_refuses "a blocked goal"
+lw_td git; lw_set_reg '.status = "blocked"'; view_mut '.state="OPEN"'; lw_td_refuses "a blocked goal"
 check "teardown blocked goal: says blocked" grep -q 'is blocked' "$FX/out"
-lw_td git; lw_set_reg '.status = "escalated"'; lw_td_refuses "an escalated registry entry"
+lw_td git; lw_set_reg '.status = "escalated"'; view_mut '.state="OPEN"'; lw_td_refuses "an escalated registry entry"
 
 # H3: ship-init refuses an orca worktree that belongs to another repo
 lw_fixture orca
@@ -2378,6 +2385,152 @@ check "exported functions do not affect goal.sh via the wrapper" test ! -e "$INJ
 check "ship-merge launches its helpers with bash -p" test "$(grep -c 'bash -p' "$H/ship-merge.sh")" -ge 3
 check "teardown launches cleanup with bash -p and --no-checkout" grep -q 'bash -p "$HARNESS_DIR/cleanup.sh" "$pr" --no-checkout' "$H/teardown-merged-worktree.sh"
 check "goal.sh launches notify with bash -p" test "$(grep -c 'bash -p "$NOTIFY"' "$H/goal.sh")" -ge 2
+
+ship_merge_green() {
+  view_mut '.state="OPEN" | .files=[{path:"client/a.gd"}]'
+  echo '[{"name":"gate","status":"completed","conclusion":"success","app":{"slug":"github-actions"}}]' >"$FX/checks.json"
+  echo '{"data":{"repository":{"pullRequest":{"reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}' >"$FX/threads.json"
+  echo 0 >"$FX/behind.txt"
+}
+
+# 0.4.11 case 1: ship-merge mirrors the merge into the registry
+lw_td git; ship_merge_green; echo x >>"$T/b"
+LH ship-merge 5 --confirmed >"$FX/out" 2>&1
+check "ship-merge: goal.json done after the merge" test "$(jq -r .status "$(lw_goal_file)")" = done
+check "ship-merge: registry status merged after the merge (teardown stopped on dirty tree)" test "$(lreg feat-td-x .status 2>/dev/null)" = merged
+
+# 0.4.11 case 2: a merged PR overrides a stale escalated or blocked registry status
+for st in escalated blocked; do
+  lw_td git; lw_set_reg ".status = \"$st\" | .reason = \"no progress after 5 stop blocks: PR state unavailable\""
+  lw_td_run 5; rc=$?
+  check "teardown proceeds for $st registry + MERGED PR: exits 0" test $rc -eq 0
+  check "teardown proceeds for $st registry + MERGED PR: worktree removed" test ! -e "$T"
+  check "teardown proceeds for $st registry + MERGED PR: registry removed" test ! -e "$(lreg_file feat-td-x)"
+done
+lw_td git; lw_set_reg '.status = "escalated"'; view_mut '.state="OPEN"'
+lw_td_run 5; rc=$?
+check "teardown still STOPs for escalated registry + OPEN PR" test "$rc|$(test -d "$T" && echo kept || echo gone)" = "1|kept"
+
+# 0.4.11 case 3: an unreadable PR state fails open without counting
+mkdir -p "$TMP/ghfail"
+printf '#!/bin/sh\necho "gh: authentication required" >&2\nexit 4\n' >"$TMP/ghfail/gh"; chmod +x "$TMP/ghfail/gh"
+for gate in "${STOP_COPIES[@]}"; do
+  gl="${gate#"$HERE"/}"
+  lw_td git; touch "$LM/.claude/state/autonomy.on"
+  outs=""
+  for _ in 1 2 3 4 5 6; do
+    outs="$outs$( cd "$LM" && echo '{}' | env -u AGENT_STATE_DIR -u GH_BIN CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/ghfail:$TMP/lsleep:$TMP/lbin:$PATH" bash "$gate" 2>/dev/null )"
+  done
+  check "stop-gate ($gl) unreadable PR: allows the stop" test -z "$outs"
+  check "stop-gate ($gl) unreadable PR: stop_blocks unchanged after 6 checks" test "$(jq -r .stop_blocks "$(lw_goal_file)")" = 0
+  check "stop-gate ($gl) unreadable PR: total_blocks unchanged after 6 checks" test "$(jq -r .total_blocks "$(lw_goal_file)")" = 0
+  check "stop-gate ($gl) unreadable PR: goal stays active" test "$(jq -r .status "$(lw_goal_file)")" = active
+  check "stop-gate ($gl) unreadable PR: registry stays active" test "$(lreg feat-td-x .status)" = active
+done
+
+# 0.4.11 case 4: ship-init and goal set keep the real branch slug
+lw_fixture git
+LH ship-init fix x y >"$FX/out" 2>"$FX/err"
+check "ship-init: goal.json branch and slug are the real branch slug" test "$(jq -r '[.branch, .slug] | join("|")' "$(lw_goal_file)")" = "fix/x-y|fix-x-y"
+check "ship-init: registry file is named after the branch slug" test -f "$(lreg_file fix-x-y)"
+check "ship-init: no master or main registry file" test ! -e "$(lreg_file master)" -a ! -e "$(lreg_file main)"
+LH goal set "later from main" >/dev/null 2>&1
+check "goal set from the main checkout keeps branch and slug" test "$(jq -r '[.branch, .slug] | join("|")' "$(lw_goal_file)")" = "fix/x-y|fix-x-y"
+LH goal pr 9 >/dev/null 2>&1
+check "goal pr after goal set from main still mirrors into the registry" test "$(lreg fix-x-y .pr)" = 9
+jq '.status = "done"' "$(lw_goal_file)" >"$FX/t" && mv "$FX/t" "$(lw_goal_file)"
+LH ship-init fix x z >"$FX/out" 2>"$FX/err"
+check "ship-init after a finished goal records the new branch slug" test "$(jq -r '[.branch, .slug, .status] | join("|")' "$(lw_goal_file)")" = "fix/x-z|fix-x-z|active"
+for st in escalated done; do
+  jq --arg s "$st" '.status = $s' "$(lw_goal_file)" >"$FX/t" && mv "$FX/t" "$(lw_goal_file)"
+  LH goal set "later from main" >/dev/null 2>&1
+  check "goal set from the main checkout keeps branch and slug of a $st goal" test "$(jq -r '[.branch, .slug] | join("|")' "$(lw_goal_file)")" = "fix/x-z|fix-x-z"
+done
+
+# 0.4.11 case 5: gh runs through direnv when the repo has an .envrc
+mkdir -p "$TMP/dbin" "$TMP/nodbin"
+cat >"$TMP/dbin/direnv" <<'STUB'
+#!/usr/bin/env bash
+echo "$*" >>"$FX/direnv.log"
+[ "$1" = exec ] || exit 0
+shift 2
+exec "$@"
+STUB
+printf '#!/bin/sh\nexec "%s" "$@"\n' "$TMP/gh" >"$TMP/dbin/gh"; cp "$TMP/dbin/gh" "$TMP/nodbin/gh"
+chmod +x "$TMP/dbin/direnv" "$TMP/dbin/gh" "$TMP/nodbin/gh"
+LMP="$(cd "$LM" && pwd -P)"
+for gate in "${STOP_COPIES[@]}"; do
+  gl="${gate#"$HERE"/}"
+  lw_td git; touch "$LM/.claude/state/autonomy.on" "$LM/.envrc"; rm -f "$FX/direnv.log" "$FX/gh.log"
+  ( cd "$LM" && echo '{}' | env -u AGENT_STATE_DIR -u GH_BIN CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/dbin:$TMP/lsleep:$TMP/lbin:$PATH" bash "$gate" ) >/dev/null 2>&1
+  check "stop-gate ($gl) with .envrc and direnv: gh runs via direnv exec <root>" grep -Eq "^exec ($LM|$LMP) /[^ ]*gh pr view" "$FX/direnv.log"
+  rm -f "$FX/direnv.log" "$FX/gh.log" "$LM/.envrc"; jq '.status = "active"' "$(lw_goal_file)" >"$FX/t" && mv "$FX/t" "$(lw_goal_file)"
+  ( cd "$LM" && echo '{}' | env -u AGENT_STATE_DIR -u GH_BIN CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/dbin:$TMP/lsleep:$TMP/lbin:$PATH" bash "$gate" ) >/dev/null 2>&1
+  check "stop-gate ($gl) without .envrc: direnv is not used" test ! -e "$FX/direnv.log"
+  check "stop-gate ($gl) without .envrc: plain gh still runs" grep -q '^pr view 5' "$FX/gh.log"
+  if [ -z "$(type -P direnv)" ]; then
+    touch "$LM/.envrc"; rm -f "$FX/gh.log"; jq '.status = "active"' "$(lw_goal_file)" >"$FX/t" && mv "$FX/t" "$(lw_goal_file)"
+    ( cd "$LM" && echo '{}' | env -u AGENT_STATE_DIR -u GH_BIN CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/nodbin:$TMP/lsleep:$TMP/lbin:$PATH" bash "$gate" ) >/dev/null 2>&1
+    check "stop-gate ($gl) with .envrc but no direnv: plain gh runs" grep -q '^pr view 5' "$FX/gh.log"
+  fi
+done
+lw_td git; ship_merge_green; touch "$LM/.envrc"; rm -f "$FX/direnv.log"
+bash -c 'cd "$1" && env -u GH_BIN -u ORCA_BIN -u AGENT_HARNESS_TEST -u AGENT_STATE_DIR -u CLAUDE_PROJECT_DIR PATH="$2:$3:$PATH" bash "$4/ship-merge.sh" 5 --confirmed' _ "$LM" "$TMP/dbin" "$TMP/lsleep" "$H" >"$FX/out" 2>&1
+check "ship-merge with .envrc and direnv: gh runs via direnv exec <root>" grep -Eq "^exec ($LM|$LMP) /[^ ]*gh pr view" "$FX/direnv.log"
+rm -f "$LM/.envrc" "$FX/direnv.log"
+lw_td git; ship_merge_green
+bash -c 'cd "$1" && env -u GH_BIN -u ORCA_BIN -u AGENT_HARNESS_TEST -u AGENT_STATE_DIR -u CLAUDE_PROJECT_DIR PATH="$2:$3:$PATH" bash "$4/ship-merge.sh" 5 --confirmed' _ "$LM" "$TMP/dbin" "$TMP/lsleep" "$H" >"$FX/out" 2>&1
+check "ship-merge without .envrc: direnv is not used" test ! -e "$FX/direnv.log"
+
+# 0.4.12: the environment comes from direnv, the gh binary stays the pinned one
+mkdir -p "$TMP/ebin" "$FX/evil"
+cat >"$TMP/ebin/direnv" <<'STUB'
+#!/usr/bin/env bash
+[ "$1" = exec ] || exit 0
+shift 2
+PATH="$FX/evil:$PATH" exec "$@"
+STUB
+printf '#!/bin/sh\necho evil >>"%s/evil.log"\nexit 1\n' "$FX" >"$FX/evil/gh"
+chmod +x "$TMP/ebin/direnv" "$FX/evil/gh"
+cp "$TMP/dbin/gh" "$TMP/ebin/gh"
+for gate in "${STOP_COPIES[@]}"; do
+  gl="${gate#"$HERE"/}"
+  lw_td git; touch "$LM/.claude/state/autonomy.on" "$LM/.envrc"; rm -f "$FX/evil.log" "$FX/gh.log"
+  ( cd "$LM" && echo '{}' | env -u AGENT_STATE_DIR -u GH_BIN CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/ebin:$TMP/lsleep:$TMP/lbin:$PATH" bash "$gate" ) >/dev/null 2>&1
+  check "stop-gate ($gl): a gh put first on PATH by .envrc is not run" test ! -e "$FX/evil.log"
+  check "stop-gate ($gl): the pinned gh still ran" grep -q '^pr view 5' "$FX/gh.log"
+  rm -f "$LM/.envrc"
+done
+lw_td git; ship_merge_green; touch "$LM/.envrc"; rm -f "$FX/evil.log" "$FX/gh.log"
+bash -c 'cd "$1" && env -u GH_BIN -u ORCA_BIN -u AGENT_HARNESS_TEST -u AGENT_STATE_DIR -u CLAUDE_PROJECT_DIR PATH="$2:$3:$PATH" bash "$4/ship-merge.sh" 5 --confirmed' _ "$LM" "$TMP/ebin" "$TMP/lsleep" "$H" >"$FX/out" 2>&1
+check "ship-merge: a gh put first on PATH by .envrc is not run" test ! -e "$FX/evil.log"
+check "ship-merge: the pinned gh still ran" grep -q '^pr merge 5' "$FX/gh.log"
+rm -f "$LM/.envrc"
+
+# 0.4.12: a gh that is not an absolute path never goes through direnv
+printf '#!/bin/sh\nexec "%s" "$@"\n' "$TMP/gh" >"$TMP/dbin/ghrel"; chmod +x "$TMP/dbin/ghrel"
+lw_td git; ship_merge_green; touch "$LM/.envrc"; rm -f "$FX/direnv.log" "$FX/gh.log"
+bash -c 'cd "$1" && env -u ORCA_BIN -u AGENT_STATE_DIR -u CLAUDE_PROJECT_DIR AGENT_HARNESS_TEST=1 GH_BIN=ghrel PATH="$2:$3:$PATH" bash "$4/ship-merge.sh" 5 --confirmed' _ "$LM" "$TMP/dbin" "$TMP/lsleep" "$H" >"$FX/out" 2>&1
+check "ship-merge: a relative gh runs plain, without direnv" test ! -e "$FX/direnv.log"
+check "ship-merge: the relative gh still ran" grep -q '^pr merge 5' "$FX/gh.log"
+rm -f "$LM/.envrc"
+
+# 0.4.12: an unreadable PR state notifies once and says so on stderr
+for gate in "${STOP_COPIES[@]}"; do
+  gl="${gate#"$HERE"/}"
+  lw_td git; touch "$LM/.claude/state/autonomy.on"; rm -f "$FX/orca.log"
+  ( cd "$LM" && echo '{}' | env -u AGENT_STATE_DIR -u GH_BIN ORCA_WORKTREE_ID='repo::/p' CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/ghfail:$TMP/lsleep:$TMP/lbin:$PATH" bash "$gate" ) >/dev/null 2>"$FX/err"
+  check "stop-gate ($gl) unreadable PR: one waiting notification" test "$(grep -c 'waiting: PR state unreadable' "$FX/orca.log" 2>/dev/null)" = 1
+  check "stop-gate ($gl) unreadable PR: says so on stderr" grep -qx 'ship-stop-gate: PR state unreadable; allowing stop' "$FX/err"
+done
+
+# 0.4.12: a merged PR does not excuse an unsafe worktree on an escalated goal
+lw_td git; lw_set_reg '.status = "escalated"'; echo x >>"$T/b"
+lw_td_run 5; rc=$?
+check "teardown escalated + MERGED + dirty tree: exits 1, worktree kept" test "$rc|$(test -d "$T" && echo kept)" = "1|kept"
+lw_td git; lw_set_reg '.status = "escalated"'; ( cd "$T" && echo y >y && git add y && git commit -qm Y ) >/dev/null 2>&1
+lw_td_run 5; rc=$?
+check "teardown escalated + MERGED + extra local commit: exits 1, worktree kept" test "$rc|$(test -d "$T" && echo kept)" = "1|kept"
 
 check "verify-this picks up the generated override and runs its commands" \
   node --test "$HERE/scripts/agent-harness/test/verify-override.test.mjs"

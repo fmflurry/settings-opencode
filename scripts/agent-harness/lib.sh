@@ -34,6 +34,14 @@ if [ "$HARNESS_INSTALLED" = 0 ] && [ "${AGENT_HARNESS_TEST:-}" = 1 ]; then
   ORCA="${ORCA_BIN:-$ORCA}"
 fi
 GOAL_FILE="$STATE_DIR/goal.json"
+# The repo's .envrc selects the gh account; a plain gh would use the personal token. Only its environment is used:
+# the binary stays the pinned $GH, so an agent-written .envrc cannot swap it.
+gh_cmd() {
+  case "$GH" in
+    /*) if [ -f "$ROOT/.envrc" ] && command -v direnv >/dev/null 2>&1; then direnv exec "$ROOT" "$GH" "$@"; else "$GH" "$@"; fi ;;
+    *) "$GH" "$@" ;;
+  esac
+}
 CONFIG_FILE="$ROOT/.claude/agent-harness.json"
 # shellcheck disable=SC2034
 NOTIFY="$HARNESS_DIR/notify.sh"
@@ -141,7 +149,7 @@ cfg_get() { [ -f "$CONFIG_FILE" ] || return 0; jq -r "$1" "$CONFIG_FILE" 2>/dev/
 base_branch() {
   local b
   b="$(cfg_get '.base // empty')"
-  [ -n "$b" ] || b="$("$GH" repo view --json defaultBranchRef -q .defaultBranchRef.name)" || return 1
+  [ -n "$b" ] || b="$(gh_cmd repo view --json defaultBranchRef -q .defaultBranchRef.name)" || return 1
   [ -n "$b" ] || return 1
   echo "$b"
 }
@@ -154,9 +162,9 @@ protected_regex() {
 # Returns 2 when GitHub cannot be queried.
 pr_problems() {
   local pr="$1" head="$2" base="$3" repo runs statuses threads bad review behind name rs who
-  repo="$("$GH" repo view --json nameWithOwner -q .nameWithOwner)" || return 2
+  repo="$(gh_cmd repo view --json nameWithOwner -q .nameWithOwner)" || return 2
 
-  runs="$("$GH" api "repos/$repo/commits/$head/check-runs" --paginate --jq '.check_runs[]' | jq -s .)" || return 2
+  runs="$(gh_cmd api "repos/$repo/commits/$head/check-runs" --paginate --jq '.check_runs[]' | jq -s .)" || return 2
   bad="$(jq -r '[.[] | select(.status != "completed" or (.conclusion | IN("success", "skipped", "neutral") | not)) | .name]
     | unique | join(", ")' <<<"$runs")"
   [ -z "$bad" ] || echo "checks failing or pending: $bad"
@@ -169,14 +177,14 @@ pr_problems() {
   rs="$(cfg_get '.reviewStatus // empty')"
   if [ -n "$rs" ]; then
     who="$(cfg_get '.reviewStatusCreator // empty')"
-    statuses="$("$GH" api "repos/$repo/commits/$head/statuses" --paginate --jq '.[]' | jq -s .)" || return 2
+    statuses="$(gh_cmd api "repos/$repo/commits/$head/statuses" --paginate --jq '.[]' | jq -s .)" || return 2
     review="$(jq -r --arg c "$rs" --arg who "$who" '[.[] | select(.context == $c)] | sort_by(.id) | last
       | if . == null then "missing" elif ($who != "" and .creator.login != $who) then "posted by \(.creator.login)"
         elif .state != "success" then "state \(.state)" else "ok" end' <<<"$statuses")"
     [ "$review" = ok ] || echo "$rs status not green for head ${head:0:8}: $review"
   fi
 
-  threads="$("$GH" api graphql -F owner="${repo%%/*}" -F name="${repo##*/}" -F pr="$pr" -f query='
+  threads="$(gh_cmd api graphql -F owner="${repo%%/*}" -F name="${repo##*/}" -F pr="$pr" -f query='
 query($owner:String!,$name:String!,$pr:Int!){repository(owner:$owner,name:$name){pullRequest(number:$pr){reviewThreads(first:100){pageInfo{hasNextPage}nodes{isResolved}}}}}')" || return 2
   if [ "$(jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage' <<<"$threads")" = true ]; then
     echo "more than 100 review threads: resolve some, then retry"
@@ -185,7 +193,7 @@ query($owner:String!,$name:String!,$pr:Int!){repository(owner:$owner,name:$name)
     [ "$bad" = 0 ] || echo "unresolved review threads: $bad"
   fi
 
-  behind="$("$GH" api "repos/$repo/compare/$base...$head" --jq .behind_by)" || return 2
+  behind="$(gh_cmd api "repos/$repo/compare/$base...$head" --jq .behind_by)" || return 2
   [[ "$behind" =~ ^[0-9]+$ ]] || return 2
   [ "$behind" = 0 ] || echo "head is behind $base by $behind commits; rebase first"
   return 0

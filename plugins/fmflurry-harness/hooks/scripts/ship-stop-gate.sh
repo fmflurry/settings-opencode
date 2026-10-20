@@ -11,6 +11,16 @@ HARNESS_HOME="${CURSOR_PLUGIN_ROOT:-/nonexistent}/scripts/agent-harness"
 GOAL_FILE="$STATE_DIR/goal.json"
 GH=gh
 [ "${AGENT_HARNESS_TEST:-}" = 1 ] && GH="${GH_BIN:-gh}"
+# Hooks must not source lib.sh, so this repeats its gh_cmd: .envrc selects the gh account, not the personal token.
+# Only its environment is used; the gh binary is pinned before direnv can change PATH.
+gh_cmd() {
+  local bin
+  bin="$(type -P "$GH" 2>/dev/null)" || bin="$GH"
+  case "$bin" in
+    /*) if [ -f "$ROOT/.envrc" ] && command -v direnv >/dev/null 2>&1; then direnv exec "$ROOT" "$bin" "$@"; else "$bin" "$@"; fi ;;
+    *) "$bin" "$@" ;;
+  esac
+}
 MAX_BLOCKS=5
 MAX_TOTAL_BLOCKS=30
 
@@ -50,9 +60,14 @@ escalate() {
 pr="$(goal_get '.pr // empty')"
 view="" head="" state=""
 if [ -n "$pr" ]; then
-  view="$("$GH" pr view "$pr" --json state,headRefOid 2>/dev/null)" || view=""
+  view="$(gh_cmd pr view "$pr" --json state,headRefOid 2>/dev/null)" || view=""
   state="$(jq -r '.state // empty' <<<"$view" 2>/dev/null)"
   head="$(jq -r '.headRefOid // empty' <<<"$view" 2>/dev/null)"
+  if [ -z "$state" ]; then
+    echo "ship-stop-gate: PR state unreadable; allowing stop" >&2
+    notify waiting "PR state unreadable" "$pr" || true
+    exit 0
+  fi
 fi
 if [ "$state" = MERGED ]; then
   goal_update '.status = "done"'
@@ -69,21 +84,18 @@ fi
 
 if [ -z "$pr" ]; then
   reason="no PR yet: push the branch, open a PR to the base branch and record it with goal.sh pr <n>"
-elif [ -n "$state" ]; then
-  reason="PR #$pr is not merged: wait for checks to pass, then run agent-harness ship-merge $pr"
 else
-  reason=""
+  reason="PR #$pr is not merged: wait for checks to pass, then run agent-harness ship-merge $pr"
 fi
 
 if [ "$(goal_get '.total_blocks')" -ge "$MAX_TOTAL_BLOCKS" ]; then
-  escalate "total stop blocks reached $MAX_TOTAL_BLOCKS: ${reason:-PR state unavailable}"
+  escalate "total stop blocks reached $MAX_TOTAL_BLOCKS: $reason"
   exit 0
 fi
 if [ "$(goal_get '.stop_blocks')" -ge "$MAX_BLOCKS" ]; then
-  escalate "no progress after $MAX_BLOCKS stop blocks: ${reason:-PR state unavailable}"
+  escalate "no progress after $MAX_BLOCKS stop blocks: $reason"
   exit 0
 fi
-[ -n "$reason" ] || exit 0
 
 jq -n --arg r "Goal not done. $reason" '{decision:"block",reason:$r}'
 exit 0

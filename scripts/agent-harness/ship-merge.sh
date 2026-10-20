@@ -25,8 +25,8 @@ refuse() { echo "ship-merge refused: $1" >&2; exit 1; }
 resolve_merge_method() {
   local want="$1" repo flags s r c allowed=() m
   case "$want" in "" | squash | rebase | merge) ;; *) refuse "unknown merge method '$want'; use squash, rebase or merge" ;; esac
-  repo="$("$GH" repo view --json nameWithOwner -q .nameWithOwner)" || refuse "cannot read repository for merge settings"
-  flags="$("$GH" api "repos/$repo" --jq '"\(.allow_squash_merge) \(.allow_rebase_merge) \(.allow_merge_commit)"')" || refuse "cannot read merge settings of $repo"
+  repo="$(gh_cmd repo view --json nameWithOwner -q .nameWithOwner)" || refuse "cannot read repository for merge settings"
+  flags="$(gh_cmd api "repos/$repo" --jq '"\(.allow_squash_merge) \(.allow_rebase_merge) \(.allow_merge_commit)"')" || refuse "cannot read merge settings of $repo"
   read -r s r c <<<"$flags"
   [ "$s" != true ] || allowed+=(squash)
   [ "$r" != true ] || allowed+=(rebase)
@@ -41,7 +41,7 @@ if ! autonomy_on && [ "$confirmed" != "--confirmed" ]; then
   refuse "autonomy is off and --confirmed was not given"
 fi
 
-view="$("$GH" pr view "$pr" --json state,baseRefName,isDraft,headRefOid,headRefName,isCrossRepository,files)" || refuse "cannot read PR #$pr"
+view="$(gh_cmd pr view "$pr" --json state,baseRefName,isDraft,headRefOid,headRefName,isCrossRepository,files)" || refuse "cannot read PR #$pr"
 base="$(base_branch)" || refuse "cannot resolve the base branch"
 head="$(jq -r .headRefOid <<<"$view")"
 branch="$(jq -r .headRefName <<<"$view")"
@@ -62,13 +62,14 @@ problems="$(pr_problems "$pr" "$head" "$base")" || refuse "cannot query GitHub f
 
 merge_rc=0
 method="$(resolve_merge_method "${method:-$(cfg_get '.mergeMethod // empty')}")" || exit 1
-"$GH" pr merge "$pr" --"$method" --match-head-commit "$head" || merge_rc=$?
-state="$("$GH" pr view "$pr" --json state | jq -r .state)" || state=unknown
+gh_cmd pr merge "$pr" --"$method" --match-head-commit "$head" || merge_rc=$?
+state="$(gh_cmd pr view "$pr" --json state | jq -r .state)" || state=unknown
 [ "$state" = MERGED ] || refuse "merge failed (exit $merge_rc); PR state is $state"
 
 goal_update '.status = "done"'
 bash -p "$NOTIFY" "done" "PR #$pr merged" "$pr"
-if reg_find_by_pr "$pr" >/dev/null 2>&1; then
+if slug="$(reg_find_by_pr "$pr" 2>/dev/null)"; then
+  reg_update "$slug" '.status = "merged"' || true
   bash -p "$HARNESS_DIR/teardown-merged-worktree.sh" "$pr" ${keep:+--keep-branch} || echo "teardown incomplete; rerun: agent-harness teardown-merged-worktree $pr" >&2
 else
   bash -p "$HARNESS_DIR/cleanup.sh" "$pr" ${keep:+--keep-branch} || echo "cleanup incomplete; rerun: agent-harness cleanup $pr" >&2

@@ -29,11 +29,13 @@ slug="$(reg_find_by_pr "$pr")" || { echo "teardown: no registered worktree for P
 status="$(reg_get "$slug" '.status // empty')"
 recorded="$(reg_get "$slug" '.path // empty')"
 rbranch="$(reg_get "$slug" '.branch // empty')"
-case "$status" in escalated | blocked) stop "goal $slug is $status; a human must review it" ;; esac
 [ -n "$recorded" ] || stop "registry entry $slug has no path"
 
-view="$("$GH" pr view "$pr" --json state,headRefOid,headRefName)" || stop "cannot read PR #$pr"
-[ "$(jq -r .state <<<"$view")" = MERGED ] || stop "PR #$pr is not MERGED"
+view="$(gh_cmd pr view "$pr" --json state,headRefOid,headRefName)" || stop "cannot read PR #$pr"
+if [ "$(jq -r .state <<<"$view")" != MERGED ]; then
+  case "$status" in escalated | blocked) stop "goal $slug is $status; a human must review it" ;; esac
+  stop "PR #$pr is not MERGED"
+fi
 oid="$(jq -r '.headRefOid // empty' <<<"$view")"
 pbranch="$(jq -r '.headRefName // empty' <<<"$view")"
 { [ -n "$oid" ] && [ -n "$pbranch" ]; } || stop "PR #$pr head unknown"

@@ -16,8 +16,10 @@ case "$cmd" in
     goal="${1:?goal text}"
     [ $# -eq 0 ] || shift
     keep_branch="" keep_slug="" keep_pr=null
-    if [ -f "$GOAL_FILE" ] && [ "$(goal_get '.status // empty')" = active ] && [ -n "$(goal_get '.slug // empty')" ]; then
-      keep_branch="$(goal_get '.branch // empty')" keep_slug="$(goal_get '.slug')" keep_pr="$(goal_get '.pr // null')"
+    # Only ship-init may bind goal.json to a branch: the cwd's HEAD here is often the main checkout's.
+    if [ -f "$GOAL_FILE" ] && [ -n "$(goal_get '.slug // empty')" ]; then
+      keep_branch="$(goal_get '.branch // empty')" keep_slug="$(goal_get '.slug')"
+      [ "$(goal_get '.status // empty')" = done ] || keep_pr="$(goal_get '.pr // null')"
     fi
     branch="${keep_branch:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")}"
     jq -n --arg goal "$goal" --arg branch "$branch" --arg slug "${keep_slug:-$(reg_slug "$branch")}" --argjson pr "$keep_pr" \

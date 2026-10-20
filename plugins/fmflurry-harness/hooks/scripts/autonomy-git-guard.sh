@@ -70,7 +70,7 @@ if [ -n "$base_cfg" ]; then BASE_A="$base_cfg"; BASE_B="$base_cfg"; else BASE_A=
 ALIAS_RE=$'(^|\n)[Aa][Ll][Ii][Aa][Ss]\\.'
 is_base() { [ "$1" = "$BASE_A" ] || [ "$1" = "$BASE_B" ]; }
 
-DEFAULT_ALTS='\.github/|\.claude/|\.opencode/|tools/agent-harness/|tools/ci/|opencode\.jsonc$|AGENTS\.md$|CLAUDE\.md$'
+DEFAULT_ALTS='\.github/|\.claude/|\.opencode/|tools/agent-harness/|tools/ci/|opencode\.jsonc$|AGENTS\.md$|CLAUDE\.md$|\.envrc$'
 alts="$(cfg '(.protectedPaths // []) | map(ltrimstr("^")) | join("|")')"
 alts="${alts:-$DEFAULT_ALTS}"
 ALTS_DEFAULT=0
@@ -1063,7 +1063,7 @@ function maybe_prot(t) {
   if (win) t = tolower(t)
   return index(t, ".github/") || index(t, ".claude/") || index(t, ".opencode/") || index(t, "tools/agent-harness/") \
     || index(t, "tools/ci/") || index(tolower(t), "goal.json") || index(tolower(t), "autonomy.on") || index(t, "opencode.jsonc") || index(t, "agents.md") || index(t, "claude.md") \
-    || index(t, "AGENTS.md") || index(t, "CLAUDE.md")
+    || index(t, "AGENTS.md") || index(t, "CLAUDE.md") || index(t, ".envrc")
 }
 function segkeep(s,   t, k, b, i, a, n, ps) {
   sub(/^[ \t\r\f\v({]+/, "", s)
@@ -1188,7 +1188,7 @@ function joinrec(rec, more,   L, n, p, ch, m, lim, i, c, del) {
 BEGIN {
   n = split("if then elif else do while until ! { ( builtin eval env sudo command exec nice nohup xargs timeout time bash sh zsh dash export cd pushd rm gh", ps, " ")
   for (i = 1; i <= n; i++) SK[ps[i]] = 1
-  n = split("if then elif else do while until ! { ( builtin eval env sudo command exec nice nohup xargs timeout time bash sh zsh dash agent-harness agent-harness.sh worktree-rm.sh teardown-merged-worktree.sh ship-init.sh ship-merge.sh cleanup.sh orca rm mv trash rsync find cd pushd gh tee cp ln install truncate touch sed dd sponge", ps, " ")
+  n = split("if then elif else do while until ! { ( builtin eval env sudo command exec nice nohup xargs timeout time bash sh zsh dash agent-harness agent-harness.sh worktree-rm.sh teardown-merged-worktree.sh ship-init.sh ship-merge.sh cleanup.sh orca rm mv trash rsync find cd pushd gh direnv tee cp ln install truncate touch sed dd sponge", ps, " ")
   for (i = 1; i <= n; i++) LK[ps[i]] = 1
   n = split("push reset branch update-ref send-pack commit checkout restore config worktree remote", ps, " ")
   for (i = 1; i <= n; i++) GD[ps[i]] = 1
@@ -1627,6 +1627,10 @@ while [ "$LI" -lt "$nlines" ]; do
       [ "$AUTO" = 1 ] && [ "${GIT_ENV_U:-0}" = 1 ] && deny_unparsed
       check_git "${ct[@]}" ;;
     gh) check_gh "${ct[@]}" ;;
+    direnv)
+      for a in "${ct[@]:1}"; do
+        case "$a" in allow | permit | grant | edit) deny_review "direnv allow and edit approve .envrc, which then runs code inside the harness: a human must approve it." ;; esac
+      done ;;
     tee | sponge | mv | cp | rm | ln | install | truncate | touch | rsync) any_protected "${ct[@]:1}" && deny ;;
     sed)
       for a in "${ct[@]:1}"; do

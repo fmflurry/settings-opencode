@@ -1676,6 +1676,16 @@ check "worktree-rm: null activity exits 1" test $rc -eq 1
 check "worktree-rm: null activity prints activity unknown" grep -q 'activity unknown' <<<"$out"
 check "worktree-rm: null activity keeps target" test -d "$WT"
 
+orca_dup() { jq -n --arg p "$WT" --argjson a "$1" --argjson b "$2" '{ok:true,result:{worktrees:[{path:$p,lastActivityAt:$a},{path:$p,nested:{path:$p,lastActivityAt:$b}}]}}' >"$FX/orca_wt.json"; }
+wtfx; orca_dup $(( $(now_ms) - 7200000 )) null; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: duplicate path old+null is idle and proceeds" test "$rc|$(test -e "$WT" && echo kept || echo gone)" = "0|gone"
+wtfx; orca_dup null null; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: duplicate path null+null stops activity unknown" test "$rc|$(grep -c 'activity unknown' <<<"$out")" = "1|1"
+wtfx; orca_dup "$(now_ms)" null; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: duplicate path recent+null stops active" test "$rc|$(grep -c 'active within' <<<"$out")" = "1|1"
+wtfx; orca_dup "$(now_ms)" $(( $(now_ms) - 7200000 )); out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: duplicate path recent+old stops active (max wins)" test "$rc|$(grep -c 'active within' <<<"$out")" = "1|1"
+
 wtfx; orca_activity $(( $(now_ms) - 1800000 )); echo '{"base":"master","worktreeIdleMinutes":"abc"}' >"$CFG"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
 check "worktree-rm: non-numeric idle config falls back to 60" grep -q 'active within 60 min' <<<"$out"
 check "worktree-rm: non-numeric idle config exits 1" test $rc -eq 1

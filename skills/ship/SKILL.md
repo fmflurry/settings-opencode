@@ -32,7 +32,7 @@ The main checkout is never used for goal work.
    Do this on the success path and on the blocked path.
 4. **Merged.** `agent-harness ship-merge <pr>` merges, then runs `agent-harness teardown-merged-worktree <pr>` for a
    registered goal.
-5. **Blocked or escalated.** Never tear down. Keep the worktree, the branch and the registry.
+5. **Blocked or escalated.** Never tear down unless the PR is merged. Keep the worktree, the branch and the registry.
 
 Rules for the orchestrator:
 
@@ -66,6 +66,7 @@ Read `.claude/agent-harness.json` in the target repo before stage 1. All keys ar
 `base`, `requiredChecks`, `reviewStatus`, `reviewStatusCreator`, `verify`, `protectedPaths`, `mergeMethod`,
 `worktreeIdleMinutes`.
 Defaults are in the "Autonomous mode" section of this repo's README.
+When the repo has an `.envrc` and `direnv` is installed, harness `gh` calls take their environment from it (the `gh` binary stays pinned). An approved `.envrc` and the files it sources (`.envrc.local`, `.env`) are trusted: autonomy denies writes to `.envrc` and `direnv allow|permit|grant|edit`.
 
 ## Modes
 
@@ -198,7 +199,7 @@ active and the PR is unmerged. Do not end the turn to wait for a fix you can mak
 
 ### Blocked path
 
-Never tear down a blocked or escalated goal. In this order:
+Never tear down a blocked or escalated goal unless its PR is merged. In this order:
 
 1. Keep the worktree, the branch and the registry (`status` escalated, with the reason).
 2. Generate and render the report (stage 11), and commit it to the PR, so the reviewer can see the state.

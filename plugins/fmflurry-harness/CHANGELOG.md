@@ -2,6 +2,10 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.11] - 2026-10-20
+
+- Removed the `compress` skill (`/caveman:compress`). Its bundled scripts were flagged for reading credentials (#40), and nothing else in the harness used it.
+
 ## [0.4.10] - 2026-10-19
 
 - Review gate before push. While autonomy is on and the goal is active, the git guard denies `git push` and `gh pr create` unless `agent-harness goal review code pass` and `agent-harness goal review security pass` are both recorded for the exact diff being pushed (a hash of the diff against `origin/<base>`, ignoring `docs/agent-reports/`). Pushes to `backup/*` are allowed, `gh pr create --head` and `-H` are denied, and the guard fails closed when it cannot compute the key or cannot read `goal.json`. The key is a hash of the byte-exact diff (`--binary --full-index`, no external diff or textconv, diff config overridden), so whitespace-only and binary changes need a new review. A push with no explicit refspec is denied while `remote.<name>.push` is set or `push.default` is `matching`. `gh pr new` is gated like `gh pr create`. Writes to `goal.json` and `autonomy.on` by relative path from `.claude/state`, or through `sponge`, are denied.

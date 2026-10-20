@@ -2,6 +2,10 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.13] - 2026-10-20
+
+- Worktree activity check uses the most recent Orca timestamp per path; Orca lists each worktree twice and the null entry made every teardown stop.
+
 ## [0.4.12] - 2026-10-20
 
 - Teardown after merge. `ship-merge` now records `merged` in the goal registry as well as `goal.json`, and `teardown-merged-worktree` no longer stops on an `escalated` or `blocked` registry status when the PR is MERGED (every other check still applies; an unmerged escalated or blocked goal is still never torn down).

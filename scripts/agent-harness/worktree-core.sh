@@ -58,15 +58,16 @@ wt_remove() {
   fi
   if command -v "$ORCA" >/dev/null 2>&1 && { [ "$MODE" != teardown ] || orca_managed; } && olist="$($olist_cmd 2>/dev/null)"; then
     command -v jq >/dev/null 2>&1 || stop activity "activity unknown (jq missing)"
-    last=""
+    last="" unk=""
     while IFS=$'\t' read -r q ts; do
       [ -n "$q" ] && [ "$(norm "$q")" = "$T" ] || continue
       use_orca=1
-      [[ "$ts" =~ ^[0-9]+$ ]] || stop activity "activity unknown (lastActivityAt: $ts)"
+      [[ "$ts" =~ ^[0-9]+$ ]] || { unk="$ts"; continue; }
       if [ -z "$last" ] || [ "$ts" -gt "$last" ]; then last="$ts"; fi
-    done < <(jq -r '.. | objects | select(has("path")) | [(.path | tostring), (.lastActivityAt | tostring)] | @tsv' <<<"$olist" 2>/dev/null || true)
+    done < <(jq -r '[.. | objects | select(has("path")) | {p: (.path | tostring), t: .lastActivityAt}] | group_by(.p)[] | [.[0].p, (([.[].t | numbers] | max) // "null" | tostring)] | @tsv' <<<"$olist" 2>/dev/null || true)
   fi
   if [ "$use_orca" = 1 ]; then
+    [ -n "$last" ] || stop activity "activity unknown (lastActivityAt: $unk)"
     idle_min="$(cfg_get '.worktreeIdleMinutes // empty')"
     if [[ "$idle_min" =~ ^[0-9]+$ ]] && [ "$((10#$idle_min))" -ge 15 ]; then idle_min=$((10#$idle_min)); else idle_min=60; fi
     now_ms=$(( $(date +%s) * 1000 ))

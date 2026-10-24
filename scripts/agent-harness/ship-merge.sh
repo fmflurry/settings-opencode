@@ -25,7 +25,7 @@ refuse() { echo "ship-merge refused: $1" >&2; exit 1; }
 resolve_merge_method() {
   local want="$1" repo flags s r c allowed=() m
   case "$want" in "" | squash | rebase | merge) ;; *) refuse "unknown merge method '$want'; use squash, rebase or merge" ;; esac
-  repo="$(gh_cmd repo view --json nameWithOwner -q .nameWithOwner)" || refuse "cannot read repository for merge settings"
+  repo="$(gh_repo_name)" || refuse "cannot read repository for merge settings"
   flags="$(gh_cmd api "repos/$repo" --jq '"\(.allow_squash_merge) \(.allow_rebase_merge) \(.allow_merge_commit)"')" || refuse "cannot read merge settings of $repo"
   read -r s r c <<<"$flags"
   [ "$s" != true ] || allowed+=(squash)
@@ -41,7 +41,7 @@ if ! autonomy_on && [ "$confirmed" != "--confirmed" ]; then
   refuse "autonomy is off and --confirmed was not given"
 fi
 
-view="$(gh_cmd pr view "$pr" --json state,baseRefName,isDraft,headRefOid,headRefName,isCrossRepository,files)" || refuse "cannot read PR #$pr"
+view="$(gh_pr_view "$pr" state,baseRefName,isDraft,headRefOid,headRefName,isCrossRepository,files)" || refuse "cannot read PR #$pr"
 base="$(base_branch)" || refuse "cannot resolve the base branch"
 head="$(jq -r .headRefOid <<<"$view")"
 branch="$(jq -r .headRefName <<<"$view")"
@@ -62,8 +62,8 @@ problems="$(pr_problems "$pr" "$head" "$base")" || refuse "cannot query GitHub f
 
 merge_rc=0
 method="$(resolve_merge_method "${method:-$(cfg_get '.mergeMethod // empty')}")" || exit 1
-gh_cmd pr merge "$pr" --"$method" --match-head-commit "$head" || merge_rc=$?
-state="$(gh_cmd pr view "$pr" --json state | jq -r .state)" || state=unknown
+gh_pr_merge "$pr" "$method" "$head" || merge_rc=$?
+state="$(gh_pr_view "$pr" state | jq -r .state)" || state=unknown
 [ "$state" = MERGED ] || refuse "merge failed (exit $merge_rc); PR state is $state"
 
 goal_update '.status = "done"'

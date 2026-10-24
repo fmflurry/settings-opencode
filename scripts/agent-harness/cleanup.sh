@@ -23,7 +23,7 @@ say() { echo "cleanup: $*"; }
 CO="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 g() { git -C "$CO" "$@"; }
 
-view="$(gh_cmd pr view "$pr" --json state,headRefName,headRefOid,isCrossRepository)" || refuse "cannot read PR #$pr"
+view="$(gh_pr_view "$pr" state,headRefName,headRefOid,isCrossRepository)" || refuse "cannot read PR #$pr"
 base="$(base_branch)" || refuse "cannot resolve the base branch"
 branch="$(jq -r .headRefName <<<"$view")"
 oid="$(jq -r .headRefOid <<<"$view")"
@@ -39,15 +39,15 @@ fi
 errf="$(mktemp)"
 trap 'rm -f "$errf"' EXIT
 if [ -z "$keep" ] && [ "$cross" = false ]; then
-  repo="$(gh_cmd repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)" || repo=""
+  repo="$(gh_repo_name 2>/dev/null)" || repo=""
   if [ -z "$repo" ]; then
     say "remote $branch skipped (repo unknown)"
   elif ! info="$(gh_cmd api "repos/$repo/branches/$branch" 2>"$errf")"; then
     if grep -q 'HTTP 404' "$errf"; then say "remote $branch absent"; else say "remote $branch unknown (gh error)"; fi
   elif [ "$(jq -r '.protected // false' <<<"$info")" = true ]; then
     say "remote $branch kept (protected)"
-  elif ! by_base="$(gh_cmd pr list --state open --base "$branch" --json number --jq '.[].number' 2>/dev/null)" ||
-    ! by_head="$(gh_cmd pr list --state open --head "$branch" --json number --jq '.[].number' 2>/dev/null)"; then
+  elif ! by_base="$(gh_pr_list_open --base "$branch" 2>/dev/null)" ||
+    ! by_head="$(gh_pr_list_open --head "$branch" 2>/dev/null)"; then
     say "remote $branch kept (cannot list open PRs)"
   elif [ -n "$by_base" ] || [ -n "$by_head" ]; then
     say "remote $branch kept (open PR uses it)"

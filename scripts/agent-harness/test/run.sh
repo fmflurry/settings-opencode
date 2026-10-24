@@ -36,7 +36,9 @@ case "$*" in
     jq -n --arg b "$(cat "$FX/default_branch" 2>/dev/null || echo master)" '{full_name:"o/r",default_branch:$b,allow_squash_merge:true,allow_rebase_merge:true,allow_merge_commit:true}' | jq -r "$(jq_arg "$@")" ;;
   "api repos/o/r/pulls/"*"/files?per_page=100 "*)
     rest_gate
-    jq -c '(.files // []) | map({filename:.path})' "$FX/view.json" | jq -c "$(jq_arg "$@")" ;;
+    if [ -e "$FX/files.3000" ]; then jq -nc '[range(3000)|{filename:"f\(.)"}]'
+    elif [ -e "$FX/files.2999" ]; then jq -nc '[range(2999)|{filename:"f\(.)"}]'
+    else jq -c '(.files // []) | map({filename:.path})' "$FX/view.json"; fi | jq -c "$(jq_arg "$@")" ;;
   "api repos/o/r/pulls/"*"/comments?per_page=100 "*)
     rest_gate
     { cat "$FX/comments.json" 2>/dev/null || echo '[]'; } | jq -c "$(jq_arg "$@")" ;;
@@ -98,7 +100,7 @@ H="$HERE/scripts/agent-harness"; HOOKS="$HERE/.claude/hooks"
 CFG="$TMP/proj/.claude/agent-harness.json"
 export FX GH_BIN="$TMP/gh" ORCA_BIN="$TMP/orca" AGENT_STATE_DIR="$TMP/state" CLAUDE_PROJECT_DIR="$TMP/proj" AGENT_HARNESS_DIR="$H" AGENT_HARNESS_TEST=1
 unset ORCA_WORKTREE_ID GITHUB_ACTIONS TLTB_STATE_DIR
-reset() { rm -f "$FX"/*.log "$FX"/merge.* "$FX"/merge_settings.txt "$FX"/open_prs.json "$FX"/branch.json "$FX"/branch.gone "$FX"/branch.err "$FX"/list.fail "$FX"/default_branch "$FX"/graphql.off "$FX"/graphql.502 "$FX"/rest.fail "$FX"/pull.patch "$FX"/pull2.patch "$FX"/pull.reads "$FX"/graphql.transport "$FX"/graphql.getrest "$FX"/pulls.malformed "$FX"/pulls.fail "$FX"/comments.json "$TMP/state"/* "$CFG"; }
+reset() { rm -f "$FX"/*.log "$FX"/merge.* "$FX"/merge_settings.txt "$FX"/open_prs.json "$FX"/branch.json "$FX"/branch.gone "$FX"/branch.err "$FX"/list.fail "$FX"/default_branch "$FX"/graphql.off "$FX"/graphql.502 "$FX"/rest.fail "$FX"/pull.patch "$FX"/pull2.patch "$FX"/pull.reads "$FX"/graphql.transport "$FX"/graphql.getrest "$FX"/pulls.malformed "$FX"/pulls.fail "$FX"/files.3000 "$FX"/files.2999 "$FX"/comments.json "$TMP/state"/* "$CFG"; }
 flag_on() { : >"$TMP/state/autonomy.on"; }
 cfg_ci() { echo '{"base":"master","requiredChecks":["gate","export"],"reviewStatus":"tltb-review","reviewStatusCreator":"github-actions[bot]"}' >"$CFG"; }
 
@@ -733,6 +735,10 @@ check "graphql down: protected path merges with --confirmed and autonomy off" te
 check "graphql down: protected path --confirmed merge goes through REST" grep -qxF "$(rest_put squash)" "$FX/gh.log"
 
 gfresh; echo '.changed_files = 3000' >"$FX/pull.patch"; grefuses "REST file list at the 3000 cap" 'incomplete' 5
+gfresh; : >"$FX/files.3000"; echo '.changed_files = 3000' >"$FX/pull.patch"; grefuses "REST file list of exactly 3000 entries matching changed_files" 'incomplete' 5
+gfresh; : >"$FX/files.2999"; echo '.changed_files = 2999' >"$FX/pull.patch"; merge 5; rc=$?
+check "graphql down: REST file list of 2999 entries matching changed_files merges" test $rc -eq 0
+check "graphql down: REST file list of 2999 entries is merged over REST" grep -qxF "$(rest_put squash)" "$FX/gh.log"
 gfresh; echo '.changed_files = 7' >"$FX/pull.patch"; grefuses "REST file list that disagrees with changed_files" 'incomplete' 5
 
 gfresh; mutate '.isDraft=true' view.json; grefuses "draft" 'is draft' 5

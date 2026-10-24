@@ -2,6 +2,13 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.14] - 2026-10-24
+
+- REST fallback when GitHub GraphQL is unavailable (the Claude Code cloud 403 `GitHub GraphQL is not available`, or a transport failure to the `/graphql` endpoint). Only that gh error switches `ship-merge`, `cleanup`, `teardown-merged-worktree`, `ship-init --adopt` and the review-thread check to `gh api repos/...`; any other gh failure refuses exactly as before. Every gate is unchanged, and the normal path sends gh the same arguments.
+- In the fallback the protected-path file list must be complete: REST lists at most 3000 files, so `ship-merge` refuses when the count is 3000 or more or differs from the list.
+- In the fallback the review-thread gate refuses when the PR has any review comment, because REST cannot tell which threads are resolved. Merge where GraphQL works instead.
+- Every REST read is validated and fails closed on a parse error. The stop-gate hook is unchanged.
+
 ## [0.4.13] - 2026-10-20
 
 - Worktree activity check uses the most recent Orca timestamp per path; Orca lists each worktree twice and the null entry made every teardown stop.

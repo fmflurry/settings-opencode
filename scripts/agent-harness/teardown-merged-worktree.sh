@@ -31,7 +31,7 @@ recorded="$(reg_get "$slug" '.path // empty')"
 rbranch="$(reg_get "$slug" '.branch // empty')"
 [ -n "$recorded" ] || stop "registry entry $slug has no path"
 
-view="$(gh_cmd pr view "$pr" --json state,headRefOid,headRefName)" || stop "cannot read PR #$pr"
+view="$(gh_pr_view "$pr" state,headRefOid,headRefName)" || stop "cannot read PR #$pr"
 if [ "$(jq -r .state <<<"$view")" != MERGED ]; then
   case "$status" in escalated | blocked) stop "goal $slug is $status; a human must review it" ;; esac
   stop "PR #$pr is not MERGED"

@@ -38,7 +38,7 @@ base="$(cfg_get '.base // empty')"
 
 pr=null
 if [ -n "$adopt" ]; then
-  view="$(gh_cmd pr view "$adopt" --json headRefName,isCrossRepository)" || die "cannot read PR #$adopt"
+  view="$(gh_pr_view "$adopt" headRefName,isCrossRepository)" || die "cannot read PR #$adopt"
   [ "$(jq -r '.isCrossRepository' <<<"$view")" = false ] || die "PR #$adopt comes from a fork"
   branch="$(jq -r '.headRefName // empty' <<<"$view")"
   { [ -n "$branch" ] && [ "$branch" != "$base" ]; } || die "PR #$adopt head branch is '${branch:-empty}'"

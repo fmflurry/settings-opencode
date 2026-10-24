@@ -16,7 +16,47 @@ check() { local name="$1"; shift; if "$@"; then ok; else bad "$name"; fi; }
 cat >"$TMP/gh" <<'STUB'
 #!/usr/bin/env bash
 echo "$*" >>"$FX/gh.log"
+jq_arg() { while [ $# -gt 0 ]; do case "$1" in -q | --jq) echo "$2"; return ;; esac; shift; done; }
+rest_gate() { [ -e "$FX/rest.fail" ] && { echo "HTTP 500: Internal Server Error" >&2; exit 1; }; return 0; }
+rest_pull() {
+  jq -c '{state:(if .state=="OPEN" then "open" else "closed" end),merged:(.state=="MERGED"),draft:.isDraft,base:{ref:.baseRefName,repo:{full_name:"o/r"}},head:{ref:.headRefName,sha:.headRefOid,repo:{full_name:(if .isCrossRepository then "fork/r" else "o/r" end)}},changed_files:((.files // [])|length),updated_at:"2026-10-24T00:00:00Z"}' "$FX/view.json" || exit 1
+}
 case "$*" in
+  "pr view"* | "pr list"* | "pr merge"* | "repo view"* | "api graphql"*)
+    [ -e "$FX/graphql.off" ] && {
+      case "$*" in "api graphql"*) echo '{"message":"GitHub GraphQL is not available from Claude Code sessions; use the REST API (gh api repos/{owner}/{repo}/...).","documentation_url":"https://docs.anthropic.com/en/docs/claude-code/github-actions"}' ;; esac
+      echo "HTTP 403: GitHub GraphQL is not available from Claude Code sessions; use the REST API (gh api repos/{owner}/{repo}/...). (https://api.github.com/graphql)" >&2; exit 1; }
+    [ -e "$FX/graphql.transport" ] && { echo 'Post "https://api.github.com/graphql": dial tcp: i/o timeout' >&2; exit 1; }
+    [ -e "$FX/graphql.getrest" ] && { echo 'Get "https://api.github.com/repos/o/r/pulls/5": dial tcp: i/o timeout' >&2; exit 1; }
+    [ -e "$FX/graphql.502" ] && { echo "HTTP 502: Bad Gateway (https://api.github.com/graphql)" >&2; exit 1; } ;;
+esac
+case "$*" in
+  "api repos/{owner}/{repo} --jq "*)
+    rest_gate
+    jq -n --arg b "$(cat "$FX/default_branch" 2>/dev/null || echo master)" '{full_name:"o/r",default_branch:$b,allow_squash_merge:true,allow_rebase_merge:true,allow_merge_commit:true}' | jq -r "$(jq_arg "$@")" ;;
+  "api repos/o/r/pulls/"*"/files?per_page=100 "*)
+    rest_gate
+    if [ -e "$FX/files.3000" ]; then jq -nc '[range(3000)|{filename:"f\(.)"}]'
+    elif [ -e "$FX/files.2999" ]; then jq -nc '[range(2999)|{filename:"f\(.)"}]'
+    else jq -c '(.files // []) | map({filename:.path})' "$FX/view.json"; fi | jq -c "$(jq_arg "$@")" ;;
+  "api repos/o/r/pulls/"*"/comments?per_page=100 "*)
+    rest_gate
+    { cat "$FX/comments.json" 2>/dev/null || echo '[]'; } | jq -c "$(jq_arg "$@")" ;;
+  "api repos/o/r/pulls?state=open&per_page=100 "*)
+    rest_gate
+    [ ! -e "$FX/pulls.fail" ] || { echo "HTTP 500: Internal Server Error" >&2; exit 1; }
+    if [ -e "$FX/pulls.malformed" ]; then echo '[{"number":"x","baseRefName":"other","headRefName":"other"}]'; else cat "$FX/open_prs.json" 2>/dev/null || echo '[]'; fi | jq -c 'map({number,base:{ref:.baseRefName},head:{ref:.headRefName}})' | jq -c "$(jq_arg "$@")" ;;
+  "api -X PUT repos/o/r/pulls/"*"/merge "*)
+    rest_gate
+    [ -e "$FX/merge.noop" ] || { jq '.state="MERGED"' "$FX/view.json" >"$FX/t" && mv "$FX/t" "$FX/view.json"; }
+    exit "$(cat "$FX/merge.rc" 2>/dev/null || echo 0)" ;;
+  "api repos/o/r/pulls/"*)
+    rest_gate
+    reads=$(( $(cat "$FX/pull.reads" 2>/dev/null || echo 0) + 1 )); echo "$reads" >"$FX/pull.reads"
+    body="$(rest_pull)" || exit 1
+    [ ! -e "$FX/pull.patch" ] || body="$(jq -c "$(cat "$FX/pull.patch")" <<<"$body")" || exit 1
+    { [ "$reads" -lt 2 ] || [ ! -e "$FX/pull2.patch" ]; } || body="$(jq -c "$(cat "$FX/pull2.patch")" <<<"$body")" || exit 1
+    echo "$body" ;;
   *defaultBranchRef*)
     b="$(cat "$FX/default_branch" 2>/dev/null || echo master)"
     case "$*" in
@@ -60,7 +100,7 @@ H="$HERE/scripts/agent-harness"; HOOKS="$HERE/.claude/hooks"
 CFG="$TMP/proj/.claude/agent-harness.json"
 export FX GH_BIN="$TMP/gh" ORCA_BIN="$TMP/orca" AGENT_STATE_DIR="$TMP/state" CLAUDE_PROJECT_DIR="$TMP/proj" AGENT_HARNESS_DIR="$H" AGENT_HARNESS_TEST=1
 unset ORCA_WORKTREE_ID GITHUB_ACTIONS TLTB_STATE_DIR
-reset() { rm -f "$FX"/*.log "$FX"/merge.* "$FX"/merge_settings.txt "$FX"/open_prs.json "$FX"/branch.json "$FX"/branch.gone "$FX"/branch.err "$FX"/list.fail "$FX"/default_branch "$TMP/state"/* "$CFG"; }
+reset() { rm -f "$FX"/*.log "$FX"/merge.* "$FX"/merge_settings.txt "$FX"/open_prs.json "$FX"/branch.json "$FX"/branch.gone "$FX"/branch.err "$FX"/list.fail "$FX"/default_branch "$FX"/graphql.off "$FX"/graphql.502 "$FX"/rest.fail "$FX"/pull.patch "$FX"/pull2.patch "$FX"/pull.reads "$FX"/graphql.transport "$FX"/graphql.getrest "$FX"/pulls.malformed "$FX"/pulls.fail "$FX"/files.3000 "$FX"/files.2999 "$FX"/comments.json "$TMP/state"/* "$CFG"; }
 flag_on() { : >"$TMP/state/autonomy.on"; }
 cfg_ci() { echo '{"base":"master","requiredChecks":["gate","export"],"reviewStatus":"tltb-review","reviewStatusCreator":"github-actions[bot]"}' >"$CFG"; }
 
@@ -636,6 +676,181 @@ check "goal backup-add rejects non-backup name" test $rc -eq 2
 goalw backup-add backup/missing; rc=$?
 check "goal backup-add rejects missing branch" test $rc -eq 2
 check "goal backup-add rejected names not recorded" test "$(jq -c '.backup_branches' "$TMP/state/goal.json")" = '["backup/feat-1"]'
+
+# ---- GraphQL unavailable: REST fallback (ship-merge, cleanup)
+gdown() { : >"$FX/graphql.off"; }
+gfresh() { fresh; gdown; }
+gnocfg() { nocfg; gdown; }
+g502() { fresh; : >"$FX/graphql.502"; }
+rest_pull_read() { grep -qxF "api repos/o/r/pulls/5" "$FX/gh.log"; }
+no_put() { ! grep -q 'api -X PUT' "$FX/gh.log" 2>/dev/null; }
+no_rest_placeholder() { ! grep -qF 'repos/{owner}/{repo}' "$FX/gh.log" 2>/dev/null; }
+no_rest_notice() { ! grep -q 'using REST' "$FX/out" 2>/dev/null; }
+log_line() { grep -nxF -- "$1" "$FX/gh.log" | head -n1 | cut -d: -f1; }
+log_before() { local a b; a="$(log_line "$1")"; b="$(log_line "$2")"; [ -n "$a" ] && [ -n "$b" ] && [ "$a" -lt "$b" ]; }
+rest_put() { echo "api -X PUT repos/o/r/pulls/5/merge -f merge_method=$1 -f sha=$HEAD_SHA"; }
+grefuses() {
+  local name="$1" msg="$2"; shift 2
+  merge "$@"; local rc=$?
+  check "graphql down: refuses $name" test $rc -ne 0
+  check "graphql down: no merge call: $name" bash -c '! grep -Eq "pr merge|api -X PUT" "$1" 2>/dev/null' _ "$FX/gh.log"
+  check "graphql down: $name is decided from the REST PR" rest_pull_read
+  check "graphql down: $name reason" grep -q -- "$msg" "$FX/out"
+}
+
+gfresh; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5
+merge 5; rc=$?
+check "graphql down: ship-merge exits 0 when green" test $rc -eq 0
+check "graphql down: ship-merge tries pr merge first with the usual flags" grep -qxF "pr merge 5 --squash --match-head-commit $HEAD_SHA" "$FX/gh.log"
+check "graphql down: ship-merge falls back to a REST squash merge pinned to the head sha" grep -qxF "$(rest_put squash)" "$FX/gh.log"
+check "graphql down: ship-merge tries pr merge before the REST merge" log_before "pr merge 5 --squash --match-head-commit $HEAD_SHA" "$(rest_put squash)"
+check "graphql down: ship-merge announces the REST fallback" grep -q 'GitHub GraphQL unavailable; using REST' "$FX/out"
+check "graphql down: ship-merge marks goal done" test "$(jq -r .status "$TMP/state/goal.json")" = "done"
+check "graphql down: ship-merge cleanup deletes remote branch via API" grep -q 'api -X DELETE repos/o/r/git/refs/heads/feat' "$FX/gh.log"
+check "graphql down: ship-merge cleanup reports the remote deleted" grep -q '^cleanup: remote feat deleted' "$FX/out"
+check "graphql down: ship-merge never deletes via gh" bash -c '! grep -q -- "--delete-branch" "$1"' _ "$FX/gh.log"
+
+gfresh; merge 5 --method rebase; rc=$?
+check "graphql down: ship-merge --method rebase exits 0" test $rc -eq 0
+check "graphql down: ship-merge --method rebase passes merge_method=rebase" grep -qxF "$(rest_put rebase)" "$FX/gh.log"
+gfresh; echo "false true false" >"$FX/merge_settings.txt"; merge 5; rc=$?
+check "graphql down: auto method picks rebase when squash is disallowed" test $rc -eq 0
+check "graphql down: auto method passes merge_method=rebase" grep -qxF "$(rest_put rebase)" "$FX/gh.log"
+gfresh; echo "false true false" >"$FX/merge_settings.txt"; grefuses "method squash not allowed" 'allowed: rebase' 5 --method squash
+
+gnocfg; merge 5; rc=$?
+check "graphql down: no config: merges" test $rc -eq 0
+check "graphql down: no config: reads the default branch over REST" grep -qxF 'api repos/{owner}/{repo} --jq .default_branch' "$FX/gh.log"
+check "graphql down: no config: REST merge" grep -qxF "$(rest_put squash)" "$FX/gh.log"
+gnocfg; echo trunk >"$FX/default_branch"; grefuses "no config: PR base differs from default branch" 'base is not trunk' 5
+gnocfg; echo trunk >"$FX/default_branch"; mutate '.baseRefName="trunk"' view.json; merge 5; rc=$?
+check "graphql down: no config: merges into a non-master default branch" test $rc -eq 0
+check "graphql down: no config: compares against the REST default branch" grep -q 'compare/trunk\.\.\.' "$FX/gh.log"
+
+reset; green_fixtures; flag_on; echo '{"base":"master","protectedPaths":["^secret/"]}' >"$CFG"; gdown
+setfiles '[{"path":"secret/key.txt"}]'; grefuses "protected path with autonomy on" 'touches protected path secret/key.txt' 5
+reset; green_fixtures; echo '{"base":"master","protectedPaths":["^secret/"]}' >"$CFG"; gdown
+setfiles '[{"path":"secret/key.txt"}]'; merge 5 --confirmed; rc=$?
+check "graphql down: protected path merges with --confirmed and autonomy off" test $rc -eq 0
+check "graphql down: protected path --confirmed merge goes through REST" grep -qxF "$(rest_put squash)" "$FX/gh.log"
+
+gfresh; echo '.changed_files = 3000' >"$FX/pull.patch"; grefuses "REST file list at the 3000 cap" 'incomplete' 5
+gfresh; : >"$FX/files.3000"; echo '.changed_files = 3000' >"$FX/pull.patch"; grefuses "REST file list of exactly 3000 entries matching changed_files" 'incomplete' 5
+gfresh; : >"$FX/files.2999"; echo '.changed_files = 2999' >"$FX/pull.patch"; merge 5; rc=$?
+check "graphql down: REST file list of 2999 entries matching changed_files merges" test $rc -eq 0
+check "graphql down: REST file list of 2999 entries is merged over REST" grep -qxF "$(rest_put squash)" "$FX/gh.log"
+gfresh; echo '.changed_files = 7' >"$FX/pull.patch"; grefuses "REST file list that disagrees with changed_files" 'incomplete' 5
+
+gfresh; mutate '.isDraft=true' view.json; grefuses "draft" 'is draft' 5
+gfresh; mutate '.state="CLOSED"' view.json; grefuses "closed PR" 'is not OPEN' 5
+gfresh; mutate '.state="MERGED"' view.json; grefuses "already merged PR" 'is not OPEN' 5
+gfresh; echo 3 >"$FX/behind.txt"; grefuses "behind base" 'behind master by 3' 5
+gfresh; mutate '(.[] | select(.name=="gate") | .conclusion) = "failure"' checks.json; grefuses "failing required check" 'checks failing or pending: gate' 5
+gfresh; mutate '.isCrossRepository=true' view.json; grefuses "cross-repository PR" 'comes from a fork' 5
+gfresh; echo '[{"id":11}]' >"$FX/comments.json"; grefuses "review comments (resolution unverifiable)" 'review threads unverifiable without GitHub GraphQL' 5
+gfresh; echo '[]' >"$FX/comments.json"; mutate '.data.repository.pullRequest.reviewThreads.nodes=[{"isResolved":false}]' threads.json; merge 5; rc=$?
+check "graphql down: no review comments merges whatever the GraphQL fixture says" test $rc -eq 0
+check "graphql down: review comments are counted over REST" grep -qF 'api repos/o/r/pulls/5/comments?per_page=100' "$FX/gh.log"
+gfresh; merge 5; rc=$?
+check "graphql down: GraphQL 403 body on stdout does not leak into the thread check" test $rc -eq 0
+check "graphql down: GraphQL 403 body on stdout leaves no null in the output" bash -c '! grep -q null "$1"' _ "$FX/out"
+gfresh; echo '[{"id":11}]' >"$FX/comments.json"; merge 5; rc=$?
+check "graphql down: GraphQL 403 body on stdout does not hide the review comment count" grep -q ': 1 review comments' "$FX/out"
+
+pull_reread() { [ "$(cat "$FX/pull.reads" 2>/dev/null || echo 0)" -ge 2 ]; }
+gfresh; echo '.head.sha = "0000000000000000000000000000000000000000"' >"$FX/pull2.patch"; grefuses "PR head moved between REST reads" 'cannot read PR #5' 5
+check "graphql down: PR head moved between REST reads: the PR was re-read" pull_reread
+gfresh; echo '.updated_at = "2026-10-24T00:00:01Z"' >"$FX/pull2.patch"; grefuses "PR updated between REST reads" 'cannot read PR #5' 5
+check "graphql down: PR updated between REST reads: the PR was re-read" pull_reread
+gfresh; echo '.changed_files = 3' >"$FX/pull2.patch"; grefuses "PR file count changed between REST reads" 'cannot read PR #5' 5
+check "graphql down: PR file count changed between REST reads: the PR was re-read" pull_reread
+
+gfresh; echo '.merged = null' >"$FX/pull.patch"; grefuses "REST PR with a null merged flag" 'cannot read PR #5' 5
+gfresh; echo '.draft = null' >"$FX/pull.patch"; grefuses "REST PR with a null draft flag" 'cannot read PR #5' 5
+gfresh; echo '.head.sha = ""' >"$FX/pull.patch"; grefuses "REST PR with an empty head sha" 'cannot read PR #5' 5
+gfresh; echo '.head.repo = null' >"$FX/pull.patch"; grefuses "REST PR whose head repo was deleted" 'comes from a fork' 5
+
+cfresh; gdown; : >"$FX/pulls.malformed"; cleanup 5; rc=$?
+check "graphql down: cleanup with a malformed REST PR list exits 0" test $rc -eq 0
+check "graphql down: cleanup with a malformed REST PR list asked for the list" grep -qF 'api repos/o/r/pulls?state=open&per_page=100' "$FX/gh.log"
+check "graphql down: cleanup with a malformed REST PR list keeps the remote" no_delete
+check "graphql down: cleanup with a malformed REST PR list says it cannot list open PRs" grep -q '^cleanup: remote feat kept (cannot list open PRs)' "$FX/out"
+cfresh; gdown; : >"$FX/pulls.fail"; cleanup 5; rc=$?
+check "graphql down: cleanup with a failing REST PR list exits 0" test $rc -eq 0
+check "graphql down: cleanup with a failing REST PR list asked for the list" grep -qF 'api repos/o/r/pulls?state=open&per_page=100' "$FX/gh.log"
+check "graphql down: cleanup with a failing REST PR list keeps the remote" no_delete
+check "graphql down: cleanup with a failing REST PR list says it cannot list open PRs" grep -q '^cleanup: remote feat kept (cannot list open PRs)' "$FX/out"
+
+fresh; : >"$FX/graphql.transport"; merge 5; rc=$?
+check "graphql down: a GraphQL transport failure falls back to REST and merges" test $rc -eq 0
+check "graphql down: a GraphQL transport failure uses the REST merge" grep -qxF "$(rest_put squash)" "$FX/gh.log"
+check "graphql down: a GraphQL transport failure announces the REST fallback" grep -q 'GitHub GraphQL unavailable; using REST' "$FX/out"
+fresh; : >"$FX/graphql.getrest"; merge 5; rc=$?
+check "graphql down: a REST-looking transport failure still refuses ship-merge" test $rc -ne 0
+check "graphql down: a REST-looking transport failure refuses with cannot read PR" grep -q 'cannot read PR #5' "$FX/out"
+check "graphql down: a REST-looking transport failure makes no REST call" no_rest_placeholder
+check "graphql down: a REST-looking transport failure never reads the REST PR" bash -c '! grep -q "api repos/o/r/pulls" "$1"' _ "$FX/gh.log"
+check "graphql down: a REST-looking transport failure makes no merge call" bash -c '! grep -Eq "pr merge|api -X PUT" "$1"' _ "$FX/gh.log"
+check "graphql down: a REST-looking transport failure prints no REST notice" no_rest_notice
+
+gfresh; touch "$FX/merge.noop"; echo 1 >"$FX/merge.rc"; merge 5; rc=$?
+check "graphql down: refuses when the REST merge fails and the PR stays open" test $rc -ne 0
+check "graphql down: failed REST merge was attempted" grep -qxF "$(rest_put squash)" "$FX/gh.log"
+check "graphql down: failed REST merge reports the open PR" grep -q 'merge failed' "$FX/out"
+gfresh; echo 1 >"$FX/merge.rc"; merge 5; rc=$?
+check "graphql down: succeeds when the REST merge exits non-zero but the PR is MERGED" test $rc -eq 0
+
+g502; merge 5; rc=$?
+check "graphql down: a GraphQL 502 still refuses ship-merge" test $rc -ne 0
+check "graphql down: a GraphQL 502 refuses with cannot read PR" grep -q 'cannot read PR #5' "$FX/out"
+check "graphql down: a GraphQL 502 makes no REST call" no_rest_placeholder
+check "graphql down: a GraphQL 502 never reads the REST PR" bash -c '! grep -q "api repos/o/r/pulls" "$1"' _ "$FX/gh.log"
+check "graphql down: a GraphQL 502 makes no merge call" bash -c '! grep -Eq "pr merge|api -X PUT" "$1"' _ "$FX/gh.log"
+check "graphql down: a GraphQL 502 prints no REST notice" no_rest_notice
+gfresh; : >"$FX/rest.fail"; merge 5; rc=$?
+check "graphql down: a failing REST fallback still refuses ship-merge" test $rc -ne 0
+check "graphql down: a failing REST fallback refuses with cannot read PR" grep -q 'cannot read PR #5' "$FX/out"
+check "graphql down: a failing REST fallback was attempted" grep -q 'using REST' "$FX/out"
+check "graphql down: a failing REST fallback makes no merge call" bash -c '! grep -Eq "pr merge|api -X PUT" "$1"' _ "$FX/gh.log"
+
+cfresh; gdown; before="$(origin_master)"; cleanup 5; rc=$?
+check "graphql down: cleanup of a MERGED PR exits 0" test $rc -eq 0
+check "graphql down: cleanup announces the REST fallback" grep -q 'GitHub GraphQL unavailable; using REST' "$FX/out"
+check "graphql down: cleanup deletes remote feat" remote_deleted
+check "graphql down: cleanup lists open PRs over REST" grep -qF 'api repos/o/r/pulls?state=open&per_page=100' "$FX/gh.log"
+check "graphql down: cleanup reports remote deleted" grep -q '^cleanup: remote feat deleted' "$FX/out"
+check "graphql down: cleanup origin base untouched" test "$(origin_master)" = "$before"
+cfresh; gdown; echo '[{"number":9,"baseRefName":"master","headRefName":"feat"}]' >"$FX/open_prs.json"; cleanup 5; rc=$?
+check "graphql down: cleanup with an open PR from the head exits 0" test $rc -eq 0
+check "graphql down: cleanup with an open PR from the head keeps the remote" no_delete
+check "graphql down: cleanup with an open PR from the head says so" grep -q '^cleanup: remote feat kept (open PR uses it)' "$FX/out"
+cfresh; gdown; echo '[{"number":9,"baseRefName":"feat","headRefName":"child"}]' >"$FX/open_prs.json"; cleanup 5; rc=$?
+check "graphql down: cleanup with an open child PR exits 0" test $rc -eq 0
+check "graphql down: cleanup with an open child PR keeps the remote" no_delete
+check "graphql down: cleanup with an open child PR says so" grep -q '^cleanup: remote feat kept (open PR uses it)' "$FX/out"
+cfresh; : >"$FX/graphql.502"; cleanup 5; rc=$?
+check "graphql down: a GraphQL 502 still refuses cleanup" test $rc -eq 1
+check "graphql down: a GraphQL 502 cleanup deletes nothing" no_delete
+check "graphql down: a GraphQL 502 cleanup makes no REST call" no_rest_placeholder
+
+fresh; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5
+merge 5; rc=$?
+check "graphql down: normal path merges" test $rc -eq 0
+check "graphql down: normal path logs exactly the gh pr merge call" grep -qxF "pr merge 5 --squash --match-head-commit $HEAD_SHA" "$FX/gh.log"
+check "graphql down: normal path never calls the REST merge" no_put
+check "graphql down: normal path never uses the REST repo placeholder" no_rest_placeholder
+check "graphql down: normal path prints no REST notice" no_rest_notice
+nocfg; merge 5; rc=$?
+check "graphql down: normal path no config merges" test $rc -eq 0
+check "graphql down: normal path no config asks gh for the default branch" grep -q 'defaultBranchRef' "$FX/gh.log"
+check "graphql down: normal path no config never uses the REST repo placeholder" no_rest_placeholder
+check "graphql down: normal path no config never reads the REST PR" bash -c '! grep -q "api repos/o/r/pulls" "$1"' _ "$FX/gh.log"
+cfresh; cleanup 5; rc=$?
+check "graphql down: normal path cleanup exits 0" test $rc -eq 0
+check "graphql down: normal path cleanup deletes remote feat" remote_deleted
+check "graphql down: normal path cleanup never uses the REST repo placeholder" no_rest_placeholder
+check "graphql down: normal path cleanup never lists PRs over REST" bash -c '! grep -q "api repos/o/r/pulls" "$1"' _ "$FX/gh.log"
+check "graphql down: normal path cleanup prints no REST notice" no_rest_notice
 fi
 reset; fresh_work
 
@@ -2055,6 +2270,64 @@ check "ship-merge unregistered: exits 0" test $rc -eq 0
 check "ship-merge unregistered: runs plain cleanup" grep -q '^cleanup: ' "$FX/out"
 check "ship-merge unregistered: no teardown" bash -c '! grep -q "teardown" "$1"' _ "$FX/out"
 check "ship-merge unregistered: local branch deleted" bash -c '! git -C "$1" show-ref -q --verify refs/heads/feat/plain' _ "$LM"
+
+# ---- GraphQL unavailable: REST fallback (ship-init --adopt, teardown-merged-worktree)
+g_rest_pull() { grep -qxF "api repos/o/r/pulls/$1" "$FX/gh.log"; }
+g_no_rest_call() { ! grep -Eq 'repos/\{owner\}/\{repo\}|api repos/o/r/pulls' "$FX/gh.log" 2>/dev/null; }
+adopt_view() { jq -n --argjson x "$1" '{state:"OPEN",baseRefName:"master",isDraft:false,headRefOid:"abc123",headRefName:"feat/adopt-me",isCrossRepository:$x,files:[]}' >"$FX/view.json"; }
+adopt_down() {
+  lw_adopt_fixture git; ( cd "$LM" && git branch -q -D feat/adopt-me ) >/dev/null 2>&1
+  adopt_view "$1"; : >"$FX/graphql.$2"
+  LH ship-init --adopt 9 >"$FX/out" 2>&1; rc=$?
+  LT="$LROOT/main-wt/feat-adopt-me"
+}
+adopt_down false off
+check "graphql down: ship-init adopt exits 0" test $rc -eq 0
+check "graphql down: ship-init adopt reads the PR over REST" g_rest_pull 9
+check "graphql down: ship-init adopt announces the REST fallback" grep -q 'GitHub GraphQL unavailable; using REST' "$FX/out"
+check "graphql down: ship-init adopt worktree is on the PR head branch" test "$(git -C "$LT" branch --show-current)" = feat/adopt-me
+check "graphql down: ship-init adopt registry records the PR" test "$(lreg feat-adopt-me '[.branch, (.pr | tostring)] | join("|")')" = "feat/adopt-me|9"
+adopt_down true off
+check "graphql down: ship-init adopt refuses a fork PR" test $rc -eq 1
+check "graphql down: ship-init adopt fork PR is read over REST" g_rest_pull 9
+check "graphql down: ship-init adopt fork PR is named as a fork" grep -q 'comes from a fork' "$FX/out"
+check "graphql down: ship-init adopt fork refusal creates nothing" test ! -e "$LM-wt/feat-adopt-me"
+adopt_down false 502
+check "graphql down: a GraphQL 502 still refuses ship-init adopt" test $rc -eq 1
+check "graphql down: a GraphQL 502 ship-init adopt refuses with cannot read PR" grep -q 'cannot read PR #9' "$FX/out"
+check "graphql down: a GraphQL 502 ship-init adopt makes no REST call" g_no_rest_call
+check "graphql down: a GraphQL 502 ship-init adopt creates nothing" test ! -e "$LM-wt/feat-adopt-me"
+
+lw_td git; gdown; lw_td_run 5; rc=$?
+check "graphql down: teardown exits 0" test $rc -eq 0
+check "graphql down: teardown reads the PR over REST" g_rest_pull 5
+check "graphql down: teardown announces the REST fallback" grep -q 'GitHub GraphQL unavailable; using REST' "$FX/out"
+check "graphql down: teardown directory gone" test ! -e "$T"
+check "graphql down: teardown remote branch deleted" grep -q 'DELETE repos/o/r/git/refs/heads/feat/td-x' "$FX/gh.log"
+check "graphql down: teardown summary line matches git mode" grep -qxF "teardown: worktree removed $TN; remote feat/td-x deleted; local feat/td-x deleted; registry removed" "$FX/out"
+check "graphql down: teardown registry removed" test ! -e "$(lreg_file feat-td-x)"
+lw_td git; view_mut '.state="OPEN"'; gdown; lw_td_run 5; rc=$?
+check "graphql down: teardown refuses an unmerged PR: exits 1" test $rc -eq 1
+check "graphql down: teardown refuses an unmerged PR: prints STOP" grep -q 'teardown: STOP (' "$FX/out"
+check "graphql down: teardown refuses an unmerged PR: decided from the REST PR" g_rest_pull 5
+check "graphql down: teardown refuses an unmerged PR: directory kept" test -d "$T"
+check "graphql down: teardown refuses an unmerged PR: registry kept" test -f "$(lreg_file $LS)"
+lw_td git; : >"$FX/graphql.502"; lw_td_run 5; rc=$?
+check "graphql down: a GraphQL 502 still stops teardown" test $rc -eq 1
+check "graphql down: a GraphQL 502 teardown prints STOP" grep -q 'teardown: STOP (' "$FX/out"
+check "graphql down: a GraphQL 502 teardown makes no REST call" g_no_rest_call
+check "graphql down: a GraphQL 502 teardown keeps the directory" test -d "$T"
+check "graphql down: a GraphQL 502 teardown keeps the registry" test -f "$(lreg_file $LS)"
+
+lw_td git
+view_mut '.state="OPEN" | .files=[{path:"client/a.gd"}]'
+echo '[{"name":"gate","status":"completed","conclusion":"success","app":{"slug":"github-actions"}}]' >"$FX/checks.json"
+echo 0 >"$FX/behind.txt"; gdown
+LH ship-merge 5 --confirmed >"$FX/out" 2>&1; rc=$?
+check "graphql down: ship-merge registered exits 0" test $rc -eq 0
+check "graphql down: ship-merge registered merges over REST pinned to the head sha" grep -qxF "api -X PUT repos/o/r/pulls/5/merge -f merge_method=squash -f sha=$TD_HEAD" "$FX/gh.log"
+check "graphql down: ship-merge registered routes to teardown" grep -q '^teardown: worktree removed' "$FX/out"
+check "graphql down: ship-merge registered worktree gone" test ! -e "$T"
 
 # report
 lw_fixture git

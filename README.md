@@ -71,7 +71,7 @@ A hardened primary `conductor` agent backed by **25 specialist sub-agents**, wir
 | `show-your-work`                   | Keeps a per-decision log                    | Gives reviewers a trail for unattended runs                     |
 | `fix-ci`                           | Finds failing checks and fixes them         | Routes by failure type: build, test, or security                |
 | `config-sync`                      | Propagates harness config changes           | Keeps repo and live directories in step                         |
-| `openspec-propose`                 | Generates a full change proposal            | Design, specs, and tasks in one step                            |
+| `openspec`                         | OpenSpec workflow, one skill                | Propose, apply, archive, and the rest live under `references/`  |
 
 **Highlighted commands** — full list in [Slash commands](#commands-en).
 
@@ -199,7 +199,7 @@ cd ~/Workspace/settings-opencode
 ./install.sh
 ```
 
-`install.sh` is interactive by default. It will prompt for each of two independent targets (OpenCode and Claude Code):
+`install.sh` is interactive by default. It asks which harness to install (Claude Code, OpenCode, or both), which variant (Orchestration or Monolith, default Orchestration), and whether the scope is global or local:
 
 1. Verify your prerequisites (`git`, `bun`/`npm`).
 2. **OpenCode** (if selected): merge repo files into `~/.config/opencode` (or `./.opencode` if `--local`) without removing existing user config.
@@ -215,7 +215,8 @@ Useful flags:
 | Flag            | Behaviour                                                                                                                                                                                   |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | _(none)_        | Interactive walk-through: prompt `[Y/n]` for OpenCode (default Y) and Claude Code (default Y).                                                                                               |
-| `--yes`, `-y`   | Non-interactive — accept all defaults: OpenCode ✓, Claude Code ✓. Existing normal directories are merged, not removed or backed up.                                                           |
+| `--yes`, `-y`   | Non-interactive — accept all defaults: OpenCode ✓, Claude Code ✓, variant Orchestration. Existing normal directories are merged, not removed or backed up.                                     |
+| `--variant`     | `orchestration` or `monolith`. Same as `HARNESS_VARIANT`. The flag wins over the env. Unset plus `--yes` stays Orchestration.                                                                    |
 | `--local`       | Project-scoped install into the current directory (`./.opencode`, `./.claude` as independent siblings); skips the global shell-rc env block (prints it as a hint instead).                   |
 | `--opencode`    | **Allow-list:** install OpenCode only (if combined with other flags, only those are installed).                                                                                             |
 | `--claude`      | **Allow-list:** install Claude Code only.                                                                                                                                                   |
@@ -223,6 +224,13 @@ Useful flags:
 | `--no-claude`   | **Deny:** skip the Claude Code mirror. Can be combined with other targets.                                                                                                                  |
 | `--uninstall`   | Remove the env-var block and optionally remove copied local/global dirs after confirmation. **Never deletes the cloned repo or your data without confirmation.**                               |
 | `--help`, `-h`  | Print usage.                                                                                                                                                                                |
+
+Orchestration is the conductor-led tree at the repo root. Monolith (`variants/monolith/`) is a lean overlay applied to the install copy: the primary agent writes, `/orchestrate` is optional, and OpenCode and Claude Code get the same roster. Skills stay one shared tree. `install-cursor.sh` keeps building the Orchestration plugin.
+
+```bash
+./install.sh --variant monolith
+HARNESS_VARIANT=monolith ./install.sh --yes
+```
 
 The script writes a fenced block to your shell rc (`~/.zshrc`, `~/.bashrc`, or `~/.config/fish/config.fish`) that looks like this:
 
@@ -647,7 +655,7 @@ Unpinned templates (16) — available in `commands/`, plus Claude-side/OpenSpec 
 
 ### Skills
 
-**70 skills** listed below. `scripts/sync-skills.sh` computes the canonical union (root `skills/` ∪ `.claude/skills/`, root wins on conflicts), excludes the runtime dir `skills/skill-creator/`, and copies into both harness targets. Attribution for vendored skills lives in [`skills/THIRD_PARTY_NOTICES.md`](skills/THIRD_PARTY_NOTICES.md).
+Grouped below. `scripts/sync-skills.sh` computes the canonical union (root `skills/` ∪ `.claude/skills/`, root wins on conflicts), excludes the runtime dir `skills/skill-creator/`, and copies into both harness targets. Attribution for vendored skills lives in [`skills/THIRD_PARTY_NOTICES.md`](skills/THIRD_PARTY_NOTICES.md).
 
 - **Planning & design (5):** `socratic-design`, `chimera`, `api-spec-openapi`, `why`, `blast-radius`.
 - **Review & quality (6):** `comment-judge`, `interfectio-commentarum`, `verify-this`, `create-verification-skill`, `test-behavior-not-implementation`, `ai-ecosystem-audit`.
@@ -655,16 +663,17 @@ Unpinned templates (16) — available in `commands/`, plus Claude-side/OpenSpec 
 - **CI & git (5):** `fix-ci`, `fix-merge-conflicts`, `get-pr-comments`, `loop-on-ci`, `git-workflow`.
 - **Angular (4):** `angular-clean-architecture`, `angular-ddd`, `angular-cop`, `angular-accessibility`.
 - **.NET (3):** `dotnet-clean-architecture`, `dotnet-ddd`, `dotnet-cop`.
-- **Three.js / 3D (10):** `threejs-fundamentals`, `threejs-geometry`, `threejs-materials`, `threejs-textures`, `threejs-lighting`, `threejs-animation`, `threejs-interaction`, `threejs-shaders`, `threejs-loaders`, `threejs-postprocessing`.
+- **Three.js / 3D (1):** `threejs`, with the ten topics under `references/`.
 - **PostgreSQL playbooks (4):** `postgres-health-check`, `postgres-performance-tuning`, `postgres-backup-restore`, `postgres-container-ops`.
 - **Playwright E2E (2):** `playwright-e2e-authoring`, `playwright-e2e-review`.
-- **OpenSpec workflow (11):** `openspec-new-change`, `openspec-ff-change`, `openspec-continue-change`, `openspec-apply-change`, `openspec-verify-change`, `openspec-archive-change`, `openspec-bulk-archive-change`, `openspec-sync-specs`, `openspec-explore`, `openspec-propose`, `openspec-onboard`.
+- **OpenSpec workflow (1):** `openspec`, with the eleven workflows under `references/`.
 - **Writing & communication (7):** `humanizer`, `for-real`, `caveman`, `caveman-commit`, `caveman-review`, `show-me`, `show-your-work`.
 - **Harness & config (5):** `config-sync`, `harness-parity`, `skill-authoring`, `treetopia`, `strategic-compact`.
 - **Security (1):** `security-review`.
 - **Compliance (1):** `gdpr-compliance`.
 - **Domain (2):** `flurryx`, `transloco`.
 - **Universal standards (1):** `coding-standards`.
+- **On-demand role skills:** `planner`, `coder`, `writer`, `doc-updater`, `architect`, `refactor-cleaner`, `scout`, `gaudi`, `testing`, `security`, `coding-style`, `code-comments`, `autonomy`, `question-handling`, `enforcement-ladder`, `tool-budget`, `verification-gate`. Monolith loads these in the main loop. Orchestration still has the matching agents.
 
 The PostgreSQL and Playwright sets are **gc.platform-specific project playbooks**, not general-purpose skills — read them alongside the `postgres-dba` agent. `/e2e` and `e2e-runner` do not assume that stack. They read `e2e.json` or discover the start command, ports, and runner (`skills/e2e`). Load `playwright-e2e-authoring` and `playwright-e2e-review` only when that override names them. A project sets `"enabled": false` to opt out. Consumers that do not want the playbooks omit those two skills when vendoring.
 
@@ -1005,7 +1014,7 @@ Les hooks et les plugins OpenCode code-memory ne font rien quand la décision es
 - Contextes (memos de mode): `contexts/*.md`.
 - Instructions globales: `instructions/*.md` (6 chargees au demarrage; le reste est un skill ou un fichier non charge).
 - Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`, `scripts/llm-metrics-dashboard.ts`, `scripts/settings-sync.sh`, `scripts/sync-skills.sh`, `scripts/skill-drift-check.sh`.
-- Installeurs: `bootstrap.sh`, `bootstrap.ps1`, `install.sh`, `install-cursor.sh`.
+- Installeurs: `bootstrap.sh`, `bootstrap.ps1`, `install.sh`, `install-cursor.sh`. `./install.sh` demande Orchestration (defaut) ou Monolith; `--variant` et `HARNESS_VARIANT` font le meme choix sans prompt. Le plugin Cursor reste Orchestration.
 - Mirror Claude Code: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/agents/`, `.claude/skills/`, `.claude/commands/`.
 - Exclusions volontaires (`.gitignore`): `node_modules/`, `antigravity-*`, `.DS_Store`, fichiers locaux `.env*` sauf `.env.example`, répertoire runtime `skills/skill-creator/`.
 
@@ -1121,7 +1130,7 @@ Non epinglees (16): `/checkpoint`, `/pm2`, `/setup-pm`, `/ecosystem-audit`, `/cr
 
 ### Skills
 
-**70 skills** listes ci-dessous. `scripts/sync-skills.sh` calcule l'union canonique (root `skills/` ∪ `.claude/skills/`, root gagne), exclut le runtime `skills/skill-creator/`, et copie vers chaque cible. Attribution dans [`skills/THIRD_PARTY_NOTICES.md`](skills/THIRD_PARTY_NOTICES.md).
+Groupes ci-dessous. `scripts/sync-skills.sh` calcule l'union canonique (root `skills/` ∪ `.claude/skills/`, root gagne), exclut le runtime `skills/skill-creator/`, et copie vers chaque cible. Attribution dans [`skills/THIRD_PARTY_NOTICES.md`](skills/THIRD_PARTY_NOTICES.md).
 
 - **Planification & design (5):** `socratic-design`, `chimera`, `api-spec-openapi`, `why`, `blast-radius`.
 - **Revue & qualite (6):** `comment-judge`, `interfectio-commentarum`, `verify-this`, `create-verification-skill`, `test-behavior-not-implementation`, `ai-ecosystem-audit`.
@@ -1129,13 +1138,14 @@ Non epinglees (16): `/checkpoint`, `/pm2`, `/setup-pm`, `/ecosystem-audit`, `/cr
 - **CI & git (5):** `fix-ci`, `fix-merge-conflicts`, `get-pr-comments`, `loop-on-ci`, `git-workflow`.
 - **Angular (4):** `angular-clean-architecture`, `angular-ddd`, `angular-cop`, `angular-accessibility`.
 - **.NET (3):** `dotnet-clean-architecture`, `dotnet-ddd`, `dotnet-cop`.
-- **Three.js / 3D (10):** `threejs-{fundamentals,geometry,materials,textures,lighting,animation,interaction,shaders,loaders,postprocessing}`.
+- **Three.js / 3D (1):** `threejs`, dix sujets sous `references/`.
 - **Playbooks PostgreSQL (4):** `postgres-{health-check,performance-tuning,backup-restore,container-ops}`.
 - **Playwright E2E (2):** `playwright-e2e-authoring`, `playwright-e2e-review`.
-- **Workflow OpenSpec (11):** `openspec-{new,ff,continue,apply,verify,archive,bulk-archive,sync-specs,explore,propose,onboard}`.
+- **Workflow OpenSpec (1):** `openspec`, onze workflows sous `references/`.
 - **Ecriture & communication (7):** `humanizer`, `for-real`, `caveman`, `caveman-commit`, `caveman-review`, `show-me`, `show-your-work`.
 - **Harness & config (5):** `config-sync`, `harness-parity`, `skill-authoring`, `treetopia`, `strategic-compact`.
 - **Securite (1):** `security-review`. **Conformite (1):** `gdpr-compliance`. **Domaine (2):** `flurryx`, `transloco`. **Standards (1):** `coding-standards`.
+- **Skills de role a la demande:** `planner`, `coder`, `writer`, `doc-updater`, `architect`, `refactor-cleaner`, `scout`, `gaudi`, `testing`, `security`, `coding-style`, `code-comments`, `autonomy`, `question-handling`, `enforcement-ladder`, `tool-budget`, `verification-gate`. Monolith les charge dans la boucle principale. Orchestration garde les agents correspondants.
 
 Les ensembles PostgreSQL et Playwright sont des **playbooks projet specifiques a gc.platform**. `/e2e` et `e2e-runner` ne supposent pas cette stack : ils lisent `e2e.json` ou decouvrent la commande de demarrage, les ports et le runner (`skills/e2e`). Les playbooks Playwright ne se chargent que si l'override les nomme. `"enabled": false` desactive `/e2e`. Un consommateur qui n'en veut pas omet `playwright-e2e-authoring` et `playwright-e2e-review` au vendoring. `skill-creator` est runtime-only, git-ignore et jamais synchronise.
 

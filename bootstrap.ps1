@@ -34,6 +34,10 @@
 .EXAMPLE
     # Install only the Claude mirror (skip OpenCode):
     & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -NoOpencode
+
+.EXAMPLE
+    # Lean Monolith overlay. Default, and an omitted -Variant, stay Orchestration.
+    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -Variant monolith
 #>
 [CmdletBinding()]
 param(
@@ -42,11 +46,26 @@ param(
     [switch]$Opencode,
     [switch]$Claude,
     [switch]$Local,
-    [switch]$Uninstall
+    [switch]$Uninstall,
+    [string]$Variant = ''
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+if ([string]::IsNullOrWhiteSpace($Variant)) { $Variant = $env:HARNESS_VARIANT }
+if ([string]::IsNullOrWhiteSpace($Variant)) { $Variant = 'orchestration' }
+$Variant = $Variant.Trim().ToLowerInvariant()
+switch ($Variant) {
+    '1' { $Variant = 'orchestration' }
+    '2' { $Variant = 'monolith' }
+    'orchestration' { }
+    'monolith' { }
+    default {
+        Write-Host "error: unknown harness variant '$Variant' (use orchestration or monolith)" -ForegroundColor Red
+        exit 2
+    }
+}
 
 # Capture invocation directory before any Push-Location happens.
 $InvokeDir = (Get-Location).Path
@@ -498,6 +517,39 @@ if ($doOpencode -and $opencodeTargetReady -and -not $opencodeTargetIsSource) { $
 if ($doClaude -and $claudeTargetReady -and -not $claudeTargetIsSource)       { $skillDests += (Join-Path $ClaudeDir   'skills') }
 if ($skillDests.Count -gt 0) {
     Sync-Skills $SrcDir $skillDests
+}
+
+if ($Variant -eq 'monolith') {
+    $applyArgs = @((Join-Path $SrcDir 'scripts/variants/apply-monolith.mjs'), '--repo', $SrcDir)
+    $writable = $false
+    if ($doOpencode -and $opencodeTargetReady) {
+        if ($opencodeTargetIsSource) {
+            Warn 'OpenCode target is the source checkout; monolith overlay skipped'
+        } else {
+            $applyArgs += @('--opencode', $OpencodeDir)
+            $writable = $true
+        }
+    }
+    if ($doClaude -and $claudeTargetReady) {
+        if ($claudeTargetIsSource) {
+            Warn 'Claude target is the source checkout; monolith overlay skipped'
+        } else {
+            $applyArgs += @('--claude', $ClaudeDir)
+            $writable = $true
+        }
+    }
+    if (-not $writable) { Die 'monolith variant had no writable install target' }
+    Step 'Applying Monolith variant'
+    & node @applyArgs
+    if ($LASTEXITCODE -ne 0) { Die 'monolith overlay failed' }
+} else {
+    Info 'variant: orchestration'
+    if ($doOpencode -and $opencodeTargetReady -and -not $opencodeTargetIsSource) {
+        [System.IO.File]::WriteAllText((Join-Path $OpencodeDir '.harness-variant'), "orchestration`n")
+    }
+    if ($doClaude -and $claudeTargetReady -and -not $claudeTargetIsSource) {
+        [System.IO.File]::WriteAllText((Join-Path $ClaudeDir '.harness-variant'), "orchestration`n")
+    }
 }
 
 # ------------------------------ next steps -----------------------------------

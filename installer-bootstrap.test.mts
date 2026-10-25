@@ -88,7 +88,10 @@ function writeFakeNpm(binDir: string): void {
     chmodSync(executable, 0o755);
   }
   const fakeNode = join(binDir, "node");
-  writeFileSync(fakeNode, "#!/usr/bin/env bash\ncase \"${1:-}\" in\n  -p) printf '22.6.0\\n' ;;\n  --version) printf 'v22.6.0\\n' ;;\n  *) exit 0 ;;\nesac\n");
+  writeFileSync(
+    fakeNode,
+    "#!/usr/bin/env bash\ncase \"$*\" in\n  *apply-monolith.mjs*) printf 'fake node refused apply-monolith\\n' >&2; exit 99 ;;\nesac\ncase \"${1:-}\" in\n  -p) printf '22.6.0\\n' ;;\n  --version) printf 'v22.6.0\\n' ;;\n  *) exit 0 ;;\nesac\n",
+  );
   chmodSync(fakeNode, 0o755);
 }
 
@@ -107,6 +110,7 @@ import sys
 replies = [line.encode() for line in sys.argv[1].splitlines()]
 reply_markers = [
     b"Choose harness",
+    b"Choose harness variant",
     b"Choose install scope",
     b"write the OPENCODE_MODEL_",
     b"install the .claude mirror",
@@ -417,7 +421,7 @@ test("remote bootstrap interactive OpenCode local installs only the local OpenCo
     writeFakeNpm(fakeBin);
 
     const result = runRemoteStyleInteractiveInstaller(
-      "OpenCode\nlocal\nn\nn\nn\n",
+      "OpenCode\nOrchestration\nlocal\nn\nn\nn\n",
       projectDir,
       {
         ...process.env,
@@ -511,6 +515,97 @@ test("global both install keeps Claude mirror separate from the OpenCode target"
       false,
       `Claude mirror must be a sibling of the global OpenCode target, not nested inside it\n${output}`,
     );
+    assert.match(
+      readFileSync(join(homeDir, ".config", "opencode", "opencode.jsonc"), "utf8"),
+      /"default_agent":\s*"conductor"/,
+      `default --yes install must stay on the Orchestration conductor\n${output}`,
+    );
+    assert.equal(
+      existsSync(join(homeDir, ".claude", "agents", "conductor.md")),
+      true,
+      `default --yes install must keep the conductor agent\n${output}`,
+    );
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test("unknown --variant exits before copying a target", () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), "settings-opencode-install-"));
+  try {
+    const projectDir = join(tmpRoot, "project");
+    const homeDir = join(tmpRoot, "home");
+    mkdirSync(projectDir);
+    mkdirSync(homeDir);
+
+    const result = spawnSync("bash", [installerPath, "--yes", "--variant", "lean"], {
+      cwd: projectDir,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        HOME: homeDir,
+        PATH: "/usr/bin:/bin",
+        SHELL: "/bin/zsh",
+      },
+    });
+    const output = `${result.stdout}\n${result.stderr}`;
+
+    assert.equal(result.status, 2, output);
+    assert.match(output, /unknown variant/i);
+    assert.equal(existsSync(join(homeDir, ".config", "opencode")), false);
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test("non-interactive monolith install overlays both targets and leaves orchestration sources", () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), "settings-opencode-install-"));
+  try {
+    const projectDir = join(tmpRoot, "project");
+    const homeDir = join(tmpRoot, "home");
+    const fakeBin = join(tmpRoot, "bin");
+    mkdirSync(projectDir);
+    mkdirSync(homeDir);
+    mkdirSync(fakeBin);
+    writeFakeNpm(fakeBin);
+    writeFileSync(join(fakeBin, "node"), `#!/usr/bin/env bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`);
+    chmodSync(join(fakeBin, "node"), 0o755);
+
+    const result = spawnSync(
+      "bash",
+      [installerPath, "--local", "--yes", "--variant", "monolith"],
+      {
+        cwd: projectDir,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          HOME: homeDir,
+          HARNESS_VARIANT: "orchestration",
+          PATH: `${fakeBin}:/usr/bin:/bin:/usr/sbin:/sbin`,
+          SHELL: "/bin/zsh",
+        },
+      },
+    );
+    const output = `${result.stdout}\n${result.stderr}`;
+
+    assert.equal(result.status, 0, output);
+    const installed = JSON.parse(readFileSync(join(projectDir, ".opencode", "opencode.jsonc"), "utf8"));
+    assert.equal(installed.default_agent, "main");
+    assert.equal(installed.agent.conductor, undefined);
+    assert.equal(installed.agent.cop?.tools?.write, false);
+    assert.equal(installed.mcp.blender, undefined);
+    assert.equal(installed.mcp["code-memory"] !== undefined, true);
+    assert.match(readFileSync(join(projectDir, ".opencode", "mcp.deferred.example.jsonc"), "utf8"), /blender/);
+    assert.equal(readFileSync(join(projectDir, ".opencode", ".harness-variant"), "utf8").trim(), "monolith");
+    assert.equal(readFileSync(join(projectDir, ".claude", ".harness-variant"), "utf8").trim(), "monolith");
+    assert.equal(existsSync(join(projectDir, ".claude", "agents", "conductor.md")), false);
+    assert.equal(existsSync(join(projectDir, ".claude", "agents", "code-reviewer.md")), true);
+    assert.equal(existsSync(join(projectDir, ".claude", "hooks", "ship-stop-gate.sh")), true);
+    assert.equal(existsSync(join(projectDir, ".claude", "skills", "conductor", "SKILL.md")), true);
+    assert.doesNotMatch(readFileSync(join(projectDir, ".claude", "CLAUDE.md"), "utf8"), /First-Tool Gate|cannot write/i);
+    assert.match(readFileSync(join(repoRoot, "opencode.jsonc"), "utf8"), /"default_agent":\s*"conductor"/);
+    assert.equal(existsSync(join(repoRoot, ".claude", "agents", "conductor.md")), true);
+    assert.match(readFileSync(join(repoRoot, ".claude", "rules", "common", "orchestration.md"), "utf8"), /First-Tool Gate/);
   } finally {
     rmSync(tmpRoot, { recursive: true, force: true });
   }
@@ -671,8 +766,9 @@ test("interactive OpenCode reinstall default-no for nested .claude does not mark
 
     const result = runInteractiveInstallerWithMarkers(
       ["--opencode"],
-      ["global", "", "n"],
+      ["Orchestration", "global", "", "n"],
       [
+        "Choose harness variant",
         "Choose install scope",
         "delete unexpected nested .claude",
         "write the OPENCODE_MODEL_",
@@ -904,10 +1000,29 @@ test("OpenCode local install syncs the repository config payload exactly", () =>
       if (!existsSync(sourcePath)) {
         continue;
       }
+      const source = withoutInstallerExcludes(collectEntries(sourcePath));
+      const installed = withoutInstallerExcludes(collectEntries(join(installedRoot, payloadPath)));
+      if (payloadPath === "scripts") {
+        for (const extra of [
+          "agent-harness/.installed",
+          "agent-harness/hooks/",
+          "agent-harness/hooks/autonomy-context.sh",
+          "agent-harness/hooks/autonomy-git-guard.sh",
+          "agent-harness/hooks/ship-stop-gate.sh",
+        ]) {
+          delete installed[extra];
+        }
+      }
       assert.deepEqual(
-        collectEntries(join(installedRoot, payloadPath)),
-        collectEntries(sourcePath),
+        installed,
+        source,
         `${payloadPath} must match the repository payload exactly`,
+      );
+    }
+    for (const hook of ["autonomy-context.sh", "autonomy-git-guard.sh", "ship-stop-gate.sh"]) {
+      assert.equal(
+        readFileSync(join(installedRoot, "scripts/agent-harness/hooks", hook), "utf8"),
+        readFileSync(join(repoRoot, ".claude/hooks", hook), "utf8"),
       );
     }
   } finally {
@@ -1253,6 +1368,28 @@ function treeContainsSymlink(root: string, expectedTarget: string): boolean {
   }
   return metadata.isDirectory() && readdirSync(root).some((entry) =>
     treeContainsSymlink(join(root, entry), expectedTarget));
+}
+
+function withoutInstallerExcludes(entries: Record<string, string>): Record<string, string> {
+  const kept: Record<string, string> = {};
+  for (const [key, value] of Object.entries(entries)) {
+    const parts = key.replace(/\/$/, "").split("/");
+    const base = parts.at(-1) ?? "";
+    if (
+      parts.includes("assets")
+      || parts.includes("__tests__")
+      || parts.includes("__mocks__")
+      || base === ".DS_Store"
+      || base.endsWith(".log")
+      || base.includes(".bak")
+      || /\.test\.[^/]+$/.test(base)
+      || /\.spec\.[^/]+$/.test(base)
+    ) {
+      continue;
+    }
+    kept[key] = value;
+  }
+  return kept;
 }
 
 function collectEntries(root: string): Record<string, string> {

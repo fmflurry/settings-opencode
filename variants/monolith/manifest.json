@@ -1,0 +1,47 @@
+{
+  "id": "monolith",
+  "baseline": "variants/monolith/CLAUDE.md",
+  "removeAgents": [
+    "conductor",
+    "scout",
+    "planner",
+    "coder",
+    "writer",
+    "doc-updater",
+    "tdd-guide",
+    "git-specialist",
+    "architect",
+    "api-spec-architect",
+    "gdpr-specialist",
+    "postgres-dba",
+    "gaudi",
+    "refactor-cleaner",
+    "angular-cop",
+    "dotnet-cop",
+    "haruspex-commentorum",
+    "why-synthesizer",
+    "comment-judge"
+  ],
+  "keptAgents": [
+    "code-reviewer",
+    "security-reviewer",
+    "database-reviewer",
+    "ecosystem-auditor",
+    "e2e-runner",
+    "why-investigator",
+    "build-error-resolver"
+  ],
+  "overlayAgents": ["cop", "comment-judge"],
+  "deferredMcp": ["blender", "smartbear-swagger"],
+  "primaryModelEnv": "OPENCODE_MODEL_CONDUCTOR",
+  "reviewModelEnv": "OPENCODE_MODEL_SUBAGENT_PLANNER",
+  "descriptions": {
+    "code-reviewer": "Reviews a diff for bugs, regressions, missing tests, and broken conventions. Use after a meaningful change or when the user asks for a review. Read-only.",
+    "security-reviewer": "Reviews auth, secrets, user input, payments, and personal data. Use when a change touches those surfaces or the user asks for a security review. Read-only.",
+    "database-reviewer": "Reviews SQL, PostgreSQL, Supabase, RLS, and migrations. Use for a schema or query change. Read-only.",
+    "ecosystem-auditor": "Audits OpenCode and Claude Code harness parity. Use for /ecosystem-audit or a harness-coherence check. Read-only.",
+    "e2e-runner": "Runs browser end-to-end flows and writes their artifacts. Use for Playwright or a critical user flow. The log stays out of the main session.",
+    "why-investigator": "Investigates one evidence category, git history or one MCP, for design rationale. Use from the why skill, one category per investigator, in parallel. Read-only.",
+    "build-error-resolver": "Fixes build, typecheck, and lint errors with a minimal diff. Use when the build is red and the log is large."
+  }
+}

@@ -12,6 +12,7 @@
 #   --uninstall     Remove env-var block and installed copies (does not delete the repo)
 #   --local         Project-scoped install into the current working directory
 #                   (./.opencode, ./.claude). Does not touch shell rc files.
+#   --variant NAME  orchestration (default) or monolith. HARNESS_VARIANT too.
 #   --help, -h      Show usage
 #
 set -euo pipefail
@@ -43,6 +44,7 @@ OPENCODE_TARGET_IS_SOURCE=0
 FLAG_OPENCODE=0
 FLAG_CLAUDE=0
 FLAG_LOCAL=0
+HARNESS_VARIANT="${HARNESS_VARIANT:-}"
 
 # ------------------------------ presentation ---------------------------------
 
@@ -208,6 +210,30 @@ ask_install_scope() {
     done
 }
 
+normalize_variant() {
+    local value
+    value="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+    case "$value" in
+        orchestration|1) printf 'orchestration' ;;
+        monolith|2) printf 'monolith' ;;
+        *) return 1 ;;
+    esac
+}
+
+ask_variant() {
+    local reply normalized
+    while :; do
+        printf "    ${BOLD}?${RESET} Choose harness variant: Orchestration or Monolith [Orchestration] "
+        read_reply reply
+        reply="${reply:-Orchestration}"
+        if normalized="$(normalize_variant "$reply")"; then
+            HARNESS_VARIANT="$normalized"
+            return 0
+        fi
+        printf "    please answer Orchestration or Monolith\n"
+    done
+}
+
 # ------------------------------ usage ----------------------------------------
 
 print_help() {
@@ -229,6 +255,9 @@ Flags:
                   Does not touch global shell rc files. Combine with --yes,
                   --no-claude, --no-opencode, and --uninstall as normal. Do
                   NOT run this from inside the settings-opencode repo itself.
+  --variant NAME  orchestration (default) or monolith. Same as HARNESS_VARIANT.
+                  Orchestration keeps the conductor. Monolith is the lean overlay.
+                  --yes with neither flag nor env stays Orchestration.
   --help, -h      Show this message
 
 Target paths (global mode):
@@ -500,6 +529,44 @@ sync_skills() {
     else
         info "no install targets active — skill sync skipped"
     fi
+}
+
+# Orchestration is the copied tree. Monolith rewrites that copy and never the source checkout.
+apply_harness_variant() {
+    local args=() wrote=0
+    if [ "$HARNESS_VARIANT" != "monolith" ]; then
+        info "variant: orchestration"
+        if [ "$SKIP_OPENCODE" != "1" ] && [ "$OPENCODE_TARGET_READY" = "1" ] && [ "$OPENCODE_TARGET_IS_SOURCE" != "1" ]; then
+            printf 'orchestration\n' > "$TARGET_OPENCODE/.harness-variant"
+        fi
+        if [ "$SKIP_CLAUDE" != "1" ] && [ "$CLAUDE_TARGET_READY" = "1" ] && ! same_directory "$TARGET_CLAUDE" "$REPO_DIR/.claude"; then
+            printf 'orchestration\n' > "$TARGET_CLAUDE/.harness-variant"
+        fi
+        return 0
+    fi
+
+    if [ "$SKIP_OPENCODE" != "1" ] && [ "$OPENCODE_TARGET_READY" = "1" ]; then
+        if [ "$OPENCODE_TARGET_IS_SOURCE" = "1" ]; then
+            warn "OpenCode target is the source checkout; monolith overlay skipped"
+        else
+            args+=(--opencode "$TARGET_OPENCODE")
+            wrote=1
+        fi
+    fi
+    if [ "$SKIP_CLAUDE" != "1" ] && [ "$CLAUDE_TARGET_READY" = "1" ]; then
+        if same_directory "$TARGET_CLAUDE" "$REPO_DIR/.claude"; then
+            warn "Claude target is the source .claude; monolith overlay skipped"
+        else
+            args+=(--claude "$TARGET_CLAUDE")
+            wrote=1
+        fi
+    fi
+    if [ "$wrote" != "1" ]; then
+        err "monolith variant had no writable install target"
+        exit 1
+    fi
+    step "Applying Monolith variant"
+    node "$REPO_DIR/scripts/variants/apply-monolith.mjs" --repo "$REPO_DIR" "${args[@]}"
 }
 
 # ------------------------------ env-var block --------------------------------
@@ -1398,11 +1465,28 @@ while [ $# -gt 0 ]; do
         --claude)        FLAG_CLAUDE=1 ;;
         --uninstall)     DO_UNINSTALL=1 ;;
         --local)         LOCAL_MODE=1; FLAG_LOCAL=1 ;;
+        --variant)
+            if [ $# -lt 2 ] || [ -z "${2:-}" ]; then
+                err "--variant needs orchestration or monolith"
+                exit 2
+            fi
+            HARNESS_VARIANT="$2"
+            shift
+            ;;
+        --variant=*)     HARNESS_VARIANT="${1#--variant=}" ;;
         -h|--help)       print_help; exit 0 ;;
         *) err "unknown flag: $1"; print_help; exit 1 ;;
     esac
     shift
 done
+
+if [ -n "$HARNESS_VARIANT" ]; then
+    normalized="$(normalize_variant "$HARNESS_VARIANT")" || {
+        err "unknown variant '${HARNESS_VARIANT}': use orchestration or monolith"
+        exit 2
+    }
+    HARNESS_VARIANT="$normalized"
+fi
 
 # Allowlist resolution: if ANY positive flag is present, only listed targets
 # are candidates; unlisted targets default to OFF (skipped). Opt-outs are
@@ -1431,9 +1515,16 @@ if [ "$ASSUME_YES" != "1" ] && [ "$DO_UNINSTALL" != "1" ]; then
     if [ "$FLAG_OPENCODE" != "1" ] && [ "$FLAG_CLAUDE" != "1" ] && [ "$SKIP_OPENCODE" != "1" ] && [ "$SKIP_CLAUDE" != "1" ]; then
         ask_harness_choice
     fi
+    if [ -z "$HARNESS_VARIANT" ]; then
+        ask_variant
+    fi
     if [ "$FLAG_LOCAL" != "1" ]; then
         ask_install_scope
     fi
+fi
+
+if [ -z "$HARNESS_VARIANT" ]; then
+    HARNESS_VARIANT=orchestration
 fi
 
 # Apply local-mode target overrides before any other logic runs.
@@ -1454,6 +1545,7 @@ fi
 step "settings-opencode installer"
 info "repo:    $REPO_DIR"
 info "mode:    $([ "$ASSUME_YES" = "1" ] && echo "non-interactive" || echo "interactive")$([ "$LOCAL_MODE" = "1" ] && echo " --local (project-scoped)" || true)"
+info "variant: $HARNESS_VARIANT"
 
 configure_wsl_targets
 check_prereqs
@@ -1498,6 +1590,7 @@ if [ "$LOCAL_MODE" != "1" ]; then
 fi
 
 sync_skills
+apply_harness_variant
 if [ "$SKIP_OPENCODE" != "1" ] && [ "$OPENCODE_TARGET_READY" != "1" ]; then
     err "OpenCode target runtime is absent; refusing a successful install"
     exit 1

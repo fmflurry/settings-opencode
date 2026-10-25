@@ -5,9 +5,9 @@ description: Help the user understand the current topic visually. Produces a sel
 
 Help the user understand the current topic of conversation visually. Skip the preamble and keep prose brief.
 
-## Default: write an HTML file and open it
+## Default: write an HTML file, screenshot it, open it
 
-Terminal-rendered diagrams read poorly. So unless an exception below applies, produce **one self-contained HTML file**, check it, then follow "Then screenshot and show it" below.
+Terminal-rendered diagrams read poorly. So unless an exception below applies, produce **one self-contained HTML file**, run the "Before opening the file" checklist, then follow "Then screenshot and show it" below.
 
 - Path: `/tmp/show-me-{slug}.html`, where `{slug}` is 2-4 kebab-case words naming the topic.
 - `/tmp` is the default so the repo working tree stays clean. Write inside the repo only when the user asks to keep the artifact; then `docs/` or the path they name.
@@ -20,6 +20,7 @@ Terminal-rendered diagrams read poorly. So unless an exception below applies, pr
 - Match the product's colors, type, spacing, and components. Real labels and real data — never `foo`/`bar` placeholders.
 - Responsive: readable at desktop width and on mobile. At least one `@media` breakpoint collapsing multi-column layouts to a single stack.
 - Monospace blocks for code, trees, and pseudocode; keep them visually distinct from prose.
+- Slide decks: stack the slides as sections in normal flow, with no `vh` heights or JS-driven one-slide view, so the full-page screenshot shows every slide.
 
 ### Pick the smallest form that makes the point
 

@@ -236,11 +236,7 @@ test('firefox-only: uses the proven flag order, a throwaway profile and timeout 
   assert.ok(firefox.some((line) => line.includes('--window-size=390,2200')));
   assertEachCallTimedOut(log, 'firefox');
 
-  const profiles = new Set(firefox.map((line) => /--profile (\S+)/.exec(line)?.[1]));
-  assert.ok(profiles.size > 0 && !profiles.has(undefined));
-  for (const profile of profiles) {
-    assert.ok(!fs.existsSync(profile), `profile dir left behind: ${profile}`);
-  }
+  assert.deepEqual(fs.readdirSync(path.join(sb.root, 'tmp')), []);
 });
 
 test('prefers chromium over firefox and passes the headless screenshot flags', () => {
@@ -380,6 +376,35 @@ test('exits 2 with a usage line when the html argument is missing, absent or not
     assert.notEqual(r.stderr.trim(), '');
   }
   assert.equal(sb.log().length, 0);
+});
+
+test('never reports a stale PNG as fresh when the first browser writes nothing', () => {
+  const sb = makeSandbox({
+    shims: ['chromium', 'firefox'],
+    env: { SHIM_H: '2200', SHIM_CHROMIUM_NOPNG: '1' },
+  });
+  const desktop = path.join(sb.work, `${sb.name}.png`);
+  const phone = path.join(sb.work, `${sb.name}-390.png`);
+  fs.writeFileSync(desktop, 'STALE');
+  fs.writeFileSync(phone, 'STALE');
+  const r = sb.run();
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(callsTo(sb.log(), 'firefox').length > 0);
+  assertPngs(sb, r.stdout);
+  for (const png of [desktop, phone]) {
+    assert.ok(!fs.readFileSync(png, 'utf8').includes('STALE'), `stale content in ${png}`);
+  }
+  assert.deepEqual(fs.readdirSync(path.join(sb.root, 'tmp')), []);
+});
+
+test('removes a stale phone PNG when the layout at 390px matches the desktop layout', () => {
+  const sb = makeSandbox({ shims: ['chromium'], env: { SHIM_H: '2200', SHIM_M390: 'wide' } });
+  const phone = path.join(sb.work, `${sb.name}-390.png`);
+  fs.writeFileSync(phone, 'STALE');
+  const r = sb.run();
+  assert.equal(r.status, 0, r.stderr);
+  assertPngs(sb, r.stdout, { phone: false });
+  assert.ok(!fs.existsSync(phone));
 });
 
 test('writes the PNGs into the out-dir argument', () => {

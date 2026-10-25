@@ -117,8 +117,9 @@ elif command -v gtimeout >/dev/null 2>&1; then
   timeout_bin=gtimeout
 fi
 
-if ! mkdir -p "$out" 2>/dev/null || ! out=$(CDPATH='' cd -- "$out" 2>/dev/null && pwd); then
-  note "cannot use out-dir $out"
+out_arg=$out
+if ! mkdir -p "$out_arg" 2>/dev/null || ! out=$(CDPATH='' cd -- "$out_arg" 2>/dev/null && pwd); then
+  note "cannot use out-dir $out_arg"
   exit 0
 fi
 work=$(mktemp -d "${TMPDIR:-/tmp}/show-me.XXXXXX") || {
@@ -200,6 +201,7 @@ measure_page() {
 
 shoot() {
   local w=$1 png=$2
+  rm -f "$png"
   render shot "$w" "$m_h" "$png" "$html_url" >/dev/null 2>&1 </dev/null
   if [ -s "$png" ]; then
     return 0
@@ -229,6 +231,7 @@ esac
 
 desktop_png=$out/$name.png
 phone_png=$out/$name-390.png
+rm -f "$desktop_png" "$phone_png"
 
 for backend in $cands; do
   pending=

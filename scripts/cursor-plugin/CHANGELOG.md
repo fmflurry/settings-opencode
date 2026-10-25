@@ -2,6 +2,12 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.15] - 2026-10-25
+
+- show-me renders full-page PNG screenshots via `skills/show-me/scripts/screenshot.sh`. Detection order: Playwright chromium, then Chrome/Chromium, then Firefox (`--no-remote`, throwaway `--profile`, `timeout 60`). Full height is measure-then-capture, capped at 12000px. A 390px phone PNG is made only when the layout differs. Without a browser the helper never fails.
+- show-me attaches the PNGs and the HTML through the host's attach-files tool (OpenBot). When attaching, it writes to `~/OpenBot/Shared/show-me/`.
+- show-me runs `xdg-open` only when a display is set.
+
 ## [0.4.14] - 2026-10-24
 
 - REST fallback when GitHub GraphQL is unavailable (the Claude Code cloud 403 `GitHub GraphQL is not available`, or a transport failure to the `/graphql` endpoint). Only that gh error switches `ship-merge`, `cleanup`, `teardown-merged-worktree`, `ship-init --adopt` and the review-thread check to `gh api repos/...`; any other gh failure refuses exactly as before. Every gate is unchanged, and the normal path sends gh the same arguments.

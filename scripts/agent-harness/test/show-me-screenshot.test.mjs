@@ -13,7 +13,7 @@ const FIXTURE_HTML =
   '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0}.box{height:900px}' +
   '@media (max-width:600px){.box{height:1800px}}</style></head><body><div class="box">show-me</div></body></html>\n';
 
-const REQUIRED_TOOLS = ['bash', 'mktemp', 'rm', 'cat', 'grep', 'sed', 'head', 'mkdir', 'cp', 'mv'];
+const REQUIRED_TOOLS = ['bash', 'mktemp', 'rm', 'cat', 'grep', 'sed', 'head', 'mkdir', 'cp', 'mv', 'ln'];
 
 const MEASURE_SIG = [
   'w=${ws%%,*}',
@@ -48,6 +48,7 @@ const SHIMS = {
     '  esac',
     'done',
     ...BROWSER_COMMON,
+    'if [ -n "$SHIM_PLANT_AT" ]; then ln -s "$SHIM_PLANT_TO" "$SHIM_PLANT_AT" 2>/dev/null; fi',
     'if [ -z "$SHIM_CHROMIUM_NOPNG" ] && [ -n "$png" ]; then echo png > "$png"; fi',
     ...MEASURE_SIG,
     'if [ -n "$SHIM_H" ] && [ "$s" = 1 ]; then echo "SHOW_ME_MEASURE h=$SHIM_H m=$sig" >&2; fi',
@@ -235,6 +236,8 @@ test('firefox-only: uses the proven flag order, a throwaway profile and timeout 
   assert.ok(firefox.some((line) => line.includes('--window-size=1280,2200')));
   assert.ok(firefox.some((line) => line.includes('--window-size=390,2200')));
   assertEachCallTimedOut(log, 'firefox');
+  const firefoxShot = firefox.find((line) => line.includes('--window-size=1280,2200'));
+  assertWorkDirShot(sb, /--screenshot (\S+) /.exec(firefoxShot)?.[1]);
 
   assert.deepEqual(fs.readdirSync(path.join(sb.root, 'tmp')), []);
 });
@@ -254,6 +257,7 @@ test('prefers chromium over firefox and passes the headless screenshot flags', (
   for (const flag of ['--headless', '--hide-scrollbars', '--user-data-dir=', '--screenshot=']) {
     assert.ok(shot.includes(flag), `missing ${flag} in: ${shot}`);
   }
+  assertWorkDirShot(sb, /--screenshot=(\S+)/.exec(shot)?.[1]);
   assert.equal(shot.includes('--no-sandbox'), process.getuid?.() === 0);
   assert.ok(chromium.some((line) => line.includes('--window-size=1280,800')));
   assertEachCallTimedOut(log, 'chromium');
@@ -424,6 +428,58 @@ test('replaces a symlinked PNG target instead of writing through it', () => {
   assertPngs(sb, r.stdout);
   assert.equal(fs.readFileSync(keep, 'utf8'), 'KEEP');
   assert.ok(fs.lstatSync(desktop).isFile());
+});
+
+function assertWorkDirShot(sb, loggedPath) {
+  assert.ok(loggedPath, 'no screenshot path in the browser call');
+  assert.ok(
+    loggedPath.startsWith(path.join(sb.root, 'tmp') + path.sep),
+    `screenshot not rendered inside the sandbox TMPDIR: ${loggedPath}`,
+  );
+  assert.ok(loggedPath.endsWith('shot-1280.png'), `unexpected screenshot name: ${loggedPath}`);
+}
+
+function assertDestinationRefused(sb, r, blockedDir) {
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, '');
+  const lines = r.stderr.split('\n').filter(Boolean);
+  assert.equal(lines.length, 1, `expected exactly one stderr line, got: ${r.stderr}`);
+  assert.match(lines[0], /cannot write/);
+  assertNotesPrefixed(r.stderr);
+  assert.deepEqual(fs.readdirSync(blockedDir).filter((file) => /^shot-.*\.png$/.test(file)), []);
+  assert.deepEqual(fs.readdirSync(path.join(sb.root, 'tmp')), []);
+}
+
+test('refuses a PNG path that is a directory and writes nothing into it', () => {
+  const sb = makeSandbox({ shims: ['chromium'], env: { SHIM_H: '2200' } });
+  const blocked = path.join(sb.work, `${sb.name}.png`);
+  fs.mkdirSync(blocked);
+  const r = sb.run();
+  assertDestinationRefused(sb, r, blocked);
+  assert.ok(fs.lstatSync(blocked).isDirectory());
+});
+
+test('refuses a PNG path that becomes a symlink to a directory and writes nothing through it', () => {
+  const target = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'show-me-target-')), 'dir');
+  roots.push(path.dirname(target));
+  fs.mkdirSync(target);
+  const sb = makeSandbox({
+    shims: ['chromium'],
+    env: { SHIM_H: '2200', SHIM_PLANT_AT: 'work/page.png', SHIM_PLANT_TO: target },
+  });
+  const blocked = path.join(sb.work, `${sb.name}.png`);
+  const r = sb.run();
+  assertDestinationRefused(sb, r, target);
+  assert.ok(fs.lstatSync(blocked).isSymbolicLink());
+});
+
+test('exits 2 when the out-dir argument contains a newline', () => {
+  const sb = makeSandbox({ shims: ['chromium'], env: { SHIM_H: '2200' } });
+  const r = sb.run([sb.html, path.join(sb.root, 'out\nline')]);
+  assert.equal(r.status, 2, r.stderr);
+  assert.equal(r.stdout, '');
+  assert.notEqual(r.stderr.trim(), '');
+  assert.equal(sb.log().length, 0);
 });
 
 test('writes the PNGs into the out-dir argument', () => {

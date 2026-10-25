@@ -128,6 +128,12 @@ if ! mkdir -p -- "$out_arg" 2>/dev/null || ! out=$(CDPATH='' cd -- "$out_arg" 2>
   note "cannot use out-dir $out_arg"
   exit 0
 fi
+case $html$out in
+  *[[:cntrl:]\\]*)
+    note 'usage: bash screenshot.sh <file.html> [out-dir] (no backslash or control character in the path)'
+    exit 2
+    ;;
+esac
 work=$(mktemp -d "${TMPDIR:-/tmp}/show-me.XXXXXX") || {
   note 'cannot create a temp directory'
   exit 0
@@ -210,7 +216,15 @@ shoot() {
   rm -f -- "$tmp"
   render shot "$w" "$m_h" "$tmp" "$html_url" >/dev/null 2>&1 </dev/null
   [ -s "$tmp" ] || { rm -f -- "$tmp"; return 1; }
-  mv -f -- "$tmp" "$png"
+  if [ -d "$png" ] || [ -L "$png" ]; then
+    rm -f -- "$tmp"
+    return 2
+  fi
+  if mv -f -- "$tmp" "$png" 2>/dev/null && [ -f "$png" ] && [ ! -L "$png" ]; then
+    return 0
+  fi
+  rm -f -- "$tmp"
+  return 2
 }
 
 if ! cp "$html" "$work/measure.html"; then
@@ -234,12 +248,22 @@ esac
 
 desktop_png=$out/$name.png
 phone_png=$out/$name-390.png
-rm -f -- "$desktop_png" "$phone_png"
+rm -f -- "$desktop_png" "$phone_png" 2>/dev/null
+if [ -d "$desktop_png" ] || [ -L "$desktop_png" ]; then
+  note "cannot write $desktop_png (a directory or link is in the way)"
+  exit 0
+fi
 
 for backend in $cands; do
   pending=
   measure_page 1280
-  shoot 1280 "$desktop_png" || continue
+  desktop_rc=0
+  shoot 1280 "$desktop_png" || desktop_rc=$?
+  if [ "$desktop_rc" -eq 2 ]; then
+    note "cannot write $desktop_png"
+    exit 0
+  fi
+  [ "$desktop_rc" -eq 0 ] || continue
   printf '%s' "$pending" >&2
   pending=
   printf '%s\n' "$desktop_png"
@@ -249,10 +273,16 @@ for backend in $cands; do
   measure_page 390
   if [ "$desktop_known" = 1 ] && [ "$m_known" = 1 ] && [ "$desktop_sig" = "$m_sig" ]; then
     queue_note 'same layout at 390px, skipping the phone PNG'
-  elif shoot 390 "$phone_png"; then
-    printf '%s\n' "$phone_png"
+  elif [ -d "$phone_png" ] || [ -L "$phone_png" ]; then
+    queue_note "cannot write $phone_png (a directory or link is in the way)"
   else
-    queue_note "the 390px screenshot failed with $backend"
+    phone_rc=0
+    shoot 390 "$phone_png" || phone_rc=$?
+    case $phone_rc in
+      0) printf '%s\n' "$phone_png" ;;
+      2) queue_note "cannot write $phone_png" ;;
+      *) queue_note "the 390px screenshot failed with $backend" ;;
+    esac
   fi
   printf '%s' "$pending" >&2
   exit 0

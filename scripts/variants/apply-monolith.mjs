@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Overlay the Monolith variant onto an installed OpenCode tree, Claude tree, or both.
-// Reads Orchestration files from the install target and variant files from the repo.
+// Reads Conductor files from the install target and variant files from the repo.
 // Refuses to rewrite the source checkout.
 import fs from 'node:fs';
 import path from 'node:path';

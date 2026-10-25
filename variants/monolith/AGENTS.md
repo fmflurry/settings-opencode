@@ -38,6 +38,6 @@ Hooks enforce secrets, the exploratory tool budget, autonomy git guards, and the
 
 On Cursor, review subagents default to `grok-4.7-xhigh` and parallel fan-out defaults to `grok-4.7-medium`. Do not name a Claude, GPT, or Gemini model. Do not use a fast tier.
 
-This install is Monolith. Orchestration is the conductor-led install. `/orchestrate` is optional here.
+This install is Monolith. Conductor is the conductor-led install. `/orchestrate` is optional here.
 
 Command text that names a folded agent means: load the matching skill and do the work here. Folded agents are not installed: conductor, scout, planner, coder, writer, doc-updater, tdd-guide, git-specialist, architect, api-spec-architect, gdpr-specialist, postgres-dba, gaudi, refactor-cleaner, angular-cop, dotnet-cop, haruspex-commentorum, why-synthesizer.

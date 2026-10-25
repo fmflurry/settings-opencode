@@ -76,8 +76,8 @@ Whenever you **add, edit, rename, or delete** any artifact — no matter which h
 
 This settings repo keeps two installable harnesses. They share `skills/` (and the `.claude/skills/` mirror). A variant does not get its own copy of a skill.
 
-- **Orchestration** is the repository root: `.claude/`, `opencode.jsonc`, `prompts/agents/`, `instructions/`. The conductor routes, and the primary agent does not write.
-- **Monolith** is `variants/monolith/`. The installer overlays that tree onto a copy. It does not edit the Orchestration sources.
+- **Conductor** is the repository root: `.claude/`, `opencode.jsonc`, `prompts/agents/`, `instructions/`. The conductor routes, and the primary agent does not write. `orchestration` is an install alias for this variant.
+- **Monolith** is `variants/monolith/`. The installer overlays that tree onto a copy. It does not edit the Conductor sources.
 
 Claude and OpenCode receive the same overlay: the same baseline text (`CLAUDE.md` and `AGENTS.md`), the same agent roster, and the same skill union. `scripts/variants/parity-check.mjs` checks that.
 

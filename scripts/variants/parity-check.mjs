@@ -37,14 +37,17 @@ for (const text of Object.values(manifest.descriptions)) {
 }
 if (manifest.deferredMcp.join(',') !== 'blender,smartbear-swagger') fail('deferred MCP list changed');
 
-const orchestration = parseJsonc(read('opencode.jsonc'));
-if (orchestration.default_agent !== 'conductor') fail('orchestration default agent changed');
-if (!/First-Tool Gate/.test(read('instructions/subagent-routing.md'))) fail('orchestration routing lost the first-tool gate');
-if (!/First-Tool Gate/.test(read('.claude/rules/common/orchestration.md'))) fail('orchestration rule lost the first-tool gate');
-if (!/You CANNOT write or edit/.test(read('.claude/agents/conductor.md'))) fail('orchestration conductor can write');
-if (orchestration.mcp?.blender == null || orchestration.mcp?.['smartbear-swagger'] == null) {
-  fail('orchestration mcp dropped blender or smartbear-swagger');
+const sourceConfig = parseJsonc(read('opencode.jsonc'));
+if (sourceConfig.default_agent !== 'conductor') fail('conductor default agent changed');
+if (!/First-Tool Gate/.test(read('instructions/subagent-routing.md'))) fail('conductor routing lost the first-tool gate');
+if (!/First-Tool Gate/.test(read('.claude/rules/common/orchestration.md'))) fail('conductor rule lost the first-tool gate');
+if (!/You CANNOT write or edit/.test(read('.claude/agents/conductor.md'))) fail('conductor agent can write');
+if (sourceConfig.mcp?.blender == null || sourceConfig.mcp?.['smartbear-swagger'] == null) {
+  fail('conductor mcp dropped blender or smartbear-swagger');
 }
+const conductorVariant = JSON.parse(read('variants/conductor/manifest.json'));
+if (conductorVariant.id !== 'conductor') fail('conductor variant id changed');
+if (exists('variants/orchestration')) fail('orchestration variant directory should stay an alias, not a tree');
 
 const hooks = [
   'autonomy-ask-guard.sh', 'autonomy-context.sh', 'autonomy-git-guard.sh', 'codememory-mode.sh',
@@ -98,6 +101,7 @@ const parityA = read('skills/harness-parity/SKILL.md');
 const parityB = read('.claude/skills/harness-parity/SKILL.md');
 if (parityA !== parityB) fail('harness-parity copies differ');
 if (!parityA.includes('## D. Variants')) fail('harness-parity does not describe variants');
+if (!parityA.includes('**Conductor**')) fail('harness-parity does not name the Conductor variant');
 
 const BAD = /\b(?:claude-(?:opus|sonnet|haiku|fable)[a-z0-9.-]*|gpt-[a-z0-9.-]+|gemini-[a-z0-9.-]+)\b|(?:^|[\s`])(opus|sonnet|haiku)(?:[\s`]|$)|-fast\b/i;
 function scan(dir) {

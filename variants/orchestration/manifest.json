@@ -1,6 +1,0 @@
-{
-  "id": "orchestration",
-  "default": true,
-  "summary": "Conductor-led harness. The repository root is the source: .claude/, opencode.jsonc, prompts/agents/, and instructions/. Behavior of this variant is that tree, unchanged.",
-  "sources": [".claude/", "opencode.jsonc", "prompts/agents/", "instructions/", "commands/"]
-}

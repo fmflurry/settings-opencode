@@ -21,6 +21,21 @@
 
 > My personal **OpenCode** and **Claude Code** configuration, kept public so I can sync it across machines — and so anyone curious can borrow what's useful. MIT licensed, fork freely. It evolves with my workflow, so treat it as a living reference rather than a stable distribution.
 
+### Choisir sa variante
+
+Conductor est le défaut : le conducteur route, et l'agent principal n'écrit pas. Monolith est l'overlay léger : l'agent principal écrit, et `/orchestrate` est optionnel. `orchestration` reste un alias de Conductor. Un changement de variante retire les agents, commandes et règles de l'autre.
+
+```bash
+./install.sh                         # menu interactif, défaut Conductor
+./install.sh conductor               # OpenCode et Claude Code, scope global
+./install.sh monolith
+./install.sh --status                # variante installée, sans réinstaller
+./install.sh --variant orchestration # alias de conductor
+HARNESS_VARIANT=monolith ./install.sh --yes
+```
+
+Windows : `bootstrap.ps1 conductor`, `bootstrap.ps1 monolith`, `bootstrap.ps1 -Status`.
+
 ### Want to try it? Jump to **[Public install](#public-install)** — it takes about five minutes.
 
 ---
@@ -199,7 +214,7 @@ cd ~/Workspace/settings-opencode
 ./install.sh
 ```
 
-`install.sh` is interactive by default. It asks which harness to install (Claude Code, OpenCode, or both), which variant (Orchestration or Monolith, default Orchestration), and whether the scope is global or local:
+`install.sh` is interactive by default. It asks which harness to install (Claude Code, OpenCode, or both), which variant (Conductor or Monolith, default Conductor), and whether the scope is global or local:
 
 1. Verify your prerequisites (`git`, `bun`/`npm`).
 2. **OpenCode** (if selected): merge repo files into `~/.config/opencode` (or `./.opencode` if `--local`) without removing existing user config.
@@ -215,8 +230,9 @@ Useful flags:
 | Flag            | Behaviour                                                                                                                                                                                   |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | _(none)_        | Interactive walk-through: prompt `[Y/n]` for OpenCode (default Y) and Claude Code (default Y).                                                                                               |
-| `--yes`, `-y`   | Non-interactive — accept all defaults: OpenCode ✓, Claude Code ✓, variant Orchestration. Existing normal directories are merged, not removed or backed up.                                     |
-| `--variant`     | `orchestration` or `monolith`. Same as `HARNESS_VARIANT`. The flag wins over the env. Unset plus `--yes` stays Orchestration.                                                                    |
+| `--yes`, `-y`   | Non-interactive — accept all defaults: OpenCode ✓, Claude Code ✓, variant Conductor. Existing normal directories are merged, not removed or backed up.                                     |
+| `--variant`     | `conductor` or `monolith`. `orchestration` is an alias of `conductor`. Same as `HARNESS_VARIANT`. The flag wins over the env. Unset plus `--yes` stays Conductor.                                                                    |
+| `--status`      | Print the installed variant for OpenCode and Claude Code, then exit. A marker of `orchestration` is reported as Conductor.                                                                    |
 | `--local`       | Project-scoped install into the current directory (`./.opencode`, `./.claude` as independent siblings); skips the global shell-rc env block (prints it as a hint instead).                   |
 | `--opencode`    | **Allow-list:** install OpenCode only (if combined with other flags, only those are installed).                                                                                             |
 | `--claude`      | **Allow-list:** install Claude Code only.                                                                                                                                                   |
@@ -225,10 +241,13 @@ Useful flags:
 | `--uninstall`   | Remove the env-var block and optionally remove copied local/global dirs after confirmation. **Never deletes the cloned repo or your data without confirmation.**                               |
 | `--help`, `-h`  | Print usage.                                                                                                                                                                                |
 
-Orchestration is the conductor-led tree at the repo root. Monolith (`variants/monolith/`) is a lean overlay applied to the install copy: the primary agent writes, `/orchestrate` is optional, and OpenCode and Claude Code get the same roster. Skills stay one shared tree. `install-cursor.sh` keeps building the Orchestration plugin.
+Conductor is the conductor-led tree at the repo root. Monolith (`variants/monolith/`) is a lean overlay applied to the install copy: the primary agent writes, `/orchestrate` is optional, and OpenCode and Claude Code get the same roster. Skills stay one shared tree. `install-cursor.sh` keeps building the Conductor plugin. `./install.sh conductor` and `./install.sh monolith` switch without the menu and remove the other variant's leftovers.
 
 ```bash
-./install.sh --variant monolith
+./install.sh conductor
+./install.sh monolith
+./install.sh --status
+./install.sh --variant orchestration
 HARNESS_VARIANT=monolith ./install.sh --yes
 ```
 
@@ -673,7 +692,7 @@ Grouped below. `scripts/sync-skills.sh` computes the canonical union (root `skil
 - **Compliance (1):** `gdpr-compliance`.
 - **Domain (2):** `flurryx`, `transloco`.
 - **Universal standards (1):** `coding-standards`.
-- **On-demand role skills:** `planner`, `coder`, `writer`, `doc-updater`, `architect`, `refactor-cleaner`, `scout`, `gaudi`, `testing`, `security`, `coding-style`, `code-comments`, `autonomy`, `question-handling`, `enforcement-ladder`, `tool-budget`, `verification-gate`. Monolith loads these in the main loop. Orchestration still has the matching agents.
+- **On-demand role skills:** `planner`, `coder`, `writer`, `doc-updater`, `architect`, `refactor-cleaner`, `scout`, `gaudi`, `testing`, `security`, `coding-style`, `code-comments`, `autonomy`, `question-handling`, `enforcement-ladder`, `tool-budget`, `verification-gate`. Monolith loads these in the main loop. Conductor still has the matching agents.
 
 The PostgreSQL and Playwright sets are **gc.platform-specific project playbooks**, not general-purpose skills — read them alongside the `postgres-dba` agent. `/e2e` and `e2e-runner` do not assume that stack. They read `e2e.json` or discover the start command, ports, and runner (`skills/e2e`). Load `playwright-e2e-authoring` and `playwright-e2e-review` only when that override names them. A project sets `"enabled": false` to opt out. Consumers that do not want the playbooks omit those two skills when vendoring.
 
@@ -1014,7 +1033,7 @@ Les hooks et les plugins OpenCode code-memory ne font rien quand la décision es
 - Contextes (memos de mode): `contexts/*.md`.
 - Instructions globales: `instructions/*.md` (6 chargees au demarrage; le reste est un skill ou un fichier non charge).
 - Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`, `scripts/llm-metrics-dashboard.ts`, `scripts/settings-sync.sh`, `scripts/sync-skills.sh`, `scripts/skill-drift-check.sh`.
-- Installeurs: `bootstrap.sh`, `bootstrap.ps1`, `install.sh`, `install-cursor.sh`. `./install.sh` demande Orchestration (defaut) ou Monolith; `--variant` et `HARNESS_VARIANT` font le meme choix sans prompt. Le plugin Cursor reste Orchestration.
+- Installeurs: `bootstrap.sh`, `bootstrap.ps1`, `install.sh`, `install-cursor.sh`. `./install.sh` demande Conductor (defaut) ou Monolith; `./install.sh conductor`, `./install.sh monolith`, `--variant` et `HARNESS_VARIANT` font le meme choix sans prompt. `orchestration` est un alias de Conductor. `./install.sh --status` affiche la variante installee. Le plugin Cursor reste Conductor.
 - Mirror Claude Code: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/agents/`, `.claude/skills/`, `.claude/commands/`.
 - Exclusions volontaires (`.gitignore`): `node_modules/`, `antigravity-*`, `.DS_Store`, fichiers locaux `.env*` sauf `.env.example`, répertoire runtime `skills/skill-creator/`.
 
@@ -1145,7 +1164,7 @@ Groupes ci-dessous. `scripts/sync-skills.sh` calcule l'union canonique (root `sk
 - **Ecriture & communication (7):** `humanizer`, `for-real`, `caveman`, `caveman-commit`, `caveman-review`, `show-me`, `show-your-work`.
 - **Harness & config (5):** `config-sync`, `harness-parity`, `skill-authoring`, `treetopia`, `strategic-compact`.
 - **Securite (1):** `security-review`. **Conformite (1):** `gdpr-compliance`. **Domaine (2):** `flurryx`, `transloco`. **Standards (1):** `coding-standards`.
-- **Skills de role a la demande:** `planner`, `coder`, `writer`, `doc-updater`, `architect`, `refactor-cleaner`, `scout`, `gaudi`, `testing`, `security`, `coding-style`, `code-comments`, `autonomy`, `question-handling`, `enforcement-ladder`, `tool-budget`, `verification-gate`. Monolith les charge dans la boucle principale. Orchestration garde les agents correspondants.
+- **Skills de role a la demande:** `planner`, `coder`, `writer`, `doc-updater`, `architect`, `refactor-cleaner`, `scout`, `gaudi`, `testing`, `security`, `coding-style`, `code-comments`, `autonomy`, `question-handling`, `enforcement-ladder`, `tool-budget`, `verification-gate`. Monolith les charge dans la boucle principale. Conductor garde les agents correspondants.
 
 Les ensembles PostgreSQL et Playwright sont des **playbooks projet specifiques a gc.platform**. `/e2e` et `e2e-runner` ne supposent pas cette stack : ils lisent `e2e.json` ou decouvrent la commande de demarrage, les ports et le runner (`skills/e2e`). Les playbooks Playwright ne se chargent que si l'override les nomme. `"enabled": false` desactive `/e2e`. Un consommateur qui n'en veut pas omet `playwright-e2e-authoring` et `playwright-e2e-review` au vendoring. `skill-creator` est runtime-only, git-ignore et jamais synchronise.
 

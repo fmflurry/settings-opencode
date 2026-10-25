@@ -12,7 +12,10 @@
 #   --uninstall     Remove env-var block and installed copies (does not delete the repo)
 #   --local         Project-scoped install into the current working directory
 #                   (./.opencode, ./.claude). Does not touch shell rc files.
-#   --variant NAME  orchestration (default) or monolith. HARNESS_VARIANT too.
+#   --variant NAME  conductor (default) or monolith. orchestration is an alias.
+#                   HARNESS_VARIANT too. A bare conductor or monolith is the
+#                   same choice and skips the prompts.
+#   --status        Print the installed variant and exit.
 #   --help, -h      Show usage
 #
 set -euo pipefail
@@ -44,6 +47,10 @@ OPENCODE_TARGET_IS_SOURCE=0
 FLAG_OPENCODE=0
 FLAG_CLAUDE=0
 FLAG_LOCAL=0
+FLAG_VARIANT=0
+DO_STATUS=0
+POSITIONAL_VARIANT=""
+VARIANT_EXPLICIT=0
 HARNESS_VARIANT="${HARNESS_VARIANT:-}"
 
 # ------------------------------ presentation ---------------------------------
@@ -78,6 +85,10 @@ confirm_existing_local_opencode() {
     [ -d "$TARGET_OPENCODE" ] || return 0
 
     if [ "$ASSUME_YES" = "1" ]; then
+        if [ "$VARIANT_EXPLICIT" = "1" ]; then
+            info "existing local target $TARGET_OPENCODE; the chosen variant merges into it"
+            return 0
+        fi
         warn "$TARGET_OPENCODE exists; --yes does not merge into an existing local .opencode without target-specific confirmation"
         return 1
     fi
@@ -96,6 +107,10 @@ confirm_existing_local_claude() {
     [ -d "$TARGET_CLAUDE" ] || return 0
 
     if [ "$ASSUME_YES" = "1" ]; then
+        if [ "$VARIANT_EXPLICIT" = "1" ]; then
+            info "existing local target $TARGET_CLAUDE; the chosen variant merges into it"
+            return 0
+        fi
         warn "$TARGET_CLAUDE exists; --yes does not merge into an existing local .claude without target-specific confirmation"
         return 1
     fi
@@ -214,7 +229,7 @@ normalize_variant() {
     local value
     value="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
     case "$value" in
-        orchestration|1) printf 'orchestration' ;;
+        conductor|orchestration|1) printf 'conductor' ;;
         monolith|2) printf 'monolith' ;;
         *) return 1 ;;
     esac
@@ -223,14 +238,14 @@ normalize_variant() {
 ask_variant() {
     local reply normalized
     while :; do
-        printf "    ${BOLD}?${RESET} Choose harness variant: Orchestration or Monolith [Orchestration] "
+        printf "    ${BOLD}?${RESET} Choose harness variant: Conductor or Monolith [Conductor] "
         read_reply reply
-        reply="${reply:-Orchestration}"
+        reply="${reply:-conductor}"
         if normalized="$(normalize_variant "$reply")"; then
             HARNESS_VARIANT="$normalized"
             return 0
         fi
-        printf "    please answer Orchestration or Monolith\n"
+        printf "    please answer Conductor or Monolith\n"
     done
 }
 
@@ -240,7 +255,7 @@ print_help() {
     cat <<EOF
 ${BOLD}settings-opencode installer${RESET}
 
-Usage: ./install.sh [flags]
+Usage: ./install.sh [conductor|monolith] [flags]
 
 Flags:
   --yes, -y       Non-interactive (accept all defaults)
@@ -255,9 +270,15 @@ Flags:
                   Does not touch global shell rc files. Combine with --yes,
                   --no-claude, --no-opencode, and --uninstall as normal. Do
                   NOT run this from inside the settings-opencode repo itself.
-  --variant NAME  orchestration (default) or monolith. Same as HARNESS_VARIANT.
-                  Orchestration keeps the conductor. Monolith is the lean overlay.
-                  --yes with neither flag nor env stays Orchestration.
+  conductor, monolith
+                  Install that variant without prompts (both harnesses, global
+                  scope, same as --yes). orchestration is an alias of conductor.
+                  Combine with --local, --no-claude, or --no-opencode.
+  --variant NAME  conductor (default) or monolith. orchestration is an alias
+                  of conductor. Same as HARNESS_VARIANT. The flag wins over
+                  the env. --yes with neither flag nor env stays Conductor.
+  --status        Print the installed variant for OpenCode and Claude Code,
+                  then exit. Does not install or prompt.
   --help, -h      Show this message
 
 Target paths (global mode):
@@ -531,17 +552,55 @@ sync_skills() {
     fi
 }
 
-# Orchestration is the copied tree. Monolith rewrites that copy and never the source checkout.
+print_installed_variant() {
+    local name="$1" dir="$2" marker raw
+    if [ ! -d "$dir" ]; then
+        printf '%s: %s (not installed)\n' "$name" "$dir"
+        return 0
+    fi
+    marker="$dir/.harness-variant"
+    if [ ! -f "$marker" ]; then
+        printf '%s: %s (not recorded)\n' "$name" "$dir"
+        return 0
+    fi
+    raw="$(tr '[:upper:]' '[:lower:]' < "$marker" | tr -d '[:space:]')"
+    case "$raw" in
+        conductor|orchestration) printf '%s: %s Conductor\n' "$name" "$dir" ;;
+        monolith) printf '%s: %s Monolith\n' "$name" "$dir" ;;
+        "") printf '%s: %s (not recorded)\n' "$name" "$dir" ;;
+        *) printf '%s: %s unknown (%s)\n' "$name" "$dir" "$raw" ;;
+    esac
+}
+
+# Conductor is the copied tree. Returning to it deletes Monolith-only paths.
+# Monolith rewrites the copy and never the source checkout.
+prune_conductor_leftovers() {
+    local args=(--repo "$REPO_DIR" --variant conductor)
+    local do_opencode=0 do_claude=0
+    if [ "$SKIP_OPENCODE" != "1" ] && [ "$OPENCODE_TARGET_READY" = "1" ] && [ "$OPENCODE_TARGET_IS_SOURCE" != "1" ]; then
+        args+=(--opencode "$TARGET_OPENCODE")
+        do_opencode=1
+    fi
+    if [ "$SKIP_CLAUDE" != "1" ] && [ "$CLAUDE_TARGET_READY" = "1" ] && ! same_directory "$TARGET_CLAUDE" "$REPO_DIR/.claude"; then
+        args+=(--claude "$TARGET_CLAUDE")
+        do_claude=1
+    fi
+    if [ "$do_opencode" = "1" ] || [ "$do_claude" = "1" ]; then
+        node "$REPO_DIR/scripts/variants/prune-foreign.mjs" "${args[@]}"
+    fi
+    info "variant: conductor"
+    if [ "$do_opencode" = "1" ]; then
+        printf 'conductor\n' > "$TARGET_OPENCODE/.harness-variant"
+    fi
+    if [ "$do_claude" = "1" ]; then
+        printf 'conductor\n' > "$TARGET_CLAUDE/.harness-variant"
+    fi
+}
+
 apply_harness_variant() {
     local args=() wrote=0
     if [ "$HARNESS_VARIANT" != "monolith" ]; then
-        info "variant: orchestration"
-        if [ "$SKIP_OPENCODE" != "1" ] && [ "$OPENCODE_TARGET_READY" = "1" ] && [ "$OPENCODE_TARGET_IS_SOURCE" != "1" ]; then
-            printf 'orchestration\n' > "$TARGET_OPENCODE/.harness-variant"
-        fi
-        if [ "$SKIP_CLAUDE" != "1" ] && [ "$CLAUDE_TARGET_READY" = "1" ] && ! same_directory "$TARGET_CLAUDE" "$REPO_DIR/.claude"; then
-            printf 'orchestration\n' > "$TARGET_CLAUDE/.harness-variant"
-        fi
+        prune_conductor_leftovers
         return 0
     fi
 
@@ -1465,24 +1524,74 @@ while [ $# -gt 0 ]; do
         --claude)        FLAG_CLAUDE=1 ;;
         --uninstall)     DO_UNINSTALL=1 ;;
         --local)         LOCAL_MODE=1; FLAG_LOCAL=1 ;;
+        --status)        DO_STATUS=1 ;;
         --variant)
             if [ $# -lt 2 ] || [ -z "${2:-}" ]; then
-                err "--variant needs orchestration or monolith"
+                err "--variant needs conductor or monolith"
                 exit 2
             fi
             HARNESS_VARIANT="$2"
+            FLAG_VARIANT=1
             shift
             ;;
-        --variant=*)     HARNESS_VARIANT="${1#--variant=}" ;;
+        --variant=*)
+            HARNESS_VARIANT="${1#--variant=}"
+            FLAG_VARIANT=1
+            ;;
+        conductor|Conductor|CONDUCTOR|monolith|Monolith|MONOLITH|orchestration|Orchestration|ORCHESTRATION|1|2)
+            if [ -n "$POSITIONAL_VARIANT" ]; then
+                err "only one variant name is allowed"
+                exit 2
+            fi
+            POSITIONAL_VARIANT="$1"
+            ;;
         -h|--help)       print_help; exit 0 ;;
         *) err "unknown flag: $1"; print_help; exit 1 ;;
     esac
     shift
 done
 
+if [ "$DO_STATUS" = "1" ]; then
+    if [ "$LOCAL_MODE" = "1" ]; then
+        TARGET_OPENCODE="$INVOKE_DIR/.opencode"
+        TARGET_CLAUDE="$INVOKE_DIR/.claude"
+    fi
+    print_installed_variant "opencode" "$TARGET_OPENCODE"
+    print_installed_variant "claude" "$TARGET_CLAUDE"
+    exit 0
+fi
+
+if [ -n "$POSITIONAL_VARIANT" ]; then
+    if [ "$FLAG_VARIANT" = "1" ]; then
+        pos_norm="$(normalize_variant "$POSITIONAL_VARIANT")" || {
+            err "unknown variant '${POSITIONAL_VARIANT}': use conductor or monolith"
+            exit 2
+        }
+        flag_norm="$(normalize_variant "$HARNESS_VARIANT")" || {
+            err "unknown variant '${HARNESS_VARIANT}': use conductor or monolith"
+            exit 2
+        }
+        if [ "$pos_norm" != "$flag_norm" ]; then
+            err "variant '${POSITIONAL_VARIANT}' conflicts with --variant '${HARNESS_VARIANT}'"
+            exit 2
+        fi
+        HARNESS_VARIANT="$pos_norm"
+    else
+        HARNESS_VARIANT="$POSITIONAL_VARIANT"
+    fi
+    ASSUME_YES=1
+    VARIANT_EXPLICIT=1
+elif [ "$FLAG_VARIANT" = "1" ]; then
+    if [ -z "$HARNESS_VARIANT" ]; then
+        err "--variant needs conductor or monolith"
+        exit 2
+    fi
+    VARIANT_EXPLICIT=1
+fi
+
 if [ -n "$HARNESS_VARIANT" ]; then
     normalized="$(normalize_variant "$HARNESS_VARIANT")" || {
-        err "unknown variant '${HARNESS_VARIANT}': use orchestration or monolith"
+        err "unknown variant '${HARNESS_VARIANT}': use conductor or monolith (orchestration is an alias of conductor)"
         exit 2
     }
     HARNESS_VARIANT="$normalized"
@@ -1524,7 +1633,7 @@ if [ "$ASSUME_YES" != "1" ] && [ "$DO_UNINSTALL" != "1" ]; then
 fi
 
 if [ -z "$HARNESS_VARIANT" ]; then
-    HARNESS_VARIANT=orchestration
+    HARNESS_VARIANT=conductor
 fi
 
 # Apply local-mode target overrides before any other logic runs.

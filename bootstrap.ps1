@@ -36,8 +36,11 @@
     & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -NoOpencode
 
 .EXAMPLE
-    # Lean Monolith overlay. Default, and an omitted -Variant, stay Orchestration.
-    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -Variant monolith
+    # Lean Monolith overlay. Default, and an omitted variant, stay Conductor.
+    # orchestration is an alias of Conductor.
+    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) monolith
+    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -Variant conductor
+    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -Status
 #>
 [CmdletBinding()]
 param(
@@ -47,24 +50,49 @@ param(
     [switch]$Claude,
     [switch]$Local,
     [switch]$Uninstall,
-    [string]$Variant = ''
+    [switch]$Status,
+    [string]$Variant = '',
+    [Parameter(Position = 0)]
+    [string]$VariantName = ''
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-if ([string]::IsNullOrWhiteSpace($Variant)) { $Variant = $env:HARNESS_VARIANT }
-if ([string]::IsNullOrWhiteSpace($Variant)) { $Variant = 'orchestration' }
-$Variant = $Variant.Trim().ToLowerInvariant()
-switch ($Variant) {
-    '1' { $Variant = 'orchestration' }
-    '2' { $Variant = 'monolith' }
-    'orchestration' { }
-    'monolith' { }
-    default {
-        Write-Host "error: unknown harness variant '$Variant' (use orchestration or monolith)" -ForegroundColor Red
+function ConvertTo-HarnessVariant([string]$value) {
+    if ([string]::IsNullOrWhiteSpace($value)) { return 'conductor' }
+    switch ($value.Trim().ToLowerInvariant()) {
+        '1' { return 'conductor' }
+        '2' { return 'monolith' }
+        'conductor' { return 'conductor' }
+        'orchestration' { return 'conductor' }
+        'monolith' { return 'monolith' }
+        default { return $null }
+    }
+}
+
+if (-not $Status) {
+    $fromFlag = -not [string]::IsNullOrWhiteSpace($Variant)
+    $fromName = -not [string]::IsNullOrWhiteSpace($VariantName)
+    if ($fromFlag -and $fromName) {
+        $flagNorm = ConvertTo-HarnessVariant $Variant
+        $nameNorm = ConvertTo-HarnessVariant $VariantName
+        if ([string]::IsNullOrWhiteSpace($flagNorm) -or [string]::IsNullOrWhiteSpace($nameNorm) -or $flagNorm -ne $nameNorm) {
+            Write-Host "error: variant '$VariantName' conflicts with -Variant '$Variant'" -ForegroundColor Red
+            exit 2
+        }
+        $Variant = $flagNorm
+    } elseif ($fromName) {
+        $Variant = $VariantName
+    }
+    if ([string]::IsNullOrWhiteSpace($Variant)) { $Variant = $env:HARNESS_VARIANT }
+    if ([string]::IsNullOrWhiteSpace($Variant)) { $Variant = 'conductor' }
+    $normalizedVariant = ConvertTo-HarnessVariant $Variant
+    if ([string]::IsNullOrWhiteSpace($normalizedVariant)) {
+        Write-Host "error: unknown harness variant '$Variant' (use conductor or monolith; orchestration is an alias of conductor)" -ForegroundColor Red
         exit 2
     }
+    $Variant = $normalizedVariant
 }
 
 # Capture invocation directory before any Push-Location happens.
@@ -99,8 +127,8 @@ if ($Opencode -or $Claude) {
 if ($NoOpencode) { $doOpencode = $false }
 if ($NoClaude)   { $doClaude   = $false }
 
-# Empty-set guard.
-if (-not $doOpencode -and -not $doClaude) {
+# Empty-set guard. -Status only reads markers, so a disabled target still reports.
+if (-not $Status -and -not $doOpencode -and -not $doClaude) {
     Die 'nothing to install (both targets disabled)'
 }
 
@@ -306,6 +334,32 @@ function Move-LegacyNotificationHelper($opencodeDir) {
 }
 
 # (empty-set guard is handled in the resolver block above)
+
+function Write-VariantStatus($name, $dir) {
+    if (-not (Test-Path -LiteralPath $dir -PathType Container)) {
+        Write-Host ("{0}: {1} (not installed)" -f $name, $dir)
+        return
+    }
+    $markerPath = Join-Path $dir '.harness-variant'
+    if (-not (Test-Path -LiteralPath $markerPath -PathType Leaf)) {
+        Write-Host ("{0}: {1} (not recorded)" -f $name, $dir)
+        return
+    }
+    $raw = ([System.IO.File]::ReadAllText($markerPath)).Trim().ToLowerInvariant()
+    switch ($raw) {
+        'conductor' { Write-Host ("{0}: {1} Conductor" -f $name, $dir) }
+        'orchestration' { Write-Host ("{0}: {1} Conductor" -f $name, $dir) }
+        'monolith' { Write-Host ("{0}: {1} Monolith" -f $name, $dir) }
+        '' { Write-Host ("{0}: {1} (not recorded)" -f $name, $dir) }
+        default { Write-Host ("{0}: {1} unknown ({2})" -f $name, $dir, $raw) }
+    }
+}
+
+if ($Status) {
+    Write-VariantStatus 'opencode' $OpencodeDir
+    Write-VariantStatus 'claude' $ClaudeDir
+    exit 0
+}
 
 # ------------------------------ uninstall ------------------------------------
 
@@ -543,12 +597,21 @@ if ($Variant -eq 'monolith') {
     & node @applyArgs
     if ($LASTEXITCODE -ne 0) { Die 'monolith overlay failed' }
 } else {
-    Info 'variant: orchestration'
-    if ($doOpencode -and $opencodeTargetReady -and -not $opencodeTargetIsSource) {
-        [System.IO.File]::WriteAllText((Join-Path $OpencodeDir '.harness-variant'), "orchestration`n")
+    Info 'variant: conductor'
+    $pruneArgs = @((Join-Path $SrcDir 'scripts\variants\prune-foreign.mjs'), '--repo', $SrcDir, '--variant', 'conductor')
+    $doPruneOpencode = $doOpencode -and $opencodeTargetReady -and -not $opencodeTargetIsSource
+    $doPruneClaude = $doClaude -and $claudeTargetReady -and -not $claudeTargetIsSource
+    if ($doPruneOpencode) { $pruneArgs += @('--opencode', $OpencodeDir) }
+    if ($doPruneClaude) { $pruneArgs += @('--claude', $ClaudeDir) }
+    if ($doPruneOpencode -or $doPruneClaude) {
+        & node @pruneArgs
+        if ($LASTEXITCODE -ne 0) { Die 'conductor prune failed' }
     }
-    if ($doClaude -and $claudeTargetReady -and -not $claudeTargetIsSource) {
-        [System.IO.File]::WriteAllText((Join-Path $ClaudeDir '.harness-variant'), "orchestration`n")
+    if ($doPruneOpencode) {
+        [System.IO.File]::WriteAllText((Join-Path $OpencodeDir '.harness-variant'), "conductor`n")
+    }
+    if ($doPruneClaude) {
+        [System.IO.File]::WriteAllText((Join-Path $ClaudeDir '.harness-variant'), "conductor`n")
     }
 }
 

@@ -14,7 +14,7 @@ function copyTree(src, dest) {
   fs.cpSync(src, dest, { recursive: true, filter: (item) => !item.includes(`${path.sep}node_modules${path.sep}`) });
 }
 
-test('monolith overlay keeps orchestration sources and installs the lean roster', () => {
+test('monolith overlay keeps conductor sources and installs the lean roster', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'monolith-apply-'));
   const opencode = path.join(tmp, 'opencode');
   const claude = path.join(tmp, 'claude');

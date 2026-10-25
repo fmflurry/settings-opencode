@@ -1,0 +1,6 @@
+{
+  "id": "conductor",
+  "default": true,
+  "summary": "Conductor-led harness. The repository root is the source: .claude/, opencode.jsonc, prompts/agents/, and instructions/. Behavior of this variant is that tree, unchanged. The install alias orchestration selects this variant.",
+  "sources": [".claude/", "opencode.jsonc", "prompts/agents/", "instructions/", "commands/"]
+}

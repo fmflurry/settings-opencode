@@ -680,7 +680,7 @@
       "subtask": true,
     },
     "show-me": {
-      "description": "Explain a topic visually by producing a self-contained HTML artifact (diagram, infographic, or short slide deck) and opening it. Usage: /show-me <topic>",
+      "description": "Explain a topic visually by producing a self-contained HTML artifact (diagram, infographic, or short slide deck), opening it, and showing PNG screenshots of it. Usage: /show-me <topic>",
       "template": "{file:commands/show-me.md}\n\n$ARGUMENTS",
       "agent": "writer",
       "subtask": true,

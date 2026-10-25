@@ -1,21 +1,17 @@
 ---
 name: show-me
-description: Help the user understand the current topic visually. Produces a self-contained HTML file by default (diagrams, infographics, short slide decks) and opens it, because terminal-rendered diagrams read poorly. Use when the user says "show me", "visualize", "diagram this", "draw it", "explain visually", or when a topic is too dense for prose.
+description: Help the user understand the current topic visually. Produces a self-contained HTML file by default (diagrams, infographics, short slide decks), renders PNG screenshots of it, and shows them in the host, because terminal-rendered diagrams read poorly. Use when the user says "show me", "visualize", "diagram this", "draw it", "explain visually", or when a topic is too dense for prose.
 ---
 
 Help the user understand the current topic of conversation visually. Skip the preamble and keep prose brief.
 
-## Default: write an HTML file and open it
+## Default: write an HTML file, screenshot it, open it
 
-Terminal-rendered diagrams read poorly. So unless an exception below applies, produce **one self-contained HTML file** and open it:
-
-```
-Bash(open /tmp/show-me-{slug}.html)
-```
+Terminal-rendered diagrams read poorly. So unless an exception below applies, produce **one self-contained HTML file**, run the "Before opening the file" checklist, then follow "Then screenshot and show it" below.
 
 - Path: `/tmp/show-me-{slug}.html`, where `{slug}` is 2-4 kebab-case words naming the topic.
 - `/tmp` is the default so the repo working tree stays clean. Write inside the repo only when the user asks to keep the artifact; then `docs/` or the path they name.
-- After opening, leave 1-3 lines in chat: what the file shows and its path. Do not paste the HTML.
+- When the host has an attach-files tool (e.g. `openbot.attach_files_to_response`), the app may not read `/tmp`. Write `~/OpenBot/Shared/show-me/show-me-{slug}.html` instead, running `mkdir -p` on that directory when it is missing. Detect the tool by its presence in your tool list.
 
 ### Hard constraints on the HTML
 
@@ -24,6 +20,7 @@ Bash(open /tmp/show-me-{slug}.html)
 - Match the product's colors, type, spacing, and components. Real labels and real data — never `foo`/`bar` placeholders.
 - Responsive: readable at desktop width and on mobile. At least one `@media` breakpoint collapsing multi-column layouts to a single stack.
 - Monospace blocks for code, trees, and pseudocode; keep them visually distinct from prose.
+- Slide decks: stack the slides as sections in normal flow, with no `vh` heights or JS-driven one-slide view, so the full-page screenshot shows every slide.
 
 ### Pick the smallest form that makes the point
 
@@ -125,3 +122,22 @@ Place each visual next to the short text it supports. Keep only the calls, files
 - Every label is a real name from this codebase or conversation.
 - One `@media` breakpoint present; no horizontal scroll on mobile.
 - Smallest form that makes the point; nothing decorative survived.
+
+## Then screenshot and show it
+
+Skip this section when an exception above applies.
+
+1. Screenshot: `bash <this skill's directory>/scripts/screenshot.sh <html>`. It writes `<name>.png` (1280 wide, full page height) and `<name>-390.png` (phone, only when the layout differs) next to the HTML, then prints their paths. It tries Playwright chromium, then Chrome/Chromium, then Firefox, and never downloads a browser. Full height: a measure pass reads the page height, then a capture renders at that height, capped at 12000px.
+2. If it prints no path, the reason is on stderr. Say so in one line and continue with the HTML only. Never fail the skill over a screenshot.
+3. When the host has an attach-files tool, attach the PNG(s) and the HTML before the final answer so the user sees the image in the app (e.g. `openbot.attach_files_to_response`). Inside OpenBot, `openbot.html_render` may also give an inline view.
+4. Open the HTML for the user with this block. It skips silently on hosts without a display:
+
+   ```bash
+   if [ "$(uname)" = Darwin ]; then
+     open "<html>"
+   elif [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+     xdg-open "<html>" >/dev/null 2>&1 &
+   fi
+   ```
+
+5. Chat: 1-3 lines. Say what the visual shows, then the paths (HTML and PNGs). Do not paste the HTML.

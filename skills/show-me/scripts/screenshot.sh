@@ -64,6 +64,12 @@ if [ -z "$html" ] || [ ! -f "$html" ]; then
   note 'usage: bash screenshot.sh <file.html> [out-dir]'
   exit 2
 fi
+case $html in
+  *[[:cntrl:]\\]*)
+    note 'usage: bash screenshot.sh <file.html> [out-dir] (no backslash or control character in the path)'
+    exit 2
+    ;;
+esac
 
 base=${html##*/}
 src_dir=.
@@ -118,7 +124,7 @@ elif command -v gtimeout >/dev/null 2>&1; then
 fi
 
 out_arg=$out
-if ! mkdir -p "$out_arg" 2>/dev/null || ! out=$(CDPATH='' cd -- "$out_arg" 2>/dev/null && pwd); then
+if ! mkdir -p -- "$out_arg" 2>/dev/null || ! out=$(CDPATH='' cd -- "$out_arg" 2>/dev/null && pwd); then
   note "cannot use out-dir $out_arg"
   exit 0
 fi
@@ -200,14 +206,11 @@ measure_page() {
 }
 
 shoot() {
-  local w=$1 png=$2
-  rm -f "$png"
-  render shot "$w" "$m_h" "$png" "$html_url" >/dev/null 2>&1 </dev/null
-  if [ -s "$png" ]; then
-    return 0
-  fi
-  rm -f "$png"
-  return 1
+  local w=$1 png=$2 tmp="$work/shot-$1.png"
+  rm -f -- "$tmp"
+  render shot "$w" "$m_h" "$tmp" "$html_url" >/dev/null 2>&1 </dev/null
+  [ -s "$tmp" ] || { rm -f -- "$tmp"; return 1; }
+  mv -f -- "$tmp" "$png"
 }
 
 if ! cp "$html" "$work/measure.html"; then
@@ -231,7 +234,7 @@ esac
 
 desktop_png=$out/$name.png
 phone_png=$out/$name-390.png
-rm -f "$desktop_png" "$phone_png"
+rm -f -- "$desktop_png" "$phone_png"
 
 for backend in $cands; do
   pending=

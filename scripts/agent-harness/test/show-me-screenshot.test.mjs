@@ -13,7 +13,7 @@ const FIXTURE_HTML =
   '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0}.box{height:900px}' +
   '@media (max-width:600px){.box{height:1800px}}</style></head><body><div class="box">show-me</div></body></html>\n';
 
-const REQUIRED_TOOLS = ['bash', 'mktemp', 'rm', 'cat', 'grep', 'sed', 'head', 'mkdir', 'cp'];
+const REQUIRED_TOOLS = ['bash', 'mktemp', 'rm', 'cat', 'grep', 'sed', 'head', 'mkdir', 'cp', 'mv'];
 
 const MEASURE_SIG = [
   'w=${ws%%,*}',
@@ -270,7 +270,8 @@ test('prefers playwright (node) over chromium', () => {
   const url = fileUrl(sb.html);
   const desktop = path.join(sb.work, `${sb.name}.png`);
   assert.ok(log.some((line) => /^node measure 1280 file:\/\/\S+$/.test(line)));
-  assert.ok(log.includes(`node shot 1280 2200 ${desktop} ${url}`));
+  assert.ok(log.some((line) => /^node shot 1280 2200 \S+\/shot-1280\.png file:\/\/\S+$/.test(line) && line.endsWith(` ${url}`)));
+  assert.ok(fs.existsSync(desktop));
 });
 
 test('falls through to chromium when the playwright candidate exits 3', () => {
@@ -369,7 +370,12 @@ test('percent-encodes %, space, # and ? in the file URL', () => {
 
 test('exits 2 with a usage line when the html argument is missing, absent or not a file', () => {
   const sb = makeSandbox({ shims: ['chromium'], env: { SHIM_H: '2200' } });
-  for (const args of [[], [path.join(sb.work, 'missing.html')], [sb.work]]) {
+  const badNames = ['back\\slash.html', 'new\nline.html'].map((file) => {
+    const bad = path.join(sb.work, file);
+    fs.writeFileSync(bad, FIXTURE_HTML);
+    return bad;
+  });
+  for (const args of [[], [path.join(sb.work, 'missing.html')], [sb.work], ...badNames.map((bad) => [bad])]) {
     const r = sb.run(args);
     assert.equal(r.status, 2, `args ${JSON.stringify(args)}: ${r.stderr}`);
     assert.equal(r.stdout, '');
@@ -405,6 +411,19 @@ test('removes a stale phone PNG when the layout at 390px matches the desktop lay
   assert.equal(r.status, 0, r.stderr);
   assertPngs(sb, r.stdout, { phone: false });
   assert.ok(!fs.existsSync(phone));
+});
+
+test('replaces a symlinked PNG target instead of writing through it', () => {
+  const sb = makeSandbox({ shims: ['chromium'], env: { SHIM_H: '2200' } });
+  const keep = path.join(sb.root, 'keep.txt');
+  fs.writeFileSync(keep, 'KEEP');
+  const desktop = path.join(sb.work, `${sb.name}.png`);
+  fs.symlinkSync(keep, desktop);
+  const r = sb.run();
+  assert.equal(r.status, 0, r.stderr);
+  assertPngs(sb, r.stdout);
+  assert.equal(fs.readFileSync(keep, 'utf8'), 'KEEP');
+  assert.ok(fs.lstatSync(desktop).isFile());
 });
 
 test('writes the PNGs into the out-dir argument', () => {

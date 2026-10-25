@@ -76,6 +76,11 @@ const SHIMS = {
     'if [ -n "$SHIM_H" ] && [ "$s" = 1 ]; then echo "SHOW_ME_MEASURE h=$SHIM_H m=$sig"; fi',
     'exit 0',
   ],
+  mv: [
+    '#!/bin/bash',
+    'mkdir -p -- "${@: -1}"',
+    'exec "$SHIM_REAL_MV" "$@"',
+  ],
   node: [
     '#!/bin/bash',
     'echo "node ${*:3}" >> "$SHIM_LOG"',
@@ -457,6 +462,19 @@ test('refuses a PNG path that is a directory and writes nothing into it', () => 
   const r = sb.run();
   assertDestinationRefused(sb, r, blocked);
   assert.ok(fs.lstatSync(blocked).isDirectory());
+  assert.equal(sb.log().length, 0);
+});
+
+test('never moves the shot into a directory created after the pre-check', () => {
+  const sb = makeSandbox({
+    shims: ['chromium', 'mv'],
+    env: { SHIM_H: '2200', SHIM_REAL_MV: resolveOnPath('mv') },
+  });
+  const blocked = path.join(sb.work, `${sb.name}.png`);
+  const r = sb.run();
+  assertDestinationRefused(sb, r, blocked);
+  assert.ok(fs.lstatSync(blocked).isDirectory());
+  assert.deepEqual(fs.readdirSync(blocked), []);
 });
 
 test('refuses a PNG path that becomes a symlink to a directory and writes nothing through it', () => {

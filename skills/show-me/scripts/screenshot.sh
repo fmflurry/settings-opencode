@@ -123,6 +123,10 @@ elif command -v gtimeout >/dev/null 2>&1; then
   timeout_bin=gtimeout
 fi
 
+# -T (GNU only) keeps a directory created after shoot()'s check from catching the file
+mv_flags=(-f)
+if mv --version >/dev/null 2>&1; then mv_flags+=(-T); fi
+
 out_arg=$out
 if ! mkdir -p -- "$out_arg" 2>/dev/null || ! out=$(CDPATH='' cd -- "$out_arg" 2>/dev/null && pwd); then
   note "cannot use out-dir $out_arg"
@@ -220,7 +224,7 @@ shoot() {
     rm -f -- "$tmp"
     return 2
   fi
-  if mv -f -- "$tmp" "$png" 2>/dev/null && [ -f "$png" ] && [ ! -L "$png" ]; then
+  if mv "${mv_flags[@]}" -- "$tmp" "$png" 2>/dev/null && [ -f "$png" ] && [ ! -L "$png" ]; then
     return 0
   fi
   rm -f -- "$tmp"

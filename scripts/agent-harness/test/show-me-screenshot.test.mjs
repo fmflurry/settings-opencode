@@ -78,7 +78,7 @@ const SHIMS = {
   ],
   mv: [
     '#!/bin/bash',
-    'mkdir -p -- "${@: -1}"',
+    '[ "$1" = --version ] || mkdir -p -- "${@: -1}"',
     'exec "$SHIM_REAL_MV" "$@"',
   ],
   node: [
@@ -465,7 +465,9 @@ test('refuses a PNG path that is a directory and writes nothing into it', () => 
   assert.equal(sb.log().length, 0);
 });
 
-test('never moves the shot into a directory created after the pre-check', () => {
+const gnuMv = spawnSync('mv', ['--version']).status === 0;
+
+test('never moves the shot into a directory created after the pre-check', { skip: !gnuMv && 'needs GNU mv -T (BSD/macOS mv has no -T)' }, () => {
   const sb = makeSandbox({
     shims: ['chromium', 'mv'],
     env: { SHIM_H: '2200', SHIM_REAL_MV: resolveOnPath('mv') },

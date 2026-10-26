@@ -69,6 +69,12 @@ fails open when the host cannot be read. The review/fix loop stops when the same
 `agent-harness goal --goal <slug> bump`, exit 3), with a safety ceiling of 10 rounds. Stop and tell the user the remaining findings.
 Do not start another fix round. Do not work around the loop by ending the turn.
 
+## Session binding
+
+`ship-init` binds the goal to `AGENT_HARNESS_SESSION` (OpenCode; the plugin's `shell.env` hook injects it) or `CLAUDE_CODE_SESSION_ID` (Claude Code).
+A goal with no bound session, or a Stop event with no session id, is held by the stop gate (fails closed). `ship-init --adopt` rebinding prints a notice. Agents cannot set
+`CLAUDE_CODE_SESSION_ID`, `AGENT_HARNESS_SESSION` or `AGENT_HARNESS_GOAL` in any mode.
+
 ## Scope
 
 - Interactive mode (flag off): rules (a) and (b) apply. Rule (d) does not apply, so confirm each irreversible action.

@@ -2,6 +2,20 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.19] - 2026-10-26
+
+- Goal state is per goal. Each goal lives only in its registry entry `<git-common-dir>/agent-harness/goals/<slug>.json`. There is no shared `goal.json`, and a legacy `goal.json` is ignored. `autonomy.on` stays shared in `<main>/.claude/state`.
+- `ship-init` prints the worktree path on stdout and `slug=<slug>` on stderr, and binds the entry to the session: `AGENT_HARNESS_SESSION` on OpenCode (injected by the plugin's `shell.env` hook), else `CLAUDE_CODE_SESSION_ID` on Claude Code.
+- `agent-harness goal` selects its goal with `--goal <slug>`, else `AGENT_HARNESS_GOAL`, else the entry for the cwd worktree's branch, else exits 2. Run from the main checkout, pass `--goal <slug>`.
+- The session is bound at `ship-init`. Resuming in a new session (after `/resume` or `/clear`) is `agent-harness ship-init --adopt <pr>`, which rebinds `session_id`. Goal commands never rebind.
+- Agents cannot set `CLAUDE_CODE_SESSION_ID`, `AGENT_HARNESS_SESSION` or `AGENT_HARNESS_GOAL` in any mode; the guard denies those. Autonomous `ship-init` refuses without a session id.
+- A goal with no bound session, or a Stop event with no session id, is held by the stop gate (fails closed). `ship-init --adopt` rebinding prints a notice.
+- While any goal is active, only an ACTIVE goal's branch with passing reviews may be pushed.
+- The Stop gate acts only on goals bound to the stopping session, so concurrent `/ship` sessions in one repo no longer interfere.
+- The push guard checks the review verdicts of the branch being pushed. Pushing an unregistered branch while any goal is active is denied. Shell writes to the registry are denied.
+- `goal clear` is removed.
+- Upgrade: in-flight goals lose their recorded reviews and counters (review verdicts, bump fingerprints, fix rounds) because that state moved to the registry. Each in-flight goal needs one fresh code and security review before its next push.
+
 ## [0.4.18] - 2026-10-26
 
 - Pull requests opened or updated by the harness include a show-me visual report. `agent-harness pr-report` writes `docs/pr-reports/<branch-slug>.html` and `.png` (offline HTML, one `@media` breakpoint) and copies both into `/opt/cursor/artifacts/pr-reports/` when that directory is writable. The PR template section `## Visual report` embeds the PNG and links the HTML.

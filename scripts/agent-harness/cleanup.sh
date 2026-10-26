@@ -30,10 +30,9 @@ oid="$(jq -r .headRefOid <<<"$view")"
 cross="$(jq -r .isCrossRepository <<<"$view")"
 [ "$(jq -r .state <<<"$view")" = MERGED ] || refuse "PR #$pr is not MERGED"
 { [ -n "$branch" ] && [ "$branch" != null ] && [ "$branch" != "$base" ]; } || refuse "PR #$pr head branch is empty or the base branch"
+GOAL_SLUG="$(reg_find_by_pr "$pr" 2>/dev/null)" || GOAL_SLUG=""
 if autonomy_on; then
-  gpr="$(goal_get '.pr // empty' || true)"
-  [ -n "$gpr" ] || refuse "goal does not track a PR; autonomous cleanup needs goal pr #$pr"
-  [ "$gpr" = "$pr" ] || refuse "goal tracks PR #$gpr, not #$pr"
+  [ -n "$GOAL_SLUG" ] || refuse "no registered goal tracks PR #$pr; autonomous cleanup needs goal pr #$pr"
 fi
 
 errf="$(mktemp)"
@@ -100,7 +99,7 @@ if [ -z "$keep" ] && [ "$branch" != "$current" ] && g show-ref --verify --quiet 
   fi
 fi
 
-if [ "$(goal_get '.pr // empty')" = "$pr" ]; then
+if [ -n "$GOAL_SLUG" ]; then
   deleted=()
   while IFS= read -r b; do
     [[ "$b" =~ ^backup/[a-z0-9]+(-[a-z0-9]+)*$ ]] || continue

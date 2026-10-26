@@ -20,6 +20,20 @@ const setup = () => {
   return { root, state, env, opts: { directory: path.join(root, "proj"), env, dirs } };
 };
 
+const registerGoal = (dir: string, goal: string, session: string) => {
+  const gitOut = (...args: string[]) => execFileSync("git", args, { cwd: dir, encoding: "utf8" }).trim();
+  const branch = gitOut("branch", "--show-current");
+  const slug = branch.replaceAll("/", "-");
+  const goals = path.join(gitOut("rev-parse", "--path-format=absolute", "--git-common-dir"), "agent-harness", "goals");
+  fs.mkdirSync(goals, { recursive: true });
+  const entry = {
+    v: 1, goal, criteria: [], branch, slug, path: dir, base: "master", via: "git", pr: null, head_oid: "", head_sha: "",
+    status: "active", reason: "", report: "", fix_iterations: 0, max_fix_iterations: 10, last_fingerprint: "", reviews: {},
+    stop_blocks: 0, total_blocks: 0, backup_branches: [], session_id: session, created_at: "2026-10-24T00:00:00Z",
+  };
+  fs.writeFileSync(path.join(goals, `${slug}.json`), JSON.stringify(entry));
+};
+
 test("git guard is a no-op when autonomy is off", async () => {
   const { opts } = setup();
   const result = await runHook("autonomy-git-guard.sh", { tool_input: { command: "git push origin main" } }, opts);
@@ -51,11 +65,7 @@ test("bash guard rejection denies a push when an active goal has no review verdi
   git("add", "b");
   git("commit", "-qm", "B");
   fs.writeFileSync(path.join(state, "autonomy.on"), "");
-  execFileSync("bash", [path.join(repo, "scripts/agent-harness/goal.sh"), "set", "review gate goal"], {
-    cwd: repoDir,
-    env: { ...process.env, CLAUDE_PROJECT_DIR: repoDir, ...opts.env },
-    stdio: "ignore",
-  });
+  registerGoal(repoDir, "review gate goal", "sess-review");
   const reason = await bashGuardRejection(
     { tool_input: { command: "git push -u origin feat" }, cwd: repoDir },
     { ...opts, directory: repoDir },
@@ -66,12 +76,9 @@ test("bash guard rejection denies a push when an active goal has no review verdi
 test("stop gate blocks when a goal is active without a PR", async () => {
   const { opts, state } = setup();
   fs.writeFileSync(path.join(state, "autonomy.on"), "");
-  execFileSync("bash", [path.join(repo, "scripts/agent-harness/goal.sh"), "set", "ship it"], {
-    cwd: opts.directory,
-    env: { ...process.env, CLAUDE_PROJECT_DIR: opts.directory, ...opts.env },
-    stdio: "ignore",
-  });
-  const result = await runHook("ship-stop-gate.sh", {}, opts);
+  execFileSync("git", ["init", "-q", "-b", "feat"], { cwd: opts.directory, stdio: "ignore" });
+  registerGoal(opts.directory, "ship it", "sess-stop");
+  const result = await runHook("ship-stop-gate.sh", { session_id: "sess-stop" }, opts);
   assert.ok(blockReason(result));
 });
 
@@ -202,4 +209,48 @@ test("bash tool throws when the checkout git guard asks", async () => {
     () => plugin["tool.execute.before"]({ tool: "bash" }, { args: { command: "git status" } }),
     /confirm the push/,
   );
+});
+
+test("shell env exposes the session id and the stop gate blocks that same session", async () => {
+  const { root } = setup();
+  const directory = path.join(root, "proj");
+  fs.mkdirSync(path.join(directory, ".claude", "hooks"), { recursive: true });
+  fs.mkdirSync(path.join(directory, ".claude", "state"), { recursive: true });
+  fs.writeFileSync(path.join(directory, ".claude", "state", "autonomy.on"), "");
+  fs.writeFileSync(
+    path.join(directory, ".claude", "hooks", "ship-stop-gate.sh"),
+    `[ "$(jq -r .session_id)" = ses_bound ] && echo '{"decision":"block","reason":"keep going"}'\n`,
+  );
+  const prompts: unknown[] = [];
+  const plugin = await AutonomyPlugin({
+    directory,
+    client: { session: { get: async () => ({ data: {} }), promptAsync: async (p: unknown) => void prompts.push(p) } } as never,
+    $: (() => undefined) as never,
+  });
+  const out = { env: {} as Record<string, string> };
+  await plugin["shell.env"]({ sessionID: "ses_bound" }, out);
+  assert.equal(out.env.AGENT_HARNESS_SESSION, "ses_bound");
+  await plugin.event({ event: { type: "session.idle", properties: { sessionID: out.env.AGENT_HARNESS_SESSION } } });
+  assert.equal(prompts.length, 1);
+});
+
+test("stop gate receives the idle session id on stdin", async () => {
+  const { root } = setup();
+  const directory = path.join(root, "proj");
+  const hooks = path.join(directory, ".claude", "hooks");
+  const captured = path.join(root, "gate-stdin.json");
+  fs.mkdirSync(path.join(directory, ".claude", "state"), { recursive: true });
+  fs.writeFileSync(path.join(directory, ".claude", "state", "autonomy.on"), "");
+  fs.mkdirSync(hooks, { recursive: true });
+  fs.writeFileSync(path.join(hooks, "ship-stop-gate.sh"), `cat > '${captured}'\n`);
+  const plugin = await AutonomyPlugin({
+    directory,
+    client: { session: { get: async () => ({ data: {} }), promptAsync: async () => undefined } } as never,
+    $: (() => {
+      const chain = { cwd: () => chain, quiet: () => chain, nothrow: async () => undefined };
+      return chain;
+    }) as never,
+  });
+  await plugin.event({ event: { type: "session.idle", properties: { sessionID: "ses_abc" } } });
+  assert.deepEqual(JSON.parse(fs.readFileSync(captured, "utf8")), { session_id: "ses_abc" });
 });

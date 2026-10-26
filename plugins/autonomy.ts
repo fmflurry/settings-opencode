@@ -30,7 +30,7 @@ export const AutonomyPlugin = async ({ $, client, directory }: PluginInput) => {
     if (inFlight.has(sessionID)) return true;
     inFlight.add(sessionID);
     try {
-      const reason = blockReason(await runHook("ship-stop-gate.sh", {}, { ...opts, timeoutMs: GATE_TIMEOUT_MS }));
+      const reason = blockReason(await runHook("ship-stop-gate.sh", { session_id: sessionID }, { ...opts, timeoutMs: GATE_TIMEOUT_MS }));
       if (!reason) return false;
       await client.session.promptAsync({
         path: { id: sessionID },
@@ -49,6 +49,11 @@ export const AutonomyPlugin = async ({ $, client, directory }: PluginInput) => {
       if (!autonomyOn()) return;
       const context = await runHookText("autonomy-context.sh", {}, opts);
       if (context) output.system.push(context);
+    },
+
+    // ship-init binds the goal to this id, and the stop gate later receives the same id from the idle event.
+    "shell.env": async (input: { sessionID?: string }, output: { env: Record<string, string> }) => {
+      if (input.sessionID) output.env.AGENT_HARNESS_SESSION = input.sessionID;
     },
 
     "tool.execute.before": async (input: { tool: string }, output: { args: unknown }) => {

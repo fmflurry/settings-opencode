@@ -1,54 +1,61 @@
 #!/bin/bash -p
 # shellcheck disable=SC2016
-# Usage: goal.sh set "<goal>" [criteria...] | pr <n> | backup-add <branch> | sha <headsha> | review <code|security> <pass|fail> | bump (findings on stdin) | escalate "<reason>" | status | clear
+# Usage: goal.sh [--goal <slug>] set "<goal>" [criteria...] | pr <n> | backup-add <branch> | sha <headsha> | review <code|security> <pass|fail> | bump (findings on stdin) | escalate "<reason>" | status
+# The goal is the registry entry selected by --goal, else $AGENT_HARNESS_GOAL, else the branch checked out in the cwd.
 set -euo pipefail
 # shellcheck source=scripts/agent-harness/lib.sh
 . "${BASH_SOURCE[0]%/*}/lib.sh"
-mkdir -p "$STATE_DIR"
+explicit=""
+if [ "${1:-}" = --goal ]; then
+  [ $# -ge 2 ] || { echo "goal: --goal needs a slug" >&2; exit 2; }
+  explicit="$2"
+  shift 2
+fi
 escalate_goal() {
   goal_update --arg r "$1" '.status = "escalated" | .reason = $r'
-  reg_mirror --arg r "$1" '.status = "escalated" | .reason = $r'
 }
 cmd="${1:-status}"
 [ $# -eq 0 ] || shift
+if [ "$cmd" != status ]; then
+  if ! goal_resolve "$explicit"; then
+    named="${explicit:-${AGENT_HARNESS_GOAL:-}}"
+    if [ -n "$named" ]; then
+      echo "goal $cmd: no goal named $named" >&2
+      exit 2
+    fi
+    # bump and backup-add stay no-ops while no goal is active at all.
+    case "$cmd" in bump | backup-add) reg_any_active || exit 0 ;; esac
+    echo "goal $cmd: no goal selected; pass --goal <slug>, set AGENT_HARNESS_GOAL, or run from the goal's worktree" >&2
+    exit 2
+  fi
+fi
 case "$cmd" in
   set)
     goal="${1:?goal text}"
     [ $# -eq 0 ] || shift
-    keep_branch="" keep_slug="" keep_pr=null
-    # Only ship-init may bind goal.json to a branch: the cwd's HEAD here is often the main checkout's.
-    if [ -f "$GOAL_FILE" ] && [ -n "$(goal_get '.slug // empty')" ]; then
-      keep_branch="$(goal_get '.branch // empty')" keep_slug="$(goal_get '.slug')"
-      [ "$(goal_get '.status // empty')" = done ] || keep_pr="$(goal_get '.pr // null')"
-    fi
-    branch="${keep_branch:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")}"
-    jq -n --arg goal "$goal" --arg branch "$branch" --arg slug "${keep_slug:-$(reg_slug "$branch")}" --argjson pr "$keep_pr" \
-      '{goal:$goal, criteria:$ARGS.positional, branch:$branch, slug:$slug, pr:$pr, head_sha:"",
-        fix_iterations:0, max_fix_iterations:10, last_fingerprint:"", reviews:{}, stop_blocks:0, total_blocks:0, status:"active", reason:"", backup_branches:[]}' \
-      --args "$@" >"$GOAL_FILE"
+    criteria="$(jq -nc '$ARGS.positional' --args "$@")"
+    goal_update --arg goal "$goal" --argjson criteria "$criteria" '(if .status == "done" then null else .pr end) as $pr
+      | .goal = $goal | .criteria = $criteria | .pr = $pr | .head_sha = "" | .fix_iterations = 0 | .max_fix_iterations //= 10
+      | .last_fingerprint = "" | .reviews = {} | .stop_blocks = 0 | .total_blocks = 0 | .status = "active" | .reason = "" | .backup_branches //= []'
     ;;
   pr)
     goal_update --argjson n "${1:?pr number}" '.pr = $n'
-    reg_mirror --argjson n "$1" '.pr = $n'
     [[ "$1" =~ ^[0-9]+$ ]] && kpi_emit pr_open "pr=$1"
     ;;
   backup-add)
-    [ -f "$GOAL_FILE" ] || exit 0
     n="${1:?branch name}"
     [[ "$n" =~ ^backup/[a-z0-9]+(-[a-z0-9]+)*$ ]] || { echo "goal backup-add: '$n' must match backup/<kebab-slug>" >&2; exit 2; }
     git show-ref --verify --quiet "refs/heads/$n" || { echo "goal backup-add: local branch '$n' does not exist" >&2; exit 2; }
     goal_update --arg n "$n" '.backup_branches = ((.backup_branches // []) + [$n] | unique)'
     ;;
   sha)
-    goal_update --arg s "${1:?head sha}" '.head_sha = $s'
-    reg_mirror --arg s "$1" '.head_oid = $s'
+    goal_update --arg s "${1:?head sha}" '.head_sha = $s | .head_oid = $s'
     ;;
   review)
     kind="${1:-}" verdict="${2:-}"
     [[ "$kind" =~ ^(code|security)$ && "$verdict" =~ ^(pass|fail)$ ]] || { echo "usage: goal.sh review <code|security> <pass|fail>" >&2; exit 2; }
-    [ -f "$GOAL_FILE" ] || { echo "goal review: no goal" >&2; exit 2; }
-    wt="$(reg_get "$(goal_slug)" '.path // empty' 2>/dev/null || true)"
-    [ -d "$wt" ] || wt="$PWD"
+    wt="$(goal_get '.path // empty')"
+    [ -d "$wt" ] || { echo "goal review: the worktree of goal $GOAL_SLUG is missing" >&2; exit 2; }
     head_sha="$(git -C "$wt" rev-parse HEAD 2>/dev/null)" || { echo "goal review: $wt is not a git worktree" >&2; exit 2; }
     mb=""
     # Same recipe as gate_key in .claude/hooks/autonomy-git-guard.sh (hooks must not source lib.sh): keep both identical.
@@ -71,14 +78,12 @@ case "$cmd" in
     done
     set -- --arg k "$key" --arg kind "$kind" --arg v "$verdict" --arg s "$head_sha" --arg at "$at" '.reviews[$k][$kind] = {verdict:$v, sha:$s, at:$at}'
     goal_update "$@"
-    reg_mirror "$@"
     prnum="$(goal_get '.pr // empty')"
     kpi_args=(review_round "review=$kind" "verdict=$verdict")
     [[ "$prnum" =~ ^[0-9]+$ ]] && kpi_args+=("pr=$prnum")
     kpi_emit "${kpi_args[@]}" ${kpi_extra[@]+"${kpi_extra[@]}"}
     ;;
   bump)
-    [ -f "$GOAL_FILE" ] || exit 0
     findings="$(tr '[:upper:]' '[:lower:]' | sed -E 's/:[0-9]+(:[0-9]+)?$//; s/[#: ]l[0-9]+(-l?[0-9]+)?$//; s/[[:space:]]+$//; /^[[:space:]]*$/d' | sort -u)"
     [ -n "$findings" ] || { echo "goal bump: pipe the findings on stdin, one '<reviewer>:<path>' or 'ci:<check>' per line" >&2; exit 2; }
     fp="$(printf '%s\n' "$findings" | git hash-object --stdin)"
@@ -105,7 +110,21 @@ case "$cmd" in
     escalate_goal "$reason"
     bash -p "$NOTIFY" failure "$reason: $(goal_get '.goal')" "$(goal_get '.pr // empty')"
     ;;
-  status) if [ -f "$GOAL_FILE" ]; then jq -c . "$GOAL_FILE"; else echo "no goal"; fi ;;
-  clear) rm -f "$GOAL_FILE" ;;
-  *) echo "usage: goal.sh set|pr|backup-add|sha|review|bump|escalate|status|clear" >&2; exit 2 ;;
+  status)
+    if goal_resolve "$explicit"; then
+      jq -c . "$(reg_path "$GOAL_SLUG")"
+    elif [ -n "$explicit" ]; then
+      echo "goal status: no goal named $explicit" >&2
+      exit 2
+    else
+      d="$(reg_dir 2>/dev/null)" || d=""
+      found=0
+      for f in "$d"/*.json; do
+        [ -f "$f" ] || continue
+        jq -ce 'select(.status == "active")' "$f" 2>/dev/null && found=1
+      done
+      [ "$found" = 1 ] || echo "no goal"
+    fi
+    ;;
+  *) echo "usage: goal.sh [--goal <slug>] set|pr|backup-add|sha|review|bump|escalate|status" >&2; exit 2 ;;
 esac

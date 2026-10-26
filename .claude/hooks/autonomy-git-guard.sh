@@ -75,7 +75,7 @@ alts="$(cfg '(.protectedPaths // []) | map(ltrimstr("^")) | join("|")')"
 alts="${alts:-$DEFAULT_ALTS}"
 ALTS_DEFAULT=0
 [ "$alts" = "$DEFAULT_ALTS" ] && ALTS_DEFAULT=1
-AUTONOMY_FLAG='\.claude/state/(autonomy\.on|goal\.json)'
+AUTONOMY_FLAG='\.claude/state/(autonomy\.on|goal\.json)|agent-harness/goals'
 TOKEN_RE="(^|/)(${alts})|${AUTONOMY_FLAG}"
 if [ "$WIN" = 1 ]; then lc "$TOKEN_RE"; TOKEN_RE="$LCV"; fi
 LOOSE_RE="$(sed -E 's/\$(\||$)/\1/g' <<<"$alts")|${AUTONOMY_FLAG}"
@@ -108,11 +108,38 @@ is_protected_token() {
       norm_path "$t" "${CD_BASE:-$cwd}"
       [[ "$NP" == */.claude/state/* ]] && return 0 ;;
   esac
+  cd_sync
+  if [ "${CD_BASE:-}" = "?" ]; then
+    [[ "$t" != /* && "$t" != \~* ]] && [[ "$t" == goals || "$t" == goals/* || "$t" == *.json ]] && return 0
+  else
+    norm_path "$t" "${CD_BASE:-$cwd}"
+    in_registry "$NP" && return 0
+  fi
   [[ "$t" =~ $TOKEN_RE ]]
+}
+lower() {
+  LOWV="$1"
+  [[ "$LOWV" != *[A-Z]* ]] || LOWV="$(tr '[:upper:]' '[:lower:]' <<<"$LOWV")"
+}
+# True when a normalised path lies inside <git-common-dir>/agent-harness, whatever spelling or cwd reached it.
+# The filesystem may ignore case, so both sides are compared in lowercase.
+REG_N="" REG_RE='/\.git/agent-harness(/|$)|/agent-harness/goals(/|$)'
+in_registry() {
+  lower "$1"
+  local p="$LOWV"
+  if [ -z "$REG_N" ]; then
+    REG_N=-
+    if goals_dir; then norm_path "${GOALS_DIR%/goals}" /; lower "$NP"; REG_N="$LOWV"; fi
+  fi
+  [[ "$p" =~ $REG_RE ]] && return 0
+  [ "$REG_N" != - ] && { [ "$p" = "$REG_N" ] || [[ "$p" == "$REG_N"/* ]]; }
 }
 any_protected() {
   local t
-  [ "$ALTS_DEFAULT" = 1 ] && [[ "$*" != *[./]* ]] && return 1
+  if [ "$ALTS_DEFAULT" = 1 ] && [[ "$*" != *[./]* ]]; then
+    cd_sync
+    if [ "${CD_BASE:-}" != "?" ]; then norm_path "${CD_BASE:-$cwd}" /; in_registry "$NP" || return 1; fi
+  fi
   for t in "$@"; do is_protected_token "$t" && return 0; done
   return 1
 }
@@ -194,13 +221,34 @@ gate_git() {
   fi
 }
 
-# Gated while autonomy is on and the goal is active; an unreadable goal.json fails closed.
-# Sets GATE_BASE from goal.json.
+# Same registry location as reg_dir in scripts/agent-harness/lib.sh (hooks must not source lib.sh): keep both identical.
+GOALS_DIR="" GOALS_DIR_SET=0
+goals_dir() {
+  local common="" d
+  if [ "$GOALS_DIR_SET" = 0 ]; then
+    GOALS_DIR_SET=1
+    for d in "${CLAUDE_PROJECT_DIR:-}" "$PWD"; do
+      [ -n "$d" ] && common="$(git -C "$d" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" && [ -n "$common" ] && break
+      common=""
+    done
+    [ -z "$common" ] || GOALS_DIR="$common/agent-harness/goals"
+  fi
+  [ -n "$GOALS_DIR" ]
+}
+
+# Gated while autonomy is on and any registered goal is active; an unreadable entry or registry fails closed.
 gate_on() {
-  local goal="$STATE_DIR/goal.json" st=""
-  [ "$AUTO" = 1 ] && [ -f "$goal" ] || return 1
-  { read -r st; read -r GATE_BASE; } < <(jqr '(.status // ""), (.base // "")' "$goal" 2>/dev/null)
-  [ "$st" = active ] || [ -z "$st" ]
+  local f st
+  [ "$AUTO" = 1 ] || return 1
+  goals_dir || return 1
+  set +f
+  for f in "$GOALS_DIR"/*.json; do
+    [ -f "$f" ] || continue
+    st="$(jqr '.status // ""' "$f" 2>/dev/null)" || st=""
+    if [ "$st" = active ] || [ -z "$st" ]; then set -f; return 0; fi
+  done
+  set -f
+  return 1
 }
 
 # The recipe is repeated in scripts/agent-harness/goal.sh (hooks must not source lib.sh): keep both identical.
@@ -222,14 +270,25 @@ gate_key() {
 
 # $1 = directory the command runs in ("?" when unknown); the rest = pushed source revs ("HEAD" when none).
 review_gate() {
-  local goal="$STATE_DIR/goal.json" src ok
+  local src br slug f st ok
   GATE_DIR="$1"; shift
   [ "$#" -gt 0 ] || set -- HEAD
   for src in "$@"; do
-    if [ "$GATE_DIR" = "?" ] || ! gate_key "$src"; then
-      deny_review "cannot compute review key for '$src' (unknown directory, or no origin/<base> to diff against). Run from the goal worktree after \`git fetch origin\`, then push again."
+    if [ "$GATE_DIR" = "?" ]; then
+      deny_review "cannot compute review key for '$src' (unknown directory). Run from the goal worktree after \`git fetch origin\`, then push again."
     fi
-    ok="$(jqr --arg k "$GKEY" '((.reviews // {})[$k] // {}) | ((.code.verdict == "pass") and (.security.verdict == "pass"))' "$goal" 2>/dev/null)"
+    if [ "$src" = HEAD ]; then br="$(gate_git symbolic-ref -q --short HEAD 2>/dev/null)" || br=""; else br="${src#refs/heads/}"; fi
+    slug="${br//\//-}"
+    goals_dir && [[ "$slug" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || deny_review "no goal is registered for '$src' while a goal is active: push only a branch created by agent-harness ship-init."
+    f="$GOALS_DIR/$slug.json"
+    [ -f "$f" ] && [ "$(jqr '.branch // ""' "$f" 2>/dev/null)" = "$br" ] || deny_review "no goal is registered for branch '$br' while a goal is active: push only a branch created by agent-harness ship-init."
+    st="$(jqr '.status // ""' "$f" 2>/dev/null)" || st=""
+    { [ "$st" = active ] || [ -z "$st" ]; } || deny_review "goal for branch '$br' is $st; only an active goal's branch may be pushed."
+    GATE_BASE="$(jqr '.base // ""' "$f" 2>/dev/null)" || GATE_BASE=""
+    if ! gate_key "$src"; then
+      deny_review "cannot compute review key for '$src' (no origin/<base> to diff against). Run from the goal worktree after \`git fetch origin\`, then push again."
+    fi
+    ok="$(jqr --arg k "$GKEY" '((.reviews // {})[$k] // {}) | ((.code.verdict == "pass") and (.security.verdict == "pass"))' "$f" 2>/dev/null)"
     [ "$ok" = true ] || deny_review "review the diff before pushing: no passing code and security review is recorded for it (key $GKEY). Run the local reviewers, record each verdict with \`agent-harness goal review code|security pass|fail\`, fix findings, then push again."
   done
 }
@@ -713,7 +772,7 @@ prefix_value_flags() {
   esac
 }
 
-HARNESS_ENV_RE='(^|[^A-Za-z0-9_])(AGENT_HARNESS_TEST|AGENT_HARNESS_DIR|AGENT_HARNESS_WORKTREE_RM_[A-Z]*|GH_BIN|ORCA_BIN|AGENT_STATE_DIR|TLTB_STATE_DIR|CLAUDE_PROJECT_DIR|BASH_ENV|PATH|HOME|SHELLOPTS|BASHOPTS|PS4|ENV|DYLD_[A-Z_]*|LD_[A-Z_]*)\+?=|--(rcfile|init-file)'
+HARNESS_ENV_RE='(^|[^A-Za-z0-9_])(AGENT_HARNESS_TEST|AGENT_HARNESS_DIR|AGENT_HARNESS_WORKTREE_RM_[A-Z]*|GH_BIN|ORCA_BIN|AGENT_STATE_DIR|TLTB_STATE_DIR|CLAUDE_PROJECT_DIR|CLAUDE_CODE_SESSION_ID|AGENT_HARNESS_SESSION|AGENT_HARNESS_GOAL|BASH_ENV|PATH|HOME|SHELLOPTS|BASHOPTS|PS4|ENV|DYLD_[A-Z_]*|LD_[A-Z_]*)\+?=|--(rcfile|init-file)'
 HARNESS_SOURCE_RE='(^|[;&|({`]|\$\(|(^|[^[:alnum:]_])(then|do|else)[[:space:]])[[:space:]]*(\.|source)[[:space:]]+[^[:space:]]'
 HARNESS_FUNC_RE='(^|[^A-Za-z0-9_])(export[[:space:]]+-[A-Za-z]*f|(declare|typeset)[[:space:]]+-[A-Za-z]*[xf]|set[[:space:]]+-[A-Za-z]*a|set[[:space:]]+-o[[:space:]]+allexport)|BASH_FUNC_|allexport'
 
@@ -1066,7 +1125,7 @@ function segfeed(s,   n, i, parts) {
 function maybe_prot(t) {
   if (win) t = tolower(t)
   return index(t, ".github/") || index(t, ".claude/") || index(t, ".opencode/") || index(t, "tools/agent-harness/") \
-    || index(t, "tools/ci/") || index(tolower(t), "goal.json") || index(tolower(t), "autonomy.on") || index(t, "opencode.jsonc") || index(t, "agents.md") || index(t, "claude.md") \
+    || index(t, "tools/ci/") || index(tolower(t), "goal.json") || index(t, "agent-harness/goals") || index(tolower(t), "autonomy.on") || index(t, "opencode.jsonc") || index(t, "agents.md") || index(t, "claude.md") \
     || index(t, "AGENTS.md") || index(t, "CLAUDE.md") || index(t, ".envrc")
 }
 function segkeep(s,   t, k, b, i, a, n, ps) {
@@ -1079,7 +1138,7 @@ function segkeep(s,   t, k, b, i, a, n, ps) {
   if (index(s, ">")) {
     if (!altsdef) return 1
     k = split(s, a, " ")
-    for (i = 1; i <= k; i++) if (maybe_prot(a[i])) return 1
+    for (i = 1; i <= k; i++) if (maybe_prot(a[i]) || index(a[i], ".json") || index(a[i], "goals")) return 1
   }
   match(s, /^[^ \t]+/); t = substr(s, 1, RLENGTH)
   sub(/[)}]+$/, "", t)
@@ -1489,6 +1548,11 @@ if [[ "$cmd" == *agent-harness* ]] && { [ "$AUTO" = 1 ] || [[ "$cmd" =~ worktree
   grep -Eq "$HARNESS_FUNC_RE" <<<"$unquoted" && deny_harness_env
   grep -Eq "$HARNESS_SOURCE_RE" <<<"$unquoted" && deny_harness_env
 fi
+case "$cmd" in
+  *AGENT_HARNESS_SESSION* | *AGENT_HARNESS_GOAL* | *CLAUDE_CODE_SESSION_ID*)
+    unquoted="$(tr -d "'\"" <<<"$cmd")"
+    grep -Eq '(^|[^A-Za-z0-9_])(AGENT_HARNESS_SESSION|AGENT_HARNESS_GOAL|CLAUDE_CODE_SESSION_ID)\+?=' <<<"$unquoted" && deny_harness_env ;;
+esac
 if [[ "$cmd" == *worktree-rm* ]] && grep -Eq '(^|[^[:alnum:]_])(export|declare +-x|set +-a)( |$)' <<<"$cmd"; then deny_worktree; fi
 [[ "$cmd" == *--confirmed* && "$cmd" == *worktree-rm* ]] && ASKED_WT=1
 

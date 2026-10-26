@@ -99,8 +99,16 @@ chmod +x "$TMP/gh" "$TMP/orca"
 H="$HERE/scripts/agent-harness"; HOOKS="$HERE/.claude/hooks"
 CFG="$TMP/proj/.claude/agent-harness.json"
 export FX GH_BIN="$TMP/gh" ORCA_BIN="$TMP/orca" AGENT_STATE_DIR="$TMP/state" CLAUDE_PROJECT_DIR="$TMP/proj" AGENT_HARNESS_DIR="$H" AGENT_HARNESS_TEST=1 AGENT_HARNESS_KPI=0
-unset ORCA_WORKTREE_ID GITHUB_ACTIONS TLTB_STATE_DIR
-reset() { rm -f "$FX"/*.log "$FX"/merge.* "$FX"/merge_settings.txt "$FX"/open_prs.json "$FX"/branch.json "$FX"/branch.gone "$FX"/branch.err "$FX"/list.fail "$FX"/default_branch "$FX"/graphql.off "$FX"/graphql.502 "$FX"/rest.fail "$FX"/pull.patch "$FX"/pull2.patch "$FX"/pull.reads "$FX"/graphql.transport "$FX"/graphql.getrest "$FX"/pulls.malformed "$FX"/pulls.fail "$FX"/files.3000 "$FX"/files.2999 "$FX"/comments.json "$TMP/state"/* "$CFG"; }
+unset ORCA_WORKTREE_ID GITHUB_ACTIONS TLTB_STATE_DIR CLAUDE_CODE_SESSION_ID
+reset() { rm -rf "$TMP/work/.git/agent-harness"; rm -f "$FX"/*.log "$FX"/merge.* "$FX"/merge_settings.txt "$FX"/open_prs.json "$FX"/branch.json "$FX"/branch.gone "$FX"/branch.err "$FX"/list.fail "$FX"/default_branch "$FX"/graphql.off "$FX"/graphql.502 "$FX"/rest.fail "$FX"/pull.patch "$FX"/pull2.patch "$FX"/pull.reads "$FX"/graphql.transport "$FX"/graphql.getrest "$FX"/pulls.malformed "$FX"/pulls.fail "$FX"/files.3000 "$FX"/files.2999 "$FX"/comments.json "$TMP/state"/* "$CFG"; }
+WREG="$TMP/work/.git/agent-harness/goals/feat.json"
+wgfile() { local d="${WG_CWD:-$TMP/work}" b; b="$(git -C "$d" branch --show-current)"; echo "$(git -C "$d" rev-parse --path-format=absolute --git-common-dir)/agent-harness/goals/${b//\//-}.json"; }
+wgoal() {
+  local d="${WG_CWD:-$TMP/work}" b s f
+  b="$(git -C "$d" branch --show-current)"; s="${b//\//-}"; f="$(wgfile)"; mkdir -p "${f%/*}"
+  jq -n --arg g "${1:-g}" --arg b "$b" --arg s "$s" --arg p "$d" '{v:1,goal:$g,criteria:[],branch:$b,slug:$s,path:$p,base:"master",via:"git",pr:null,head_oid:"",head_sha:"",status:"active",reason:"",report:"",fix_iterations:0,max_fix_iterations:10,last_fingerprint:"",reviews:{},stop_blocks:0,total_blocks:0,backup_branches:[],session_id:"sess-w",created_at:"2026-10-24T00:00:00Z"}' >"$f"
+}
+wg() { local d="${WG_CWD:-$TMP/work}"; [ "$1" != set ] || [ -f "$(wgfile)" ] || wgoal; ( cd "$d" && bash "$H/goal.sh" "$@" ); }
 flag_on() { : >"$TMP/state/autonomy.on"; }
 cfg_ci() { echo '{"base":"master","requiredChecks":["gate","export"],"reviewStatus":"tltb-review","reviewStatusCreator":"github-actions[bot]"}' >"$CFG"; }
 
@@ -143,7 +151,7 @@ check "dispatcher: unknown subcommand exits non-zero" test $rc -ne 0
 check "dispatcher: unknown subcommand prints usage" grep -qi 'usage' <<<"$out"
 disp >/dev/null 2>&1; check "dispatcher: no args exits non-zero" test $? -ne 0
 disp goal set "via dispatcher" >/dev/null 2>&1
-check "dispatcher: goal forwards to goal.sh" grep -q 'via dispatcher' "$DREPO/.claude/state/goal.json"
+check "dispatcher: goal set without a registered goal exits 2 and writes no goal.json" test ! -e "$DREPO/.claude/state/goal.json"
 out="$(disp ship-merge 5 2>&1)"; rc=$?
 check "dispatcher: ship-merge forwards (refuses with flag off)" test $rc -ne 0
 check "dispatcher: ship-merge output comes from ship-merge.sh" grep -q 'ship-merge refused' <<<"$out"
@@ -155,17 +163,17 @@ check "dispatcher: notify forwards to notify.sh" grep -q -- 'done: merged' "$FX/
 reset
 SDR="$TMP/sdrepo"; git init -q "$SDR"; mkdir -p "$SDR/sub/dir"
 ( cd "$SDR/sub/dir" && env -u AGENT_STATE_DIR -u CLAUDE_PROJECT_DIR bash "$H/goal.sh" set g1 )
-check "state dir: git toplevel when no CLAUDE_PROJECT_DIR" test -f "$SDR/.claude/state/goal.json"
+check "state dir: git toplevel when no CLAUDE_PROJECT_DIR writes no goal.json" test ! -e "$SDR/.claude/state/goal.json"
 NOGIT="$TMP/nogit"; mkdir -p "$NOGIT"
 ( cd "$NOGIT" && env -u AGENT_STATE_DIR -u CLAUDE_PROJECT_DIR GIT_CEILING_DIRECTORIES="$TMP" bash "$H/goal.sh" set g2 )
-check "state dir: cwd when not in git and no CLAUDE_PROJECT_DIR" test -f "$NOGIT/.claude/state/goal.json"
+check "state dir: cwd when not in git and no CLAUDE_PROJECT_DIR writes no goal.json" test ! -e "$NOGIT/.claude/state/goal.json"
 ( cd "$SDR" && env -u AGENT_STATE_DIR CLAUDE_PROJECT_DIR="$TMP/proj" bash "$H/goal.sh" set g3 )
-check "state dir: CLAUDE_PROJECT_DIR beats git toplevel" test -f "$TMP/proj/.claude/state/goal.json"
+check "state dir: CLAUDE_PROJECT_DIR beats git toplevel writes no goal.json" test ! -e "$TMP/proj/.claude/state/goal.json"
 rm -rf "$TMP/proj/.claude/state"
 ( env -u AGENT_STATE_DIR TLTB_STATE_DIR="$TMP/legacy" bash "$H/goal.sh" set g4 )
-check "state dir: TLTB_STATE_DIR honoured as fallback" test -f "$TMP/legacy/goal.json"
+check "state dir: TLTB_STATE_DIR honoured as fallback writes no goal.json" test ! -e "$TMP/legacy/goal.json"
 ( AGENT_STATE_DIR="$TMP/primary" TLTB_STATE_DIR="$TMP/legacy2" bash "$H/goal.sh" set g5 )
-check "state dir: AGENT_STATE_DIR wins over TLTB_STATE_DIR" test -f "$TMP/primary/goal.json"
+check "state dir: AGENT_STATE_DIR wins over TLTB_STATE_DIR writes no goal.json" test ! -e "$TMP/primary/goal.json"
 check "state dir: legacy dir untouched when AGENT_STATE_DIR set" test ! -e "$TMP/legacy2/goal.json"
 ( AGENT_STATE_DIR="$TMP/ctxdir" bash "$H/autonomy.sh" on ) >/dev/null
 out="$(AGENT_STATE_DIR="$TMP/ctxdir" bash "$HOOKS/autonomy-context.sh" </dev/null)"
@@ -177,7 +185,7 @@ check "state dir: hooks honour TLTB_STATE_DIR fallback" grep -q 'AUTONOMOUS MODE
 SDR2="$TMP/sdrepo2"; git init -q "$SDR2"
 ( cd "$SDR2" && env -u CLAUDE_PROJECT_DIR -u AGENT_HARNESS_TEST AGENT_STATE_DIR="$TMP/ign1" bash "$H/goal.sh" set gx )
 check "env gate: AGENT_STATE_DIR ignored without AGENT_HARNESS_TEST" test ! -e "$TMP/ign1/goal.json"
-check "env gate: falls back to project state dir" test -f "$SDR2/.claude/state/goal.json"
+check "env gate: falls back to project state dir writes no goal.json" test ! -e "$SDR2/.claude/state/goal.json"
 rm -rf "$SDR2/.claude/state"
 ( cd "$SDR2" && env -u CLAUDE_PROJECT_DIR -u AGENT_STATE_DIR -u AGENT_HARNESS_TEST TLTB_STATE_DIR="$TMP/ign2" bash "$H/goal.sh" set gy )
 check "env gate: TLTB_STATE_DIR ignored without AGENT_HARNESS_TEST" test ! -e "$TMP/ign2/goal.json"
@@ -260,97 +268,97 @@ check "notify writes step summary in Actions" grep -q '^\*\*failure\*\*: boom' "
 reset
 out="$(bash "$HOOKS/autonomy-context.sh" </dev/null)"
 check "autonomy-context silent when off" test -z "$out"
-flag_on; bash "$H/goal.sh" set "ctx goal"
-out="$(bash "$HOOKS/autonomy-context.sh" </dev/null)"
+flag_on; wg set "ctx goal"
+out="$(CLAUDE_PROJECT_DIR="$TMP/work" bash "$HOOKS/autonomy-context.sh" </dev/null)"
 check "autonomy-context prints block when on" grep -q 'AUTONOMOUS MODE ON' <<<"$out"
 check "autonomy-context prints goal" grep -q 'Goal: ctx goal' <<<"$out"
 
 # ---- goal.sh
 reset
-bash "$H/goal.sh" set "ship it" "crit a" "crit b"
-check "goal criteria array" test "$(jq '.criteria | length' "$TMP/state/goal.json")" = 2
-check "goal default fix ceiling is 10" test "$(jq -r .max_fix_iterations "$TMP/state/goal.json")" = 10
-jq '.max_fix_iterations = 2' "$TMP/state/goal.json" >"$TMP/g" && mv "$TMP/g" "$TMP/state/goal.json"
-printf 'code:a.sh\n' | bash "$H/goal.sh" bump; check "bump within max" test $? -eq 0
-printf 'code:b.sh\n' | ORCA_WORKTREE_ID='repo::/p' bash "$H/goal.sh" bump; rc=$?
+wg set "ship it" "crit a" "crit b"
+check "goal criteria array" test "$(jq '.criteria | length' "$WREG")" = 2
+check "goal default fix ceiling is 10" test "$(jq -r .max_fix_iterations "$WREG")" = 10
+jq '.max_fix_iterations = 2' "$WREG" >"$TMP/g" && mv "$TMP/g" "$WREG"
+printf 'code:a.sh\n' | wg bump; check "bump within max" test $? -eq 0
+printf 'code:b.sh\n' | ORCA_WORKTREE_ID='repo::/p' wg bump; rc=$?
 check "bump past max exits 3" test $rc -eq 3
-check "bump past max escalates" test "$(jq -r .status "$TMP/state/goal.json")" = escalated
+check "bump past max escalates" test "$(jq -r .status "$WREG")" = escalated
 check "bump past max notifies" grep -q 'failure:' "$FX/orca.log"
-check "bump past max records reason" test "$(jq -r .reason "$TMP/state/goal.json")" = "fix iterations exhausted (2)"
+check "bump past max records reason" test "$(jq -r .reason "$WREG")" = "fix iterations exhausted (2)"
 reset
-printf 'code:a.sh\n' | bash "$H/goal.sh" bump; check "bump with no goal file exits 0" test $? -eq 0
+printf 'code:a.sh\n' | wg bump; check "bump with no goal file exits 0" test $? -eq 0
 
 # bump takes a findings fingerprint on stdin, stops on a repeat, ceiling is 10
-bumpfp() { printf '%b' "$1" | bash "$H/goal.sh" bump >/dev/null 2>&1; }
-reset; bash "$H/goal.sh" set g-fp
+bumpfp() { printf '%b' "$1" | wg bump >/dev/null 2>&1; }
+reset; wg set g-fp
 bumpfp 'code:src/a.sh:12\nci:Gate\n'; check "bump first fingerprint exits 0" test $? -eq 0
 bumpfp 'code:src/a.sh:12\nci:Gate\n'; rc=$?
 check "bump same fingerprint twice exits 3" test $rc -eq 3
-check "bump same fingerprint escalates" test "$(jq -r .status "$TMP/state/goal.json")" = escalated
-check "bump same fingerprint reason says no progress" grep -q 'no progress' "$TMP/state/goal.json"
-reset; bash "$H/goal.sh" set g-fp2
+check "bump same fingerprint escalates" test "$(jq -r .status "$WREG")" = escalated
+check "bump same fingerprint reason says no progress" grep -q 'no progress' "$WREG"
+reset; wg set g-fp2
 bumpfp 'Code:src/a.sh:12\nci:gate\n'
 bumpfp 'ci:GATE\nCODE:src/a.sh:99\nci:gate\n'; rc=$?
 check "bump reordered, relined, duplicated fingerprint is the same (exit 3)" test $rc -eq 3
-reset; bash "$H/goal.sh" set g-fp3
+reset; wg set g-fp3
 bumpfp 'code:src/a.sh\n'
 bumpfp 'code:src/b.sh\n'; check "bump different fingerprint exits 0" test $? -eq 0
-check "bump different fingerprint stays active" test "$(jq -r .status "$TMP/state/goal.json")" = active
-reset; bash "$H/goal.sh" set g-fp4
+check "bump different fingerprint stays active" test "$(jq -r .status "$WREG")" = active
+reset; wg set g-fp4
 allok=0; for l in a b c d e f g h i; do bumpfp "code:file-$l\n" || allok=1; done
 check "bump 9 distinct fingerprints all exit 0" test $allok -eq 0
 bumpfp 'code:file-j\n'; rc=$?
 check "bump 10th round hits the ceiling (exit 3)" test $rc -eq 3
-check "bump ceiling escalates" test "$(jq -r .status "$TMP/state/goal.json")" = escalated
-reset; bash "$H/goal.sh" set g-fp5
-bash "$H/goal.sh" bump </dev/null >/dev/null 2>&1; rc=$?
+check "bump ceiling escalates" test "$(jq -r .status "$WREG")" = escalated
+reset; wg set g-fp5
+wg bump </dev/null >/dev/null 2>&1; rc=$?
 check "bump with empty stdin exits 2" test $rc -eq 2
-check "bump with empty stdin leaves goal active" test "$(jq -r .status "$TMP/state/goal.json")" = active
+check "bump with empty stdin leaves goal active" test "$(jq -r .status "$WREG")" = active
 reset
-bash "$H/goal.sh" set g2
-bash "$H/goal.sh" escalate "needs a human"; rc=$?
+wg set g2
+wg escalate "needs a human"; rc=$?
 check "escalate exits 0" test $rc -eq 0
-check "escalate sets status and reason" test "$(jq -r '.status + "|" + .reason' "$TMP/state/goal.json")" = "escalated|needs a human"
+check "escalate sets status and reason" test "$(jq -r '.status + "|" + .reason' "$WREG")" = "escalated|needs a human"
 
 # ---- stop-gate
-stop() { echo '{"stop_hook_active":false}' | bash "$HOOKS/ship-stop-gate.sh"; }
+stop() { echo '{"stop_hook_active":false,"session_id":"sess-w"}' | ( cd "$TMP/work" && bash "$HOOKS/ship-stop-gate.sh" ); }
 reset; green_fixtures
-bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5
+wg set g; wg pr 5
 out="$(stop)"
 check "stop-gate no-op when flag off" test -z "$out"
 flag_on
 mutate '.state="MERGED"' view.json
 out="$(stop)"
 check "stop-gate allows on MERGED" test -z "$out"
-check "stop-gate marks done" test "$(jq -r .status "$TMP/state/goal.json")" = "done"
+check "stop-gate marks done" test "$(jq -r .status "$WREG")" = "done"
 
 reset; green_fixtures; flag_on
-bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5
+wg set g; wg pr 5
 out="$(stop)"
 check "stop-gate blocks when PR not merged" test "$(jq -r .decision <<<"$out")" = block
 check "stop-gate reason names ship-merge" grep -Eq 'ship-merge(\.sh)? 5' <<<"$out"
 
 reset; green_fixtures; flag_on
-bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5; bash "$H/goal.sh" sha "$HEAD_SHA"
+wg set g; wg pr 5; wg sha "$HEAD_SHA"
 for _ in 1 2 3 4; do out="$(stop)"; done
 check "stop-gate still blocks at 4 no-progress" test "$(jq -r .decision <<<"$out")" = block
 out="$(stop)"
 check "stop-gate escalates after 5 no-progress" test -z "$out"
-check "stop-gate escalated status" test "$(jq -r .status "$TMP/state/goal.json")" = escalated
-check "stop-gate records reason" grep -q 'no progress after 5 stop blocks: PR #5 is not merged' "$TMP/state/goal.json"
+check "stop-gate escalated status" test "$(jq -r .status "$WREG")" = escalated
+check "stop-gate records reason" grep -q 'no progress after 5 stop blocks: PR #5 is not merged' "$WREG"
 
 reset; green_fixtures; flag_on
-bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5
-jq '.total_blocks = 29 | .stop_blocks = 0' "$TMP/state/goal.json" >"$TMP/g" && mv "$TMP/g" "$TMP/state/goal.json"
+wg set g; wg pr 5
+jq '.total_blocks = 29 | .stop_blocks = 0' "$WREG" >"$TMP/g" && mv "$TMP/g" "$WREG"
 out="$(stop)"
 check "stop-gate total cap escalates despite head change" test -z "$out"
-check "stop-gate total cap reason" grep -q 'total stop blocks reached 30' "$TMP/state/goal.json"
+check "stop-gate total cap reason" grep -q 'total stop blocks reached 30' "$WREG"
 
 reset; green_fixtures; flag_on
-bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5; bash "$H/goal.sh" sha "$HEAD_SHA"
-jq '.stop_blocks = 3' "$TMP/state/goal.json" >"$TMP/g" && mv "$TMP/g" "$TMP/state/goal.json"
+wg set g; wg pr 5; wg sha "$HEAD_SHA"
+jq '.stop_blocks = 3' "$WREG" >"$TMP/g" && mv "$TMP/g" "$WREG"
 mutate '.headRefOid="newhead"' view.json; stop >/dev/null
-check "stop-gate keeps stop_blocks across head change" test "$(jq -r .stop_blocks "$TMP/state/goal.json")" = 3
+check "stop-gate keeps stop_blocks across head change" test "$(jq -r .stop_blocks "$WREG")" = 3
 
 
 # ---- ship-merge (configured: base master, required gate+export, tltb-review by the bot)
@@ -383,13 +391,13 @@ fresh; mutate '.baseRefName="develop"' view.json; refuses "PR base differs from 
 fresh; touch "$FX/merge.noop"; echo 1 >"$FX/merge.rc"; merge 5; rc=$?
 check "ship-merge refuses when merge fails and PR stays open" test $rc -ne 0
 
-fresh; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5
+fresh; wg set g; wg pr 5
 merge 5; rc=$?
 check "ship-merge succeeds when green" test $rc -eq 0
 check "ship-merge exact flags" grep -qx "pr merge 5 --squash --match-head-commit $HEAD_SHA" "$FX/gh.log"
 check "ship-merge never deletes via gh" bash -c '! grep -q -- "--delete-branch" "$1"' _ "$FX/gh.log"
 check "ship-merge cleanup deletes remote branch via API" grep -q 'api -X DELETE repos/o/r/git/refs/heads/feat' "$FX/gh.log"
-check "ship-merge marks goal done" test "$(jq -r .status "$TMP/state/goal.json")" = "done"
+check "ship-merge marks goal done" test "$(jq -r .status "$WREG")" = "done"
 fresh; ORCA_WORKTREE_ID='repo::/p' merge 5
 check "ship-merge notifies done with PR number" grep -q -- 'done: PR #5 merged' "$FX/orca.log"
 fresh; mutate '.isDraft=true' view.json; ORCA_WORKTREE_ID='repo::/p' merge 5
@@ -400,7 +408,7 @@ fresh; echo 1 >"$FX/merge.rc"; merge 5; rc=$?
 check "ship-merge succeeds when merge exits non-zero but PR is MERGED" test $rc -eq 0
 
 # ---- ship-merge: merge method
-fresh; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5
+fresh; wg set g; wg pr 5
 echo "false true false" >"$FX/merge_settings.txt"; merge 5; rc=$?
 check "merge method: auto picks rebase when squash is disallowed" test $rc -eq 0
 check "merge method: auto passes --rebase" grep -qx "pr merge 5 --rebase --match-head-commit $HEAD_SHA" "$FX/gh.log"
@@ -496,11 +504,11 @@ nocfg; echo trunk >"$FX/default_branch"; mutate '.baseRefName="trunk" | .headRef
 
 # ---- ship-merge runs cleanup
 merge() { ( cd "$TMP/work" && CLAUDE_PROJECT_DIR="$TMP/work" bash "$H/ship-merge.sh" "$@" ) >"$FX/out" 2>&1; }
-fresh; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5; merge 5; rc=$?
+fresh; wg set g; wg pr 5; merge 5; rc=$?
 check "ship-merge success runs cleanup (remote)" grep -q 'api -X DELETE repos/o/r/git/refs/heads/feat' "$FX/gh.log"
 check "ship-merge success runs cleanup (local branch gone)" bash -c '! git -C "$1" show-ref --verify --quiet refs/heads/feat' _ "$TMP/work"
 check "ship-merge success prints cleanup lines" grep -q '^cleanup: remote feat deleted' "$FX/out"
-fresh; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5; merge 5 --keep-branch; rc=$?
+fresh; wg set g; wg pr 5; merge 5 --keep-branch; rc=$?
 check "ship-merge --keep-branch exits 0" test $rc -eq 0
 check "ship-merge --keep-branch no remote delete" bash -c '! grep -q "api -X DELETE" "$1"' _ "$FX/gh.log"
 check "ship-merge --keep-branch keeps local branch" git -C "$TMP/work" show-ref --verify --quiet refs/heads/feat
@@ -561,25 +569,25 @@ check "cleanup --keep-branch: no remote delete" no_delete
 check "cleanup --keep-branch: local feat kept" local_exists feat
 check "cleanup --keep-branch: checks out base" test "$(cur_branch)" = master
 
-cfresh; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5
+cfresh; wg set g; wg pr 5
 git -C "$TMP/work" branch -q backup/old; git -C "$TMP/work" branch -q backup/unrecorded
-jq '.backup_branches=["backup/old"]' "$TMP/state/goal.json" >"$FX/t" && mv "$FX/t" "$TMP/state/goal.json"
+jq '.backup_branches=["backup/old"]' "$WREG" >"$FX/t" && mv "$FX/t" "$WREG"
 cleanup 5; rc=$?
 check "cleanup backups: exits 0" test $rc -eq 0
 check "cleanup backups: recorded backup deleted" bash -c '! git -C "$1" show-ref --verify --quiet refs/heads/backup/old' _ "$TMP/work"
 check "cleanup backups: unrecorded backup kept" local_exists backup/unrecorded
-check "cleanup backups: recorded list emptied" test "$(jq -c '.backup_branches' "$TMP/state/goal.json")" = "[]"
+check "cleanup backups: recorded list emptied" test "$(jq -c '.backup_branches' "$WREG")" = "[]"
 check "cleanup backups: reports deletion" grep -q '^cleanup: backup backup/old deleted' "$FX/out"
 
-cfresh; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 6
+cfresh; wg set g; wg pr 6
 git -C "$TMP/work" branch -q backup/old
-jq '.backup_branches=["backup/old"]' "$TMP/state/goal.json" >"$FX/t" && mv "$FX/t" "$TMP/state/goal.json"
+jq '.backup_branches=["backup/old"]' "$WREG" >"$FX/t" && mv "$FX/t" "$WREG"
 cleanup 5; rc=$?
 check "cleanup foreign goal PR (autonomy off): exits 0" test $rc -eq 0
 check "cleanup foreign goal PR (autonomy off): backup untouched" local_exists backup/old
-check "cleanup foreign goal PR (autonomy off): list untouched" test "$(jq -c '.backup_branches' "$TMP/state/goal.json")" = '["backup/old"]'
+check "cleanup foreign goal PR (autonomy off): list untouched" test "$(jq -c '.backup_branches' "$WREG")" = '["backup/old"]'
 
-cfresh; flag_on; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 6
+cfresh; flag_on; wg set g; wg pr 6
 cleanup 5; rc=$?
 check "cleanup autonomy on with other goal PR: refused" test $rc -eq 1
 check "cleanup autonomy on with other goal PR: nothing deleted" no_delete
@@ -589,11 +597,11 @@ cfresh; flag_on; cleanup 5; rc=$?
 check "cleanup autonomy on without goal file: refused" test $rc -eq 1
 check "cleanup autonomy on without goal file: nothing deleted" no_delete
 
-cfresh; flag_on; bash "$H/goal.sh" set g; cleanup 5; rc=$?
+cfresh; flag_on; wg set g; cleanup 5; rc=$?
 check "cleanup autonomy on with empty goal pr: refused" test $rc -eq 1
 check "cleanup autonomy on with empty goal pr: nothing deleted" no_delete
 
-cfresh; flag_on; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5; cleanup 5; rc=$?
+cfresh; flag_on; wg set g; wg pr 5; cleanup 5; rc=$?
 check "cleanup autonomy on with matching goal pr: exits 0" test $rc -eq 0
 check "cleanup autonomy on with matching goal pr: deletes remote feat" remote_deleted
 
@@ -618,11 +626,11 @@ check "cleanup dirty tree: local feat kept" local_exists feat
 check "cleanup dirty tree: dirty file untouched" test -f "$TMP/work/dirty.txt"
 rm -f "$TMP/work/dirty.txt"
 
-cfresh; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5
+cfresh; wg set g; wg pr 5
 git -C "$TMP/work" branch -q backup/merged
 git -C "$TMP/work" checkout -q -b backup/unmerged && ( cd "$TMP/work" && echo u >u && git add u && git commit -qm U ) >/dev/null 2>&1
 git -C "$TMP/work" checkout -q feat
-jq '.backup_branches=["backup/merged","backup/unmerged"]' "$TMP/state/goal.json" >"$FX/t" && mv "$FX/t" "$TMP/state/goal.json"
+jq '.backup_branches=["backup/merged","backup/unmerged"]' "$WREG" >"$FX/t" && mv "$FX/t" "$WREG"
 cleanup 5; rc=$?
 check "cleanup unmerged backup: exits 0" test $rc -eq 0
 check "cleanup unmerged backup: merged backup deleted" bash -c '! git -C "$1" show-ref --verify --quiet refs/heads/backup/merged' _ "$TMP/work"
@@ -660,22 +668,22 @@ rm -rf "$TMP/wt"; git -C "$TMP/work" worktree prune
 
 # ---- goal backup-add
 reset; fresh_work
-goalw() { ( cd "$TMP/work" && bash "$H/goal.sh" "$@" ) >"$FX/out" 2>&1; }
+goalw() { ( cd "$TMP/work" && wg "$@" ) >"$FX/out" 2>&1; }
 goalw backup-add backup/feat-1; rc=$?
 check "goal backup-add without goal: no-op exit 0" test $rc -eq 0
-check "goal backup-add without goal: creates no goal file" test ! -e "$TMP/state/goal.json"
+check "goal backup-add without goal: creates no goal file" test ! -e "$WREG"
 goalw set g
-check "goal set initialises backup_branches" test "$(jq -c '.backup_branches' "$TMP/state/goal.json")" = "[]"
+check "goal set initialises backup_branches" test "$(jq -c '.backup_branches' "$WREG")" = "[]"
 git -C "$TMP/work" branch -q backup/feat-1
 goalw backup-add backup/feat-1; rc=$?
-check "goal backup-add records branch" test "$rc" -eq 0 -a "$(jq -c '.backup_branches' "$TMP/state/goal.json")" = '["backup/feat-1"]'
+check "goal backup-add records branch" test "$rc" -eq 0 -a "$(jq -c '.backup_branches' "$WREG")" = '["backup/feat-1"]'
 goalw backup-add backup/feat-1
-check "goal backup-add deduplicates" test "$(jq -c '.backup_branches' "$TMP/state/goal.json")" = '["backup/feat-1"]'
+check "goal backup-add deduplicates" test "$(jq -c '.backup_branches' "$WREG")" = '["backup/feat-1"]'
 goalw backup-add feat/x; rc=$?
 check "goal backup-add rejects non-backup name" test $rc -eq 2
 goalw backup-add backup/missing; rc=$?
 check "goal backup-add rejects missing branch" test $rc -eq 2
-check "goal backup-add rejected names not recorded" test "$(jq -c '.backup_branches' "$TMP/state/goal.json")" = '["backup/feat-1"]'
+check "goal backup-add rejected names not recorded" test "$(jq -c '.backup_branches' "$WREG")" = '["backup/feat-1"]'
 
 # ---- GraphQL unavailable: REST fallback (ship-merge, cleanup)
 gdown() { : >"$FX/graphql.off"; }
@@ -698,14 +706,14 @@ grefuses() {
   check "graphql down: $name reason" grep -q -- "$msg" "$FX/out"
 }
 
-gfresh; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5
+gfresh; wg set g; wg pr 5
 merge 5; rc=$?
 check "graphql down: ship-merge exits 0 when green" test $rc -eq 0
 check "graphql down: ship-merge tries pr merge first with the usual flags" grep -qxF "pr merge 5 --squash --match-head-commit $HEAD_SHA" "$FX/gh.log"
 check "graphql down: ship-merge falls back to a REST squash merge pinned to the head sha" grep -qxF "$(rest_put squash)" "$FX/gh.log"
 check "graphql down: ship-merge tries pr merge before the REST merge" log_before "pr merge 5 --squash --match-head-commit $HEAD_SHA" "$(rest_put squash)"
 check "graphql down: ship-merge announces the REST fallback" grep -q 'GitHub GraphQL unavailable; using REST' "$FX/out"
-check "graphql down: ship-merge marks goal done" test "$(jq -r .status "$TMP/state/goal.json")" = "done"
+check "graphql down: ship-merge marks goal done" test "$(jq -r .status "$WREG")" = "done"
 check "graphql down: ship-merge cleanup deletes remote branch via API" grep -q 'api -X DELETE repos/o/r/git/refs/heads/feat' "$FX/gh.log"
 check "graphql down: ship-merge cleanup reports the remote deleted" grep -q '^cleanup: remote feat deleted' "$FX/out"
 check "graphql down: ship-merge never deletes via gh" bash -c '! grep -q -- "--delete-branch" "$1"' _ "$FX/gh.log"
@@ -833,7 +841,7 @@ check "graphql down: a GraphQL 502 still refuses cleanup" test $rc -eq 1
 check "graphql down: a GraphQL 502 cleanup deletes nothing" no_delete
 check "graphql down: a GraphQL 502 cleanup makes no REST call" no_rest_placeholder
 
-fresh; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5
+fresh; wg set g; wg pr 5
 merge 5; rc=$?
 check "graphql down: normal path merges" test $rc -eq 0
 check "graphql down: normal path logs exactly the gh pr merge call" grep -qxF "pr merge 5 --squash --match-head-commit $HEAD_SHA" "$FX/gh.log"
@@ -1479,8 +1487,8 @@ reset; flag_on; fresh_work
 GUARD_CWD="$TMP/work"
 gate_reason() { jq -r '.hookSpecificOutput.permissionDecisionReason // ""' <<<"$(guard_in "$1")"; }
 gkey() { local d="$1" mb k; mb="$(git -C "$d" merge-base origin/master HEAD)"; k="$(git -C "$d" -c core.quotepath=true diff --no-ext-diff --no-textconv --binary --full-index --no-color --no-renames --no-relative -O/dev/null --src-prefix=a/ --dst-prefix=b/ --diff-algorithm=myers -U3 --inter-hunk-context=0 --submodule=short --ignore-submodules=none "$mb" HEAD -- ':/' ':(top,exclude)docs/agent-reports' | git -C "$d" hash-object --stdin)"; [ "$k" = e69de29bb2d1d6434b8b29ae775ad8c2e48c5391 ] && k=empty; echo "$k"; }
-rv() { ( cd "$GUARD_CWD" && bash "$H/goal.sh" review "$@" ) >/dev/null 2>&1; }
-gate_goal() { reset; flag_on; fresh_work; GUARD_CWD="$TMP/work"; ( cd "$TMP/work" && bash "$H/goal.sh" set gate-goal ); }
+rv() { ( WG_CWD="$GUARD_CWD"; wg review "$@" ) >/dev/null 2>&1; }
+gate_goal() { reset; flag_on; fresh_work; GUARD_CWD="$TMP/work"; ( cd "$TMP/work" && wg set gate-goal ); }
 rv_both() { rv code pass; rv security pass; }
 
 gate_goal
@@ -1509,7 +1517,7 @@ rb_build() {
   git clone -q "$TMP/rb.git" "$TMP/rb-o" 2>/dev/null
   ( cd "$TMP/rb-o" && git config user.email t@t && git config user.name t && git checkout -q master ) >/dev/null 2>&1
   reset; flag_on; GUARD_CWD="$TMP/rb"
-  ( cd "$TMP/rb" && git fetch -q origin && bash "$H/goal.sh" set rb-goal )
+  ( cd "$TMP/rb" && git fetch -q origin && WG_CWD="$TMP/rb" wg set rb-goal )
 }
 rb_move() { ( cd "$TMP/rb-o" && echo "$2" >"$1" && git add "$1" && git commit -qm M && git push -q origin HEAD:master ) >/dev/null 2>&1; }
 rb_build; rv_both; rb_move m x
@@ -1528,9 +1536,9 @@ gate_goal; rm -f "$TMP/state/autonomy.on"
 check "review gate: autonomy off is not gated" allowed "git push -u origin feat"
 reset; flag_on; fresh_work
 check "review gate: no goal.json is not gated" allowed "git push -u origin feat"
-gate_goal; bash "$H/goal.sh" escalate "needs a human"
+gate_goal; wg escalate "needs a human"
 check "review gate: escalated goal is not gated" allowed "git push -u origin feat"
-gate_goal; jq '.status = "done"' "$TMP/state/goal.json" >"$TMP/g" && mv "$TMP/g" "$TMP/state/goal.json"
+gate_goal; jq '.status = "done"' "$WREG" >"$TMP/g" && mv "$TMP/g" "$WREG"
 check "review gate: done goal is not gated" allowed "git push -u origin feat"
 
 gate_goal
@@ -1544,7 +1552,7 @@ check "review gate: gh pr create --head still denies when reviewed" denied "gh p
 NR="$TMP/nr"; rm -rf "$NR"; git init -q "$NR"
 ( cd "$NR" && git config user.email t@t && git config user.name t && git checkout -q -b feat && echo a >a && git add a && git commit -qm A \
   && git remote add origin "$TMP/origin.git" ) >/dev/null 2>&1
-reset; flag_on; ( cd "$NR" && bash "$H/goal.sh" set nr-goal ); GUARD_CWD="$NR"
+reset; flag_on; WG_CWD="$NR" wg set nr-goal; GUARD_CWD="$NR"
 check "review gate: no origin/<base> ref denies" denied "git push origin feat"
 check "review gate: no origin/<base> ref reason says cannot compute review key" grep -q 'cannot compute review key' <<<"$(gate_reason 'git push origin feat')"
 GUARD_CWD="$TMP/work"
@@ -1554,16 +1562,16 @@ check "review gate: shell redirect into goal.json denies" denied "echo x > .clau
 check "review gate: jq redirect into goal.json denies" denied "jq . a > .claude/state/goal.json"
 
 gate_goal
-( cd "$TMP/work" && bash "$H/goal.sh" review bogus pass ) >/dev/null 2>&1; rc=$?
+( cd "$TMP/work" && wg review bogus pass ) >/dev/null 2>&1; rc=$?
 check "goal review: unknown kind exits 2" test $rc -eq 2
-( cd "$TMP/work" && bash "$H/goal.sh" review code maybe ) >/dev/null 2>&1; rc=$?
+( cd "$TMP/work" && wg review code maybe ) >/dev/null 2>&1; rc=$?
 check "goal review: unknown verdict exits 2" test $rc -eq 2
 rv_both
 GK="$(gkey "$TMP/work")"; GH_SHA="$(git -C "$TMP/work" rev-parse HEAD)"
-check "goal review: recorded key equals the guard's key" test "$(jq -r '.reviews | keys[0] // ""' "$TMP/state/goal.json")" = "$GK"
-check "goal review: code entry carries verdict and HEAD sha" test "$(jq -r --arg k "$GK" '.reviews[$k].code | .verdict + "|" + .sha' "$TMP/state/goal.json")" = "pass|$GH_SHA"
-check "goal review: security entry carries verdict and HEAD sha" test "$(jq -r --arg k "$GK" '.reviews[$k].security | .verdict + "|" + .sha' "$TMP/state/goal.json")" = "pass|$GH_SHA"
-check "goal review: entries carry a timestamp" test -n "$(jq -r --arg k "$GK" '.reviews[$k].code.at // empty' "$TMP/state/goal.json")"
+check "goal review: recorded key equals the guard's key" test "$(jq -r '.reviews | keys[0] // ""' "$WREG")" = "$GK"
+check "goal review: code entry carries verdict and HEAD sha" test "$(jq -r --arg k "$GK" '.reviews[$k].code | .verdict + "|" + .sha' "$WREG")" = "pass|$GH_SHA"
+check "goal review: security entry carries verdict and HEAD sha" test "$(jq -r --arg k "$GK" '.reviews[$k].security | .verdict + "|" + .sha' "$WREG")" = "pass|$GH_SHA"
+check "goal review: entries carry a timestamp" test -n "$(jq -r --arg k "$GK" '.reviews[$k].code.at // empty' "$WREG")"
 check "goal review: push allowed right after recording" allowed "git push -u origin feat"
 
 gate_goal
@@ -1629,7 +1637,7 @@ for mv in false 0 no off; do
 done
 ( cd "$TMP/work" && git config --unset remote.origin.mirror )
 MC="$TMP/mcache"; rm -rf "$MC"; mkdir -p "$MC"; git init -q -b feat/x "$MC/clean"; git init -q -b feat/x "$MC/mir"
-( cd "$MC/mir" && git config remote.origin.mirror true ); mv "$TMP/state/goal.json" "$TMP/goal.parked"
+( cd "$MC/mir" && git config remote.origin.mirror true ); mv "$WREG" "$TMP/goal.parked"
 check "mirror remote: the config cache is per repository (clean repo first)" denied "git -C $MC/clean push; git -C $MC/mir push"
 check "mirror remote: two bare pushes in the same clean repository allow" allowed "git -C $MC/clean push; git -C $MC/clean push"
 check "mirror remote: setting it then a bare push in one command denies without a goal" denied "git config remote.origin.mirror true && git push"
@@ -1643,7 +1651,7 @@ check "mirror remote: reading the key allows" allowed "git config --get remote.o
 rm -f "$TMP/state/autonomy.on"
 check "mirror remote: autonomy off allows setting the key" allowed "git config remote.origin.mirror true"
 check "mirror remote: autonomy off allows git remote add --mirror" allowed "git remote add --mirror=push m https://example.invalid/r.git"
-flag_on; mv "$TMP/goal.parked" "$TMP/state/goal.json"
+flag_on; mv "$TMP/goal.parked" "$WREG"
 check "protected state: GOAL.JSON in upper case after cd .claude/state denies" denied "cd .claude/state && echo x > GOAL.JSON"
 check "protected state: Autonomy.On in mixed case after cd .claude/state denies" denied "cd .claude/state && echo x > Autonomy.On"
 check "review gate: setting remote.origin.mirror while gated denies" denied "git config remote.origin.mirror true"
@@ -1666,17 +1674,17 @@ rv_both
 check "review gate: gh pr new reviewed allows" allowed "gh pr new --fill"
 check "review gate: gh pr new --head denies" denied "gh pr new --head x --fill"
 
-gate_goal; cp "$TMP/state/goal.json" "$TMP/g.keep"; printf 'not json' >"$TMP/state/goal.json"
+gate_goal; cp "$WREG" "$TMP/g.keep"; printf 'not json' >"$WREG"
 check "review gate: unreadable goal.json denies a push" denied "git push -u origin feat"
-cp "$TMP/g.keep" "$TMP/state/goal.json"
+cp "$TMP/g.keep" "$WREG"
 gate_goal
 check "protected state: cd .claude/state then redirect into goal.json denies" denied "cd .claude/state && echo x > goal.json"
 check "protected state: cd .claude/state then redirect into autonomy.on denies" denied "cd .claude/state && echo > autonomy.on"
 check "protected state: sponge into goal.json denies" denied "cd .claude/state && echo x | sponge goal.json"
 check "protected state: a goal.json outside .claude/state is not protected" allowed "echo x > goal.json"
-reset; fresh_work; flag_on; bash "$H/goal.sh" set g-ceil
-jq 'del(.max_fix_iterations) | .fix_iterations = 9' "$TMP/state/goal.json" >"$TMP/g" && mv "$TMP/g" "$TMP/state/goal.json"
-printf 'code:z\n' | bash "$H/goal.sh" bump >/dev/null 2>&1; rc=$?
+reset; fresh_work; flag_on; wg set g-ceil
+jq 'del(.max_fix_iterations) | .fix_iterations = 9' "$WREG" >"$TMP/g" && mv "$TMP/g" "$WREG"
+printf 'code:z\n' | wg bump >/dev/null 2>&1; rc=$?
 check "bump without a stored ceiling defaults to 10" test $rc -eq 3
 
 reset; flag_on
@@ -2018,7 +2026,7 @@ LCWD=""
 LH() {
   local sub="$1" unsets=(-u GH_BIN -u ORCA_BIN -u AGENT_STATE_DIR -u CLAUDE_PROJECT_DIR) sets=(); shift
   if [ -n "${LH_TEST:-}" ]; then sets+=(AGENT_HARNESS_TEST=1); else unsets+=(-u AGENT_HARNESS_TEST); fi
-  ( cd "${LCWD:-$LM}" && env "${unsets[@]}" PATH="$TMP/lsleep:$TMP/lbin:$PATH" ${sets[@]+"${sets[@]}"} bash "$H/$sub.sh" "$@" )
+  ( cd "${LCWD:-$LM}" && env "${unsets[@]}" CLAUDE_CODE_SESSION_ID="${LH_SESSION:-sess-lw}" PATH="$TMP/lsleep:$TMP/lbin:$PATH" ${sets[@]+"${sets[@]}"} bash "$H/$sub.sh" "$@" )
 }
 lreg_file() { echo "$LM/.git/agent-harness/goals/$1.json"; }
 lreg() { jq -r "$2" "$(lreg_file "$1")"; }
@@ -2049,7 +2057,7 @@ check "ship-init git: registry schema" test "$(lreg $LS '[.v, .goal, .branch, .p
 check "ship-init git: registry has a creation time" test -n "$(lreg $LS '.created_at // empty')"
 check "ship-init git: nothing tracked or untracked in main" test -z "$(git -C "$LM" status --porcelain)"
 check "ship-init git: registry file is not tracked" test -z "$(git -C "$LM" ls-files agent-harness .git)"
-check "ship-init git: fix ceiling is 10" test "$(jq -r .max_fix_iterations "$LM/.claude/state/goal.json")" = 10
+check "ship-init git: fix ceiling is 10" test "$(jq -r .max_fix_iterations "$(lreg_file "$LS")")" = 10
 LH ship-init fix ui other-goal >"$FX/out" 2>&1; rc=$?
 LT2="$LROOT/main-wt/fix-ui-other-goal"
 check "two concurrent goals: second ship-init succeeds" test $rc -eq 0
@@ -2059,9 +2067,9 @@ check "two concurrent goals: both active" test "$(lreg $LS .status)|$(lreg fix-u
 LH ship-init feat ui hud-theme >"$FX/out" 2>"$FX/err"; rc=$?
 check "ship-init refuses a slug that is already active" test $rc -eq 1
 check "ship-init refusal names the active goal" grep -q 'already active' "$FX/err"
-jq --arg s "$LS" --arg b feat/ui-hud-theme '.slug = $s | .branch = $b' "$LM/.claude/state/goal.json" >"$FX/t" && mv "$FX/t" "$LM/.claude/state/goal.json"
+jq --arg s "$LS" --arg b feat/ui-hud-theme '.slug = $s | .branch = $b' "$(lreg_file "$LS")" >"$FX/t" && mv "$FX/t" "$(lreg_file "$LS")"
 LCWD="$LT" LH goal set "g" >/dev/null 2>&1
-check "goal set keeps the slug of the active goal" test "$(jq -r .slug "$LM/.claude/state/goal.json")" = "$LS"
+check "goal set keeps the slug of the active goal" test "$(jq -r .slug "$(lreg_file "$LS")")" = "$LS"
 LCWD="$LT" LH goal pr 7 >/dev/null 2>&1
 check "goal pr mirrors the PR into the registry" test "$(lreg $LS '.pr')" = 7
 check "goal pr leaves the other goal alone" test "$(lreg fix-ui-other-goal '.pr')" = null
@@ -2072,6 +2080,179 @@ check "goal escalate mirrors status and reason into the registry" test "$(lreg $
 LH ship-init feat ui hud-theme >"$FX/out" 2>"$FX/err"; rc=$?
 check "ship-init refuses a slug whose worktree still exists" test $rc -eq 1
 check "ship-init refusal creates nothing new" test "$(find "$LM/.git/agent-harness/goals" -name '*.json' | wc -l | tr -d ' ')" = 2
+
+# two concurrent goals in one repo share no state
+two_goals() {
+  lw_fixture git
+  LH_SESSION=sess-a LH ship-init feat ui goal-a >/dev/null 2>&1
+  LH_SESSION=sess-b LH ship-init fix ui goal-b >/dev/null 2>&1
+  SA=feat-ui-goal-a; SB=fix-ui-goal-b
+  TA="$LROOT/main-wt/$SA"; TB="$LROOT/main-wt/$SB"
+  : >"$LM/.claude/state/autonomy.on"
+}
+lstop() {
+  ( cd "$LM" && jq -nc --arg s "$1" '{stop_hook_active:false,session_id:$s}' \
+    | env -u GH_BIN -u ORCA_BIN -u AGENT_STATE_DIR -u CLAUDE_PROJECT_DIR -u AGENT_HARNESS_TEST PATH="$TMP/lsleep:$TMP/lbin:$PATH" bash "$HOOKS/ship-stop-gate.sh" )
+}
+lguard() {
+  local out
+  out="$( cd "$1" && jqn -n --arg c "$2" --arg d "$1" '{cwd:$d,tool_input:{command:$c}}' \
+    | env -u GH_BIN -u ORCA_BIN -u AGENT_STATE_DIR -u CLAUDE_PROJECT_DIR -u AGENT_HARNESS_TEST PATH="$TMP/lsleep:$TMP/lbin:$PATH" bash "$HOOKS/autonomy-git-guard.sh" )"
+  printf '%s' "${out:-$EMPTY_JSON}" \
+    | jq -r '.hookSpecificOutput.permissionDecision // "allow"'
+}
+rsum() { cksum <"$(lreg_file "$1")"; }
+no_goal_json() { check "per-goal state: $1 leaves no .claude/state/goal.json" test ! -e "$LM/.claude/state/goal.json"; }
+
+two_goals
+check "per-goal state: ship-init binds A to its session" test "$(lreg $SA '.session_id')" = sess-a
+check "per-goal state: ship-init binds B to its session" test "$(lreg $SB '.session_id')" = sess-b
+no_goal_json "two ship-inits"
+
+two_goals
+A0="$(rsum $SA)"
+LH goal --goal "$SB" set "retargeted b" >/dev/null 2>&1; rc=$?
+check "goal --goal B set: exits 0" test $rc -eq 0
+check "goal --goal B set: writes B" test "$(lreg $SB .goal)" = "retargeted b"
+check "goal --goal B set: A entry byte-identical" test "$(rsum $SA)" = "$A0"
+LH_SESSION=sess-b2 LH goal --goal "$SB" set "again" >/dev/null 2>&1
+check "goal --goal leaves the bound session unchanged" test "$(lreg $SB .session_id)" = sess-b
+check "goal --goal B set: A entry still byte-identical" test "$(rsum $SA)" = "$A0"
+check "goal --goal on an unknown slug: no goal named, exit 2" bash -c 'cd "$1" && env -u GH_BIN -u ORCA_BIN -u AGENT_STATE_DIR -u CLAUDE_PROJECT_DIR -u AGENT_HARNESS_TEST PATH="$2:$PATH" bash "$3/goal.sh" --goal nope bump </dev/null 2>"$4"; test $? -eq 2 && grep -q "no goal named nope" "$4"' _ "$LM" "$TMP/lbin" "$H" "$FX/err"
+AGENT_HARNESS_SESSION=oc-1 LH ship-init chore sess oc >/dev/null 2>&1
+check "ship-init prefers AGENT_HARNESS_SESSION over CLAUDE_CODE_SESSION_ID" test "$(lreg chore-sess-oc .session_id)" = oc-1
+: >"$LM/.claude/state/autonomy.on"
+( cd "$LM" && env -u CLAUDE_CODE_SESSION_ID -u AGENT_HARNESS_SESSION -u GH_BIN -u ORCA_BIN -u AGENT_STATE_DIR -u CLAUDE_PROJECT_DIR -u AGENT_HARNESS_TEST PATH="$TMP/lsleep:$TMP/lbin:$PATH" bash "$H/ship-init.sh" feat nosid x ) >/dev/null 2>"$FX/err"; rc=$?
+check "ship-init: autonomous without a session id refuses" test $rc -eq 1
+check "ship-init: refusal names the session id" grep -q "session id" "$FX/err"
+check "ship-init: refusal creates no registry entry" test ! -e "$(lreg_file feat-nosid-x)"
+rm -f "$LM/.claude/state/autonomy.on"
+
+# registry protection and push gate (autonomous)
+two_goals
+GD="$LM/.git/agent-harness"
+check "registry guard: cd agent-harness then rm -rf goals" test "$(lguard "$LM" 'cd .git/agent-harness && rm -rf goals')" = deny
+check "registry guard: cd goals then rm a goal file" test "$(lguard "$LM" 'cd .git/agent-harness/goals && rm feat-ui-goal-a.json')" = deny
+check "registry guard: cp through a doubled slash" test "$(lguard "$LM" 'cp /tmp/x .git/agent-harness//goals/feat-ui-goal-a.json')" = deny
+check "registry guard: cp through a dot segment" test "$(lguard "$LM" 'cp /tmp/x .git/agent-harness/./goals/feat-ui-goal-a.json')" = deny
+check "registry guard: cp through a dotdot segment" test "$(lguard "$LM" 'cp /tmp/x .git/agent-harness/goals/../goals/feat-ui-goal-a.json')" = deny
+check "registry guard: cp through another case" test "$(lguard "$LM" 'cp /tmp/x .git/Agent-Harness/goals/feat-ui-goal-a.json')" = deny
+check "registry guard: ln into agent-harness" test "$(lguard "$LM" 'ln -s /tmp .git/agent-harness/g2')" = deny
+check "registry guard: rm a goal file from the goals dir" test "$(lguard "$GD/goals" 'rm feat-ui-goal-a.json')" = deny
+check "registry guard: cp over a goal file from the goals dir" test "$(lguard "$GD/goals" 'cp /tmp/x feat-ui-goal-a.json')" = deny
+check "registry guard: redirect into a goal file from the goals dir" test "$(lguard "$GD/goals" 'echo {} > feat-ui-goal-a.json')" = deny
+check "registry guard: rm goals from agent-harness dir" test "$(lguard "$GD" 'rm -rf goals')" = deny
+check "registry guard: a plain file elsewhere stays allowed" test "$(lguard "$LM" 'cp /tmp/x notes.txt')" = allow
+check "env guard: inline CLAUDE_CODE_SESSION_ID on goal" test "$(lguard "$LM" 'CLAUDE_CODE_SESSION_ID=x agent-harness goal --goal feat-ui-goal-a pr 1')" = deny
+check "env guard: export AGENT_HARNESS_GOAL" test "$(lguard "$LM" 'export AGENT_HARNESS_GOAL=feat-ui-goal-b')" = deny
+check "env guard: declare AGENT_HARNESS_SESSION" test "$(lguard "$LM" 'declare -x AGENT_HARNESS_SESSION=x')" = deny
+lguard_reason() {
+  ( cd "$1" && jqn -n --arg c "$2" --arg d "$1" '{cwd:$d,tool_input:{command:$c}}' \
+    | env -u GH_BIN -u ORCA_BIN -u AGENT_STATE_DIR -u CLAUDE_PROJECT_DIR -u AGENT_HARNESS_TEST PATH="$TMP/lsleep:$TMP/lbin:$PATH" bash "$HOOKS/autonomy-git-guard.sh" ) \
+    | jq -r '.hookSpecificOutput.permissionDecisionReason // ""'
+}
+for st in escalated done Active; do
+  jq --arg s "$st" '.status = $s' "$(lreg_file $SB)" >"$FX/t" && mv "$FX/t" "$(lreg_file $SB)"
+  for push in 'fix/ui-goal-b' 'fix/ui-goal-b:feat/ui-goal-a' 'refs/heads/fix/ui-goal-b:refs/heads/feat/ui-goal-a' 'fix/ui-goal-b:refs/heads/new'; do
+    check "push gate: $st goal branch denied as '$push'" bash -c 'echo "$1" | grep -q "only an active goal"' _ "$(lguard_reason "$LM" "git push origin $push")"
+  done
+done
+AGENT_HARNESS_GOAL="$SB" LH goal pr 9 >/dev/null 2>&1
+check "AGENT_HARNESS_GOAL selects the goal" test "$(lreg $SB .pr)|$(lreg $SA .pr)" = "9|null"
+LCWD="$TA" LH goal pr 7 >/dev/null 2>&1
+check "cwd worktree branch selects the goal" test "$(lreg $SA .pr)|$(lreg $SB .pr)" = "7|9"
+check "--goal beats the cwd worktree" bash -c 'cd "$1" && env -u GH_BIN -u ORCA_BIN -u AGENT_STATE_DIR -u CLAUDE_PROJECT_DIR -u AGENT_HARNESS_TEST PATH="$2:$PATH" bash "$3/goal.sh" --goal "$4" pr 11 >/dev/null 2>&1 && test "$(jq -r .pr "$5")" = 11' _ "$TA" "$TMP/lsleep" "$H" "$SB" "$(lreg_file $SB)"
+no_goal_json "goal selection"
+
+two_goals
+LH goal --goal "$SA" review code pass >/dev/null 2>&1
+check "goal --goal A review: A has one review key" test "$(lreg $SA '.reviews | length')" = 1
+check "goal --goal A review: A code verdict is pass" test "$(lreg $SA '[.reviews[]][0].code.verdict')" = pass
+check "goal --goal A review: B has no reviews" test "$(lreg $SB '.reviews | length')" = 0
+
+two_goals
+B0="$(lreg $SB '[.status, .fix_iterations] | join("|")')"
+printf 'code:a.sh\n' | LH goal --goal "$SA" bump >/dev/null 2>&1; rc1=$?
+printf 'code:a.sh\n' | LH goal --goal "$SA" bump >/dev/null 2>&1; rc2=$?
+check "goal --goal A bump twice: first exits 0, second exits 3" test "$rc1|$rc2" = "0|3"
+check "goal --goal A bump twice: A escalated" test "$(lreg $SA .status)" = escalated
+check "goal --goal A bump twice: B active with zero fix iterations" test "$(lreg $SB '[.status, .fix_iterations] | join("|")')" = "active|0"
+check "goal --goal A bump twice: B entry unchanged" test "$B0" = "active|0"
+
+two_goals
+for _ in 1 2 3 4; do lstop sess-a >/dev/null 2>&1; done
+check "stop gate sess-a x4: A blocks counted" test "$(lreg $SA '[.stop_blocks, .total_blocks] | join("|")')" = "4|4"
+check "stop gate sess-a x4: B counters untouched" test "$(lreg $SB '[.stop_blocks, .total_blocks, .status] | join("|")')" = "0|0|active"
+out="$(lstop sess-a 2>/dev/null)"
+check "stop gate sess-a 5th call: allows (escalates)" test -z "$out"
+check "stop gate sess-a 5th call: A escalated" test "$(lreg $SA .status)" = escalated
+check "stop gate sess-a 5th call: B still active and untouched" test "$(lreg $SB '[.stop_blocks, .total_blocks, .status] | join("|")')" = "0|0|active"
+out="$(lstop sess-b 2>/dev/null)"
+check "stop gate sess-b: blocks B" test "$(jq -r .decision <<<"$out")" = block
+check "stop gate sess-b: only B counters move" test "$(lreg $SB .stop_blocks)|$(lreg $SA .stop_blocks)" = "1|5"
+
+two_goals
+A0="$(rsum $SA)"; B0="$(rsum $SB)"
+out="$(lstop sess-unknown 2>/dev/null)"; rc=$?
+check "stop gate unknown session: exits 0 silently" test "$rc|$out" = "0|"
+check "stop gate unknown session: no counter change anywhere" test "$(rsum $SA)|$(rsum $SB)" = "$A0|$B0"
+out="$(lstop '' 2>/dev/null)"
+check "stop gate empty session with active goals: blocks" test "$(jq -r .decision <<<"$out")" = block
+check "stop gate empty session: acts on every active goal" test "$(lreg $SA .stop_blocks)|$(lreg $SB .stop_blocks)" = "1|1"
+no_goal_json "stop gate sessions"
+
+two_goals
+jq '.session_id = ""' "$(lreg_file $SA)" >"$FX/t" && mv "$FX/t" "$(lreg_file $SA)"
+out="$(lstop sess-anyone 2>/dev/null)"
+check "stop gate: unbound entry blocks a stop from any session" test "$(jq -r .decision <<<"$out")" = block
+check "stop gate: unbound entry counted" test "$(lreg $SA .stop_blocks)|$(lreg $SB .stop_blocks)" = "1|0"
+jq 'del(.session_id)' "$(lreg_file $SA)" >"$FX/t" && mv "$FX/t" "$(lreg_file $SA)"
+out="$(lstop sess-other 2>/dev/null)"
+check "stop gate: entry without session_id blocks any session" test "$(jq -r .decision <<<"$out")" = block
+jq '.status = "done"' "$(lreg_file $SA)" >"$FX/t" && mv "$FX/t" "$(lreg_file $SA)"
+jq '.status = "done"' "$(lreg_file $SB)" >"$FX/t" && mv "$FX/t" "$(lreg_file $SB)"
+out="$(lstop '' 2>"$FX/err")"; rc=$?
+check "stop gate empty session without active goals: allows" test "$rc|$out" = "0|"
+check "stop gate empty session: stderr note kept" grep -q "no session_id" "$FX/err"
+rm -f "$LM/.claude/state/autonomy.on"
+check "env guard (autonomy off): inline CLAUDE_CODE_SESSION_ID denied" test "$(lguard "$LM" 'CLAUDE_CODE_SESSION_ID=x agent-harness goal pr 1')" = deny
+check "env guard (autonomy off): export AGENT_HARNESS_SESSION denied" test "$(lguard "$LM" 'export AGENT_HARNESS_SESSION=x')" = deny
+check "env guard (autonomy off): declare AGENT_HARNESS_GOAL denied" test "$(lguard "$LM" 'declare -x AGENT_HARNESS_GOAL=x')" = deny
+
+two_goals
+LH_SESSION=sess-a LCWD="$TA" LH goal review code pass >/dev/null 2>&1
+LH_SESSION=sess-a LCWD="$TA" LH goal review security pass >/dev/null 2>&1
+check "push guard: reviewed A pushes from its worktree" test "$(lguard "$TA" "git push -u origin feat/ui-goal-a")" = allow
+check "push guard: unreviewed B is denied from its worktree" test "$(lguard "$TB" "git push -u origin fix/ui-goal-b")" = deny
+git -C "$LM" checkout -q -b feat/unregistered >/dev/null 2>&1
+check "push guard: unregistered branch is denied while a goal is active" test "$(lguard "$LM" "git push -u origin feat/unregistered")" = deny
+check "push guard: shell write into the goal registry is denied" test "$(lguard "$LM" "echo '{}' > .git/agent-harness/goals/x.json")" = deny
+check "push guard: jq redirect into a registry entry is denied" test "$(lguard "$TA" "jq . a > $LM/.git/agent-harness/goals/$SA.json")" = deny
+no_goal_json "push guard"
+
+two_goals
+A0="$(rsum $SA)"; B0="$(rsum $SB)"
+LH goal set "from main" >"$FX/out" 2>&1; rc=$?
+check "goal set from main, no --goal, two active goals: exits 2" test $rc -eq 2
+check "goal set from main, no --goal: writes nothing" test "$(rsum $SA)|$(rsum $SB)" = "$A0|$B0"
+check "goal set from main, no --goal: creates no goal.json" test ! -e "$LM/.claude/state/goal.json"
+
+two_goals
+( cd "$TA" && echo c >c && git add c && git commit -qm C && git push -q origin HEAD ) >/dev/null 2>&1
+jq -n --arg h "$(git -C "$TA" rev-parse HEAD)" '{state:"OPEN",baseRefName:"master",isDraft:false,headRefOid:$h,headRefName:"feat/ui-goal-a",isCrossRepository:false,files:[{path:"client/a.gd"}]}' >"$FX/view.json"
+echo '[{"name":"gate","status":"completed","conclusion":"success","app":{"slug":"github-actions"}}]' >"$FX/checks.json"
+echo '{"data":{"repository":{"pullRequest":{"reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}' >"$FX/threads.json"
+echo 0 >"$FX/behind.txt"
+LH goal --goal "$SA" pr 5 >/dev/null 2>&1
+B0="$(rsum $SB)"
+rm -f "$LM/.claude/state/autonomy.on"
+LH ship-merge 5 --confirmed >"$FX/out" 2>&1; rc=$?
+check "ship-merge A's PR: exits 0" test $rc -eq 0
+check "ship-merge A's PR: A worktree torn down" test ! -e "$TA"
+check "ship-merge A's PR: B registry entry untouched" test "$(rsum $SB)" = "$B0"
+check "ship-merge A's PR: B worktree kept" test -d "$TB"
+check "ship-merge A's PR: B still active" test "$(lreg $SB .status)" = active
+no_goal_json "ship-merge"
 
 lw_fixture git
 LH ship-init wip ui x >/dev/null 2>&1; rc=$?; check "ship-init rejects bad type" test $rc -eq 1
@@ -2120,6 +2301,13 @@ check "ship-init adopt: exits 0" test $rc -eq 0
 check "ship-init adopt: worktree on the PR head branch" test "$(git -C "$LT" branch --show-current)" = feat/adopt-me
 check "ship-init adopt: tracks origin" test "$(git -C "$LT" rev-parse --abbrev-ref '@{upstream}')" = origin/feat/adopt-me
 check "ship-init adopt: registry records the PR" test "$(lreg feat-adopt-me '[.branch, (.pr | tostring)] | join("|")')" = "feat/adopt-me|9"
+check "ship-init adopt: binds the session" test "$(lreg feat-adopt-me .session_id)" = sess-lw
+git -C "$LM" worktree remove --force "$LT" >/dev/null 2>&1
+jq '.status = "escalated"' "$(lreg_file feat-adopt-me)" >"$FX/t" && mv "$FX/t" "$(lreg_file feat-adopt-me)"
+LH_SESSION=sess-resumed LH ship-init --adopt 9 >"$FX/out" 2>"$FX/err"; rc=$?
+check "ship-init adopt: resume exits 0" test $rc -eq 0
+check "ship-init adopt: resume rebinds the session" test "$(lreg feat-adopt-me .session_id)" = sess-resumed
+check "ship-init adopt: rebind says so on stderr" grep -qx "goal feat-adopt-me rebound from session sess-lw to sess-resumed" "$FX/err"
 lw_adopt_fixture git
 jq -n '{headRefName:"feat/adopt-me",isCrossRepository:false}' >"$FX/view.json"
 ( cd "$LM" && git checkout -q feat/adopt-me ) >/dev/null 2>&1
@@ -2140,7 +2328,7 @@ lw_td() {
   TN="$(cd "$T" && pwd -P)"
   TD_HEAD="$(git -C "$T" rev-parse HEAD)"
   jq -n --arg h "$TD_HEAD" '{state:"MERGED",baseRefName:"master",isDraft:false,headRefOid:$h,headRefName:"feat/td-x",isCrossRepository:false,files:[]}' >"$FX/view.json"
-  LH goal pr 5 >/dev/null 2>&1
+  lw_set_reg '.pr = 5'
 }
 lw_td_run() { LH teardown-merged-worktree "$@" >"$FX/out" 2>&1; }
 lw_td_refuses() {
@@ -2469,29 +2657,29 @@ check "worktree-rm stays refused in autonomous mode" bash -c '! (cd "$1" && env 
 
 # ---- review fixes: one state location, registry mirror, teardown trust, injection, guard
 lw_stop() {
-  ( cd "${LCWD:-$LM}" && echo '{}' | env -u AGENT_STATE_DIR CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/lsleep:$TMP/lbin:$PATH" bash "$1" )
+  ( cd "${LCWD:-$LM}" && echo '{"session_id":"sess-lw"}' | env -u AGENT_STATE_DIR CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/lsleep:$TMP/lbin:$PATH" bash "$1" )
 }
 STOP_COPIES=("$HOOKS/ship-stop-gate.sh")
 [ ! -f "$HERE/plugins/fmflurry-harness/hooks/scripts/ship-stop-gate.sh" ] || STOP_COPIES+=("$HERE/plugins/fmflurry-harness/hooks/scripts/ship-stop-gate.sh")
-lw_goal_file() { echo "$LM/.claude/state/goal.json"; }
+lw_goal_file() { lreg_file "$LS"; }
 
 lw_fixture git
 LH ship-init feat ui b1-main >"$FX/out" 2>"$FX/err"; LT="$(cat "$FX/out")"; LS=feat-ui-b1-main
 check "ship-init prints slug=<slug>" grep -qx "slug=$LS" "$FX/err"
 check "ship-init: stdout stays the bare worktree path" test "$(cat "$FX/out")" = "$LM-wt/$LS"
-check "ship-init: goal.json lives in the main checkout" test -f "$(lw_goal_file)"
-check "ship-init: goal.json records branch, slug and status" test "$(jq -r '[.branch, .slug, .status] | join("|")' "$(lw_goal_file)")" = "feat/ui-b1-main|$LS|active"
+check "ship-init: no goal.json is written" test ! -e "$LM/.claude/state/goal.json"
+check "ship-init: registry entry records branch, slug and status" test "$(jq -r '[.branch, .slug, .status] | join("|")' "$(lw_goal_file)")" = "feat/ui-b1-main|$LS|active"
 check "ship-init: the worktree has no state of its own" test ! -e "$LT/.claude/state/goal.json"
 check "ship-init: registry records the slug" test "$(lreg $LS .slug)" = "$LS"
-LH goal pr 41 >/dev/null 2>&1
+LH goal --goal "$LS" pr 41 >/dev/null 2>&1
 check "goal pr from the main checkout mirrors into the registry" test "$(lreg $LS .pr)" = 41
-LH goal sha cafe01 >/dev/null 2>&1
+LH goal --goal "$LS" sha cafe01 >/dev/null 2>&1
 check "goal sha from the main checkout mirrors head_oid" test "$(lreg $LS .head_oid)" = cafe01
 LCWD="$LT" LH goal pr 42 >/dev/null 2>&1
 check "goal pr from inside the worktree gives the same result" test "$(lreg $LS .pr)|$(jq -r .pr "$(lw_goal_file)")" = "42|42"
 LCWD="$LT" LH goal sha beef02 >/dev/null 2>&1
 check "goal sha from inside the worktree gives the same result" test "$(lreg $LS .head_oid)" = beef02
-LH goal escalate "from main" >/dev/null 2>&1
+LH goal --goal "$LS" escalate "from main" >/dev/null 2>&1
 check "goal escalate from the main checkout mirrors status and reason" test "$(lreg $LS '[.status, .reason] | join("|")')" = "escalated|from main"
 check "autonomy flag and goal share the main state dir from the worktree" bash -c 'cd "$1" && env -u CLAUDE_PROJECT_DIR -u AGENT_STATE_DIR bash "$2/autonomy.sh" on >/dev/null && test -f "$3/.claude/state/autonomy.on" && env -u CLAUDE_PROJECT_DIR -u AGENT_STATE_DIR bash "$2/autonomy.sh" off >/dev/null' _ "$LT" "$H" "$LM"
 touch "$LM/.claude/state/autonomy.on"
@@ -2509,7 +2697,7 @@ lw_td_run 5; rc=$?
 check "teardown from the main checkout (PR set from main): exits 0" test $rc -eq 0
 check "teardown from the main checkout: registry removed" test ! -e "$(lreg_file feat-td-x)"
 lw_td git; lw_set_reg '.pr = null'; lw_td_run 5; rc=$?
-check "teardown falls back to the goal.json slug when no registry entry has the PR" test "$rc|$(test -e "$T" && echo kept || echo gone)" = "0|gone"
+check "teardown has no goal.json fallback when no registry entry has the PR: exits 3" test $rc -eq 3
 lw_td git; lw_set_reg '.pr = null'; jq '.pr = 9' "$(lw_goal_file)" >"$FX/t" && mv "$FX/t" "$(lw_goal_file)"; lw_td_run 5; rc=$?
 check "teardown: goal.json tracking another PR gives no fallback" test $rc -eq 3
 lw_td git
@@ -2531,7 +2719,7 @@ for gate in "${STOP_COPIES[@]}"; do
   view_mut '.state="OPEN"'
   jq --arg h "$TD_HEAD" '.stop_blocks = 4 | .head_sha = $h' "$(lw_goal_file)" >"$FX/t" && mv "$FX/t" "$(lw_goal_file)"
   lw_stop "$gate" >/dev/null 2>&1
-  check "stop-gate ($gl) escalation: goal.json escalated" test "$(jq -r .status "$(lw_goal_file)")" = escalated
+  check "stop-gate ($gl) escalation: entry escalated" test "$(jq -r .status "$(lw_goal_file)")" = escalated
   check "stop-gate ($gl) escalation: mirrored status and reason in the registry" test "$(lreg feat-td-x '[.status, (.reason | startswith("no progress after 5 stop blocks"))] | join("|")')" = "escalated|true"
   lw_td_run 5; rc=$?
   check "teardown refuses a goal the stop gate escalated: exits 1" test $rc -eq 1
@@ -2539,7 +2727,7 @@ for gate in "${STOP_COPIES[@]}"; do
   check "teardown refuses a goal the stop gate escalated: directory kept" test -d "$T"
   lw_td git; touch "$LM/.claude/state/autonomy.on"
   lw_stop "$gate" >/dev/null 2>&1
-  check "stop-gate ($gl) done: goal.json done" test "$(jq -r .status "$(lw_goal_file)")" = "done"
+  check "stop-gate ($gl) done: entry done" test "$(jq -r .status "$(lw_goal_file)")" = "done"
   check "stop-gate ($gl) done: mirrored status in the registry" test "$(lreg feat-td-x .status)" = "done"
 done
 lw_td git; lw_set_reg '.status = "blocked"'; view_mut '.state="OPEN"'; lw_td_refuses "a blocked goal"
@@ -2604,8 +2792,9 @@ for inst in "$FH/.claude/scripts/agent-harness" "$FH/.config/opencode/scripts/ag
 done
 out="$(HOME="$FH" GH_BIN=/x/gh ORCA_BIN=/x/orca AGENT_STATE_DIR=/x/state AGENT_HARNESS_TEST=1 bash -c '. "$1/lib.sh"; echo "$GH|$ORCA|$STATE_DIR|$HARNESS_INSTALLED"' _ "$H" 2>&1)"
 check "test seam still works from a repo checkout" test "$out" = "/x/gh|/x/orca|/x/state|0"
+WG_CWD="$SDR" wgoal old
 ( cd "$SDR" && rm -rf "$SDR/.claude/state" && env -u CLAUDE_PROJECT_DIR HOME="$FH" AGENT_HARNESS_TEST=1 AGENT_STATE_DIR="$TMP/ign3" bash "$FH/.claude/scripts/agent-harness/goal.sh" set gz )
-check "installed goal.sh ignores AGENT_STATE_DIR" test ! -e "$TMP/ign3/goal.json" -a -f "$SDR/.claude/state/goal.json"
+check "installed goal.sh ignores AGENT_STATE_DIR" test ! -e "$TMP/ign3/goal.json" -a ! -e "$SDR/.claude/state/goal.json" -a "$(jq -r .goal "$(WG_CWD="$SDR" wgfile)")" = gz
 check "worktree-core timing seam is gated by the same check" grep -q 'HARNESS_INSTALLED" = 0 \] && \[ "${AGENT_HARNESS_TEST' "$H/worktree-core.sh"
 check "report chrome override is gated by the same check" grep -q 'HARNESS_INSTALLED" = 0 \] && \[ "${AGENT_HARNESS_TEST' "$H/report.sh"
 
@@ -2679,7 +2868,6 @@ ship_merge_green() {
 # 0.4.11 case 1: ship-merge mirrors the merge into the registry
 lw_td git; ship_merge_green; echo x >>"$T/b"
 LH ship-merge 5 --confirmed >"$FX/out" 2>&1
-check "ship-merge: goal.json done after the merge" test "$(jq -r .status "$(lw_goal_file)")" = done
 check "ship-merge: registry status merged after the merge (teardown stopped on dirty tree)" test "$(lreg feat-td-x .status 2>/dev/null)" = merged
 
 # 0.4.11 case 2: a merged PR overrides a stale escalated or blocked registry status
@@ -2702,7 +2890,7 @@ for gate in "${STOP_COPIES[@]}"; do
   lw_td git; touch "$LM/.claude/state/autonomy.on"
   outs=""
   for _ in 1 2 3 4 5 6; do
-    outs="$outs$( cd "$LM" && echo '{}' | env -u AGENT_STATE_DIR -u GH_BIN CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/ghfail:$TMP/lsleep:$TMP/lbin:$PATH" bash "$gate" 2>/dev/null )"
+    outs="$outs$( cd "$LM" && echo '{"session_id":"sess-lw"}' | env -u AGENT_STATE_DIR -u GH_BIN CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/ghfail:$TMP/lsleep:$TMP/lbin:$PATH" bash "$gate" 2>/dev/null )"
   done
   check "stop-gate ($gl) unreadable PR: allows the stop" test -z "$outs"
   check "stop-gate ($gl) unreadable PR: stop_blocks unchanged after 6 checks" test "$(jq -r .stop_blocks "$(lw_goal_file)")" = 0
@@ -2714,20 +2902,20 @@ done
 # 0.4.11 case 4: ship-init and goal set keep the real branch slug
 lw_fixture git
 LH ship-init fix x y >"$FX/out" 2>"$FX/err"
-check "ship-init: goal.json branch and slug are the real branch slug" test "$(jq -r '[.branch, .slug] | join("|")' "$(lw_goal_file)")" = "fix/x-y|fix-x-y"
+check "ship-init: registry entry branch and slug are the real branch slug" test "$(jq -r '[.branch, .slug] | join("|")' "$(lreg_file fix-x-y)")" = "fix/x-y|fix-x-y"
 check "ship-init: registry file is named after the branch slug" test -f "$(lreg_file fix-x-y)"
 check "ship-init: no master or main registry file" test ! -e "$(lreg_file master)" -a ! -e "$(lreg_file main)"
-LH goal set "later from main" >/dev/null 2>&1
-check "goal set from the main checkout keeps branch and slug" test "$(jq -r '[.branch, .slug] | join("|")' "$(lw_goal_file)")" = "fix/x-y|fix-x-y"
-LH goal pr 9 >/dev/null 2>&1
+LH goal --goal fix-x-y set "later from main" >/dev/null 2>&1
+check "goal set from the main checkout keeps branch and slug" test "$(jq -r '[.branch, .slug] | join("|")' "$(lreg_file fix-x-y)")" = "fix/x-y|fix-x-y"
+LH goal --goal fix-x-y pr 9 >/dev/null 2>&1
 check "goal pr after goal set from main still mirrors into the registry" test "$(lreg fix-x-y .pr)" = 9
-jq '.status = "done"' "$(lw_goal_file)" >"$FX/t" && mv "$FX/t" "$(lw_goal_file)"
+jq '.status = "done"' "$(lreg_file fix-x-y)" >"$FX/t" && mv "$FX/t" "$(lreg_file fix-x-y)"
 LH ship-init fix x z >"$FX/out" 2>"$FX/err"
-check "ship-init after a finished goal records the new branch slug" test "$(jq -r '[.branch, .slug, .status] | join("|")' "$(lw_goal_file)")" = "fix/x-z|fix-x-z|active"
+check "ship-init after a finished goal records the new branch slug" test "$(jq -r '[.branch, .slug, .status] | join("|")' "$(lreg_file fix-x-z)")" = "fix/x-z|fix-x-z|active"
 for st in escalated done; do
-  jq --arg s "$st" '.status = $s' "$(lw_goal_file)" >"$FX/t" && mv "$FX/t" "$(lw_goal_file)"
-  LH goal set "later from main" >/dev/null 2>&1
-  check "goal set from the main checkout keeps branch and slug of a $st goal" test "$(jq -r '[.branch, .slug] | join("|")' "$(lw_goal_file)")" = "fix/x-z|fix-x-z"
+  jq --arg s "$st" '.status = $s' "$(lreg_file fix-x-z)" >"$FX/t" && mv "$FX/t" "$(lreg_file fix-x-z)"
+  LH goal --goal fix-x-z set "later from main" >/dev/null 2>&1
+  check "goal set from the main checkout keeps branch and slug of a $st goal" test "$(jq -r '[.branch, .slug] | join("|")' "$(lreg_file fix-x-z)")" = "fix/x-z|fix-x-z"
 done
 
 # 0.4.11 case 5: gh runs through direnv when the repo has an .envrc
@@ -2745,15 +2933,15 @@ LMP="$(cd "$LM" && pwd -P)"
 for gate in "${STOP_COPIES[@]}"; do
   gl="${gate#"$HERE"/}"
   lw_td git; touch "$LM/.claude/state/autonomy.on" "$LM/.envrc"; rm -f "$FX/direnv.log" "$FX/gh.log"
-  ( cd "$LM" && echo '{}' | env -u AGENT_STATE_DIR -u GH_BIN CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/dbin:$TMP/lsleep:$TMP/lbin:$PATH" bash "$gate" ) >/dev/null 2>&1
+  ( cd "$LM" && echo '{"session_id":"sess-lw"}' | env -u AGENT_STATE_DIR -u GH_BIN CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/dbin:$TMP/lsleep:$TMP/lbin:$PATH" bash "$gate" ) >/dev/null 2>&1
   check "stop-gate ($gl) with .envrc and direnv: gh runs via direnv exec <root>" grep -Eq "^exec ($LM|$LMP) /[^ ]*gh pr view" "$FX/direnv.log"
   rm -f "$FX/direnv.log" "$FX/gh.log" "$LM/.envrc"; jq '.status = "active"' "$(lw_goal_file)" >"$FX/t" && mv "$FX/t" "$(lw_goal_file)"
-  ( cd "$LM" && echo '{}' | env -u AGENT_STATE_DIR -u GH_BIN CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/dbin:$TMP/lsleep:$TMP/lbin:$PATH" bash "$gate" ) >/dev/null 2>&1
+  ( cd "$LM" && echo '{"session_id":"sess-lw"}' | env -u AGENT_STATE_DIR -u GH_BIN CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/dbin:$TMP/lsleep:$TMP/lbin:$PATH" bash "$gate" ) >/dev/null 2>&1
   check "stop-gate ($gl) without .envrc: direnv is not used" test ! -e "$FX/direnv.log"
   check "stop-gate ($gl) without .envrc: plain gh still runs" grep -q '^pr view 5' "$FX/gh.log"
   if [ -z "$(type -P direnv)" ]; then
     touch "$LM/.envrc"; rm -f "$FX/gh.log"; jq '.status = "active"' "$(lw_goal_file)" >"$FX/t" && mv "$FX/t" "$(lw_goal_file)"
-    ( cd "$LM" && echo '{}' | env -u AGENT_STATE_DIR -u GH_BIN CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/nodbin:$TMP/lsleep:$TMP/lbin:$PATH" bash "$gate" ) >/dev/null 2>&1
+    ( cd "$LM" && echo '{"session_id":"sess-lw"}' | env -u AGENT_STATE_DIR -u GH_BIN CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/nodbin:$TMP/lsleep:$TMP/lbin:$PATH" bash "$gate" ) >/dev/null 2>&1
     check "stop-gate ($gl) with .envrc but no direnv: plain gh runs" grep -q '^pr view 5' "$FX/gh.log"
   fi
 done
@@ -2779,7 +2967,7 @@ cp "$TMP/dbin/gh" "$TMP/ebin/gh"
 for gate in "${STOP_COPIES[@]}"; do
   gl="${gate#"$HERE"/}"
   lw_td git; touch "$LM/.claude/state/autonomy.on" "$LM/.envrc"; rm -f "$FX/evil.log" "$FX/gh.log"
-  ( cd "$LM" && echo '{}' | env -u AGENT_STATE_DIR -u GH_BIN CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/ebin:$TMP/lsleep:$TMP/lbin:$PATH" bash "$gate" ) >/dev/null 2>&1
+  ( cd "$LM" && echo '{"session_id":"sess-lw"}' | env -u AGENT_STATE_DIR -u GH_BIN CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/ebin:$TMP/lsleep:$TMP/lbin:$PATH" bash "$gate" ) >/dev/null 2>&1
   check "stop-gate ($gl): a gh put first on PATH by .envrc is not run" test ! -e "$FX/evil.log"
   check "stop-gate ($gl): the pinned gh still ran" grep -q '^pr view 5' "$FX/gh.log"
   rm -f "$LM/.envrc"
@@ -2802,7 +2990,7 @@ rm -f "$LM/.envrc"
 for gate in "${STOP_COPIES[@]}"; do
   gl="${gate#"$HERE"/}"
   lw_td git; touch "$LM/.claude/state/autonomy.on"; rm -f "$FX/orca.log"
-  ( cd "$LM" && echo '{}' | env -u AGENT_STATE_DIR -u GH_BIN ORCA_WORKTREE_ID='repo::/p' CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/ghfail:$TMP/lsleep:$TMP/lbin:$PATH" bash "$gate" ) >/dev/null 2>"$FX/err"
+  ( cd "$LM" && echo '{"session_id":"sess-lw"}' | env -u AGENT_STATE_DIR -u GH_BIN ORCA_WORKTREE_ID='repo::/p' CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/ghfail:$TMP/lsleep:$TMP/lbin:$PATH" bash "$gate" ) >/dev/null 2>"$FX/err"
   check "stop-gate ($gl) unreadable PR: one waiting notification" test "$(grep -c 'waiting: PR state unreadable' "$FX/orca.log" 2>/dev/null)" = 1
   check "stop-gate ($gl) unreadable PR: says so on stderr" grep -qx 'ship-stop-gate: PR state unreadable; allowing stop' "$FX/err"
 done

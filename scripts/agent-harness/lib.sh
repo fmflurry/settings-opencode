@@ -33,7 +33,6 @@ if [ "$HARNESS_INSTALLED" = 0 ] && [ "${AGENT_HARNESS_TEST:-}" = 1 ]; then
   GH="${GH_BIN:-$GH}"
   ORCA="${ORCA_BIN:-$ORCA}"
 fi
-GOAL_FILE="$STATE_DIR/goal.json"
 # The repo's .envrc selects the gh account; a plain gh would use the personal token. Only its environment is used:
 # the binary stays the pinned $GH, so an agent-written .envrc cannot swap it.
 gh_cmd() {
@@ -208,49 +207,52 @@ reg_update() {
   if jq "$@" "$f" >"$tmp"; then mv "$tmp" "$f"; else rm -f "$tmp"; return 1; fi
 }
 
-# goal_slug: registry name of the goal in goal.json (its slug, else the slug of its branch). Never the cwd's HEAD.
-goal_slug() {
-  local s b
-  s="$(goal_get '.slug // empty')"
-  if [ -z "$s" ]; then
-    b="$(goal_get '.branch // empty')"
-    [ -z "$b" ] || s="$(reg_slug "$b")"
-  fi
-  printf '%s' "$s"
-}
-
-# reg_find_by_pr <pr>: prints the slug of the registered goal bound to the PR, else the goal.json goal when it tracks that PR.
+# reg_find_by_pr <pr>: prints the slug of the registered goal bound to the PR.
 reg_find_by_pr() {
-  local d f s
+  local d f
   d="$(reg_dir)" || return 1
   for f in "$d"/*.json; do
     [ -f "$f" ] || continue
     if jq -e --argjson n "$1" '.pr == $n' "$f" >/dev/null 2>&1; then basename "$f" .json; return 0; fi
   done
-  [ "$(goal_get '.pr // empty')" = "$1" ] || return 1
-  s="$(goal_slug)"
-  { [ -n "$s" ] && [ -f "$d/$s.json" ]; } || return 1
-  printf '%s\n' "$s"
+  return 1
 }
 
-# reg_mirror <jq args...> <filter>: update the registry entry of the goal in goal.json, if it has one.
-reg_mirror() {
-  local slug
-  slug="$(goal_slug)"
-  [ -n "$slug" ] || return 0
-  reg_update "$slug" "$@" || true
+# reg_any_active: true when some registry entry is active (or unreadable, which fails closed).
+reg_any_active() {
+  local d f st
+  d="$(reg_dir)" || return 1
+  for f in "$d"/*.json; do
+    [ -f "$f" ] || continue
+    st="$(jq -r '.status // ""' "$f" 2>/dev/null)" || st=""
+    { [ "$st" = active ] || [ -z "$st" ]; } && return 0
+  done
+  return 1
 }
+
+# goal_resolve [<slug>]: sets GOAL_SLUG to the goal this command works on: the argument, else $AGENT_HARNESS_GOAL,
+# else the registry entry of the branch checked out in the cwd. Fails (writing nothing) when none matches.
+GOAL_SLUG=""
+goal_resolve() {
+  local s="${1:-${AGENT_HARNESS_GOAL:-}}" b="" f
+  if [ -z "$s" ]; then
+    b="$(git branch --show-current 2>/dev/null)" || return 1
+    [ -n "$b" ] || return 1
+    s="$(reg_slug "$b")"
+  fi
+  f="$(reg_path "$s")" || return 1
+  [ -f "$f" ] || return 1
+  [ -z "$b" ] || [ "$(jq -r '.branch // empty' "$f" 2>/dev/null)" = "$b" ] || return 1
+  GOAL_SLUG="$s"
+}
+
+# The session a goal is bound to: only ship-init writes it, and only the harness host sets these variables.
+session_id_cur() { printf '%s' "${AGENT_HARNESS_SESSION:-${CLAUDE_CODE_SESSION_ID:-}}"; }
 
 autonomy_on() { [ -f "$STATE_DIR/autonomy.on" ]; }
 
-goal_get() { jq -r "$1" "$GOAL_FILE" 2>/dev/null; }
-
-goal_update() {
-  [ -f "$GOAL_FILE" ] || return 0
-  local tmp
-  tmp="$(mktemp "$STATE_DIR/goal.XXXXXX")" || return 1
-  if jq "$@" "$GOAL_FILE" >"$tmp"; then mv "$tmp" "$GOAL_FILE"; else rm -f "$tmp"; return 1; fi
-}
+goal_get() { reg_get "$GOAL_SLUG" "$1"; }
+goal_update() { reg_update "$GOAL_SLUG" "$@"; }
 
 cfg_get() { [ -f "$CONFIG_FILE" ] || return 0; jq -r "$1" "$CONFIG_FILE" 2>/dev/null || true; }
 

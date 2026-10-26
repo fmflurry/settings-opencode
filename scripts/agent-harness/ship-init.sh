@@ -28,6 +28,11 @@ else
   branch="${pos[0]}/${pos[1]}-${pos[2]}"
 fi
 
+sid="$(session_id_cur)"
+if autonomy_on && [ -z "$sid" ]; then
+  die "autonomous mode needs a session id to bind the goal: run it from a Claude Code or OpenCode session (AGENT_HARNESS_SESSION or CLAUDE_CODE_SESSION_ID)"
+fi
+
 M="$(main_checkout)" || die "not inside a git repository"
 g() { git -C "$M" "$@"; }
 common="$(g rev-parse --path-format=absolute --git-common-dir)" || die "cannot resolve the git dir"
@@ -93,22 +98,19 @@ fi
 
 path="$(cd "$path" && pwd -P)" || die "cannot resolve $path"
 mkdir -p "$(dirname "$reg")"
+old_sid="$(jq -r '.session_id // empty' "$reg" 2>/dev/null || true)"
 tmp="$(mktemp "$reg.XXXXXX")"
 jq -n --arg goal "${goal:-$branch}" --arg branch "$branch" --arg slug "$slug" --arg path "$path" --arg base "$base" --arg via "$via" \
-  --argjson pr "$pr" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  '{v:1, goal:$goal, slug:$slug, branch:$branch, path:$path, base:$base, via:$via, pr:$pr, head_oid:"", status:"active", reason:"", report:"", created_at:$at}' \
+  --argjson pr "$pr" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg sid "$sid" \
+  '{v:1, goal:$goal, criteria:[], slug:$slug, branch:$branch, path:$path, base:$base, via:$via, pr:$pr, head_oid:"", head_sha:"",
+    status:"active", reason:"", report:"", fix_iterations:0, max_fix_iterations:10, last_fingerprint:"", reviews:{},
+    stop_blocks:0, total_blocks:0, backup_branches:[], session_id:$sid, created_at:$at}' \
   >"$tmp" || { rm -f "$tmp"; die "cannot write the registry entry $reg"; }
+if [ -n "$adopt" ] && [ -n "$old_sid" ] && [ "$old_sid" != "$sid" ]; then
+  echo "goal $slug rebound from session $old_sid to $sid" >&2
+fi
 mv "$tmp" "$reg"
 
 mkdir -p "$STATE_DIR"
-if [ -f "$GOAL_FILE" ] && [ "$(jq -r '.status // empty' "$GOAL_FILE" 2>/dev/null)" = active ]; then
-  prev="$(jq -r '.slug // empty' "$GOAL_FILE")"
-  [ -z "$prev" ] || [ "$prev" = "$slug" ] || echo "ship-init: goal.json now tracks $slug (was $prev; $prev stays in the registry)" >&2
-  goal_update --arg b "$branch" --arg s "$slug" --argjson pr "$pr" --arg base "$base" '.branch = $b | .slug = $s | .pr = $pr | .base = $base'
-else
-  jq -n --arg goal "${goal:-$branch}" --arg branch "$branch" --arg slug "$slug" --argjson pr "$pr" --arg base "$base" \
-    '{goal:$goal, criteria:[], branch:$branch, slug:$slug, pr:$pr, base:$base, head_sha:"",
-      fix_iterations:0, max_fix_iterations:10, last_fingerprint:"", reviews:{}, stop_blocks:0, total_blocks:0, status:"active", reason:"", backup_branches:[]}' >"$GOAL_FILE"
-fi
 echo "$path"
 echo "slug=$slug" >&2

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Visual report — feat/pr-show-me-report</title>
+<style>
+  :root {
+    --ink: #1c1915;
+    --muted: #5c564c;
+    --paper: #f4f0e6;
+    --card: #fffdf8;
+    --line: #e0d6c6;
+    --accent: #0f6e6b;
+    --warn: #8a4b12;
+    --ok: #1d6b3a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 16px/1.45 "Segoe UI", "Helvetica Neue", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 28px 22px 48px; }
+  .kicker {
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 0 0 6px;
+  }
+  h1 { font-size: 28px; line-height: 1.15; margin: 0 0 8px; letter-spacing: -0.02em; }
+  .lede { color: var(--muted); max-width: 68ch; margin: 0; }
+  h2 { font-size: 16px; margin: 26px 0 10px; }
+  .flow, .files, .cols { display: grid; gap: 10px; }
+  .flow { grid-template-columns: 1fr 28px 1fr 28px 1fr; align-items: stretch; }
+  .files, .cols { grid-template-columns: 1fr 1fr; }
+  .box {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .arrow { align-self: center; justify-self: center; color: var(--accent); font-size: 22px; line-height: 1; }
+  .box h3 { margin: 0 0 6px; font-size: 15px; }
+  .box p, .box li { color: var(--muted); font-size: 14px; }
+  .box p { margin: 0; }
+  ul { margin: 6px 0 0; padding-left: 18px; }
+  code {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    background: #f3ecdf;
+    padding: 0 4px;
+    border-radius: 4px;
+  }
+  .tree { margin: 0; white-space: pre; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.55; }
+  .ok { color: var(--ok); font-weight: 700; }
+  .warn { border-left: 4px solid var(--warn); }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 8px 12px; font-size: 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+  @media (max-width: 720px) {
+    .flow, .files, .cols { grid-template-columns: 1fr; }
+    .arrow { transform: rotate(90deg); }
+    h1 { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <p class="kicker">fmflurry-harness 0.4.18 · feat/pr-show-me-report</p>
+  <h1>Every harness pull request carries a show-me report</h1>
+  <p class="lede">Opening or updating a PR now writes one offline HTML page and a PNG, commits them at a stable path, and blocks a <code>gh</code> or <code>az</code> body that omits the Visual report section. Conductor and Monolith share the skill. OpenCode, Claude Code, and Cursor run the same hook.</p>
+
+  <h2>What changed</h2>
+  <div class="flow">
+    <article class="box">
+      <h3>Before</h3>
+      <p>The template stopped at Summary, Risk, How to revert, and Tier. The only picture was the ship outcome PNG at <code>docs/agent-reports/&lt;date&gt;-&lt;slug&gt;.png</code>, which the review key ignores.</p>
+    </article>
+    <div class="arrow" aria-hidden="true">▶</div>
+    <article class="box">
+      <h3>Gate</h3>
+      <p><code>pr-visual-report.sh</code> allows a body when <code>## Visual report</code> has a checked Report line, a <code>docs/pr-reports/&lt;slug&gt;.html</code> link, and an image. A checked Skip line passes only with a reason of at least 8 characters.</p>
+    </article>
+    <div class="arrow" aria-hidden="true">▶</div>
+    <article class="box">
+      <h3>After</h3>
+      <p><code>agent-harness pr-report</code> writes <code>docs/pr-reports/&lt;branch-slug&gt;.html</code> and <code>.png</code>. Those files are committed before review. A cloud agent also copies them to <code>/opt/cursor/artifacts/pr-reports/</code>.</p>
+    </article>
+  </div>
+
+  <h2>Where the hook runs</h2>
+  <div class="cols">
+    <article class="box">
+      <h3>Three installs, one script</h3>
+      <ul>
+        <li>OpenCode: <code>plugins/autonomy.ts</code> calls <code>visualReportRejection</code> after the git guard. A missing hook fails open.</li>
+        <li>Claude Code: PreToolUse Bash in <code>.claude/settings.json</code>, and <code>install.sh</code> adds the same hook on upgrade.</li>
+        <li>Cursor: <code>hooks/hooks.json</code> from the plugin build, matcher Shell.</li>
+      </ul>
+    </article>
+    <article class="box">
+      <h3>What the hook does not see</h3>
+      <p>Cursor <code>ManagePullRequest</code> is not a shell command. The skill requires <code>agent-harness pr-report-check --body-file</code> before that tool. A title-only <code>gh pr edit</code> is left alone. A docs typo or a version bump only may check Skip and state the reason. The hook does not read the diff.</p>
+    </article>
+  </div>
+
+  <h2>Main files</h2>
+  <div class="files">
+    <article class="box">
+      <pre class="tree">.claude/hooks/pr-visual-report.sh
+scripts/agent-harness/pr-report.sh
+scripts/agent-harness/pr-report-check.sh
+skills/pr-visual-report/SKILL.md
+.github/pull_request_template.md
+scripts/cursor-plugin/config.json  0.4.18</pre>
+    </article>
+    <article class="box">
+      <pre class="tree">install.sh                         OpenCode copy + Claude addhook
+plugins/lib/autonomy-hooks.ts      visualReportRejection
+plugins/autonomy.ts                tool.execute.before
+skills/ship/SKILL.md               stage 5b, before review
+skills/git-workflow/SKILL.md       shared by both variants
+README.md                          EN and FR</pre>
+    </article>
+  </div>
+
+  <h2>Tests</h2>
+  <table>
+    <thead><tr><th>Suite</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td><code>node scripts/cursor-plugin/check.mjs</code></td><td class="ok">cursor-plugin check OK</td></tr>
+      <tr><td><code>npm test</code></td><td class="ok">173 pass, 0 fail, 2 skipped</td></tr>
+      <tr><td><code>bash scripts/agent-harness/test/run.sh</code></td><td class="ok">2035 passed, 0 failed</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Risks</h2>
+  <div class="cols">
+    <article class="box warn">
+      <h3>Skip is a statement, not a diff check</h3>
+      <p>Any body with a checked Skip line and a reason of 8 or more characters passes. A non-trivial diff can still skip if the author writes that reason.</p>
+    </article>
+    <article class="box warn">
+      <h3>Host PR tools outside the shell</h3>
+      <p>The hook blocks <code>gh</code> and <code>az</code>. A host tool that never runs those commands is gated only by <code>pr-report-check</code> in the skill.</p>
+    </article>
+    <article class="box warn">
+      <h3>The report is inside the review key</h3>
+      <p><code>docs/pr-reports/</code> is not excluded the way <code>docs/agent-reports/</code> is. Editing the report after a local review needs a new review.</p>
+    </article>
+    <article class="box warn">
+      <h3>Screenshot needs a local browser</h3>
+      <p><code>pr-report</code> exits 1 when neither <code>screenshot.sh</code> nor headless Chrome writes a PNG. It does not download a browser.</p>
+    </article>
+  </div>
+</main>
+</body>
+</html>

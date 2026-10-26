@@ -34,7 +34,7 @@ Before starting the rebase:
 
 1. Generate backup branch name: `backup/<branch-name-with-slashes-as-hyphens>-<YYYYMMDDHHMM>` (lowercase).
 2. Validate against regex `^backup/[a-z0-9]+(-[a-z0-9]+)*$`.
-3. Create backup: `git branch backup/<name>`. Confirm it matches the regex. When a goal is active (`.claude/state/goal.json` exists), record it with `agent-harness goal backup-add <name>`.
+3. Create backup: `git branch backup/<name>`. Confirm it matches the regex. When a goal is active, record it with `agent-harness goal --goal <slug> backup-add <name>` (see the ship skill's goal selection).
 
 ## Rebase
 

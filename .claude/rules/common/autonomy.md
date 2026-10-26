@@ -56,14 +56,20 @@ The flag does not authorise any action not listed above, and it does not authori
 **(e) Loop until done or escalated.** The run is a loop: ship, review, fix blockers, review again, merge, repeat. Each
 iteration runs implement, verify, local review, push, CI, then `agent-harness ship-merge`. A refusal or a blocker sends
 the run back to fix, then local review again, then push, CI and the merge retry. The push guard denies `git push` and
-`gh pr create` until `agent-harness goal review code|security pass` is recorded for the exact diff. The run ends in
+`gh pr create` until `agent-harness goal --goal <slug> review code|security pass` is recorded for the exact diff. The run ends in
 one of two states: the goal is `done` (PR merged), or it is escalated. Escalate only when a human-only blocker stops
 it, or when a full loop iteration makes no progress (the same blocker and the same failure as the one before). Record
-the reason with `agent-harness goal escalate "<reason>"`. The Stop hook (`ship-stop-gate`) blocks an early stop while
+the reason with `agent-harness goal --goal <slug> escalate "<reason>"`. The Stop hook (`ship-stop-gate`) blocks an early stop while
 the goal is active and the PR is unmerged. It escalates after five no-progress blocks or 30 blocks in total, and it
 fails open when the host cannot be read. The review/fix loop stops when the same findings repeat (fingerprint piped to
-`agent-harness goal bump`, exit 3), with a safety ceiling of 10 rounds. Stop and tell the user the remaining findings.
+`agent-harness goal --goal <slug> bump`, exit 3), with a safety ceiling of 10 rounds. Stop and tell the user the remaining findings.
 Do not start another fix round. Do not work around the loop by ending the turn.
+
+## Session binding
+
+`ship-init` binds the goal to `AGENT_HARNESS_SESSION` (OpenCode; the plugin's `shell.env` hook injects it) or `CLAUDE_CODE_SESSION_ID` (Claude Code).
+A goal with no bound session, or a Stop event with no session id, is held by the stop gate (fails closed). `ship-init --adopt` rebinding prints a notice. Agents cannot set
+`CLAUDE_CODE_SESSION_ID`, `AGENT_HARNESS_SESSION` or `AGENT_HARNESS_GOAL` in any mode.
 
 ## Scope
 

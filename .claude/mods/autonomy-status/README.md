@@ -8,7 +8,7 @@ Read relative to the session's project root (`$.session.root()`):
 
 - `.claude/agent-harness.json` or a `.claude/state/` directory marks a harness-aware repo (shows `○ manual` when autonomy is off).
 - `.claude/state/autonomy.on` present means autonomy is ON.
-- `.claude/state/goal.json` holds the ship goal (`status` is `active`, `escalated` or `done`).
+- Goal state is per goal, in the registry `<git-common-dir>/agent-harness/goals/<slug>.json` (`status` is `active`, `escalated` or `done`). There is no shared `goal.json`.
 
 Outside a harness-aware repo (none of the three exist) the mod shows nothing.
 

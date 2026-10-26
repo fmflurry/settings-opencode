@@ -1,7 +1,7 @@
 # Autonomy (mandatory)
 
 Applies to every task. The toggle is `agent-harness autonomy on|off|status`. The state file is
-`.claude/state/autonomy.on`, shared with OpenCode along with `goal.json`. The `ship` skill owns the workflow in both harnesses.
+`.claude/state/autonomy.on`, shared with OpenCode. Goal state is per goal in `<git-common-dir>/agent-harness/goals/<slug>.json` and is not shared. The `ship` skill owns the workflow in both harnesses.
 
 ## Rules
 
@@ -53,12 +53,12 @@ The flag does not authorise any action not listed above, and it does not authori
 **(e) Loop until done or escalated.** The run is a loop: ship, review, fix blockers, review again, merge, repeat. Each
 iteration runs implement, verify, local review, push, CI, then `agent-harness ship-merge`. A refusal or a blocker sends
 the run back to fix, then local review again, then push, CI and the merge retry. The push guard denies `git push` and
-`gh pr create` until `agent-harness goal review code|security pass` is recorded for the exact diff. The run ends in
+`gh pr create` until `agent-harness goal --goal <slug> review code|security pass` is recorded for the exact diff. The run ends in
 one of two states: the goal is `done` (PR merged), or it is escalated. Escalate only when a human-only blocker stops
 it, or when a full loop iteration makes no progress (the same blocker and the same failure as the one before). Record
-the reason with `agent-harness goal escalate "<reason>"`. Do not end the turn early while the goal is active and the
+the reason with `agent-harness goal --goal <slug> escalate "<reason>"`. Do not end the turn early while the goal is active and the
 PR is unmerged. The review/fix loop stops when the same findings repeat (fingerprint piped to
-`agent-harness goal bump`, exit 3), with a safety ceiling of 10 rounds. Stop and tell the user the remaining findings.
+`agent-harness goal --goal <slug> bump`, exit 3), with a safety ceiling of 10 rounds. Stop and tell the user the remaining findings.
 Do not start another fix round.
 
 ## OpenCode enforcement
@@ -69,6 +69,7 @@ Do not start another fix round.
 - Injects autonomy context into the system prompt through `experimental.chat.system.transform`, using the shared `autonomy-context.sh` hook.
 - Runs `autonomy-git-guard.sh` before each bash call and denies forbidden git commands (rule d).
 - On `session.idle` of a root session, runs `ship-stop-gate.sh`. If the gate blocks, the plugin re-prompts the session with the gate's reason. OpenCode has no stop hook, so the turn ends and a new one starts. The gate's caps escalate after 5 no-progress blocks or 30 in total.
+- The plugin's `shell.env` hook injects `AGENT_HARNESS_SESSION` into the shell. `ship-init` binds the goal to that session id, and the idle gate matches it. Claude Code binds from `CLAUDE_CODE_SESSION_ID` instead. Fails closed: a goal with no bound session, or a stop event with no session id, is held by the gate.
 
 `install.sh` deploys the three hooks to `~/.config/opencode/scripts/agent-harness/hooks/`. OpenCode-only installs also get the `~/.local/bin/agent-harness` wrapper.
 

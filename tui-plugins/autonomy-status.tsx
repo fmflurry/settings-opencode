@@ -1,8 +1,8 @@
 /** @jsxImportSource @opentui/solid */
-import { execFile } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { execFile, execFileSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { Show, createSignal } from "solid-js";
 
@@ -44,7 +44,7 @@ const parseGoal = (text: string): Goal | null => {
   }
   if (typeof raw !== "object" || raw === null) return null;
   const fields = raw as Record<string, unknown>;
-  const status = STATUSES.find((one) => one === fields.status);
+  const status = STATUSES.find((one) => one === (fields.status === "merged" ? "done" : fields.status));
   if (status === undefined) return null;
   const pr = fields.pr;
   return {
@@ -57,16 +57,39 @@ const parseGoal = (text: string): Goal | null => {
   };
 };
 
-const readSnapshot = (root: string): Snapshot => {
-  const stateDir = join(root, ".claude", "state");
-  let goal: Goal | null = null;
+const goalsDir = (root: string): string | null => {
   try {
-    goal = parseGoal(readFileSync(join(stateDir, "goal.json"), "utf8"));
+    const common = execFileSync("git", ["rev-parse", "--git-common-dir"], { cwd: root, encoding: "utf8" }).trim();
+    return resolve(root, common, "agent-harness", "goals");
   } catch {
-    goal = null;
+    return null;
   }
-  return { isOn: existsSync(join(stateDir, "autonomy.on")), goal };
 };
+
+const readGoal = (dir: string | null): Goal | null => {
+  if (dir === null) return null;
+  try {
+    const found = readdirSync(dir)
+      .filter((name) => name.endsWith(".json"))
+      .flatMap((name) => {
+        const file = join(dir, name);
+        const goal = parseGoal(readFileSync(file, "utf8"));
+        return goal === null ? [] : [{ goal, mtimeMs: statSync(file).mtimeMs }];
+      })
+      .sort(
+        (a, b) =>
+          Number(a.goal.status === "done") - Number(b.goal.status === "done") || b.mtimeMs - a.mtimeMs,
+      );
+    return found[0]?.goal ?? null;
+  } catch {
+    return null;
+  }
+};
+
+const readSnapshot = (root: string, dir: string | null): Snapshot => ({
+  isOn: existsSync(join(root, ".claude", "state", "autonomy.on")),
+  goal: readGoal(dir),
+});
 
 const prLabel = (goal: Goal): string => (goal.pr === null ? "" : ` #${goal.pr}`);
 
@@ -88,11 +111,12 @@ const resolveScript = (root: string): string => {
 
 const tui: TuiPlugin = async (api) => {
   const root = api.state.path.worktree;
-  const [snapshot, setSnapshot] = createSignal<Snapshot>(readSnapshot(root));
+  const dir = goalsDir(root);
+  const [snapshot, setSnapshot] = createSignal<Snapshot>(readSnapshot(root, dir));
 
   const refresh = (): void => {
     const prev = snapshot();
-    const next = readSnapshot(root);
+    const next = readSnapshot(root, dir);
     setSnapshot(next);
     for (const message of toastsFor(prev, next)) {
       api.ui.toast({ variant: next.goal?.status === "escalated" ? "error" : "info", message });

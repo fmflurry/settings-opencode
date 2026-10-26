@@ -10,7 +10,7 @@ export const PALETTE = {
 
 export const HARNESS_MARKERS = ['.claude/agent-harness.json', '.claude/state'] as const
 export const AUTONOMY_FLAG = '.claude/state/autonomy.on'
-export const GOAL_FILE = '.claude/state/goal.json'
+export const GOALS_DIR = 'agent-harness/goals'
 
 const GOAL_CLIP = 60
 const STATUSES: readonly GoalStatus[] = ['active', 'escalated', 'done']
@@ -32,7 +32,7 @@ export const parseGoal = (text: string): Goal | null => {
   }
   if (typeof raw !== 'object' || raw === null) return null
   const fields = raw as Record<string, unknown>
-  const status = STATUSES.find(one => one === fields.status)
+  const status = STATUSES.find(one => one === (fields.status === 'merged' ? 'done' : fields.status))
   if (status === undefined) return null
   const pr = fields.pr
   return {
@@ -48,6 +48,31 @@ export const parseGoal = (text: string): Goal | null => {
     status,
     reason: asText(fields.reason),
   }
+}
+
+export type GoalFile = { text: string; mtimeMs: number }
+
+const sessionOf = (text: string): string => {
+  try {
+    return asText((JSON.parse(text) as Record<string, unknown> | null)?.session_id)
+  } catch {
+    return ''
+  }
+}
+
+export const pickGoal = (
+  files: readonly GoalFile[],
+  sessionId: string,
+): { goal: Goal; mtimeMs: number } | null => {
+  const parsed = files.flatMap(file => {
+    const goal = parseGoal(file.text)
+    return goal === null ? [] : [{ goal, mtimeMs: file.mtimeMs, session: sessionOf(file.text) }]
+  })
+  const mine = sessionId === '' ? [] : parsed.filter(one => one.session === sessionId)
+  const pool = mine.length > 0 ? mine : parsed.filter(one => one.goal.status !== 'done')
+  const rank = (one: { goal: Goal }): number => (one.goal.status === 'done' ? 1 : 0)
+  const [best] = [...pool].sort((a, b) => rank(a) - rank(b) || b.mtimeMs - a.mtimeMs)
+  return best === undefined ? null : { goal: best.goal, mtimeMs: best.mtimeMs }
 }
 
 export const shownGoal = (s: Snapshot): Goal | null =>

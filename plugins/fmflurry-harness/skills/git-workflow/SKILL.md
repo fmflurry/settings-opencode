@@ -109,6 +109,7 @@ The `git-specialist` agent must:
 
 When the task includes PR creation or inspection:
 
+- Follow the `pr-visual-report` skill before opening or updating the PR. Commit `docs/pr-reports/<branch-slug>.html` and `.png`, and include `## Visual report` in the body. `agent-harness pr-report-check` checks the body. The hook blocks `gh` and `az` when the section is missing. A docs typo or a version bump only may skip, with the reason on the skip line.
 - detect the host from `git remote get-url origin`:
   - `github.com` → use `gh`
   - `dev.azure.com` / `visualstudio.com` → use `az repos pr` (Azure CLI + `azure-devops` extension)
@@ -230,7 +231,7 @@ When a change spans layers, split commits in this order. Each commit should stay
 
 ## Pull Request Workflow
 
-The `/create-pull-request` command owns the PR body contract (`## Content` / `## QA tests` / `## Locked decisions` / `## Non-blocking follow-ups`). When that command is not used, `git-specialist` falls back to its own minimal template (short `## Summary` section) and drops empty sections.
+The `/create-pull-request` command owns the PR body contract (`## Content` / `## QA tests` / `## Locked decisions` / `## Non-blocking follow-ups`). When that command is not used, `git-specialist` falls back to its own minimal template (short `## Summary` section) and drops empty sections. Either body also includes `## Visual report`, from the `pr-visual-report` skill. A docs typo or a version bump only may skip, with the reason stated.
 
 In all cases:
 1. Analyze full commit history (not just the latest commit)

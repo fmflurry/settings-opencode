@@ -125,7 +125,10 @@ gh pr create --base <base> --title "<type>: <description>" --body-file <body-fil
 
 The PR is created ready, not draft. `gh pr create --head` and `-H` are denied while a goal is active.
 
-The body file has four sections. Write `None.` under any section that is empty:
+The body file has those sections plus `## Visual report`. The visual report files are already committed at
+`docs/pr-reports/<branch-slug>.html` and `.png` (see the `pr-visual-report` skill). Run
+`agent-harness pr-report-check --body-file <body-file>` before `gh pr create`. Write `None.` under any section that
+is empty:
 
 ```markdown
 ## Content
@@ -139,6 +142,13 @@ The body file has four sections. Write `None.` under any section that is empty:
 
 ## Non-blocking follow-ups
 <Nit and Pre-existing findings not fixed, and other follow-ups>
+
+## Visual report
+- [x] Report: HTML and PNG committed, PNG embedded, HTML linked.
+
+![Visual report](docs/pr-reports/<branch-slug>.png)
+
+[HTML report](docs/pr-reports/<branch-slug>.html)
 ```
 
 Then record the PR and the head: `agent-harness goal pr <n>`, `agent-harness goal sha <sha>`.

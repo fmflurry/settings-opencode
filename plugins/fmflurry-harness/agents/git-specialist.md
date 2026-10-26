@@ -131,6 +131,7 @@ Stop and report if the chosen CLI or its authentication is missing.
 ### Common rules
 
 - The `/create-pull-request` command owns the PR body contract: a header line plus `## Content` / `## QA tests` / `## Locked decisions` / `## Non-blocking follow-ups`, each section included only when it has real content. When that command produced the PR body, use it as-is and add nothing to it — in particular, do not append a `## Summary` section. Only when `/create-pull-request` was not used does `git-specialist` write the body itself, using its own minimal fallback: a concise PR title plus a short `## Summary` section, dropping empty sections.
+- Every PR body also includes `## Visual report`, from the `pr-visual-report` skill. Commit `docs/pr-reports/<branch-slug>.html` and `.png` first. Run `agent-harness pr-report-check --body-file` before `gh pr create`, a body edit, or `az repos pr create`. A docs typo or a version bump only may skip, with the reason on the skip line.
 - Push the current branch with upstream tracking before creating a PR when needed.
 - If a PR already exists for the branch, return that URL instead of creating a duplicate:
   - github: `gh pr list --head <branch> --state open --json number,url`

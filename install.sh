@@ -1233,7 +1233,7 @@ install_agent_harness_scripts() {
     if [ "$OPENCODE_TARGET_READY" = "1" ] && [ "$OPENCODE_TARGET_IS_SOURCE" != "1" ]; then
         local hook_dest="$TARGET_OPENCODE/scripts/agent-harness/hooks" hook
         mkdir -p "$hook_dest"
-        for hook in autonomy-context autonomy-git-guard ship-stop-gate kpi-emit; do
+        for hook in autonomy-context autonomy-git-guard pr-visual-report ship-stop-gate kpi-emit; do
             cp "$REPO_DIR/.claude/hooks/$hook.sh" "$hook_dest/$hook.sh"
             chmod +x "$hook_dest/$hook.sh"
         done
@@ -1264,7 +1264,7 @@ merge_agent_harness_settings() {
     fi
 
     local hook_name
-    for hook_name in autonomy-context autonomy-ask-guard autonomy-git-guard orca-notify ship-stop-gate; do
+    for hook_name in autonomy-context autonomy-ask-guard autonomy-git-guard pr-visual-report orca-notify ship-stop-gate; do
         if [ ! -f "$TARGET_CLAUDE/hooks/$hook_name.sh" ]; then
             err "registered hook script is missing: $TARGET_CLAUDE/hooks/$hook_name.sh"
             exit 1
@@ -1293,6 +1293,7 @@ merge_agent_harness_settings() {
         | addhook("UserPromptSubmit"; ""; "bash " + $h + "/autonomy-context.sh")
         | addhook("PreToolUse"; "AskUserQuestion"; "bash " + $h + "/autonomy-ask-guard.sh")
         | addhook("PreToolUse"; "Bash"; "bash " + $h + "/autonomy-git-guard.sh")
+        | addhook("PreToolUse"; "Bash"; "bash " + $h + "/pr-visual-report.sh")
         | addhook("Notification"; "permission_prompt|idle_prompt"; "bash " + $h + "/orca-notify.sh")
         | addhook("Stop"; ""; "bash " + $h + "/ship-stop-gate.sh")
         | .permissions.allow = (if ((.permissions.allow // []) | index("Bash(agent-harness *)")) then .permissions.allow else ((.permissions.allow // []) + ["Bash(agent-harness *)"]) end)

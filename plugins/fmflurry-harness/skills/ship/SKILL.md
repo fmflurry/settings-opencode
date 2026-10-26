@@ -28,8 +28,9 @@ The main checkout is never used for goal work.
    `slug=<slug>` on stderr. Resume an existing PR with `agent-harness ship-init --adopt <pr>`; if that PR is still a
    draft, run `gh pr ready <pr>` before `ship-merge`, which refuses drafts.
 2. **Cycle.** Implement, verify, local review, local fix loop, push and open the PR, CI, merge.
-3. **Report before merge.** Render the show-me summary into the worktree, commit it in the PR, embed it in the PR body.
-   Do this on the success path and on the blocked path.
+3. **Report before merge.** Render the outcome show-me summary into the worktree at `docs/agent-reports/`, commit it in
+   the PR, and embed it in the PR body. Do this on the success path and on the blocked path. The visual report required
+   when the PR is opened lives at `docs/pr-reports/` and is a different file.
 4. **Merged.** `agent-harness ship-merge <pr>` merges, then runs `agent-harness teardown-merged-worktree <pr>` for a
    registered goal.
 5. **Blocked or escalated.** Never tear down unless the PR is merged. Keep the worktree, the branch and the registry.
@@ -95,6 +96,9 @@ Check the mode with `agent-harness autonomy status`. The rules behind both modes
    brief contract rule, and the FILES paths sit under the goal worktree. Commits go through `git-specialist`.
 5. **Verify.** Run the verification yourself with `git -C <wt>` or in the worktree, not through a subagent's
    self-report. Commands are in [lifecycle.md](references/lifecycle.md#5-verify).
+5b. **Visual report.** After verify, follow the `pr-visual-report` skill. Commit `docs/pr-reports/<branch-slug>.html`
+   and `.png` in the worktree before the local review, so the review diff includes them. A later edit of those files
+   needs a new review. This is separate from the outcome PNG in `docs/agent-reports/`.
 6. **Thorough review and fix (local).** Nothing is pushed yet. Dispatch in one message, so they run in parallel, each
    on `git diff <base>...HEAD`: `code-reviewer` (correctness), `security-reviewer` (auth, secrets, input, CI,
    permissions), and the stack cop when it applies: `angular-cop` for Angular/TS, `dotnet-cop` for .NET.
@@ -107,10 +111,12 @@ Check the mode with `agent-harness autonomy status`. The rules behind both modes
    round, or at the safety ceiling of 10 rounds. Tell the user the remaining confirmed Important findings and do not
    start another fix round. The push guard denies `git push` and `gh pr create` while the active goal has no passing
    code and security review for the exact diff being pushed. Any change to that diff, including a rebase conflict
-   resolution, needs a new review. A commit that touches only `docs/agent-reports/` does not.
+   resolution, needs a new review. A commit that touches only `docs/agent-reports/` does not. A commit that touches
+   `docs/pr-reports/` does.
 7. **Push and open the PR.** Dispatch `git-specialist` to push the branch and open the PR, ready (not draft), with the
-   body sections `## Content`, `## QA tests`, `## Locked decisions`, `## Non-blocking follow-ups`. Put every
-   assumption under `## Locked decisions`. Then `agent-harness goal pr <n>` and `agent-harness goal sha <sha>`. Right
+   body sections `## Content`, `## QA tests`, `## Locked decisions`, `## Non-blocking follow-ups`, and `## Visual report`.
+   Put every assumption under `## Locked decisions`. Run `agent-harness pr-report-check --body-file` on the body file.
+   Then `agent-harness goal pr <n>` and `agent-harness goal sha <sha>`. Right
    after `gh pr create`, post the review summary comment in the format of
    [review-format.md](references/review-format.md). It is an audit trail for a human. It is not a GitHub status, and
    `ship-merge` does not read it.
@@ -118,6 +124,8 @@ Check the mode with `agent-harness autonomy status`. The rules behind both modes
    fix is: fix locally, re-run the local checks, review the new diff locally (the reviewers may review only
    `git diff <last-reviewed-sha>..HEAD`) and record `agent-harness goal review code|security pass`, then push, then CI
    again, then retry `ship-merge`. The report commit (stage 11) is exempt: it changes only `docs/agent-reports/`.
+   Refreshing `docs/pr-reports/` is not exempt. When the diff the visual report describes has changed, refresh that
+   report in the fix commit before the re-review.
 9. **Wait for CI.** `gh pr checks <n> --watch`. On a failed check, use the `loop-on-ci` skill, which routes failures
    through the `fix-ci` skill. When the repo sets `reviewStatus`, also check that status on the head. On a failure,
    fix the cause, re-review (stage 8), push through `git-specialist`, then `agent-harness goal sha <sha>`. Pipe the

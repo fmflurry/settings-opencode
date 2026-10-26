@@ -2,6 +2,11 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.18] - 2026-10-26
+
+- Pull requests opened or updated by the harness include a show-me visual report. `agent-harness pr-report` writes `docs/pr-reports/<branch-slug>.html` and `.png` (offline HTML, one `@media` breakpoint) and copies both into `/opt/cursor/artifacts/pr-reports/` when that directory is writable. The PR template section `## Visual report` embeds the PNG and links the HTML.
+- `.claude/hooks/pr-visual-report.sh` blocks `gh pr create`, `gh pr edit` / `gh pr new` body edits, and `az repos pr create` / `update` descriptions that omit the section. `agent-harness pr-report-check` checks the same rules. A docs typo or a version bump only may skip, with the reason on the skip line. Conductor and Monolith share the skill. OpenCode, Claude Code, and Cursor run the hook.
+
 ## [0.4.17] - 2026-10-26
 
 - Local KPI log for Conductor vs Monolith. Hooks append JSON lines to `~/.agent-harness/kpi/events.jsonl` (`AGENT_HARNESS_KPI_LOG`, `AGENT_HARNESS_KPI=0` to disable). The log is separate from the OpenCode tok/s monitor. OpenCode, Claude Code, and Cursor write the same events. Tokens stay null unless the host sends a number.

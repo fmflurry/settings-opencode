@@ -83,6 +83,7 @@ export const runHook = async (name: string, stdin: unknown, opts: HookOptions): 
 };
 
 const GUARD_HOOK = "autonomy-git-guard.sh";
+const VISUAL_HOOK = "pr-visual-report.sh";
 
 const guardFailure = (detail: string): string => `Blocked by git-guard: ${GUARD_HOOK} ${detail}.`;
 
@@ -113,6 +114,30 @@ export const bashGuardRejection = async (stdin: unknown, opts: HookOptions): Pro
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+
+// Missing hook fails open so an older install keeps working. A present hook fails closed.
+export const visualReportRejection = async (stdin: unknown, opts: HookOptions): Promise<string | null> => {
+  const outcome = await runHookProcess(VISUAL_HOOK, stdin, opts);
+  if (outcome.kind === "missing") return null;
+  if (outcome.kind === "error") return "Blocked by pr-visual-report: hook failed to start.";
+  if (outcome.kind === "timeout") return "Blocked by pr-visual-report: hook timed out.";
+  if (outcome.code !== 0) return "Blocked by pr-visual-report: hook failed.";
+  if (!outcome.text) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(outcome.text);
+  } catch {
+    return "Blocked by pr-visual-report: hook returned invalid output.";
+  }
+  const specific = asRecord(asRecord(parsed)?.hookSpecificOutput);
+  const decision = specific?.permissionDecision;
+  if (!specific || decision === "allow" || decision === "") return null;
+  if (decision === "deny" || decision === "ask") {
+    const reason = specific.permissionDecisionReason;
+    return typeof reason === "string" && reason.length > 0 ? reason : "Blocked by pr-visual-report.";
+  }
+  return "Blocked by pr-visual-report: hook returned an unexpected decision.";
+};
 
 export const denyReason = (result: unknown): string | null => {
   const specific = asRecord(asRecord(result)?.hookSpecificOutput);

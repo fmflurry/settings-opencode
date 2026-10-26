@@ -1,0 +1,7 @@
+id: refactor-extract
+kind: refactor
+prompt: Extract the doubling into a helper named twice.
+check: node-test src.test.mjs
+shape: contains src.mjs function twice
+before: pass
+fixture: refactor-extract

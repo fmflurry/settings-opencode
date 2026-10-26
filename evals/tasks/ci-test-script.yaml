@@ -1,0 +1,6 @@
+id: ci-test-script
+kind: ci-fix
+prompt: The test script points at a missing file. Point it at add.test.mjs.
+check: json-script node --test add.test.mjs
+before: fail
+fixture: ci-test-script

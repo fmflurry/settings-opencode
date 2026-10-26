@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { PluginInput } from "@opencode-ai/plugin";
 import { GATE_TIMEOUT_MS, bashGuardRejection, blockReason, runHook, runHookText } from "./lib/autonomy-hooks.ts";
+import { emitKpi } from "./lib/kpi-emit.ts";
 
 const AUTONOMY_FLAG = ".claude/state/autonomy.on";
 const NOTIFY_SCRIPT = path.join(os.homedir(), ".config/opencode/scripts/agent-harness/notify.sh");
@@ -53,6 +54,7 @@ export const AutonomyPlugin = async ({ $, client, directory }: PluginInput) => {
     "tool.execute.before": async (input: { tool: string }, output: { args: unknown }) => {
       const tool = input.tool?.toLowerCase();
       if (tool === "question" && autonomyOn()) {
+        emitKpi(directory, ["guard_block", "guard=ask"]);
         throw new Error(ASK_DENIED);
       }
       if (tool !== "bash") return;

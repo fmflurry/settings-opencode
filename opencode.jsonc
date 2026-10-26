@@ -792,6 +792,7 @@
   },
   "plugin": [
     "opencode-skill-creator",
+    "./plugins/kpi.ts",
     "./plugins/notification.ts",
     "./plugins/mistral-affinity.js",
     "./plugins/llm-metrics.ts",

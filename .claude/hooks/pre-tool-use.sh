@@ -52,4 +52,19 @@ case "$TASK_MARKER_TOOL_NAME" in
     ;;
 esac
 
+KPI_SH="${BASH_SOURCE[0]%/*}/kpi-emit.sh"
+KPI_TOOL="${TASK_MARKER_TOOL_NAME:-$TOOL_NAME}"
+if [ -n "$KPI_TOOL" ] && [ -f "$KPI_SH" ]; then
+  KPI_SESSION="$(printf '%s' "${TASK_MARKER_INPUT:-}" | jq -r '.session_id // empty' 2>/dev/null || true)"
+  KPI_ARGS=(tool_call "tool_name=$KPI_TOOL")
+  [ -n "$KPI_SESSION" ] && KPI_ARGS+=("session=$KPI_SESSION")
+  "$KPI_SH" "${KPI_ARGS[@]}" >/dev/null 2>&1 || true
+  case "$KPI_TOOL" in
+    Task|Agent)
+      KPI_ARGS[0]=subagent_spawn
+      "$KPI_SH" "${KPI_ARGS[@]}" >/dev/null 2>&1 || true
+      ;;
+  esac
+fi
+
 exit 0

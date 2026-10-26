@@ -7,6 +7,8 @@ STATE_DIR="$ROOT/.claude/state"
 [ "${AGENT_HARNESS_TEST:-}" = 1 ] && STATE_DIR="${AGENT_STATE_DIR:-${TLTB_STATE_DIR:-$STATE_DIR}}"
 NOTIFY="${AGENT_HARNESS_DIR:-$HOME/.claude/scripts/agent-harness}/notify.sh"
 if [ -f "$STATE_DIR/autonomy.on" ]; then
+  _kpi="${BASH_SOURCE[0]%/*}/kpi-emit.sh"
+  [ -f "$_kpi" ] && "$_kpi" guard_block guard=ask >/dev/null 2>&1 || true
   jq -n '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",
     permissionDecisionReason:"Autonomous mode: decide yourself, log the assumption to .claude/state/decisions.tsv, continue."}}'
   exit 0

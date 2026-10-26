@@ -280,7 +280,7 @@ export function sanitize(text, repoDir, repoName = 'settings-opencode') {
   return text.replace(checkout, '<repo>').replace(authorCheckout, '<repo>').replace(/\/Users\/[^/\s"'`)]+/g, '/home/user');
 }
 
-const HOOK_EVENT_MAP = { PreToolUse: 'preToolUse', Stop: 'stop', SubagentStop: 'subagentStop' };
+const HOOK_EVENT_MAP = { PreToolUse: 'preToolUse', Stop: 'stop', SubagentStop: 'subagentStop', SessionStart: 'sessionStart' };
 const CURSOR_TOOL = {
   Bash: 'Shell', Edit: 'Write', MultiEdit: 'Write', Write: 'Write', Read: 'Read', Grep: 'Grep', Task: 'Task', Agent: 'Task',
 };
@@ -316,6 +316,13 @@ export function buildHooks(settings, include) {
   }
   const missing = include.filter((s) => !scripts.has(s));
   if (missing.length) throw new Error(`hooks.include not wired in .claude/settings.json: ${missing.join(', ')}`);
+  // Cursor sessionEnd has no Claude settings event. Stop already maps to `stop`.
+  if (scripts.has('kpi-emit.sh')) {
+    const command = `bash ${HOOK_SCRIPTS_DIR}/cursor-adapter.sh ${HOOK_SCRIPTS_DIR}/kpi-emit.sh sessionEnd`;
+    const list = hooks.sessionEnd ?? [];
+    if (!list.some((hook) => hook.command === command)) list.push({ command });
+    hooks.sessionEnd = list;
+  }
   return { json: { version: 1, hooks }, scripts: [...scripts] };
 }
 

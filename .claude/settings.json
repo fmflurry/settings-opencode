@@ -157,6 +157,14 @@
             "command": "bash ~/.claude/hooks/autonomy-context.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/kpi-emit.sh"
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [

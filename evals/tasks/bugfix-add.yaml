@@ -1,0 +1,6 @@
+id: bugfix-add
+kind: bugfix
+prompt: Fix add so add(1, 2) returns 3.
+check: node-test add.test.mjs
+before: fail
+fixture: bugfix-add

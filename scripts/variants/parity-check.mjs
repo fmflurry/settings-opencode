@@ -52,7 +52,7 @@ if (exists('variants/orchestration')) fail('orchestration variant directory shou
 const hooks = [
   'autonomy-ask-guard.sh', 'autonomy-context.sh', 'autonomy-git-guard.sh', 'codememory-mode.sh',
   'notification.sh', 'orca-notify.sh', 'prefer-code-memory.sh', 'pre-tool-use.sh', 'rtk-rewrite.sh',
-  'ship-stop-gate.sh', 'stop.sh', 'subagent-stop.sh', 'tool-budget.sh',
+  'ship-stop-gate.sh', 'stop.sh', 'subagent-stop.sh', 'tool-budget.sh', 'kpi-emit.sh',
 ];
 for (const hook of hooks) {
   if (!exists(path.join('.claude/hooks', hook))) fail(`missing hook ${hook}`);

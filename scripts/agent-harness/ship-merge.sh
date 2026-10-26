@@ -67,6 +67,7 @@ state="$(gh_pr_view "$pr" state | jq -r .state)" || state=unknown
 [ "$state" = MERGED ] || refuse "merge failed (exit $merge_rc); PR state is $state"
 
 goal_update '.status = "done"'
+kpi_emit ship outcome=merged "pr=$pr"
 bash -p "$NOTIFY" "done" "PR #$pr merged" "$pr"
 if slug="$(reg_find_by_pr "$pr" 2>/dev/null)"; then
   reg_update "$slug" '.status = "merged"' || true

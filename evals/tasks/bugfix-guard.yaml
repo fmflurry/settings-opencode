@@ -1,0 +1,6 @@
+id: bugfix-guard
+kind: bugfix
+prompt: Make first return undefined on an empty list instead of throwing.
+check: node-test first.test.mjs
+before: fail
+fixture: bugfix-guard

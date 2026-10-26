@@ -77,4 +77,23 @@ if [ -n "$SESSION_ID" ]; then
   fi
 fi
 
+KPI_SH="${BASH_SOURCE[0]%/*}/kpi-emit.sh"
+if [ -f "$KPI_SH" ]; then
+  KPI_ARGS=(session_end)
+  [ -n "$SESSION_ID" ] && KPI_ARGS+=("session=$SESSION_ID")
+  KPI_TOKENS="$(printf '%s' "$INPUT" | jq -r '
+    def num: if type == "number" and . >= 0 and . < 1000000000000 then floor else null end;
+    (.tokens | num) as $t
+    | (.token_count | num) as $c
+    | ((.usage.input_tokens // .input_tokens) | num) as $i
+    | ((.usage.output_tokens // .output_tokens) | num) as $o
+    | if $t != null then $t
+      elif $c != null then $c
+      elif $i != null or $o != null then (($i // 0) + ($o // 0))
+      else empty end
+  ' 2>/dev/null || true)"
+  [[ "$KPI_TOKENS" =~ ^[0-9]+$ ]] && KPI_ARGS+=("tokens=$KPI_TOKENS")
+  "$KPI_SH" "${KPI_ARGS[@]}" >/dev/null 2>&1 || true
+fi
+
 exit 0

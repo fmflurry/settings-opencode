@@ -1,0 +1,6 @@
+id: test-add-abs
+kind: test-add
+prompt: Add a unit test that abs(-2) is 2 and abs(2) is 2.
+check: node-test abs.test.mjs
+before: fail
+fixture: test-add-abs

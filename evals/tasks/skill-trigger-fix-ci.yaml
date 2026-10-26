@@ -1,0 +1,4 @@
+id: skill-trigger-fix-ci
+kind: skill
+prompt: fix CI
+expect_skill: fix-ci

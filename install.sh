@@ -1233,7 +1233,7 @@ install_agent_harness_scripts() {
     if [ "$OPENCODE_TARGET_READY" = "1" ] && [ "$OPENCODE_TARGET_IS_SOURCE" != "1" ]; then
         local hook_dest="$TARGET_OPENCODE/scripts/agent-harness/hooks" hook
         mkdir -p "$hook_dest"
-        for hook in autonomy-context autonomy-git-guard ship-stop-gate; do
+        for hook in autonomy-context autonomy-git-guard ship-stop-gate kpi-emit; do
             cp "$REPO_DIR/.claude/hooks/$hook.sh" "$hook_dest/$hook.sh"
             chmod +x "$hook_dest/$hook.sh"
         done
@@ -1289,6 +1289,7 @@ merge_agent_harness_settings() {
             ]) end;
         .hooks = ((.hooks // {}) | with_entries(.value |= (if type == "array" then map(if (.hooks | type) == "array" then .hooks |= map(bashify) else . end) else . end)))
         | addhook("SessionStart"; ""; "bash " + $h + "/autonomy-context.sh")
+        | addhook("SessionStart"; ""; "bash " + $h + "/kpi-emit.sh")
         | addhook("UserPromptSubmit"; ""; "bash " + $h + "/autonomy-context.sh")
         | addhook("PreToolUse"; "AskUserQuestion"; "bash " + $h + "/autonomy-ask-guard.sh")
         | addhook("PreToolUse"; "Bash"; "bash " + $h + "/autonomy-git-guard.sh")

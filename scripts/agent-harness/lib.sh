@@ -309,3 +309,20 @@ query($owner:String!,$name:String!,$pr:Int!){repository(owner:$owner,name:$name)
   [ "$behind" = 0 ] || echo "head is behind $base by $behind commits; rebase first"
   return 0
 }
+
+# Append one KPI event. Fail-open. Hooks keep their own copy and must not source this file.
+kpi_emit() {
+  local k candidate
+  k=""
+  for candidate in \
+    "$HARNESS_DIR/hooks/kpi-emit.sh" \
+    "$HARNESS_DIR/../../hooks/kpi-emit.sh" \
+    "$HARNESS_DIR/../../.claude/hooks/kpi-emit.sh"
+  do
+    [ -f "$candidate" ] || continue
+    k="$candidate"
+    break
+  done
+  [ -n "$k" ] || return 0
+  "$k" "$@" >/dev/null 2>&1 || true
+}

@@ -36,7 +36,17 @@ case "$EVENT" in
     PAYLOAD="$(printf '%s' "$INPUT" | jq -ce --arg ev "$EVENT" '{
       session_id: (.conversation_id // ""), transcript_path: (.transcript_path // ""),
       hook_event_name: (if $ev == "stop" then "Stop" else "SubagentStop" end),
-      stop_hook_active: ((.loop_count // 0) > 0)
+      stop_hook_active: ((.loop_count // 0) > 0),
+      tokens: (.tokens // .token_count // null),
+      usage: (.usage // null)
+    }' 2>/dev/null)" || allow_and_exit ;;
+  sessionStart|sessionEnd)
+    PAYLOAD="$(printf '%s' "$INPUT" | jq -ce --arg ev "$EVENT" '{
+      session_id: (.conversation_id // .session_id // ""), cwd: (.cwd // ""),
+      hook_event_name: (if $ev == "sessionStart" then "SessionStart" else "Stop" end),
+      source: (.source // ""),
+      tokens: (.tokens // .token_count // null),
+      usage: (.usage // null)
     }' 2>/dev/null)" || allow_and_exit ;;
   *) allow_and_exit ;;
 esac
@@ -46,6 +56,7 @@ CLAUDE_TOOL_NAME="$(printf '%s' "$PAYLOAD" | jq -r '.tool_name // empty' 2>/dev/
 CLAUDE_TOOL_ARGS="$(printf '%s' "$PAYLOAD" | jq -c '.tool_input // empty' 2>/dev/null)"
 CLAUDE_FILE_PATH="$(printf '%s' "$PAYLOAD" | jq -r '.tool_input.file_path // .tool_input.path // empty' 2>/dev/null)"
 export CLAUDE_TOOL_NAME CLAUDE_TOOL_ARGS CLAUDE_FILE_PATH
+export AGENT_HARNESS_TOOL=cursor
 
 ERR_FILE="$(mktemp 2>/dev/null)" || allow_and_exit
 OUT="$(printf '%s' "$PAYLOAD" | "${BASH:-bash}" "$SCRIPT" 2>"$ERR_FILE")"
@@ -54,6 +65,9 @@ ERR="$(cat "$ERR_FILE" 2>/dev/null)"
 rm -f "$ERR_FILE"
 
 case "$EVENT" in
+  sessionStart|sessionEnd)
+    printf '{}\n'
+    exit 0 ;;
   stop|subagentStop)
     jq -nc --arg out "$OUT" '
       ($out | try fromjson catch {}) | if type == "object" then . else {} end

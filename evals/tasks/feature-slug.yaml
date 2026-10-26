@@ -1,0 +1,6 @@
+id: feature-slug
+kind: feature
+prompt: Add slugify(text) that lowercases and turns spaces into hyphens.
+check: node-test slug.test.mjs
+before: fail
+fixture: feature-slug

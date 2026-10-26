@@ -36,6 +36,27 @@ HARNESS_VARIANT=monolith ./install.sh --yes
 
 Windows : `bootstrap.ps1 conductor`, `bootstrap.ps1 monolith`, `bootstrap.ps1 -Status`.
 
+### Mesurer les variantes
+
+Conductor et Monolith s'observent avec un journal local, distinct du moniteur tok/s d'OpenCode (`llm-metrics`). Le même journal vaut pour OpenCode, Claude Code et Cursor.
+
+Les hooks de session, d'arrêt, de sous-agent, les gardes PreToolUse, `ship-stop-gate` et le verdict de revue ajoutent une ligne JSON dans `~/.agent-harness/kpi/events.jsonl`. `AGENT_HARNESS_KPI_LOG` change le chemin. `AGENT_HARNESS_KPI=0` coupe l'écriture. Chaque ligne porte la variante lue dans `.harness-variant` (`orchestration` compte comme Conductor), la version du harness, l'outil (`opencode`, `claude` ou `cursor`), le dépôt, la branche, la session et l'heure. Les jetons sont écrits seulement quand l'hôte les fournit ; sinon la valeur est `null`. Le journal ne contient ni prompt, ni secret, ni chemin absolu.
+
+```bash
+agent-harness kpi report --since 30d --by variant
+agent-harness kpi report --json
+agent-harness kpi report --html > /tmp/kpi.html
+```
+
+Le tableau met Conductor à côté de Monolith : tâches, jetons par tâche quand ils sont connus, durée, appels d'outils, tours de revue par PR, premier passage CI, findings Important par PR, blocages des gardes, taux de revert sur 7 jours, temps de merge. Les effectifs sont affichés. Sous 5 tâches ou sous 3 PR, le rapport dit que l'échantillon est trop petit pour conclure. Les colonnes de PR viennent de `git` et `gh` en lecture seule. Si `gh` ne répond pas, ces colonnes restent vides (`--no-live` saute l'appel).
+
+```bash
+agent-harness eval
+agent-harness eval --run-model
+```
+
+`agent-harness eval` rejoue `evals/tasks/*.yaml` (correctif, feature, refactor, ajout de test, CI, docs, et le déclencheur du skill `fix-ci` pour le prompt « fix CI ») dans un worktree et un HOME isolés, une fois par variante. Le mode par défaut n'appelle aucun modèle : il vérifie les checkers et le routage de skill, sans coût de jeton. `--run-model` exige `AGENT_HARNESS_EVAL_CMD` et lance un agent Cursor par tâche et par variante (modèle `grok-4.7-medium`, ou `AGENT_HARNESS_EVAL_MODEL`). La suite livrée fait 10 tâches × 2 variantes, donc 20 sessions. Les résultats (réussite, jetons si l'hôte les donne, durée, appels d'outils) rejoignent le même journal.
+
 ### Want to try it? Jump to **[Public install](#public-install)** — it takes about five minutes.
 
 ---

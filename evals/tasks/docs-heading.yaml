@@ -1,0 +1,6 @@
+id: docs-heading
+kind: docs
+prompt: Give README a top heading named Guide.
+check: heading README.md Guide
+before: fail
+fixture: docs-heading

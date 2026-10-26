@@ -50,9 +50,15 @@ reg_mirror() {
   tmp="$(mktemp "$f.XXXXXX")" || return 0
   if jq "$@" "$f" >"$tmp"; then mv "$tmp" "$f"; else rm -f "$tmp"; fi
 }
+kpi_ship() {
+  local k="${BASH_SOURCE[0]%/*}/kpi-emit.sh"
+  [ -f "$k" ] || return 0
+  "$k" ship "$@" >/dev/null 2>&1 || true
+}
 escalate() {
   goal_update --arg r "$1" '.status = "escalated" | .reason = $r'
   reg_mirror --arg r "$1" '.status = "escalated" | .reason = $r'
+  kpi_ship outcome=escalated ${pr:+pr=$pr}
   notify failure "$1: $(goal_get '.goal')" "$(goal_get '.pr // empty')" || true
 }
 [ -f "$GOAL_FILE" ] && [ "$(goal_get '.status')" = active ] || exit 0
@@ -72,6 +78,7 @@ fi
 if [ "$state" = MERGED ]; then
   goal_update '.status = "done"'
   reg_mirror '.status = "done"'
+  kpi_ship outcome=merged ${pr:+pr=$pr}
   notify "done" "PR #$pr merged" "$pr" || true
   exit 0
 fi
@@ -97,5 +104,6 @@ if [ "$(goal_get '.stop_blocks')" -ge "$MAX_BLOCKS" ]; then
   exit 0
 fi
 
+kpi_ship outcome=blocked ${pr:+pr=$pr}
 jq -n --arg r "Goal not done. $reason" '{decision:"block",reason:$r}'
 exit 0

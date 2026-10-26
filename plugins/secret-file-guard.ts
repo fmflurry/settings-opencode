@@ -25,6 +25,7 @@
  * never secret-bearing — and remain readable through both tools.
  */
 import type { PluginInput } from "@opencode-ai/plugin";
+import { emitKpi } from "./lib/kpi-emit.ts";
 
 const ALLOWED_ENV_VARIANT_RE =
   /(^|\/)\.env\.(example|sample|template)(\.[A-Za-z0-9_-]+)?$/;
@@ -68,7 +69,7 @@ function stringArg(args: unknown, key: string): string {
   return typeof value === "string" ? value : "";
 }
 
-export const SecretFileGuardPlugin = async (_input: PluginInput) => {
+export const SecretFileGuardPlugin = async ({ directory }: PluginInput) => {
   return {
     "tool.execute.before": async (
       input: { tool: string; sessionID: string; callID: string },
@@ -77,6 +78,7 @@ export const SecretFileGuardPlugin = async (_input: PluginInput) => {
       if (input.tool === "read") {
         const filePath = stringArg(output.args, "filePath");
         if (isEnvSecretPath(filePath)) {
+          emitKpi(directory, ["guard_block", "guard=secret"]);
           throw new Error(
             `[secret-file-guard] BLOCKED: read of secret-bearing file "${filePath}" is denied ` +
               `(.env/.env.* are off-limits; .env.example/.env.sample/.env.template remain readable).`,
@@ -87,6 +89,7 @@ export const SecretFileGuardPlugin = async (_input: PluginInput) => {
       if (input.tool === "bash") {
         const command = stringArg(output.args, "command");
         if (commandReadsEnvSecret(command)) {
+          emitKpi(directory, ["guard_block", "guard=secret"]);
           throw new Error(
             `[secret-file-guard] BLOCKED: command reads a .env secret file via a text utility ` +
               `(rewritten/wrapped forms included). Command: ${command}`,

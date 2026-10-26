@@ -30,6 +30,7 @@ case "$cmd" in
   pr)
     goal_update --argjson n "${1:?pr number}" '.pr = $n'
     reg_mirror --argjson n "$1" '.pr = $n'
+    [[ "$1" =~ ^[0-9]+$ ]] && kpi_emit pr_open "pr=$1"
     ;;
   backup-add)
     [ -f "$GOAL_FILE" ] || exit 0
@@ -62,9 +63,19 @@ case "$cmd" in
     key="$(git -C "$wt" -c core.quotepath=true diff --no-ext-diff --no-textconv --binary --full-index --no-color --no-renames --no-relative -O/dev/null --src-prefix=a/ --dst-prefix=b/ --diff-algorithm=myers -U3 --inter-hunk-context=0 --submodule=short --ignore-submodules=none "$mb" HEAD -- ':/' ':(top,exclude)docs/agent-reports' 2>/dev/null | git -C "$wt" hash-object --stdin)" || { echo "goal review: cannot compute review key (git diff failed)" >&2; exit 2; }
     case "$key" in e69de29bb2d1d6434b8b29ae775ad8c2e48c5391 | 473a0f4c3be8a93681a267e3b1e9a7dcda1185436fe141f7749120a303721813) key=empty ;; esac
     at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    kpi_extra=()
+    for arg in "${@:3}"; do
+      case "$arg" in
+        important=[0-9]*|nit=[0-9]*|pre_existing=[0-9]*) kpi_extra+=("$arg") ;;
+      esac
+    done
     set -- --arg k "$key" --arg kind "$kind" --arg v "$verdict" --arg s "$head_sha" --arg at "$at" '.reviews[$k][$kind] = {verdict:$v, sha:$s, at:$at}'
     goal_update "$@"
     reg_mirror "$@"
+    prnum="$(goal_get '.pr // empty')"
+    kpi_args=(review_round "review=$kind" "verdict=$verdict")
+    [[ "$prnum" =~ ^[0-9]+$ ]] && kpi_args+=("pr=$prnum")
+    kpi_emit "${kpi_args[@]}" ${kpi_extra[@]+"${kpi_extra[@]}"}
     ;;
   bump)
     [ -f "$GOAL_FILE" ] || exit 0
@@ -73,6 +84,10 @@ case "$cmd" in
     fp="$(printf '%s\n' "$findings" | git hash-object --stdin)"
     prev="$(goal_get '.last_fingerprint // empty')"
     goal_update --arg f "$fp" '.fix_iterations += 1 | .last_fingerprint = $f'
+    prnum="$(goal_get '.pr // empty')"
+    fix_args=(fix_round "fix_iterations=$(goal_get '.fix_iterations')")
+    [[ "$prnum" =~ ^[0-9]+$ ]] && fix_args+=("pr=$prnum")
+    kpi_emit "${fix_args[@]}"
     reason=""
     if [ "$fp" = "$prev" ]; then
       reason="no progress: the same findings repeated after a fix round (fingerprint ${fp:0:12})"

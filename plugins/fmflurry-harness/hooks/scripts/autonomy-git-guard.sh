@@ -81,6 +81,10 @@ if [ "$WIN" = 1 ]; then lc "$TOKEN_RE"; TOKEN_RE="$LCV"; fi
 LOOSE_RE="$(sed -E 's/\$(\||$)/\1/g' <<<"$alts")|${AUTONOMY_FLAG}"
 
 emit() {
+  if [ "$1" = deny ]; then
+    _kpi="${BASH_SOURCE[0]%/*}/kpi-emit.sh"
+    [ -f "$_kpi" ] && "$_kpi" guard_block guard=git >/dev/null 2>&1 || true
+  fi
   jq -n --arg d "$1" --arg r "$2" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:$d,permissionDecisionReason:$r}}'
   exit 0
 }

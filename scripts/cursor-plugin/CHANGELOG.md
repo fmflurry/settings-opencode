@@ -2,6 +2,12 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.17] - 2026-10-26
+
+- Local KPI log for Conductor vs Monolith. Hooks append JSON lines to `~/.agent-harness/kpi/events.jsonl` (`AGENT_HARNESS_KPI_LOG`, `AGENT_HARNESS_KPI=0` to disable). The log is separate from the OpenCode tok/s monitor. OpenCode, Claude Code, and Cursor write the same events. Tokens stay null unless the host sends a number.
+- `agent-harness kpi report [--since 30d] [--by variant]` prints the comparison, with `--json` and `--html`. Sample sizes are shown. Fewer than 5 tasks or 3 PRs is flagged as too small to conclude. PR outcomes are read-only `gh` lookups.
+- `agent-harness eval` runs `evals/tasks` in isolated worktrees. The default checkers do not call a model. `--run-model` is the paid Cursor-agent path.
+
 ## [0.4.16] - 2026-10-25
 
 - Two install variants share one skill tree. Conductor stays the conductor-led default. `orchestration` remains an alias of `--variant` and `HARNESS_VARIANT`. Monolith is an install-time overlay (`variants/monolith/`): a short baseline, seven review subagents plus `cop` and `comment-judge`, and folded roles loaded as skills. `./install.sh conductor` and `./install.sh monolith` switch variants; with no name, `./install.sh` asks. `./install.sh --status` prints the installed variant. A switch removes the other variant's agents, commands, and rules. `--yes` with neither set stays Conductor.

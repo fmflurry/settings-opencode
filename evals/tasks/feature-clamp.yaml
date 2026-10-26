@@ -1,0 +1,6 @@
+id: feature-clamp
+kind: feature
+prompt: Add clamp(n, lo, hi) that limits n to the inclusive range.
+check: node-test clamp.test.mjs
+before: fail
+fixture: feature-clamp

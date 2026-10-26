@@ -1,0 +1,7 @@
+id: refactor-rename
+kind: refactor
+prompt: Rename foo to bar and keep the tests passing.
+check: node-test src.test.mjs
+shape: contains src.mjs function bar
+before: pass
+fixture: refactor-rename

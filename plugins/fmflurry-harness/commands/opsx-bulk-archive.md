@@ -116,7 +116,7 @@ This skill allows you to batch-archive changes, handling spec conflicts intellig
    Process changes in the determined order (respecting conflict resolution):
 
    a. **Sync specs** if delta specs exist:
-      - Use the openspec-sync-specs approach (agent-driven intelligent merge)
+      - Follow the openspec skill reference `references/openspec-sync-specs.md` (agent-driven intelligent merge)
       - For conflicts, apply in resolved order
       - Track if sync was done
 

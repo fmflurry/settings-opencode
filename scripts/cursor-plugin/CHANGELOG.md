@@ -2,6 +2,11 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.16] - 2026-10-25
+
+- Two install variants share one skill tree. Conductor stays the conductor-led default. `orchestration` remains an alias of `--variant` and `HARNESS_VARIANT`. Monolith is an install-time overlay (`variants/monolith/`): a short baseline, seven review subagents plus `cop` and `comment-judge`, and folded roles loaded as skills. `./install.sh conductor` and `./install.sh monolith` switch variants; with no name, `./install.sh` asks. `./install.sh --status` prints the installed variant. A switch removes the other variant's agents, commands, and rules. `--yes` with neither set stays Conductor.
+- `threejs-*` is one `threejs` skill and `openspec-*` is one `openspec` skill. Each family lives under `references/`. The Cursor plugin build stays the Conductor variant.
+
 ## [0.4.15] - 2026-10-25
 
 - show-me renders full-page PNG screenshots via `skills/show-me/scripts/screenshot.sh`. Detection order: Playwright chromium, then Chrome/Chromium, then Firefox (`--no-remote`, throwaway `--profile`, `timeout 60`). Full height is measure-then-capture, capped at 12000px. A 390px phone PNG is made only when the layout differs. Without a browser the helper never fails.

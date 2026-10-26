@@ -361,7 +361,8 @@ else
         "$instr_dup" "$instr_ok" "$instr_drift" "$instr_single"
 
     # Kept-overlap watchlist: these topics must be identical wherever present.
-    # A DRIFT here is already counted by the table above; only MISSING adds new drift.
+    # Content drift is already counted above. A copy missing from some roots
+    # adds drift. A topic absent from every root is not a divergent copy.
     KEEP_OVERLAP="subagent-routing question-handling codememory-first verification-gate harness-parity caveman-ultra"
     read -r -a keep_arr <<< "$KEEP_OVERLAP"
     printf '\nKept-overlap watchlist (must stay identical):\n'
@@ -384,7 +385,9 @@ else
             i=$((i + 1))
         done
         total="${#INSTR_ROOTS_PATHS[@]}"
-        if [ "$present" -lt "$total" ]; then
+        if [ "$present" -eq 0 ]; then
+            kstatus="ABSENT"
+        elif [ "$present" -lt "$total" ]; then
             kstatus="MISSING ($present/$total)"
             instr_drift=$((instr_drift + 1))
         fi

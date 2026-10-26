@@ -1,0 +1,3 @@
+# Verification gate
+
+Before you say done, run the build, lint, and the tests that cover the change, and paste the output. The ship-stop-gate hook is the gate. Load the `verification-gate` skill. This file does not restate the command matrix.

@@ -79,20 +79,20 @@ Tools are exposed as `blender_<name>`.
 
 ## three.js skills
 
-Before writing or reviewing any three.js code you MUST load the matching skill. Never answer three.js questions from memory.
+Before writing or reviewing any three.js code, load the `threejs` skill and open the matching reference. Never answer three.js questions from memory.
 
-| Topic | Skill | Use when |
+| Topic | Reference | Use when |
 | --- | --- | --- |
-| Scene, renderer, camera, loop | `threejs-fundamentals` | Bootstrapping or debugging the render loop |
-| Buffer geometry, primitives, attributes | `threejs-geometry` | Building or transforming geometry in code |
-| Material types, PBR params | `threejs-materials` | Matching a Blender material on the web |
-| Texture loading, encoding, mipmaps | `threejs-textures` | Color space, compression, or UV issues |
-| Lights, shadows, environment maps | `threejs-lighting` | Porting a Blender light rig to the browser |
-| GLTFLoader, DRACO, asset loading | `threejs-loaders` | Loading the exported `.glb` |
-| AnimationMixer, clips, skinning | `threejs-animation` | Playing exported actions |
-| GLSL, ShaderMaterial, uniforms | `threejs-shaders` | Custom shading beyond standard materials |
-| EffectComposer, passes | `threejs-postprocessing` | Bloom, AO, tone-mapping on the web |
-| Raycasting, controls, picking | `threejs-interaction` | Clickable or orbit-controlled scenes |
+| Scene, renderer, camera, loop | `references/threejs-fundamentals.md` | Bootstrapping or debugging the render loop |
+| Buffer geometry, primitives, attributes | `references/threejs-geometry.md` | Building or transforming geometry in code |
+| Material types, PBR params | `references/threejs-materials.md` | Matching a Blender material on the web |
+| Texture loading, encoding, mipmaps | `references/threejs-textures.md` | Color space, compression, or UV issues |
+| Lights, shadows, environment maps | `references/threejs-lighting.md` | Porting a Blender light rig to the browser |
+| GLTFLoader, DRACO, asset loading | `references/threejs-loaders.md` | Loading the exported `.glb` |
+| AnimationMixer, clips, skinning | `references/threejs-animation.md` | Playing exported actions |
+| GLSL, ShaderMaterial, uniforms | `references/threejs-shaders.md` | Custom shading beyond standard materials |
+| EffectComposer, passes | `references/threejs-postprocessing.md` | Bloom, AO, tone-mapping on the web |
+| Raycasting, controls, picking | `references/threejs-interaction.md` | Clickable or orbit-controlled scenes |
 
 ## Render review loop
 

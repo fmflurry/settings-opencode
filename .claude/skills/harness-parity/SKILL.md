@@ -72,6 +72,15 @@ Whenever you **add, edit, rename, or delete** any artifact — no matter which h
 
 ---
 
+## D. Variants in settings-opencode
+
+This settings repo keeps two installable harnesses. They share `skills/` (and the `.claude/skills/` mirror). A variant does not get its own copy of a skill.
+
+- **Conductor** is the repository root: `.claude/`, `opencode.jsonc`, `prompts/agents/`, `instructions/`. The conductor routes, and the primary agent does not write. `orchestration` is an install alias for this variant.
+- **Monolith** is `variants/monolith/`. The installer overlays that tree onto a copy. It does not edit the Conductor sources.
+
+Claude and OpenCode receive the same overlay: the same baseline text (`CLAUDE.md` and `AGENTS.md`), the same agent roster, and the same skill union. `scripts/variants/parity-check.mjs` checks that.
+
 ## Scope Note
 
 **The harness-parity skill itself is PROJECT-SCOPED:** it governs a project's own `.claude/` ↔ `.opencode/` pair. It does NOT govern the translation layer between this settings repo's `.claude/skills/` and its root `skills/` directory. This settings repo itself has no `.opencode/` directory; the root `skills/` directory is managed separately and is not subject to harness-parity rules. Harness-parity rules apply only when a project has both `.claude/` and `.opencode/` directories under version control.

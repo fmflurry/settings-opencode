@@ -10,7 +10,7 @@ Investigate the motivation and intent behind code.
 
 Companion to the `how` skill. `how` answers what the code does and how it works. `why` answers what forces led to its shape.
 
-Spawn investigators with `subagent_type: why-investigator` and the synthesizer with `subagent_type: why-synthesizer` (Claude Code: `Agent` tool; OpenCode: `task` tool). Models come from those agent definitions; never pass `model`. Subagents cannot spawn subagents, so run this skill from the primary agent.
+Spawn investigators with `subagent_type: why-investigator` (Claude Code: `Agent` tool; OpenCode: `task` tool). Models come from that agent definition; never pass `model`. Subagents cannot spawn subagents, so run this skill from the primary agent. If a `why-synthesizer` agent is installed, spawn it to merge the reports. If it is not installed, synthesize in this session.
 
 ## Operating Posture
 
@@ -102,9 +102,7 @@ If your scope assessment suggests a single-commit trivial target where the PR de
 
 ## Step 4. Synthesize
 
-Spawn one synthesizer with `subagent_type: why-synthesizer`.
-
-The synthesizer gets:
+If a `why-synthesizer` agent is installed, spawn it with `subagent_type: why-synthesizer`. If that agent is not installed, write the synthesis in this session. Do not invent a synthesizer subagent. Either way, use `references/synthesizer-prompt.md` and give the synthesis:
 
 1. The investigator findings, including any null results and any categories skipped with justification
 2. The code anchor from Step 2 (file paths, symbols, commit hashes, PR numbers, ticket IDs)
@@ -114,7 +112,7 @@ The synthesizer gets:
 
 ## Step 5. Present
 
-Take the synthesizer's output and present it to the user. You may lightly edit for clarity or add context from the conversation, but **do not rewrite the confidence language**.
+Present that synthesis to the user. You may lightly edit for clarity or add context from the conversation, but **do not rewrite the confidence language**.
 
 ## Output Format
 

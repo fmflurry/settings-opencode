@@ -6,7 +6,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { AutonomyPlugin } from "./autonomy.ts";
-import { bashGuardRejection, blockReason, denyReason, runHook, runHookText } from "./lib/autonomy-hooks.ts";
+import { bashGuardRejection, blockReason, denyReason, runHook, runHookText, visualReportRejection } from "./lib/autonomy-hooks.ts";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dirs = [path.join(repo, ".claude/hooks")];
@@ -146,6 +146,43 @@ test("bash guard rejection allows an empty successful hook", async () => {
   writeGuard(dir, "exit 0\n");
   const reason = await bashGuardRejection({}, { ...opts, dirs: [dir] });
   assert.equal(reason, null);
+});
+
+test("visual report rejection fails open when the hook is missing", async () => {
+  const { opts, root } = setup();
+  const reason = await visualReportRejection(
+    { tool_input: { command: 'gh pr create --body "no report"' } },
+    { ...opts, dirs: [path.join(root, "missing-hooks")] },
+  );
+  assert.equal(reason, null);
+});
+
+test("visual report rejection denies a pull request body without the section", async () => {
+  const { opts } = setup();
+  const reason = await visualReportRejection(
+    { tool_input: { command: 'gh pr create --body "no report"' }, cwd: repo },
+    { ...opts, dirs },
+  );
+  assert.match(reason ?? "", /Visual report/);
+});
+
+test("bash tool rejects a pull request body without a visual report", async () => {
+  const { root } = setup();
+  const directory = path.join(root, "proj");
+  const hooks = path.join(directory, ".claude", "hooks");
+  fs.mkdirSync(hooks, { recursive: true });
+  fs.copyFileSync(path.join(repo, ".claude/hooks/pr-visual-report.sh"), path.join(hooks, "pr-visual-report.sh"));
+  fs.writeFileSync(path.join(hooks, "autonomy-git-guard.sh"), "exit 0\n");
+  const plugin = await AutonomyPlugin({
+    directory,
+    client: {} as never,
+    $: (() => undefined) as never,
+  });
+  await assert.rejects(
+    () => plugin["tool.execute.before"]({ tool: "bash" }, { args: { command: 'gh pr create --body "no report"' } }),
+    /Visual report/,
+  );
+  await plugin["tool.execute.before"]({ tool: "bash" }, { args: { command: "git status" } });
 });
 
 test("bash tool throws when the checkout git guard asks", async () => {

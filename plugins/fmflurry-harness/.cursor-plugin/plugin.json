@@ -2,7 +2,7 @@
   "name": "fmflurry-harness",
   "displayName": "fmflurry Harness",
   "description": "Conductor routing, specialist agents, skills, commands, rules and MCP servers from the fmflurry harness.",
-  "version": "0.4.17",
+  "version": "0.4.18",
   "author": {
     "name": "fmflurry"
   },

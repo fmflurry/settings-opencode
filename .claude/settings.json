@@ -97,6 +97,15 @@
             "command": "bash ~/.claude/hooks/autonomy-git-guard.sh"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/pr-visual-report.sh"
+          }
+        ]
       }
     ],
     "Stop": [

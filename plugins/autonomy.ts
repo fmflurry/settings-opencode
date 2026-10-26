@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { PluginInput } from "@opencode-ai/plugin";
-import { GATE_TIMEOUT_MS, bashGuardRejection, blockReason, runHook, runHookText } from "./lib/autonomy-hooks.ts";
+import { GATE_TIMEOUT_MS, bashGuardRejection, blockReason, runHook, runHookText, visualReportRejection } from "./lib/autonomy-hooks.ts";
 import { emitKpi } from "./lib/kpi-emit.ts";
 
 const AUTONOMY_FLAG = ".claude/state/autonomy.on";
@@ -65,6 +65,11 @@ export const AutonomyPlugin = async ({ $, client, directory }: PluginInput) => {
         opts,
       );
       if (reason) throw new Error(reason);
+      const visual = await visualReportRejection(
+        { tool_input: { command: args.command }, cwd: directory },
+        opts,
+      );
+      if (visual) throw new Error(visual);
     },
 
     "chat.message": async (input: { sessionID?: string }) => {

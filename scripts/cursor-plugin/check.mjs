@@ -78,6 +78,15 @@ const setupText = fs.existsSync(path.join(skillsDir, 'setup-harness/SKILL.md'))
 for (const needle of ['~/.cursor/rules/fmflurry-harness-models.mdc', '~/.agents/fmflurry-harness-models.md', ...Object.values(config.defaultTierModels)]) {
   if (!setupText.includes(needle)) errors.push(`skills/setup-harness/SKILL.md: missing ${needle}`);
 }
+if (!setupText.includes('## Visual report')) errors.push('skills/setup-harness/SKILL.md: missing ## Visual report');
+const visualSkillPath = path.join(skillsDir, 'pr-visual-report/SKILL.md');
+if (!fs.existsSync(visualSkillPath)) errors.push('missing skills/pr-visual-report/SKILL.md');
+else {
+  const visualSkill = fs.readFileSync(visualSkillPath, 'utf8');
+  for (const needle of ['docs/pr-reports/', '## Visual report', 'pr-report-check']) {
+    if (!visualSkill.includes(needle)) errors.push(`skills/pr-visual-report/SKILL.md: missing ${needle}`);
+  }
+}
 
 const TEXT_EXT = new Set(['.md', '.mdc', '.json', '.txt', '.yml', '.yaml', '.mjs', '.js', '.py', '.sh']);
 const allowedSlug = new RegExp(`^(?:${(config.cursorModelFamilies ?? []).map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?:-(?:none|minimal|low|medium|high|xhigh|max))?$`);
@@ -111,6 +120,7 @@ const hooksPath = path.join(out, 'hooks/hooks.json');
 if (fs.existsSync(hooksPath)) {
   const hooksFile = JSON.parse(fs.readFileSync(hooksPath, 'utf8'));
   if (hooksFile.version !== 1) errors.push('hooks.json: version must be 1');
+  if (!JSON.stringify(hooksFile).includes('pr-visual-report.sh')) errors.push('hooks.json: missing pr-visual-report.sh');
   const rootPrefix = '${CURSOR_PLUGIN_ROOT}/';
   for (const [event, entries] of Object.entries(hooksFile.hooks ?? {})) {
     if (!config.cursorHookEvents.includes(event)) errors.push(`hooks.json: unknown Cursor event: ${event}`);

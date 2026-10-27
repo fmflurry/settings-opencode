@@ -772,7 +772,7 @@ prefix_value_flags() {
   esac
 }
 
-HARNESS_ENV_RE='(^|[^A-Za-z0-9_])(AGENT_HARNESS_TEST|AGENT_HARNESS_DIR|AGENT_HARNESS_WORKTREE_RM_[A-Z]*|GH_BIN|ORCA_BIN|AGENT_STATE_DIR|TLTB_STATE_DIR|CLAUDE_PROJECT_DIR|CLAUDE_CODE_SESSION_ID|AGENT_HARNESS_SESSION|AGENT_HARNESS_GOAL|BASH_ENV|PATH|HOME|SHELLOPTS|BASHOPTS|PS4|ENV|DYLD_[A-Z_]*|LD_[A-Z_]*)\+?=|--(rcfile|init-file)'
+HARNESS_ENV_RE='(^|[^A-Za-z0-9_])(AGENT_HARNESS_TEST|AGENT_HARNESS_DIR|AGENT_HARNESS_WORKTREE_RM_[A-Z]*|GH_BIN|ORCA_BIN|AGENT_STATE_DIR|TLTB_STATE_DIR|CLAUDE_PROJECT_DIR|CLAUDE_CODE_SESSION_ID|AGENT_HARNESS_SESSION|AGENT_HARNESS_GOAL|AGENT_HARNESS_KPI_LOG|AGENT_HARNESS_KPI|AGENT_HARNESS_VERSION|BASH_ENV|PATH|HOME|SHELLOPTS|BASHOPTS|PS4|ENV|DYLD_[A-Z_]*|LD_[A-Z_]*)\+?=|--(rcfile|init-file)'
 HARNESS_SOURCE_RE='(^|[;&|({`]|\$\(|(^|[^[:alnum:]_])(then|do|else)[[:space:]])[[:space:]]*(\.|source)[[:space:]]+[^[:space:]]'
 HARNESS_FUNC_RE='(^|[^A-Za-z0-9_])(export[[:space:]]+-[A-Za-z]*f|(declare|typeset)[[:space:]]+-[A-Za-z]*[xf]|set[[:space:]]+-[A-Za-z]*a|set[[:space:]]+-o[[:space:]]+allexport)|BASH_FUNC_|allexport'
 
@@ -1549,9 +1549,9 @@ if [[ "$cmd" == *agent-harness* ]] && { [ "$AUTO" = 1 ] || [[ "$cmd" =~ worktree
   grep -Eq "$HARNESS_SOURCE_RE" <<<"$unquoted" && deny_harness_env
 fi
 case "$cmd" in
-  *AGENT_HARNESS_SESSION* | *AGENT_HARNESS_GOAL* | *CLAUDE_CODE_SESSION_ID*)
+  *AGENT_HARNESS_SESSION* | *AGENT_HARNESS_GOAL* | *CLAUDE_CODE_SESSION_ID* | *AGENT_HARNESS_KPI* | *AGENT_HARNESS_VERSION*)
     unquoted="$(tr -d "'\"" <<<"$cmd")"
-    grep -Eq '(^|[^A-Za-z0-9_])(AGENT_HARNESS_SESSION|AGENT_HARNESS_GOAL|CLAUDE_CODE_SESSION_ID)\+?=' <<<"$unquoted" && deny_harness_env ;;
+    grep -Eq '(^|[^A-Za-z0-9_])(AGENT_HARNESS_SESSION|AGENT_HARNESS_GOAL|CLAUDE_CODE_SESSION_ID|AGENT_HARNESS_KPI_LOG|AGENT_HARNESS_KPI|AGENT_HARNESS_VERSION)\+?=' <<<"$unquoted" && deny_harness_env ;;
 esac
 if [[ "$cmd" == *worktree-rm* ]] && grep -Eq '(^|[^[:alnum:]_])(export|declare +-x|set +-a)( |$)' <<<"$cmd"; then deny_worktree; fi
 [[ "$cmd" == *--confirmed* && "$cmd" == *worktree-rm* ]] && ASKED_WT=1

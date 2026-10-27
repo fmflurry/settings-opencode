@@ -2214,7 +2214,9 @@ jq '.status = "done"' "$(lreg_file $SB)" >"$FX/t" && mv "$FX/t" "$(lreg_file $SB
 out="$(lstop '' 2>"$FX/err")"; rc=$?
 check "stop gate empty session without active goals: allows" test "$rc|$out" = "0|"
 check "stop gate empty session: stderr note kept" grep -q "no session_id" "$FX/err"
+check "env guard (autonomy on): inline AGENT_HARNESS_KPI_LOG denied" test "$(lguard "$LM" 'AGENT_HARNESS_KPI_LOG=/x agent-harness goal --goal a pr 1')" = deny
 rm -f "$LM/.claude/state/autonomy.on"
+check "env guard (autonomy off): inline AGENT_HARNESS_KPI_LOG denied" test "$(lguard "$LM" 'AGENT_HARNESS_KPI_LOG=/x agent-harness goal --goal a pr 1')" = deny
 check "env guard (autonomy off): inline CLAUDE_CODE_SESSION_ID denied" test "$(lguard "$LM" 'CLAUDE_CODE_SESSION_ID=x agent-harness goal pr 1')" = deny
 check "env guard (autonomy off): export AGENT_HARNESS_SESSION denied" test "$(lguard "$LM" 'export AGENT_HARNESS_SESSION=x')" = deny
 check "env guard (autonomy off): declare AGENT_HARNESS_GOAL denied" test "$(lguard "$LM" 'declare -x AGENT_HARNESS_GOAL=x')" = deny
@@ -2897,6 +2899,12 @@ for gate in "${STOP_COPIES[@]}"; do
   check "stop-gate ($gl) unreadable PR: total_blocks unchanged after 6 checks" test "$(jq -r .total_blocks "$(lw_goal_file)")" = 0
   check "stop-gate ($gl) unreadable PR: goal stays active" test "$(jq -r .status "$(lw_goal_file)")" = active
   check "stop-gate ($gl) unreadable PR: registry stays active" test "$(lreg feat-td-x .status)" = active
+  corrupt="$(dirname "$(lw_goal_file)")/corrupt.json"
+  printf '{not json' >"$corrupt"
+  outs="$( cd "$LM" && echo '{"session_id":"other-sess"}' | env -u AGENT_STATE_DIR -u GH_BIN CLAUDE_PROJECT_DIR="$LM" PATH="$TMP/ghfail:$TMP/lsleep:$TMP/lbin:$PATH" bash "$gate" 2>"$FX/err" )"
+  rm -f "$corrupt"
+  check "stop-gate ($gl) corrupt goal file: blocks every session" test "$(jq -r .decision <<<"$outs")" = block
+  check "stop-gate ($gl) corrupt goal file: stderr note" grep -q "unreadable goal file" "$FX/err"
 done
 
 # 0.4.11 case 4: ship-init and goal set keep the real branch slug

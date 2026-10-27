@@ -108,6 +108,11 @@ gate_goal() {
 reasons=""
 for GOAL_FILE in "$GOALS_DIR"/*.json; do
   [ -f "$GOAL_FILE" ] || continue
+  if ! jq empty "$GOAL_FILE" 2>/dev/null; then
+    echo "ship-stop-gate: unreadable goal file $GOAL_FILE; holding the stop" >&2
+    reasons="${reasons:+$reasons; }goal file ${GOAL_FILE##*/} is unreadable"
+    continue
+  fi
   st="$(goal_get '.status // ""')"
   { [ "$st" = active ] || [ -z "$st" ]; } && [ "$(goal_get --arg sid "$session_id" '(.session_id // "") as $g | $g == "" or $sid == "" or $g == $sid')" = true ] || continue
   r="$(gate_goal)"

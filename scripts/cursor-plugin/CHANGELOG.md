@@ -10,6 +10,7 @@ Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cur
 - The session is bound at `ship-init`. Resuming in a new session (after `/resume` or `/clear`) is `agent-harness ship-init --adopt <pr>`, which rebinds `session_id`. Goal commands never rebind.
 - Agents cannot set `CLAUDE_CODE_SESSION_ID`, `AGENT_HARNESS_SESSION` or `AGENT_HARNESS_GOAL` in any mode; the guard denies those. Autonomous `ship-init` refuses without a session id.
 - A goal with no bound session, or a Stop event with no session id, is held by the stop gate (fails closed). `ship-init --adopt` rebinding prints a notice.
+- The guard also denies setting `AGENT_HARNESS_KPI_LOG`, `AGENT_HARNESS_KPI` and `AGENT_HARNESS_VERSION` in any mode. A corrupt goal file is held by the stop gate for every session (fails closed).
 - While any goal is active, only an ACTIVE goal's branch with passing reviews may be pushed.
 - The Stop gate acts only on goals bound to the stopping session, so concurrent `/ship` sessions in one repo no longer interfere.
 - The push guard checks the review verdicts of the branch being pushed. Pushing an unregistered branch while any goal is active is denied. Shell writes to the registry are denied.

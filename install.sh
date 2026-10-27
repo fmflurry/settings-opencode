@@ -11,17 +11,53 @@
 #   --no-claude     Force-skip claude (wins over allowlist)
 #   --uninstall     Remove env-var block and installed copies (does not delete the repo)
 #   --local         Project-scoped install into the current working directory
-#                   (./.opencode, ./.claude). Does not touch shell rc files.
+#                   (./.opencode, ./.claude). Applies .harness-local/ on top.
+#                   Does not touch shell rc files.
 #   --variant NAME  conductor (default) or monolith. orchestration is an alias.
 #                   HARNESS_VARIANT too. A bare conductor or monolith is the
 #                   same choice and skips the prompts.
-#   --status        Print the installed variant and exit.
+#   --status        Print the installed variant and, with --local, the overlay.
 #   --help, -h      Show usage
 #
 set -euo pipefail
 
+# pwd -P so a symlink such as macOS /tmp and its /private/tmp target compare equal.
+physical_path() {
+    local target="$1" resolved=""
+    if [ -d "$target" ]; then
+        resolved="$(CDPATH= cd -P -- "$target" && pwd -P)" || resolved=""
+    fi
+    if [ -z "$resolved" ] && command -v realpath >/dev/null 2>&1; then
+        resolved="$(realpath -- "$target" 2>/dev/null || true)"
+    fi
+    if [ -z "$resolved" ] && command -v python3 >/dev/null 2>&1; then
+        resolved="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$target" 2>/dev/null || true)"
+    fi
+    if [ -n "$resolved" ]; then
+        printf '%s\n' "$resolved"
+    else
+        printf '%s\n' "$target"
+    fi
+}
+
+same_path() {
+    [ -n "${1:-}" ] && [ -n "${2:-}" ] || return 1
+    [ "$(physical_path "$1")" = "$(physical_path "$2")" ]
+}
+
+link_points_at() {
+    local link="$1" expected="$2" raw
+    raw="$(readlink "$link")" || return 1
+    [ -n "$raw" ] || return 1
+    case "$raw" in
+        /*) ;;
+        *) raw="$(dirname "$link")/$raw" ;;
+    esac
+    same_path "$raw" "$expected"
+}
+
 # Capture invocation directory before any cd happens.
-INVOKE_DIR="$PWD"
+INVOKE_DIR="$(physical_path "$PWD")"
 
 # ------------------------------ constants ------------------------------------
 
@@ -29,7 +65,7 @@ MARKER_START="# >>> settings-opencode >>>"
 MARKER_END="# <<< settings-opencode <<<"
 TARGET_OPENCODE="$HOME/.config/opencode"
 TARGET_CLAUDE="$HOME/.claude"
-REPO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]:-$0}" )" && pwd )"
+REPO_DIR="$(physical_path "$(dirname "${BASH_SOURCE[0]:-$0}")")"
 
 ASSUME_YES=0
 SKIP_CLAUDE=0
@@ -128,7 +164,7 @@ handle_nested_opencode_claude() {
     local nested_claude="$TARGET_OPENCODE/.claude"
     [ -e "$nested_claude" ] || [ -L "$nested_claude" ] || return 0
 
-    if [ "$REPO_DIR" = "$TARGET_OPENCODE" ]; then
+    if same_path "$REPO_DIR" "$TARGET_OPENCODE"; then
         err "repo already lives at the OpenCode target and contains nested .claude: $nested_claude"
         err "refusing to continue; move or remove that .claude directory explicitly, then re-run the installer"
         exit 1
@@ -275,9 +311,12 @@ Flags:
   --local         Project-scoped install into the current working directory.
                   Copies the repo into ./.opencode and ./.claude, then vendors
                   ./AGENTS.md, ./.cursor/rules, and ./.agents for the variant.
-                  The project default is Monolith. Does not touch global shell
-                  rc files. Combine with --yes, --no-claude, --no-opencode,
-                  and --uninstall as normal. Do NOT run this from inside the
+                  Then applies ./.harness-local/ on top (overlay wins) and
+                  prunes paths listed in ./.harness-local/exclude. That
+                  directory is project-owned and is never written. The project
+                  default is Monolith. Does not touch global shell rc files.
+                  Combine with --yes, --no-claude, --no-opencode, and
+                  --uninstall as normal. Do NOT run this from inside the
                   settings-opencode repo itself.
   conductor, monolith
                   Install that variant without prompts (both harnesses, global
@@ -289,7 +328,9 @@ Flags:
                   --yes with neither set is Monolith.
   --status        Print the installed variant and exit. Does not install or
                   prompt. Global mode reports OpenCode and Claude Code.
-                  --local also reports ./.cursor and ./.agents.
+                  --local also reports ./.cursor, ./.agents, the
+                  .harness-local overlay, exclude entries, and whether the
+                  domain-rules hook is enabled.
   --help, -h      Show this message
 
 Target paths (global mode):
@@ -335,11 +376,8 @@ detect_shell_rc() {
 }
 
 same_directory() {
-    local left="$1" right="$2" left_physical right_physical
-    [ -d "$left" ] && [ -d "$right" ] || return 1
-    left_physical="$(cd "$left" && pwd -P)"
-    right_physical="$(cd "$right" && pwd -P)"
-    [ "$left_physical" = "$right_physical" ]
+    [ -d "$1" ] && [ -d "$2" ] || return 1
+    same_path "$1" "$2"
 }
 
 # Copy src/ contents into dst/ as a real copy (not a symlink).
@@ -581,6 +619,69 @@ print_installed_variant() {
         "") printf '%s: %s (not recorded)\n' "$name" "$dir" ;;
         *) printf '%s: %s unknown (%s)\n' "$name" "$dir" "$raw" ;;
     esac
+}
+
+print_project_local_status() {
+    if ! command -v node >/dev/null 2>&1; then
+        printf '%s\n' "overlay: (node unavailable)"
+        return 0
+    fi
+    node "$REPO_DIR/scripts/variants/project-local.mjs" --project "$INVOKE_DIR" --status
+}
+
+install_domain_rules_helper() {
+    [ "$CLAUDE_TARGET_READY" = "1" ] || return 0
+    if same_directory "$TARGET_CLAUDE" "$REPO_DIR/.claude"; then
+        return 0
+    fi
+    mkdir -p "$TARGET_CLAUDE/hooks"
+    cp "$REPO_DIR/plugins/lib/domain-rules.ts" "$TARGET_CLAUDE/hooks/domain-rules.ts"
+    chmod +x "$TARGET_CLAUDE/hooks/domain-rules.sh" 2>/dev/null || true
+}
+
+apply_project_local() {
+    [ "$LOCAL_MODE" = "1" ] || return 0
+    local roots=() reasons=()
+    if [ "$SKIP_CLAUDE" = "1" ]; then
+        reasons+=("claude skipped (--no-claude)")
+    elif [ "$CLAUDE_TARGET_READY" != "1" ]; then
+        reasons+=("claude skipped (target not installed)")
+    elif same_directory "$TARGET_CLAUDE" "$REPO_DIR/.claude"; then
+        reasons+=("claude skipped (target is the source checkout)")
+    else
+        roots+=(claude)
+    fi
+    if [ "$SKIP_OPENCODE" = "1" ]; then
+        reasons+=("opencode skipped (--no-opencode)")
+    elif [ "$OPENCODE_TARGET_READY" != "1" ]; then
+        reasons+=("opencode skipped (target not installed)")
+    elif [ "$OPENCODE_TARGET_IS_SOURCE" = "1" ]; then
+        reasons+=("opencode skipped (target is the source checkout)")
+    else
+        roots+=(opencode)
+    fi
+    if [ "${#reasons[@]}" -gt 0 ]; then
+        local joined="" reason
+        for reason in "${reasons[@]}"; do
+            if [ -n "$joined" ]; then
+                joined="$joined; $reason"
+            else
+                joined="$reason"
+            fi
+        done
+        warn "project overlay: $joined"
+    fi
+    if [ "${#roots[@]}" -eq 0 ]; then
+        return 0
+    fi
+    roots+=(surfaces)
+    local joined
+    joined="$(IFS=,; printf '%s' "${roots[*]}")"
+    step "Applying project overlay"
+    node "$REPO_DIR/scripts/variants/project-local.mjs" \
+        --project "$INVOKE_DIR" \
+        --apply \
+        --roots "$joined"
 }
 
 # Conductor is the copied tree. Returning to it deletes Monolith-only paths.
@@ -945,7 +1046,7 @@ install_repo_link() {
     if [ "$WSL_MODE" = "1" ]; then
         step "Copying repo into $TARGET_OPENCODE (WSL -> Windows)"
         if [ -L "$TARGET_OPENCODE" ]; then
-            if [ "$(readlink "$TARGET_OPENCODE")" = "$REPO_DIR" ]; then
+            if link_points_at "$TARGET_OPENCODE" "$REPO_DIR"; then
                 if [ -e "$TARGET_OPENCODE/.claude" ] || [ -L "$TARGET_OPENCODE/.claude" ]; then
                     err "OpenCode target is a symlink to the repo and exposes nested .claude: $TARGET_OPENCODE/.claude"
                     err "refusing to mark OpenCode ready; replace the symlink or remove that .claude explicitly, then re-run the installer"
@@ -982,7 +1083,7 @@ install_repo_link() {
     fi
 
     if [ -L "$TARGET_OPENCODE" ]; then
-        if [ "$(readlink "$TARGET_OPENCODE")" = "$REPO_DIR" ]; then
+        if link_points_at "$TARGET_OPENCODE" "$REPO_DIR"; then
             if [ -e "$TARGET_OPENCODE/.claude" ] || [ -L "$TARGET_OPENCODE/.claude" ]; then
                 err "OpenCode target is a symlink to the repo and exposes nested .claude: $TARGET_OPENCODE/.claude"
                 err "refusing to mark OpenCode ready; replace the symlink or remove that .claude explicitly, then re-run the installer"
@@ -1131,7 +1232,7 @@ reconcile_legacy_clone() {
     [ -e "$legacy" ] || return 0
     [ -L "$legacy" ] && return 0
     [ -d "$legacy" ] || return 0
-    [ "$legacy" = "$REPO_DIR" ] && return 0
+    same_path "$legacy" "$REPO_DIR" && return 0
 
     warn "legacy settings-opencode clone found at $legacy (a real directory, not a symlink to $REPO_DIR)"
 
@@ -1169,7 +1270,7 @@ install_claude_mirror() {
     if [ "$WSL_MODE" = "1" ]; then
         info "WSL mode — copying instead of symlinking"
         if [ -L "$TARGET_CLAUDE" ]; then
-            if [ "$(readlink "$TARGET_CLAUDE")" = "$source_claude" ]; then
+            if link_points_at "$TARGET_CLAUDE" "$source_claude"; then
                 ok "$TARGET_CLAUDE already points at $source_claude"
                 return 0
             fi
@@ -1191,7 +1292,7 @@ install_claude_mirror() {
     fi
 
     if [ -L "$TARGET_CLAUDE" ]; then
-        if [ "$(readlink "$TARGET_CLAUDE")" = "$source_claude" ]; then
+        if link_points_at "$TARGET_CLAUDE" "$source_claude"; then
             ok "$TARGET_CLAUDE already points at $source_claude"
             return 0
         fi
@@ -1293,7 +1394,7 @@ merge_agent_harness_settings() {
     fi
 
     local hook_name
-    for hook_name in autonomy-context autonomy-ask-guard autonomy-git-guard pr-visual-report orca-notify ship-stop-gate; do
+    for hook_name in autonomy-context autonomy-ask-guard autonomy-git-guard pr-visual-report orca-notify ship-stop-gate domain-rules; do
         if [ ! -f "$TARGET_CLAUDE/hooks/$hook_name.sh" ]; then
             err "registered hook script is missing: $TARGET_CLAUDE/hooks/$hook_name.sh"
             exit 1
@@ -1301,15 +1402,22 @@ merge_agent_harness_settings() {
         chmod +x "$TARGET_CLAUDE/hooks/$hook_name.sh" 2>/dev/null || true
     done
 
-    local hooks_dir="~/.claude/hooks" mod_dir="$TARGET_CLAUDE/mods/autonomy-status"
-    [ "$LOCAL_MODE" = "1" ] && hooks_dir="./.claude/hooks"
+    local hooks_dir="~/.claude/hooks"
+    local mod_dir="$TARGET_CLAUDE/mods/autonomy-status"
+    local mod_abs="$mod_dir"
+    local mod_mode="global"
+    if [ "$LOCAL_MODE" = "1" ]; then
+        hooks_dir="./.claude/hooks"
+        mod_dir="./.claude/mods/autonomy-status"
+        mod_mode="local"
+    fi
 
     local tmp
     tmp="$(mktemp "$settings.XXXXXX")"
     cp -p "$settings" "$tmp"
     local managed_hooks f
     managed_hooks="$(for f in "$REPO_DIR"/.claude/hooks/*.sh; do basename "$f" .sh; done | jq -Rsc 'split("\n") | map(select(. != ""))')"
-    if ! jq --argjson managed "$managed_hooks" --arg h "$hooks_dir" --arg mod "$mod_dir" --arg modTilde "~/.claude/mods/autonomy-status" '
+    if ! jq --argjson managed "$managed_hooks" --arg h "$hooks_dir" --arg mod "$mod_dir" --arg modAbs "$mod_abs" --arg modTilde "~/.claude/mods/autonomy-status" --arg mode "$mod_mode" '
         def bashify: (.command? // "") as $c | if ($c | test("^[^ ]*\\.claude/hooks/[^ /]+\\.sh$")) and ($managed | index($c | split("/") | last | sub("\\.sh$"; ""))) then .command = "bash " + $c else . end;
         def addhook($ev; $m; $cmd):
             if ([.hooks[$ev][]?.hooks[]?.command] | index($cmd)) then .
@@ -1323,15 +1431,24 @@ merge_agent_harness_settings() {
         | addhook("PreToolUse"; "AskUserQuestion"; "bash " + $h + "/autonomy-ask-guard.sh")
         | addhook("PreToolUse"; "Bash"; "bash " + $h + "/autonomy-git-guard.sh")
         | addhook("PreToolUse"; "Bash"; "bash " + $h + "/pr-visual-report.sh")
+        | addhook("PreToolUse"; "Edit|Write|MultiEdit"; "bash " + $h + "/domain-rules.sh")
         | addhook("Notification"; "permission_prompt|idle_prompt"; "bash " + $h + "/orca-notify.sh")
         | addhook("Stop"; ""; "bash " + $h + "/ship-stop-gate.sh")
         | .permissions.allow = (if ((.permissions.allow // []) | index("Bash(agent-harness *)")) then .permissions.allow else ((.permissions.allow // []) + ["Bash(agent-harness *)"]) end)
         | .env.CLAUDE_CODE_PLUGIN_DIRS = (
             (.env.CLAUDE_CODE_PLUGIN_DIRS // "") as $cur
-            | ($cur | split(":")) as $parts
-            | if ($parts | index($mod)) or ($parts | index($modTilde)) then $cur
-              elif $cur == "" then $mod
-              else $cur + ":" + $mod end)
+            | ($cur | split(":") | map(select(length > 0))) as $parts
+            | if $mode == "local" then
+                ($parts | map(select(
+                    . != $mod and . != $modTilde and . != $modAbs
+                    and ((test("^/|^[A-Za-z]:") and test("[/\\\\]\\.claude[/\\\\]mods[/\\\\]autonomy-status$")) | not)
+                ))) as $kept
+                | ([$mod] + $kept | join(":"))
+              else
+                if ($parts | index($mod)) or ($parts | index($modTilde)) then $cur
+                elif $cur == "" then $mod
+                else $cur + ":" + $mod end
+              end)
     ' "$settings" > "$tmp"; then
         rm -f "$tmp"
         warn "could not merge agent-harness entries into $settings (invalid JSON?) — left unchanged"
@@ -1467,7 +1584,7 @@ run_uninstall() {
 
     local settings_sync_link="$HOME/.local/bin/settings-sync"
     if [ -e "$settings_sync_link" ] || [ -L "$settings_sync_link" ]; then
-        if [ -L "$settings_sync_link" ] && [ "$(readlink "$settings_sync_link")" = "$REPO_DIR/scripts/settings-sync.sh" ]; then
+        if [ -L "$settings_sync_link" ] && link_points_at "$settings_sync_link" "$REPO_DIR/scripts/settings-sync.sh"; then
             rm "$settings_sync_link"
             ok "removed $settings_sync_link"
         else
@@ -1506,10 +1623,10 @@ run_uninstall() {
         fi
     else
         if [ "$SKIP_OPENCODE" != "1" ]; then
-            if [ -L "$TARGET_OPENCODE" ] && [ "$(readlink "$TARGET_OPENCODE")" = "$REPO_DIR" ]; then
+            if [ -L "$TARGET_OPENCODE" ] && link_points_at "$TARGET_OPENCODE" "$REPO_DIR"; then
                 rm "$TARGET_OPENCODE"
                 ok "removed legacy symlink $TARGET_OPENCODE"
-            elif [ -d "$TARGET_OPENCODE" ] && [ "$TARGET_OPENCODE" != "$REPO_DIR" ]; then
+            elif [ -d "$TARGET_OPENCODE" ] && ! same_path "$TARGET_OPENCODE" "$REPO_DIR"; then
                 if ask "delete copied directory $TARGET_OPENCODE ?" N; then
                     rm -rf "$TARGET_OPENCODE"
                     ok "removed $TARGET_OPENCODE"
@@ -1523,7 +1640,7 @@ run_uninstall() {
             info "OpenCode target skipped (--no-opencode)"
         fi
         if [ "$SKIP_CLAUDE" != "1" ]; then
-            if [ -L "$TARGET_CLAUDE" ] && [ "$(readlink "$TARGET_CLAUDE")" = "$REPO_DIR/.claude" ]; then
+            if [ -L "$TARGET_CLAUDE" ] && link_points_at "$TARGET_CLAUDE" "$REPO_DIR/.claude"; then
                 rm "$TARGET_CLAUDE"
                 ok "removed legacy symlink $TARGET_CLAUDE"
             elif [ -d "$TARGET_CLAUDE" ]; then
@@ -1592,6 +1709,7 @@ if [ "$DO_STATUS" = "1" ]; then
     if [ "$LOCAL_MODE" = "1" ]; then
         print_installed_variant "cursor" "$INVOKE_DIR/.cursor"
         print_installed_variant "agents" "$INVOKE_DIR/.agents"
+        print_project_local_status
     fi
     exit 0
 fi
@@ -1677,7 +1795,7 @@ fi
 
 # Apply local-mode target overrides before any other logic runs.
 if [ "$LOCAL_MODE" = "1" ]; then
-    if [ "$INVOKE_DIR" = "$REPO_DIR" ]; then
+    if same_path "$INVOKE_DIR" "$REPO_DIR"; then
         err "--local copies the repo into ./.opencode; run it from your project directory, not from the settings-opencode repo"
         exit 1
     fi
@@ -1724,6 +1842,7 @@ if [ "$SKIP_OPENCODE" != "1" ]; then
     fi
 fi
 install_claude_mirror
+install_domain_rules_helper
 install_notify_scripts
 install_agent_harness_scripts
 merge_agent_harness_settings
@@ -1740,6 +1859,7 @@ fi
 sync_skills
 apply_harness_variant
 vendor_project_surfaces
+apply_project_local
 if [ "$SKIP_OPENCODE" != "1" ] && [ "$OPENCODE_TARGET_READY" != "1" ]; then
     err "OpenCode target runtime is absent; refusing a successful install"
     exit 1

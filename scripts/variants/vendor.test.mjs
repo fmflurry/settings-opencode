@@ -32,6 +32,21 @@ test('vendor refuses the settings repo', () => {
   });
   assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stderr, /settings repo/);
+
+  const linkRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vendor-link-'));
+  try {
+    const link = path.join(linkRoot, 'repo');
+    fs.symlinkSync(repo, link);
+    const linked = spawnSync(process.execPath, [vendor, '--repo', link, '--project', repo, '--variant', 'monolith'], {
+      cwd: os.tmpdir(),
+      encoding: 'utf8',
+      env: { ...process.env, HARNESS_VARIANT: '' },
+    });
+    assert.equal(linked.status, 1, `${linked.stdout}\n${linked.stderr}`);
+    assert.match(linked.stderr, /settings repo/);
+  } finally {
+    fs.rmSync(linkRoot, { recursive: true, force: true });
+  }
 });
 
 test('vendor defaults to monolith, keeps a custom baseline, and switches back', () => {

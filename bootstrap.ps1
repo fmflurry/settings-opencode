@@ -13,7 +13,8 @@
     is the update path.
 
     Use -Local for a project-scoped install: copies into .\.opencode and .\.claude
-    in the current directory; does NOT persist env vars (prints them as a hint instead).
+    in the current directory, then applies .\.harness-local\ (never written by
+    the installer). Does NOT persist env vars (prints them as a hint instead).
     Do NOT run -Local from inside the settings-opencode clone itself.
 
     Use -NoOpencode to skip OpenCode entirely (no repo copy, no deps, no env vars)
@@ -363,6 +364,8 @@ if ($Status) {
     if ($Local) {
         Write-VariantStatus 'cursor' (Join-Path $InvokeDir '.cursor')
         Write-VariantStatus 'agents' (Join-Path $InvokeDir '.agents')
+        & node (Join-Path $SrcDir 'scripts/variants/project-local.mjs') '--project' $InvokeDir '--status'
+        exit $LASTEXITCODE
     }
     exit 0
 }
@@ -424,9 +427,17 @@ if (Test-Path (Join-Path $SrcDir '.git')) {
 if ($LASTEXITCODE -ne 0) { Die 'git fetch/clone failed' }
 Ok "source ready at $SrcDir"
 
+# ProviderPath so a symlinked working directory matches the clone.
+$SrcDir = (Resolve-Path -LiteralPath $SrcDir).ProviderPath
+$InvokeDir = (Resolve-Path -LiteralPath $InvokeDir).ProviderPath
+if ($Local) {
+    $OpencodeDir = Join-Path $InvokeDir '.opencode'
+    $ClaudeDir = Join-Path $InvokeDir '.claude'
+}
+
 # ------------------------------ local guard ----------------------------------
 
-if ($Local -and ($InvokeDir -eq $SrcDir)) {
+if ($Local -and (Test-SamePath $InvokeDir $SrcDir)) {
     Die 'run -Local from your project directory, not the settings-opencode clone'
 }
 
@@ -534,6 +545,11 @@ if (-not $doClaude) {
             Ok "copied .claude mirror (personal config files seeded, not overwritten on reinstall)"
             $claudeTargetReady = $true
         }
+        if ($claudeTargetReady -and -not $claudeTargetIsSource) {
+            $hookDir = Join-Path $ClaudeDir 'hooks'
+            New-Item -ItemType Directory -Force -Path $hookDir | Out-Null
+            Copy-Item (Join-Path $SrcDir 'plugins/lib/domain-rules.ts') (Join-Path $hookDir 'domain-rules.ts') -Force
+        }
     } else {
         Warn '.claude not found in repo, skipping mirror'
     }
@@ -621,10 +637,41 @@ if ($Variant -eq 'monolith') {
     }
 }
 
-if ($Local -and (($doOpencode -and $opencodeTargetReady) -or ($doClaude -and $claudeTargetReady))) {
-    Step "Vendoring project surfaces ($Variant)"
-    & node (Join-Path $SrcDir 'scripts/variants/vendor-project.mjs') '--repo' $SrcDir '--project' $InvokeDir '--variant' $Variant
-    if ($LASTEXITCODE -ne 0) { Die 'project vendor failed' }
+if ($Local) {
+    if (($doOpencode -and $opencodeTargetReady) -or ($doClaude -and $claudeTargetReady)) {
+        Step "Vendoring project surfaces ($Variant)"
+        & node (Join-Path $SrcDir 'scripts/variants/vendor-project.mjs') '--repo' $SrcDir '--project' $InvokeDir '--variant' $Variant
+        if ($LASTEXITCODE -ne 0) { Die 'project vendor failed' }
+    }
+    $roots = @()
+    $skipReasons = @()
+    if (-not $doClaude) {
+        $skipReasons += 'claude skipped (-NoClaude)'
+    } elseif (-not $claudeTargetReady) {
+        $skipReasons += 'claude skipped (target not installed)'
+    } elseif ($claudeTargetIsSource) {
+        $skipReasons += 'claude skipped (target is the source checkout)'
+    } else {
+        $roots += 'claude'
+    }
+    if (-not $doOpencode) {
+        $skipReasons += 'opencode skipped (-NoOpencode)'
+    } elseif (-not $opencodeTargetReady) {
+        $skipReasons += 'opencode skipped (target not installed)'
+    } elseif ($opencodeTargetIsSource) {
+        $skipReasons += 'opencode skipped (target is the source checkout)'
+    } else {
+        $roots += 'opencode'
+    }
+    if ($skipReasons.Count -gt 0) {
+        Warn ("project overlay: " + ($skipReasons -join '; '))
+    }
+    if ($roots.Count -gt 0) {
+        $roots += 'surfaces'
+        Step 'Applying project overlay'
+        & node (Join-Path $SrcDir 'scripts/variants/project-local.mjs') '--project' $InvokeDir '--apply' '--roots' ($roots -join ',')
+        if ($LASTEXITCODE -ne 0) { Die 'project overlay failed' }
+    }
 }
 
 # ------------------------------ next steps -----------------------------------

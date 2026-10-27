@@ -1378,7 +1378,8 @@ registered_guard_runs() { # the command registered for the git guard, run for re
 check "the registered git guard command runs through bash" registered_guard_runs
 INSTALL_JQ="$(sed -n '/^        def bashify/,/^    '"'"' "\$settings"/p' "$HERE/install.sh" | sed '$d')"
 MANAGED_HOOKS="$(for f in "$HERE"/.claude/hooks/*.sh; do basename "$f" .sh; done | jq -Rsc 'split("\n") | map(select(. != ""))')"
-install_merge() { jq --argjson managed "$MANAGED_HOOKS" --arg h "~/.claude/hooks" --arg mod /m --arg modTilde "~/.claude/mods/autonomy-status" "$INSTALL_JQ" <<<"$1"; }
+install_merge() { jq --argjson managed "$MANAGED_HOOKS" --arg h "~/.claude/hooks" --arg mod /m --arg modAbs /m --arg modTilde "~/.claude/mods/autonomy-status" --arg mode global "$INSTALL_JQ" <<<"$1"; }
+install_merge_local() { jq --argjson managed "$MANAGED_HOOKS" --arg h "./.claude/hooks" --arg mod "./.claude/mods/autonomy-status" --arg modAbs "/proj/.claude/mods/autonomy-status" --arg modTilde "~/.claude/mods/autonomy-status" --arg mode local "$INSTALL_JQ" <<<"$1"; }
 LEGACY_SETTINGS='{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"~/.claude/hooks/autonomy-git-guard.sh"},{"type":"command","command":"/opt/own/hook.sh"}]}]}}'
 for seed in '{}' "$LEGACY_SETTINGS"; do
   merged="$(install_merge "$seed")"
@@ -1389,6 +1390,10 @@ check "installer leaves a user's own hook command alone" test "$(install_merge "
 OWN_SETTINGS='{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"~/.claude/hooks/own.sh"},{"type":"command","command":"~/.claude/hooks/autonomy-git-guard.sh"}]}]}}'
 check "installer leaves a user's own ~/.claude/hooks/own.sh unwrapped" test "$(install_merge "$OWN_SETTINGS" | jq -r '[.. | objects | select(has("command")) | .command | select(. == "~/.claude/hooks/own.sh")] | length')" = 1
 check "installer wraps the repo-managed guard it migrates" test "$(install_merge "$OWN_SETTINGS" | jq -r '[.. | objects | select(has("command")) | .command | select(. == "bash ~/.claude/hooks/autonomy-git-guard.sh")] | length')" = 1
+LOCAL_PLUGIN='{"env":{"CLAUDE_CODE_PLUGIN_DIRS":"/proj/.claude/mods/autonomy-status:~/.claude/mods/autonomy-status:/opt/other-plugin"}}'
+check "installer --local records a project-relative plugin dir" test "$(install_merge_local "$LOCAL_PLUGIN" | jq -r '.env.CLAUDE_CODE_PLUGIN_DIRS')" = "./.claude/mods/autonomy-status:/opt/other-plugin"
+GLOBAL_PLUGIN='{"env":{"CLAUDE_CODE_PLUGIN_DIRS":"~/.claude/mods/autonomy-status"}}'
+check "installer global keeps the home plugin dir" test "$(install_merge "$GLOBAL_PLUGIN" | jq -r '.env.CLAUDE_CODE_PLUGIN_DIRS')" = "~/.claude/mods/autonomy-status"
 LOCAL_SETTINGS="$TMP/local-settings.json"
 printf '%s\n' '{"hooks":{"A":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/autonomy-git-guard.sh"}]}]},"p":"~/.claude/mods/x"}' >"$LOCAL_SETTINGS"
 ( info() { :; }; ok() { :; }; eval "$(sed -n '/^localize_claude_settings_hooks() {/,/^}/p' "$HERE/install.sh")"; localize_claude_settings_hooks "$LOCAL_SETTINGS" )

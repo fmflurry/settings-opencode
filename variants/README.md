@@ -26,3 +26,7 @@ Global `--yes` with no variant stays Conductor. `--local --yes` with no variant 
 ./install.sh --local
 ./install.sh --local --variant conductor
 ```
+
+## Project overlay
+
+`./install.sh --local` and `bootstrap.ps1 -Local` apply `.harness-local/` after the variant is vendored. The directory is project-owned. The installer does not create it, write it, or delete it. Overlay files win. `.harness-local/exclude` names skills and paths that must not be installed and that are pruned on every run. Both variants do this. The layout and the off-by-default domain-rules hook are documented in `docs/harness-local.md`. `./install.sh --local --status` prints the overlay, the exclude entries, and the domain-rules state.

@@ -283,7 +283,7 @@
       },
     },
     "security-reviewer": {
-      "description": "MUST delegate for auth, user input, API endpoints, secrets, payments, PII, or sensitive data. Read-only \u2014 reports vulnerabilities; orchestrator dispatches fixes to coder.",
+      "description": "MUST delegate for auth, user input, API endpoints, secrets, payments, PII, or sensitive data. Read-only — reports vulnerabilities. If the coder agent is installed, the orchestrator dispatches fixes to that agent. Otherwise the main agent applies the fixes.",
       "mode": "subagent",
       "model": "{env:OPENCODE_MODEL_SUBAGENT_WORKER}",
       "prompt": "{file:prompts/agents/security-reviewer.txt}",

@@ -1,6 +1,6 @@
 ---
 description: Enforce TDD workflow with 80%+ coverage. /tdd refactor pins current behavior first.
-agent: tdd-guide
+agent: main
 subtask: true
 ---
 
@@ -26,7 +26,7 @@ RED → GREEN → REFACTOR → REPEAT
 1. Write characterization tests that pin the current observable behavior.
 2. Run them on the unchanged code. They pass immediately. A failure means the test is wrong: fix the test, not the code.
 3. Freeze those tests. The restructure does not edit them.
-4. Hand the restructure to `coder`. Production code changes. The characterization tests stay as written.
+4. `coder` is not installed. The main agent does this inline and loads the `coder` skill. Production code changes. The characterization tests stay as written.
 5. New behavior still uses RED: a failing test first, then the smallest code.
 
 `/tdd` without `refactor` stays RED → GREEN → REFACTOR.

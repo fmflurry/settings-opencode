@@ -53,13 +53,13 @@ When CodeMemory is off (cloud or remote agent, `FMFLURRY_CODEMEMORY=off`, or aut
 
 4. **Be honest about each risk.** Give it a real chance of happening and a real cost if it does. Keep the risks you confirmed. List the ones you checked and cleared separately. Use the same citation rules as the `why` skill. Cite a real `file:line`, a search that finds nothing is still an answer, and never make up a caller or an API.
 
-5. **Prove the one fact.** Write a script or test that runs the real code, run it, and paste what happened. Store proof scripts in `/tmp` (ephemeral; no commit). If a proof is worth keeping, dispatch to `tdd-guide` to write a permanent test.
+5. **Prove the one fact.** Write a script or test that runs the real code, run it, and paste what happened. Store proof scripts in `/tmp` (ephemeral; no commit). If a proof is worth keeping and `tdd-guide` is installed, dispatch to that agent to write a permanent test. Otherwise the main agent loads the `tdd` skill and writes the test inline.
 
    When the change is a `/tdd refactor`, the safety fact is the characterization pin. Run those tests. They pass immediately on the old structure, and they must pass on the new structure. The restructure does not edit them. Do not replace that pin with a new proof.
 
 6. **For a big or wide change, run multiple reviewers in parallel.** Different reviewers catch different real bugs:
    - `code-reviewer` — code quality, logic errors, maintainability
-   - `architect` — system design, module boundaries, scalability
+   - If the `architect` agent is installed, dispatch to that agent for system design, module boundaries, and scalability. Otherwise the main agent loads the `architect` skill and does that review inline.
    - `security-reviewer` — auth, data, secrets, trust boundaries (if auth/tenant involved)
    
    Then merge their findings. Note: OpenCode can bind these to different `OPENCODE_MODEL_SUBAGENT_*` models for diverse perspectives.

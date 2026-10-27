@@ -1,6 +1,6 @@
 ---
 description: Find what a change could break beyond the diff before it ships, and prove the one fact it's safe because of by running real code instead of writing it up. Usage: /blast-radius <change|diff>
-agent: conductor
+agent: main
 ---
 
 # Blast Radius Command

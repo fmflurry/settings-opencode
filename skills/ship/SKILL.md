@@ -3,7 +3,7 @@ name: ship
 description: >-
   Use when the user asks to deliver a goal end to end, autonomously, or "ship" a change through
   implementation, PR, review, CI and merge. Triggers: "/ship <goal>", "ship this", "deliver end to end",
-  "autonomously". Not for a single commit or a single PR; route those to the git-specialist agent.
+  "autonomously". Not for a single commit or a single PR. If the `git-specialist` agent is installed, route those to that agent. Otherwise the main agent loads the `git-workflow` skill and does the commit or PR inline.
 ---
 
 # Ship
@@ -44,7 +44,7 @@ Rules for the orchestrator:
 
 In autonomous mode the run is a loop, not a checklist. It repeats until the PR merges:
 
-1. **Implement.** Tests first, then code, through `tdd-guide` and `coder`, inside the goal worktree.
+1. **Implement.** Tests first, then code, inside the goal worktree. If `tdd-guide` is installed, dispatch to that agent for the tests. If `coder` is installed, dispatch to that agent for the code. Otherwise the main agent loads the `tdd` and `coder` skills and does the work inline.
 2. **Verify.** Run the project checks yourself.
 3. **Thorough local review** of the diff (`code-reviewer`, `security-reviewer`, the stack cop, `database-reviewer` when
    SQL changed). Record each verdict with `agent-harness goal review code|security pass|fail`.
@@ -91,9 +91,9 @@ Check the mode with `agent-harness autonomy status`. The rules behind both modes
    (when configured), zero open review threads.
 2b. **Check open PRs.** Follow the `open-pr-check` skill (`skills/open-pr-check/SKILL.md`) before planning or
     implementing. Record each overlapping PR's decision; a `Wait or cancel` outcome escalates.
-3. **Plan.** Dispatch the `planner` agent with the goal worktree path. Keep the plan in the log, not in chat.
-4. **Implement.** `tdd-guide` writes the failing tests, then `coder` implements. Both get a 6-field brief per the
-   brief contract rule, and the FILES paths sit under the goal worktree. Commits go through `git-specialist`.
+3. **Plan.** If the `planner` agent is installed, dispatch to that agent with the goal worktree path. Otherwise the main agent loads the `planner` skill and writes the plan inline. Keep the plan in the log, not in chat.
+4. **Implement.** If `tdd-guide` is installed, dispatch to that agent to write the failing tests. Otherwise the main agent loads the `tdd` skill and writes them inline. If `coder` is installed, dispatch to that agent to implement. Otherwise the main agent loads the `coder` skill and implements inline. Both passes get a 6-field brief per the
+   brief contract rule, and the FILES paths sit under the goal worktree. If `git-specialist` is installed, commits go through that agent. Otherwise the main agent loads the `git-workflow` skill and commits inline.
 5. **Verify.** Run the verification yourself with `git -C <wt>` or in the worktree, not through a subagent's
    self-report. Commands are in [lifecycle.md](references/lifecycle.md#5-verify).
 5b. **Visual report.** After verify, follow the `pr-visual-report` skill. Commit `docs/pr-reports/<branch-slug>.html`
@@ -101,7 +101,7 @@ Check the mode with `agent-harness autonomy status`. The rules behind both modes
    needs a new review. This is separate from the outcome PNG in `docs/agent-reports/`.
 6. **Thorough review and fix (local).** Nothing is pushed yet. Dispatch in one message, so they run in parallel, each
    on `git diff <base>...HEAD`: `code-reviewer` (correctness), `security-reviewer` (auth, secrets, input, CI,
-   permissions), and the stack cop when it applies: `angular-cop` for Angular/TS, `dotnet-cop` for .NET.
+   permissions), and the stack cop when it applies. If `angular-cop` is installed, dispatch to that agent for Angular/TS. Otherwise dispatch to `cop` when that agent is installed (it loads the `angular-cop` skill). If `dotnet-cop` is installed, dispatch to that agent for .NET. Otherwise dispatch to `cop` when that agent is installed (it loads the `dotnet-cop` skill). If neither cop agent is installed, the main agent loads the matching skill and reviews inline.
    `database-reviewer` when SQL changed. Verify each finding against the code and drop the ones you cannot confirm.
    Record each verdict with `agent-harness goal review code pass|fail` and `agent-harness goal review security pass|fail`.
    Every confirmed Important finding is a blocker: fix it locally, re-run the local checks, then review again on the
@@ -113,7 +113,7 @@ Check the mode with `agent-harness autonomy status`. The rules behind both modes
    code and security review for the exact diff being pushed. Any change to that diff, including a rebase conflict
    resolution, needs a new review. A commit that touches only `docs/agent-reports/` does not. A commit that touches
    `docs/pr-reports/` does.
-7. **Push and open the PR.** Dispatch `git-specialist` to push the branch and open the PR, ready (not draft), with the
+7. **Push and open the PR.** If `git-specialist` is installed, dispatch to that agent to push the branch and open the PR, ready (not draft), with the
    body sections `## Content`, `## QA tests`, `## Locked decisions`, `## Non-blocking follow-ups`, and `## Visual report`.
    Put every assumption under `## Locked decisions`. Run `agent-harness pr-report-check --body-file` on the body file.
    Then `agent-harness goal pr <n>` and `agent-harness goal sha <sha>`. Right
@@ -128,7 +128,7 @@ Check the mode with `agent-harness autonomy status`. The rules behind both modes
    report in the fix commit before the re-review.
 9. **Wait for CI.** `gh pr checks <n> --watch`. On a failed check, use the `loop-on-ci` skill, which routes failures
    through the `fix-ci` skill. When the repo sets `reviewStatus`, also check that status on the head. On a failure,
-   fix the cause, re-review (stage 8), push through `git-specialist`, then `agent-harness goal sha <sha>`. Pipe the
+   fix the cause, re-review (stage 8), then push. If `git-specialist` is installed, dispatch to that agent for the push. Otherwise the main agent loads the `git-workflow` skill and pushes inline. Then `agent-harness goal sha <sha>`. Pipe the
    failing checks (`ci:<check>`) to `agent-harness goal bump` before each fix round. Exit 3 means the same failures
    repeated or the ceiling is hit: stop and tell the user the remaining findings.
 10. **Comments.** Run the `get-pr-comments` skill to list open threads. Address each one with a fix or a reply that

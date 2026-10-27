@@ -1,6 +1,6 @@
 ---
 description: Restate the last message in plain human language, with no jargon. Usage: /for-real
-agent: conductor
+agent: main
 ---
 
 # For Real Command

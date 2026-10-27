@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Monolith no longer dispatches to folded agents</title>
+<style>
+  :root {
+    --ink: #1c1915;
+    --muted: #5c564c;
+    --paper: #f6f1e7;
+    --card: #fffdf8;
+    --line: #e2d9c8;
+    --before: #8c3a2f;
+    --before-bg: #f8ebe6;
+    --after: #0f6e56;
+    --after-bg: #e7f4ef;
+    --warn: #8a5a12;
+    --warn-bg: #f8f0dc;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 16px/1.45 "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
+  }
+  main { max-width: 980px; margin: 0 auto; padding: 32px 20px 48px; }
+  h1 { font-size: 34px; line-height: 1.15; margin: 0 0 8px; }
+  h2 { font-size: 20px; margin: 28px 0 10px; }
+  p { margin: 0 0 12px; }
+  .lede { color: var(--muted); font-size: 18px; max-width: 42rem; }
+  .flow, .split, .stats { display: grid; gap: 12px; }
+  .flow { grid-template-columns: 1.2fr auto 1.2fr auto 1.2fr; align-items: stretch; margin-top: 22px; }
+  .split { grid-template-columns: 1fr 1fr; }
+  .stats { grid-template-columns: repeat(3, 1fr); }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .arrow { align-self: center; color: var(--muted); font-size: 22px; text-align: center; }
+  .kicker { font: 12px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .before { background: var(--before-bg); border-color: #e4c7bf; }
+  .after { background: var(--after-bg); border-color: #b7ddd2; }
+  .warn { background: var(--warn-bg); border-color: #ead7ae; }
+  code, .mono { font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font: 12px/1.2 ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+  tr:last-child td { border-bottom: 0; }
+  .to { color: var(--after); font-weight: 700; }
+  ul { margin: 8px 0 0; padding-left: 18px; }
+  .num { font-size: 28px; font-weight: 700; }
+  @media (max-width: 760px) {
+    h1 { font-size: 28px; }
+    .flow, .split, .stats { grid-template-columns: 1fr; }
+    .arrow { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+<main>
+  <p class="kicker">fmflurry-harness 0.4.21 · cursor/fix-monolith-dangling-agents-7992</p>
+  <h1>Monolith output stops naming agents it does not install.</h1>
+  <p class="lede">Conductor sources stay. The install transform remaps command targets, and shared skills tell the main agent to load the skill when the specialist is absent.</p>
+
+  <div class="flow">
+    <section class="card">
+      <div class="kicker">Source, unchanged</div>
+      <p><code>commands/plan.md</code> still says <code>agent: planner</code>. <code>.claude/commands/plan.md</code> still delegates with <code>subagent_type: planner</code>.</p>
+    </section>
+    <div class="arrow">→</div>
+    <section class="card">
+      <div class="kicker">apply-monolith</div>
+      <p><code>remapAgentName</code> plus <code>rewriteCommandTree</code>. Folded <code>agent:</code> values become <code>main</code>. <code>postgres-dba</code> becomes <code>database-reviewer</code>.</p>
+    </section>
+    <div class="arrow">→</div>
+    <section class="card after">
+      <div class="kicker">Four outputs scanned</div>
+      <p>Cursor plugin, Claude tree, OpenCode tree, and a project install. A removed name as <code>agent:</code>, <code>subagent_type</code>, or a dispatch target fails the check.</p>
+    </section>
+  </div>
+
+  <h2>Before and after</h2>
+  <div class="split">
+    <section class="card before">
+      <div class="kicker">Monolith 0.4.20</div>
+      <p><code>/plan</code> frontmatter: <code>agent: planner</code></p>
+      <p><code>/db-health</code> frontmatter: <code>agent: postgres-dba</code></p>
+      <p><code>/tdd</code> Claude line: <code>subagent_type: tdd-guide</code></p>
+      <p>Reviewers said the orchestrator dispatches fixes to <code>coder</code>.</p>
+    </section>
+    <section class="card after">
+      <div class="kicker">Monolith 0.4.21</div>
+      <p><code>/plan</code> frontmatter: <code>agent: main</code>. The main agent loads the <code>planner</code> skill.</p>
+      <p><code>/db-health</code> and <code>/db-backup-check</code>: <code>agent: database-reviewer</code>.</p>
+      <p>Claude delegation lines name the skill the main agent loads. <code>e2e-runner</code> stays.</p>
+      <p>If <code>coder</code> is installed, the orchestrator dispatches the fix. Otherwise the main agent applies it.</p>
+    </section>
+  </div>
+
+  <h2>Command targets remapped</h2>
+  <table>
+    <thead><tr><th>From</th><th>Commands</th><th>To</th></tr></thead>
+    <tbody>
+      <tr><td><code>conductor</code></td><td>ship, autonomous, verify, eval, why, blast-radius, chimera, fix-ci, loop-on-ci, show-your-work, interfectio-commentarum, for-real, setup-pm, checkpoint</td><td class="to">main</td></tr>
+      <tr><td><code>git-specialist</code></td><td>git, pr, push-changes, dependabot-friday, get-pr-comments, fix-merge-conflicts</td><td class="to">main</td></tr>
+      <tr><td><code>planner</code></td><td>plan, orchestrate</td><td class="to">main</td></tr>
+      <tr><td><code>tdd-guide</code></td><td>tdd, test-coverage</td><td class="to">main</td></tr>
+      <tr><td><code>doc-updater</code></td><td>update-docs, update-codemaps</td><td class="to">main</td></tr>
+      <tr><td><code>writer</code></td><td>show-me</td><td class="to">main</td></tr>
+      <tr><td><code>refactor-cleaner</code></td><td>refactor-clean</td><td class="to">main</td></tr>
+      <tr><td><code>gdpr-specialist</code></td><td>gdpr-review</td><td class="to">main</td></tr>
+      <tr><td><code>api-spec-architect</code></td><td>api-spec</td><td class="to">main</td></tr>
+      <tr><td><code>postgres-dba</code></td><td>db-health, db-backup-check</td><td class="to">database-reviewer</td></tr>
+    </tbody>
+  </table>
+  <p style="margin-top:10px;color:var(--muted)">Kept on <code>main</code>’s roster: code-reviewer, security-reviewer, build-error-resolver, e2e-runner, ecosystem-auditor, database-reviewer, cop, comment-judge. <code>/orchestrate</code> still loads the <code>conductor</code> skill.</p>
+
+  <h2>Skills that branch on install</h2>
+  <div class="card">
+    <p>If the specialist is installed, dispatch to it. Otherwise the main agent does the work and loads the skill.</p>
+    <ul>
+      <li><code>ship</code>, <code>fix-ci</code>, <code>git-workflow</code>, <code>brief-contract</code>, <code>agent-roster</code>, <code>treetopia</code>, <code>open-pr-check</code></li>
+      <li><code>postgres-health-check</code>, <code>postgres-container-ops</code>, <code>postgres-performance-tuning</code>, <code>blast-radius</code></li>
+      <li>Rules <code>testing</code> and <code>question-handling</code>, plus the OpenCode instruction copies</li>
+      <li><code>angular-cop</code> and <code>dotnet-cop</code> fall through to <code>cop</code>, then to the skill</li>
+    </ul>
+  </div>
+
+  <h2>Checks</h2>
+  <div class="stats">
+    <section class="card after"><div class="kicker">npm test</div><div class="num">202 pass</div><p>0 fail · 2 skipped (PowerShell)</p></section>
+    <section class="card after"><div class="kicker">cursor-plugin check</div><div class="num">OK</div><p>Monolith tree has no removed dispatch target</p></section>
+    <section class="card"><div class="kicker">Conductor</div><div class="num">same</div><p><code>commands/plan.md</code> still matches <code>planner</code></p></section>
+  </div>
+
+  <h2>Risk</h2>
+  <section class="card warn">
+    <p>A skill line that says “if installed, dispatch” is the Conductor path and the Monolith path in one sentence. Dropping the “if installed” half would make Conductor stop delegating, or would make the Monolith check fail. <code>comment-judge</code> stays installed. Revert is <code>git revert</code> of this patch; plugin version returns to 0.4.20.</p>
+  </section>
+</main>
+</body>
+</html>

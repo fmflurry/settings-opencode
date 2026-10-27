@@ -32,13 +32,16 @@ Located in `~/.claude/agents/` (project scope: `<project>/.claude/agents/`):
 | gdpr-specialist | GDPR compliance | Data protection review |
 | comment-judge | Comment judging | Judge/purge comments (read-only) |
 
+Folded agents are not installed on Monolith. If an agent in this table is not installed, the main agent loads that role's skill and does the work in this session. When `angular-cop` or `dotnet-cop` is not installed and `cop` is installed, dispatch to `cop` (it loads that skill).
+
 ## Immediate Agent Usage
 
-No user prompt needed:
-1. Complex feature requests - Use **planner** agent
-2. Code just written/modified - Use **code-reviewer** agent
-3. Bug fix or new feature - Use **tdd-guide** agent
-4. Architectural decision - Use **architect** agent
+No user prompt needed. If the named agent is installed, dispatch to it. Otherwise the main agent does the work inline and loads that role's skill.
+
+1. Complex feature requests — if `planner` is installed, dispatch to that agent. Otherwise the main agent loads the `planner` skill and plans inline.
+2. Code just written or modified — use the `code-reviewer` agent.
+3. Bug fix or new feature — if `tdd-guide` is installed, dispatch to that agent. Otherwise the main agent loads the `tdd` skill and writes the tests inline.
+4. Architectural decision — if `architect` is installed, dispatch to that agent. Otherwise the main agent loads the `architect` skill and does the design inline.
 
 ## Parallel Task Execution
 

@@ -1,12 +1,12 @@
 ---
 description: Open a pull request with the repo template, after reading REVIEW.md for the tag mapping
-agent: git-specialist
+agent: main
 subtask: true
 ---
 
 # /pr
 
-Open a pull request for the current branch. Delegate the git operations to `git-specialist`. Host detection, push, and creation follow `/create-pull-request`.
+Open a pull request for the current branch. `git-specialist` is not installed. The main agent does this inline and loads the `git-workflow` skill. Host detection, push, and creation follow `/create-pull-request`.
 
 ## REVIEW.md
 

@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseJsonc, splitFrontmatter, unquote } from '../cursor-plugin/lib.mjs';
+import { remapAgentName, rewriteCommandTree } from './dangling-agents.mjs';
 
 const args = process.argv.slice(2);
 
@@ -182,6 +183,7 @@ function applyClaude(dir) {
     write(command, read('variants/monolith/commands/orchestrate.md'));
   }
   copyRecursive(path.join(repo, 'variants/monolith/skills'), path.join(dir, 'skills'));
+  rewriteCommandTree(path.join(dir, 'commands'), manifest);
   console.log(`apply-monolith: claude ${dir}`);
 }
 
@@ -268,9 +270,8 @@ function applyOpencode(dir) {
   }
   cfg.agent = agents;
 
-  const stay = new Set([...manifest.keptAgents, ...manifest.overlayAgents, 'main']);
   for (const def of Object.values(cfg.command ?? {})) {
-    if (def && typeof def === 'object' && def.agent && !stay.has(def.agent)) def.agent = 'main';
+    if (def && typeof def === 'object' && typeof def.agent === 'string') def.agent = remapAgentName(def.agent, manifest);
   }
 
   write(configPath, `${JSON.stringify(cfg, null, 2)}\n`);
@@ -279,6 +280,7 @@ function applyOpencode(dir) {
     write(command, read('variants/monolith/commands/orchestrate.md'));
   }
   copyRecursive(path.join(repo, 'variants/monolith/skills'), path.join(dir, 'skills'));
+  rewriteCommandTree(path.join(dir, 'commands'), manifest);
   write(path.join(dir, '.harness-variant'), 'monolith\n');
   console.log(`apply-monolith: opencode ${dir}`);
 }

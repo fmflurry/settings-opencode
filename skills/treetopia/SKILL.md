@@ -63,7 +63,7 @@ worktree_create(branch: "fix/login-timeout")
 ## Tool-Use Guidance
 
 - Use `worktree_create` for worktree creation.
-- Use `git-specialist` for git-only operations when available, including merge, branch creation, branch deletion, status checks, and cleanup.
+- If `git-specialist` is installed, dispatch to that agent for git-only operations, including merge, branch creation, branch deletion, status checks, and cleanup. Otherwise the main agent loads the `git-workflow` skill and does those operations inline.
 - Ask before any destructive or shared-state action, including branch deletion, worktree deletion, force push, merge into shared branches, or overwriting files.
 - Do not auto-delete a worktree.
 - Do not auto-merge a branch.
@@ -82,7 +82,7 @@ When development in the worktree is finished:
    - Merge into another user-named target branch.
 3. If the user names a target branch that does not exist, offer to create it.
 4. Ask for explicit confirmation before performing merge, branch creation, branch deletion, or worktree deletion.
-5. After confirmation, use `git-specialist` for git-only operations when available.
+5. After confirmation, if `git-specialist` is installed, dispatch to that agent for git-only operations. Otherwise the main agent loads the `git-workflow` skill and does them inline.
 6. After merge or cleanup, report what changed and what remains.
 
 Suggested teardown prompt:

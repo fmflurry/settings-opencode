@@ -1,6 +1,6 @@
 ---
 description: Fetch and summarize review comments from the active pull request, grouped by tag and actionability. Usage: /get-pr-comments [PR]
-agent: git-specialist
+agent: main
 subtask: true
 ---
 

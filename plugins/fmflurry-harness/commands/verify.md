@@ -1,6 +1,6 @@
 ---
 description: Run verification loop to validate implementation
-agent: conductor
+agent: main
 ---
 
 # Verify Command

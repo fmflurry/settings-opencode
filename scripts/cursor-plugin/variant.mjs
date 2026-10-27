@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { claudeAgent, mdc, modelsSection, tierGuard, tierTable } from './lib.mjs';
+import { rewriteCommandTree } from '../variants/dangling-agents.mjs';
 
 export function normalizeVariant(value) {
   const text = String(value ?? '').trim().toLowerCase();
@@ -166,6 +167,7 @@ export function applyCursorMonolith(out, repo, config) {
     { description: 'Monolith: the primary agent writes. Optional /orchestrate.', alwaysApply: true },
     `${baseline}\n${modelsSection(installed)}`,
   ));
+  rewriteCommandTree(path.join(out, 'commands'), manifest);
   return installed;
 }
 

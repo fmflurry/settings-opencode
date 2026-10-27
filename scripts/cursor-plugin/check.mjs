@@ -10,6 +10,7 @@ import {
   parseSemver,
   pluginSourcePaths,
 } from './version-guard.mjs';
+import { formatHits, scanMonolithTree } from '../variants/dangling-agents.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const out = path.resolve(here, '../../plugins/fmflurry-harness');
@@ -122,6 +123,11 @@ if (variant === 'monolith') {
     ? fs.readFileSync(path.join(agentsDir, 'comment-judge.md'), 'utf8')
     : '';
   if (!/persona=haruspex|haruspex/.test(judgeText)) errors.push('agents/comment-judge.md must cover the haruspex persona');
+  const manifest = JSON.parse(fs.readFileSync(path.resolve(here, '../../variants/monolith/manifest.json'), 'utf8'));
+  const dangling = scanMonolithTree(out, manifest);
+  if (dangling.length) {
+    errors.push(`monolith output still dispatches to a removed agent:\n${formatHits(dangling)}`);
+  }
 }
 if (variant === 'conductor') {
   if (!fs.existsSync(path.join(agentsDir, 'coder.md'))) errors.push('conductor plugin is missing agents/coder.md');

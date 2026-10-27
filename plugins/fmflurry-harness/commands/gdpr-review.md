@@ -1,12 +1,12 @@
 ---
 description: Audit the codebase (or a given path/feature) for GDPR compliance and produce a prioritized findings report
-agent: gdpr-specialist
+agent: main
 subtask: true
 ---
 
 # GDPR Compliance Review Command
 
-Delegate to the `gdpr-specialist` agent to conduct a comprehensive GDPR/data-protection compliance audit.
+`gdpr-specialist` is not installed. The main agent does this inline and loads the `gdpr-compliance` skill to conduct a comprehensive GDPR/data-protection compliance audit.
 
 ## Task
 

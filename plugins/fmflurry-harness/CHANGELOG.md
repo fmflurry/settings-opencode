@@ -2,6 +2,12 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.23] - 2026-10-27
+
+- `agent-harness kpi feature` reports one feature (repo + branch, and the PR number once known): wall time, active time with gaps over 5 minutes excluded, sessions per host, top tools and skills, calls per agent, tool failures and durations, guard blocks, review and fix rounds, and tokens when the host sent them.
+- The command writes a sanitised `docs/pr-reports/<slug>.metrics.json` with no prompts, arguments, or absolute paths. `pr-report` inserts that file as a Metrics panel in the show-me HTML and a short table in the PR body. `pr-report-check` warns when the metrics are missing or partial and still accepts a valid visual report.
+- Conductor and Monolith both run `kpi feature` before rendering the visual report.
+
 ## [0.4.22] - 2026-10-27
 
 - KPI lines record a sanitised `skill` (`^[a-z0-9:-]{1,64}$`) when the tool is Skill, and `agent` (`subagent_type`) on Task/Agent calls and on subagent spawn and stop. Claude reads the agent from the transcript when SubagentStop omits it. OpenCode uses the child session's parent and agent.

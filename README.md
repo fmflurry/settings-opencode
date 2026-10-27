@@ -51,7 +51,11 @@ Les hooks de session, d'arrêt, de sous-agent, les gardes PreToolUse, `PostToolU
 agent-harness kpi report --since 30d --by variant
 agent-harness kpi report --json
 agent-harness kpi report --html > /tmp/kpi.html
+agent-harness kpi feature
+agent-harness kpi feature --pr 53 --json
 ```
+
+`agent-harness kpi feature` résume une branche (dépôt + branche, et le numéro de PR dès qu'un événement le porte). Le rapport donne la durée murale, le temps actif hors pauses de plus de 5 minutes, les sessions par hôte, les outils et skills, les appels par agent (`main` et chaque sous-agent), les échecs et durées, les gardes, les tours de revue et de correctif, et les jetons quand l'hôte les a envoyés (`n/a` sinon). La commande écrit `docs/pr-reports/<slug>.metrics.json` sans prompt, argument, ni chemin absolu. Conductor et Monolith lancent cette commande avant le HTML du rapport de PR. `pr-report` insère le panneau Metrics dans le HTML et un tableau `## Metrics` dans le corps. `pr-report-check` avertit si les métriques manquent ou sont partielles, sans faire échouer le contrôle visuel.
 
 Le tableau met Conductor à côté de Monolith : tâches, jetons par tâche quand ils sont connus, durée, appels d'outils, tours de revue par PR, premier passage CI, findings Important par PR, blocages des gardes, taux de revert sur 7 jours, temps de merge. Les effectifs sont affichés. Sous 5 tâches ou sous 3 PR, le rapport dit que l'échantillon est trop petit pour conclure. Les colonnes de PR viennent de `git` et `gh` en lecture seule. Si `gh` ne répond pas, ces colonnes restent vides (`--no-live` saute l'appel).
 

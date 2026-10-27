@@ -11,10 +11,11 @@ Every pull request the harness opens or updates includes one show-me report, unl
 
 ## Produce it
 
-1. Write one self-contained HTML file. Follow the `show-me` skill: no network assets, real names from this change, at least one `@media` breakpoint, and the smallest diagram or infographic that explains the change. Cover the before/after or the flow, the main files, the test results, and the risks.
-2. Run `agent-harness pr-report <html>`. It writes `docs/pr-reports/<branch-slug>.html` and `.png`, replacing `/` in the branch name with `-`. When `/opt/cursor/artifacts` is writable, or `PR_REPORT_ARTIFACT_DIR` is set, it also copies both files to `<artifacts>/pr-reports/`.
-3. Commit both files on the PR branch before opening or updating the PR. Commit them before the local review when a review gate is on: `docs/pr-reports/` is part of the reviewed diff. The outcome PNG under `docs/agent-reports/` is a different file and stays exempt.
-4. Put `## Visual report` in the body. Check the report line. Embed the PNG and link the HTML. The link must contain `docs/pr-reports/<branch-slug>.html`. On a cloud agent, also embed `<img alt="Visual report" src="/opt/cursor/artifacts/pr-reports/<branch-slug>.png">` so the host uploads the artifact.
+1. Run `agent-harness kpi feature` before rendering the HTML. Conductor and Monolith both do this. Add `--branch` or `--pr` when the report is not for the current branch. The command writes a sanitised `docs/pr-reports/<branch-slug>.metrics.json` (repo, branch, and the PR number once known). It has wall time, active time, sessions per host, tools, skills, calls per agent, tool failures and durations, guard blocks, review and fix rounds, and tokens. Tokens are `n/a` when the host did not send them. The file has no prompts, arguments, or absolute paths.
+2. Write one self-contained HTML file. Follow the `show-me` skill: no network assets, real names from this change, at least one `@media` breakpoint, and the smallest diagram or infographic that explains the change. Cover the before/after or the flow, the main files, the test results, and the risks.
+3. Run `agent-harness pr-report <html>`. It reads the metrics file when present, inserts a Metrics panel into the HTML, and writes `docs/pr-reports/<branch-slug>.html`, `.png`, and `.metrics.json`, replacing `/` in the branch name with `-`. When `/opt/cursor/artifacts` is writable, or `PR_REPORT_ARTIFACT_DIR` is set, it also copies the files to `<artifacts>/pr-reports/`.
+4. Commit the HTML, the PNG, and the metrics JSON on the PR branch before opening or updating the PR. Commit them before the local review when a review gate is on: `docs/pr-reports/` is part of the reviewed diff. The outcome PNG under `docs/agent-reports/` is a different file and stays exempt.
+5. Put `## Visual report` in the body. Check the report line. Embed the PNG and link the HTML. The link must contain `docs/pr-reports/<branch-slug>.html`. On a cloud agent, also embed `<img alt="Visual report" src="/opt/cursor/artifacts/pr-reports/<branch-slug>.png">` so the host uploads the artifact. Under that section, or as `## Metrics`, paste the small table `pr-report` prints.
 
 ```markdown
 ## Visual report
@@ -24,7 +25,24 @@ Every pull request the harness opens or updates includes one show-me report, unl
 ![Visual report](docs/pr-reports/feat-example.png)
 
 [HTML report](docs/pr-reports/feat-example.html)
+
+## Metrics
+
+| Metric | Value |
+| --- | --- |
+| Wall | 12m |
+| Active | 9m (gaps over 5m excluded) |
+| Sessions | cursor 1, claude 0, opencode 0 |
+| Tokens | n/a |
+| Tool failures | 0 |
+| Guard blocks | 0 |
+| Review rounds | 1 |
+| Fix rounds | 0 |
+
+Status: complete
 ```
+
+The numbers in the example are the shape. Paste the table from `kpi feature` or from `pr-report`, not these sample numbers.
 
 ## Skip
 
@@ -45,3 +63,5 @@ agent-harness pr-report-check --body-file <body.md>
 ```
 
 Pass the body with `--body-file` or one quoted `--body` / `--description`. A command substitution in that argument is blocked. The hook reads the same rules and denies the command when the section is missing or incomplete. A title-only `gh pr edit` is left alone.
+
+`pr-report-check` warns on stderr when `## Metrics` is missing, or when wall or active time is `n/a` or the table is partial. Tokens may be `n/a`. The warning does not fail the check. A checked Skip line does not warn.

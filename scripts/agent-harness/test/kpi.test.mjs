@@ -51,7 +51,7 @@ test('kpi-emit appends a stamped event and drops prompt text', () => {
   assert.equal(lines[0].tool_name, 'Bash');
   assert.equal(lines[0].session_id, 'sess-1');
   assert.equal(lines[0].tokens, null);
-  assert.equal(lines[0].harness_version, '0.4.22');
+  assert.equal(lines[0].harness_version, '0.4.23');
   assert.match(lines[0].ts, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(JSON.stringify(lines[0]).includes('super-secret-token'), false);
   assert.equal(JSON.stringify(lines[0]).includes('tool_input'), false);
@@ -99,7 +99,7 @@ test('kpi-emit records Claude token totals and leaves Cursor tokens null', () =>
 test('version stamp matches the cursor plugin', () => {
   const config = JSON.parse(fs.readFileSync(path.join(repo, 'scripts/cursor-plugin/config.json'), 'utf8'));
   const script = fs.readFileSync(emit, 'utf8');
-  assert.equal(config.version, '0.4.22');
+  assert.equal(config.version, '0.4.23');
   assert.match(script, new RegExp(`AGENT_HARNESS_VERSION:-${config.version}`));
 });
 
@@ -514,7 +514,7 @@ test('hooks are registered for Claude, Cursor, OpenCode, and project installs', 
 
 test('report tolerates skill, agent, and tool_result fields', () => {
   const base = {
-    variant: 'conductor', tool: 'cursor', repo: 'o/r', branch: 'feat', tokens: null, harness_version: '0.4.22',
+    variant: 'conductor', tool: 'cursor', repo: 'o/r', branch: 'feat', tokens: null, harness_version: '0.4.23',
   };
   const events = [
     { ...base, ts: '2026-10-20T00:00:00Z', kind: 'session_start', session_id: 's', skill: 'fix-ci' },

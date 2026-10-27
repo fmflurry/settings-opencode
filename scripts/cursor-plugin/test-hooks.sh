@@ -77,6 +77,13 @@ check "stop output" "$(jq -c . <<<"$out")" '{}'
 out="$(adapter subagent-stop.sh subagentStop < "$fixtures/subagent-stop.json")"; rc=$?
 check "subagentStop exit" "$rc" "0"
 check "subagentStop output" "$(jq -c . <<<"$out")" '{}'
+out="$(AGENT_HARNESS_TEST=1 adapter kpi-emit.sh postToolUse < "$fixtures/post-tool-use.json")"; rc=$?
+check "postToolUse exit" "$rc" "0"
+check "postToolUse output" "$(jq -c . <<<"$out")" '{}'
+check "postToolUse hides the tool output" "$(grep -c SUPER_SECRET_OUTPUT <<<"$out" || true)" "0"
+out="$(printf 'not json' | AGENT_HARNESS_TEST=1 adapter kpi-emit.sh postToolUse)"; rc=$?
+check "malformed stdin postToolUse: exit 0" "$rc" "0"
+check "malformed stdin postToolUse: empty object" "$(jq -c . <<<"$out")" '{}'
 
 cat > "$work/ask-hook.sh" <<'HOOK'
 #!/bin/sh

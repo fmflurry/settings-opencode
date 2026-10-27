@@ -1427,6 +1427,7 @@ merge_agent_harness_settings() {
         .hooks = ((.hooks // {}) | with_entries(.value |= (if type == "array" then map(if (.hooks | type) == "array" then .hooks |= map(bashify) else . end) else . end)))
         | addhook("SessionStart"; ""; "bash " + $h + "/autonomy-context.sh")
         | addhook("SessionStart"; ""; "bash " + $h + "/kpi-emit.sh")
+        | addhook("PostToolUse"; ""; "bash " + $h + "/kpi-emit.sh")
         | addhook("UserPromptSubmit"; ""; "bash " + $h + "/autonomy-context.sh")
         | addhook("PreToolUse"; "AskUserQuestion"; "bash " + $h + "/autonomy-ask-guard.sh")
         | addhook("PreToolUse"; "Bash"; "bash " + $h + "/autonomy-git-guard.sh")

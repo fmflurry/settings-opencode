@@ -1,6 +1,6 @@
 ---
 description: Save verification state and progress checkpoint
-agent: conductor
+agent: main
 ---
 
 # Checkpoint Command

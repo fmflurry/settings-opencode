@@ -19,14 +19,14 @@ MANDATORY workflow:
 
 ## Troubleshooting Test Failures
 
-1. Use **tdd-guide** agent
+1. If the `tdd-guide` agent is installed, dispatch to that agent. Otherwise the main agent loads the `tdd` skill and does the troubleshooting inline.
 2. Check test isolation
 3. Verify mocks are correct (unit/integration tests only; E2E tests run against real services)
 4. Fix implementation, not tests (unless tests are wrong)
 
 ## Agent Support
 
-- **tdd-guide** - Use PROACTIVELY for new features, enforces write-tests-first
+- If the `tdd-guide` agent is installed, dispatch to that agent for new features (write-tests-first). Otherwise the main agent loads the `tdd` skill and does that work inline.
 
 ## Shape
 

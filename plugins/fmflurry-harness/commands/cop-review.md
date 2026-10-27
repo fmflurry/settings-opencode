@@ -65,7 +65,7 @@ The review report is saved as a static HTML file under `docs/code-review/` — o
 - Path: `docs/code-review/<topic>-remediation.html` (e.g. `docs/code-review/sales-remediation.html` for a Sales bounded-context review).
 - Create the `docs/code-review/` directory if it does not exist.
 - Use a `<topic>` that names the branch or the area under review (kebab-case); append `-remediation` when the report tracks fixes to prior findings.
-- This applies to every `/cop-review` run (.NET via `dotnet-cop`, Angular via `angular-cop`, or both).
+- This applies to every `/cop-review` run for .NET and Angular. If `dotnet-cop` or `angular-cop` is installed, that agent reviews its stack. Otherwise dispatch to `cop` when that agent is installed (it loads the matching skill). Otherwise the main agent loads the matching skill and reviews inline.
 
 ## Output Contract
 

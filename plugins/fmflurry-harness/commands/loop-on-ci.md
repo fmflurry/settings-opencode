@@ -1,6 +1,6 @@
 ---
 description: Monitor PR checks until green — watch required checks, fix failures via fix-ci, iterate until all pass. Capped at 5 iterations. Usage: /loop-on-ci [branch|PR]
-agent: conductor
+agent: main
 ---
 
 # Loop on CI Command

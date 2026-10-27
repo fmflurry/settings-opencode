@@ -1,12 +1,12 @@
 ---
 description: Dependabot Friday triage — inventory open Dependabot PRs, check CI and ignore guardrails, produce a report-only merge plan (no merge without explicit user OK)
-agent: git-specialist
+agent: main
 subtask: true
 ---
 
 # Dependabot Friday Command
 
-Delegate to the `git-specialist` agent for a **report-only** triage of all open Dependabot PRs. This command never merges, closes, rebases, or comments — every mutation is emitted as a `⚠️ HUMAN CONFIRMATION REQUIRED` block and executed only after explicit user approval.
+`git-specialist` is not installed. The main agent does this inline and loads the `git-workflow` skill for a **report-only** triage of all open Dependabot PRs. This command never merges, closes, rebases, or comments — every mutation is emitted as a `⚠️ HUMAN CONFIRMATION REQUIRED` block and executed only after explicit user approval.
 
 ## Task
 

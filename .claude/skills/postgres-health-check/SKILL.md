@@ -155,7 +155,7 @@ SELECT pg_cancel_backend(<pid>);
 SELECT pg_terminate_backend(<pid>);
 ```
 
-App-side fix (uncommitted transactions, missing `await using` on transactions) → dispatch `coder` via conductor.
+App-side fix (uncommitted transactions, missing `await using` on transactions): if `coder` is installed, dispatch to that agent. Otherwise the main agent loads the `coder` skill and applies the fix inline.
 
 ---
 
@@ -176,7 +176,7 @@ ORDER BY pg_relation_size(s.indexrelid) DESC;
 
 **Severity:** MEDIUM (large unused indexes on write-heavy tables); LOW otherwise.
 
-**Remediation:** dropping an index defined in an EF Core migration is a **code change** → recommend `database-reviewer` (review) + `coder` (migration). Ad-hoc drop, if ever:
+**Remediation:** dropping an index defined in an EF Core migration is a **code change**. `database-reviewer` reviews it. If `coder` is installed, dispatch to that agent for the migration. Otherwise the main agent loads the `coder` skill and writes the migration inline. Ad-hoc drop, if ever:
 
 ⚠️ HUMAN CONFIRMATION REQUIRED
 

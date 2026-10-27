@@ -9,6 +9,13 @@ Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cur
 - Tokens: OpenCode sums input and output from `message.updated` onto the session end or the subagent stop. Claude sums input and output from the stop transcript (8 MiB cap). Cursor leaves `tokens` null. Prompts, arguments, and absolute paths stay out of the log. `AGENT_HARNESS_KPI=0` still disables writes.
 - The field list is `docs/kpi-events.md`.
 
+## [0.4.21] - 2026-10-27
+
+- Monolith command output remaps `agent:` frontmatter that named a folded agent to `main`. `postgres-dba` commands remap to `database-reviewer`. Claude `subagent_type` delegation lines in those commands are rewritten the same way. Conductor sources are unchanged.
+- Skills and rules that named a folded agent as a dispatch target now say: if that agent is installed, dispatch to it; otherwise the main agent does the work inline and loads the matching skill (`planner`, `tdd`, `coder`, `git-workflow`, `architect`, and the rest of the fold). `cop` stands in for `angular-cop` and `dotnet-cop` when those agents are absent.
+- `code-reviewer`, `security-reviewer`, and `build-error-resolver` say the main agent applies the fixes when `coder` is not installed.
+- `node scripts/cursor-plugin/check.mjs` and `scripts/variants/dangling-agents.test.mjs` build Monolith for the Cursor plugin, Claude, OpenCode, and a project install, and fail if a removed agent is still an `agent:`, `subagent_type`, or dispatch target. Lists of folded agents that are not installed, and the `conductor` skill loaded by `/orchestrate`, stay allowed.
+
 ## [0.4.20] - 2026-10-27
 
 - `./install.sh --local` applies a project-owned `.harness-local/` directory on top of the vendored `.claude/`, `.opencode/`, `AGENTS.md`, `.cursor/`, and `.agents` trees. Overlay files win. The installer never creates, edits, or deletes `.harness-local/`. Conductor and Monolith both do this. A local install with no variant stays Monolith.

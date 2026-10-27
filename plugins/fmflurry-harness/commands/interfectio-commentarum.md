@@ -1,6 +1,6 @@
 ---
 description: Spawn Haruspex Commentorum, fix accepted comment findings, and offer encodings for claimed constraints. Usage: /interfectio-commentarum [path|diff]
-agent: conductor
+agent: main
 ---
 
 # Interfectio Commentarum Command

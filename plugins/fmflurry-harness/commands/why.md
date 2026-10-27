@@ -1,6 +1,6 @@
 ---
 description: Investigate why code is shaped the way it is — design rationale, regressions, postmortems, data-backed thresholds — by querying historical-evidence MCPs in parallel and returning a cited read on decisions and tradeoffs. Usage: /why <question>
-agent: conductor
+agent: main
 ---
 
 # Why Command

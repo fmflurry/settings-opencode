@@ -69,8 +69,8 @@ From this analysis, build a job → repro command → owner map. Examples per te
 | TS/Angular/Node | `npx tsc --noEmit` | build-error-resolver |
 | Node linting | `npm run lint` or `pnpm run lint` | build-error-resolver |
 | .NET build | `dotnet build --nologo -clp:ErrorsOnly` | build-error-resolver |
-| .NET test | `dotnet test` | tdd-guide or coder |
-| Node tests | `npm test` or `pnpm test` | tdd-guide or coder |
+| .NET test | `dotnet test` | If `tdd-guide` or `coder` is installed, dispatch to that agent. Otherwise the main agent loads the `tdd` or `coder` skill and fixes it inline |
+| Node tests | `npm test` or `pnpm test` | If `tdd-guide` or `coder` is installed, dispatch to that agent. Otherwise the main agent loads the `tdd` or `coder` skill and fixes it inline |
 | E2E (Playwright, Cypress, etc.) | `npm run e2e` (or project-specific) | e2e-runner |
 | Secret scanning (gitleaks) | Workflow log excerpt | **STOP**, security-reviewer; rotate any exposed secret |
 | SAST/Security scanner (opengrep, SonarQube, etc.) | Check logs | security-reviewer |
@@ -88,7 +88,7 @@ Determine the failure type and delegate appropriately:
 | Failure Type | Route | Notes |
 |---|---|---|
 | Build, typecheck, lint (tsc, eslint, prettier, dotnet build, etc.) | build-error-resolver | Minimal fix, verify with same command locally |
-| Unit tests or integration tests failing | tdd-guide or coder | Fix the test or implementation; do not disable tests |
+| Unit tests or integration tests failing | If `tdd-guide` or `coder` is installed, dispatch to that agent. Otherwise the main agent loads the `tdd` or `coder` skill and fixes it inline | Fix the test or implementation; do not disable tests |
 | Comment gate, permissions, branch naming | Ask human | Inspect the workflow output for the gate rule |
 | gitleaks (leaked secrets) | **STOP**, security-reviewer | Never allowlist; rotate the secret; abort immediately |
 | opengrep / SAST security scanner | security-reviewer | Severity-based routing |
@@ -100,7 +100,7 @@ Determine the failure type and delegate appropriately:
 After a fix is merged locally:
 
 1. Stage relevant files and create a commit (or squash into an existing one per git-workflow conventions).
-2. Push to the branch (via git-specialist, normal push, no force).
+2. Push to the branch (normal push, no force). If `git-specialist` is installed, dispatch to that agent. Otherwise the main agent loads the `git-workflow` skill and pushes inline.
 3. Re-run `gh pr checks --json …` to see the updated check set.
 4. If all checks are green, report success.
 5. If new failures appear, repeat from step 2 (root cause diagnosis).
@@ -110,7 +110,7 @@ After a fix is merged locally:
 - **Never edit workflows** (`.github/workflows/*.yml`, `azure-pipelines.yml`) without explicit human consent. Workflow changes are infrastructure; they belong in a separate PR.
 - **Never disable or skip tests.** If a test is failing legitimately, fix the code, not the test.
 - **Never use `--no-verify`** to bypass hooks.
-- **Routing is mandatory.** Do not attempt to fix build errors, tests, or security issues directly; dispatch to the appropriate specialist.
+- **Routing is mandatory when the specialist is installed.** If the agent for that failure is installed, dispatch to that agent. Otherwise the main agent loads the matching skill and fixes the failure inline. Do not disable tests.
 
 ## Output
 

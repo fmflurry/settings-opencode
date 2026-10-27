@@ -1,12 +1,12 @@
 ---
 description: Audit PostgreSQL backup/restore posture (archiving, pg_stat_archiver, dumps, volume persistence) and emit advisory setup commands for human execution
-agent: postgres-dba
+agent: database-reviewer
 subtask: true
 ---
 
 # DB Backup Check Command
 
-Delegate to the `postgres-dba` agent to audit this repository's PostgreSQL backup/restore posture (`gc-platform-postgres`, `postgres:16-alpine`).
+Delegate to the `database-reviewer` agent to audit this repository's PostgreSQL backup/restore posture (`gc-platform-postgres`, `postgres:16-alpine`).
 
 ## Task
 
@@ -18,7 +18,7 @@ Load the `postgres-backup-restore` skill and audit:
 - **Volume persistence?** `docker volume inspect postgres-data` — data must sit on the named volume at `/var/lib/postgresql/data`
 - **PITR possible today?** base backup + WAL archive present, or not (PG16 has NO native incremental backups)
 
-Produce a **gap report** (CRITICAL → HIGH → MEDIUM → LOW) and **advisory setup commands** — archiving enablement, `pg_dump`/`pg_basebackup` recipes, PITR recovery steps — each as a `⚠️ HUMAN CONFIRMATION REQUIRED` block. Compose changes are recommended as handoffs to `coder` via the conductor. Nothing is executed.
+Produce a **gap report** (CRITICAL → HIGH → MEDIUM → LOW) and **advisory setup commands** — archiving enablement, `pg_dump`/`pg_basebackup` recipes, PITR recovery steps — each as a `⚠️ HUMAN CONFIRMATION REQUIRED` block. Compose changes are recommended as handoffs. If `coder` is installed, hand the repo change to that agent. Otherwise the main agent loads the `coder` skill and writes it inline. Nothing is executed.
 
 ## Scope
 
@@ -29,7 +29,7 @@ $ARGUMENTS
 
 ## Output Format
 
-Return the structured report per the `postgres-dba` agent specification:
+Return the structured report per the `database-reviewer` agent specification:
 
 - **Severity tiers:** CRITICAL → HIGH → MEDIUM → LOW
 - **Evidence:** exact query/command + observed values per finding

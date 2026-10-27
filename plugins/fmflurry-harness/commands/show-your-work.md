@@ -1,6 +1,6 @@
 ---
 description: Keep a reviewable TSV decision trail for long-running or unattended work. Usage: /show-your-work [task-slug]
-agent: conductor
+agent: main
 ---
 
 # Show Your Work Command

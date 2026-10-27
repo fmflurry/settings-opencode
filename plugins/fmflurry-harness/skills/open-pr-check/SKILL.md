@@ -9,7 +9,7 @@ why-not-tooled: overlap with an open PR is a judgment about topic and files, not
 
 Why: an implementation once duplicated an open PR from another maintainer or co-owner (a license proposal) because nobody looked at open PRs first.
 
-Before implementing a change, and before opening a new PR, check the open PRs. This applies to a `/ship` goal and to any `coder`, `tdd-guide` or `writer` dispatch that changes repo files.
+Before implementing a change, and before opening a new PR, check the open PRs. This applies to a `/ship` goal and to file edits. If `coder`, `tdd-guide`, or `writer` is installed, run the check before handing work to that agent. Otherwise the main agent runs the check before editing inline.
 
 1. **List open PRs.**
    `gh pr list --state open --limit 100 --json number,title,author,headRefName,isDraft,updatedAt,files`

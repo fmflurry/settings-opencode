@@ -1,6 +1,6 @@
 ---
 description: Resolve merge conflicts via rebase, validate build and tests, and finalize with a backup branch — linear history, never force-push without explicit consent. Usage: /fix-merge-conflicts
-agent: git-specialist
+agent: main
 subtask: true
 ---
 

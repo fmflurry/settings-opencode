@@ -4,7 +4,7 @@ description: Generate Zalando-compliant OpenAPI 3.1 specs (one per bounded conte
 
 # API Spec Command
 
-Routing to the `api-spec-architect` subagent is handled by the `agent:` field on this command in `opencode.jsonc` — no manual delegation needed.
+`api-spec-architect` is not installed. The main agent does this inline and loads the `api-spec-openapi` skill.
 
 Generate and publish OpenAPI 3.1 specifications for: $ARGUMENTS
 

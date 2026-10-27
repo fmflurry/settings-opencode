@@ -50,7 +50,7 @@ test('kpi-emit appends a stamped event and drops prompt text', () => {
   assert.equal(lines[0].tool_name, 'Bash');
   assert.equal(lines[0].session_id, 'sess-1');
   assert.equal(lines[0].tokens, null);
-  assert.equal(lines[0].harness_version, '0.4.20');
+  assert.equal(lines[0].harness_version, '0.4.21');
   assert.match(lines[0].ts, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(JSON.stringify(lines[0]).includes('super-secret-token'), false);
   assert.equal(JSON.stringify(lines[0]).includes('tool_input'), false);
@@ -84,7 +84,7 @@ test('kpi-emit records host token totals and ignores the test log when no path i
 test('version stamp matches the cursor plugin', () => {
   const config = JSON.parse(fs.readFileSync(path.join(repo, 'scripts/cursor-plugin/config.json'), 'utf8'));
   const script = fs.readFileSync(emit, 'utf8');
-  assert.equal(config.version, '0.4.20');
+  assert.equal(config.version, '0.4.21');
   assert.match(script, new RegExp(`AGENT_HARNESS_VERSION:-${config.version}`));
 });
 

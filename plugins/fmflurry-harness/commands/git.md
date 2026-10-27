@@ -1,6 +1,6 @@
 ---
 description: Handle git tasks with enforced branch and commit naming conventions
-agent: git-specialist
+agent: main
 subtask: true
 ---
 
@@ -39,7 +39,7 @@ Allowed types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
 `scope` is required for branches. If it is ambiguous, ask one short question before creating the branch.
 `scope` must be a single lowercase token with letters and numbers only. The first `-` after `/` separates `scope` from `short-description`.
 
-3. Use `git-specialist` workflow:
+3. `git-specialist` is not installed. The main agent does this inline and loads the `git-workflow` skill:
 
 - inspect repository state first
 - use a compliant branch name for branch operations

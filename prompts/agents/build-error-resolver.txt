@@ -160,10 +160,10 @@ npx eslint . --fix
 
 ## When NOT to Use
 
-- Code needs refactoring → use `refactor-cleaner`
-- Architecture changes needed → use `architect`
-- New features required → use `planner`
-- Tests failing → use `tdd-guide`
+- Code needs refactoring → if `refactor-cleaner` is installed, dispatch to that agent. Otherwise the main agent loads the `refactor-cleaner` skill and does it inline.
+- Architecture changes needed → if `architect` is installed, dispatch to that agent. Otherwise the main agent loads the `architect` skill and does it inline.
+- New features required → if `planner` is installed, dispatch to that agent. Otherwise the main agent loads the `planner` skill and does it inline.
+- Tests failing → if `tdd-guide` is installed, dispatch to that agent. Otherwise the main agent loads the `tdd` skill and does it inline.
 - Security issues → use `security-reviewer`
 
 ---

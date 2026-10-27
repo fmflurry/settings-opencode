@@ -68,7 +68,7 @@ ORDER BY a.xact_start NULLS LAST;
    SELECT indexrelid::regclass, indisvalid FROM pg_index WHERE indexrelid = '<schema>.<index_name>'::regclass;
    ```
 
-   Then the EF migration records the index in the model **without** re-creating it (so the model and the live schema agree) — that wiring is a code decision for `database-reviewer`/`coder`.
+   Then the EF migration records the index in the model **without** re-creating it (so the model and the live schema agree). That wiring is a code decision for `database-reviewer`. If `coder` is installed, dispatch to that agent for the change. Otherwise the main agent loads the `coder` skill and does the wiring inline.
 
 2. **Suppress the migration transaction** so the concurrent build can run in `Up()` — ⚠️ the mechanism is EF-version-specific; confirm the repo's version supports per-migration suppression before recommending it. If unsupported, fall back to pattern 1.
 
@@ -119,7 +119,7 @@ dotnet ef migrations list --project <path-to-ef-project>
 
 ⚠️ `has-pending-model-changes` reports model changes lacking a migration; it needs the EF Core CLI matching the repo's major version (the command itself is EF Core 8+). If the CLI errors with "unrecognized command", the repo's `dotnet-ef` tool is older — fall back to `migrations list` and a manual model diff. Confirm exact availability before relying on it.
 
-**Interpretation for audits:** pending model changes on a deployed service = the running schema lags the code's expectations (a future deploy will apply them — assess their locks per §1 before that deploy). This is a *signal*, not a defect: code-side resolution (generate/review the migration) is `database-reviewer` + `coder` work.
+**Interpretation for audits:** pending model changes on a deployed service = the running schema lags the code's expectations (a future deploy will apply them — assess their locks per §1 before that deploy). This is a *signal*, not a defect: code-side resolution is a `database-reviewer` review plus the migration change. If `coder` is installed, dispatch to that agent for the change. Otherwise the main agent loads the `coder` skill and writes it inline.
 
 **Severity:** MEDIUM (unreviewed pending model changes on a service heading toward a deploy); LOW (expected mid-development drift).
 

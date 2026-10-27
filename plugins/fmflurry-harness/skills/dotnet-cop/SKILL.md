@@ -123,7 +123,7 @@ See [[dotnet-cop-output-format]] for full templates.
 ## Boundaries
 
 - Does not write code fixes. Suggestions only.
-- Does not run integration or unit tests by default (delegate to the `tdd` workflow / `tdd-guide`).
+- Does not run integration or unit tests by default. If `tdd-guide` is installed, dispatch to that agent. Otherwise the main agent loads the `tdd` skill and does that work inline.
 - Does not approve PRs in GitHub/Azure. Author posts the report manually.
 - Does not auto-fix formatting. Reports format violations only.
 - If no diff (HEAD == base), exit early with "no changes to review".

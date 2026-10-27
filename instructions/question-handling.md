@@ -23,11 +23,13 @@ Tag in output: `## Blocker: <question>`
 Format: `[NON-BLOCKING] <question>  (default: <what agent assumed>)`
 Tag in output: `## Note: <question> (assumed: <default>)`
 
-## Conductor Protocol
+## Question protocol
+
+If the specialist agent that asked is installed, the conductor re-dispatches to that agent. Otherwise the main agent does the same steps inline.
 
 ### On receiving blocking question:
 1. Attempt self-resolution: check repo (CodeMemory when it is on, otherwise grep/read; `codememory_claims` only when CodeMemory is on)
-2. If resolvable → answer it, re-dispatch with answer folded into brief
+2. If resolvable → answer it. If that specialist agent is installed, re-dispatch to that agent with the answer folded into the brief. Otherwise continue in this session with the answer.
 3. If NOT resolvable → `ask` tool immediately
 
 ### On receiving non-blocking question:
@@ -42,8 +44,8 @@ Tag in output: `## Note: <question> (assumed: <default>)`
    ## Questions Collected During Execution
    | # | From | Question | Assumed Default |
    |---|------|----------|-----------------|
-   | 1 | coder | Use fetch or axios? | axios |
-   | 2 | planner | Phase 2 needed before Phase 3? | Yes |
+   | 1 | implementing session | Use fetch or axios? | axios |
+   | 2 | planning session | Phase 2 needed before Phase 3? | Yes |
 
    Awaiting your input on any you'd like changed.
    ```
@@ -54,7 +56,7 @@ Before surfacing ANY blocking question to user. When CodeMemory is off, skip ste
 1. `codememory_retrieve` — semantic search for answer (only when CodeMemory is on)
 2. `codememory_claims` — user preferences/decisions (only when CodeMemory is on)
 3. `grep`/`read` — verify exact files if CodeMemory is suggestive, or as the first lookup when it is off
-4. If REPO CAN ANSWER → answer it, fold into re-dispatch brief
+4. If REPO CAN ANSWER → answer it. If that specialist agent is installed, fold the answer into a re-dispatch to that agent. Otherwise continue in this session with the answer.
 5. Only if REPO CANNOT ANSWER → `ask` tool with socratic-design shape:
    - Evidence: what you found
    - Question: single dependency-safe question

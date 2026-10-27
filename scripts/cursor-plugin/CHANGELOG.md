@@ -2,6 +2,13 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.20] - 2026-10-27
+
+- `./install.sh --local` applies a project-owned `.harness-local/` directory on top of the vendored `.claude/`, `.opencode/`, `AGENTS.md`, `.cursor/`, and `.agents` trees. Overlay files win. The installer never creates, edits, or deletes `.harness-local/`. Conductor and Monolith both do this. A local install with no variant stays Monolith.
+- `.harness-local/exclude` lists skill ids and harness paths the installer must not install and must prune on every run. A skill id removes that skill from `.claude/skills`, `.opencode/skills`, and `.agents/skills`.
+- The domain-rules hook stays off unless `.harness-local/domain-rules.json` sets `"enabled": true`. Claude runs `.claude/hooks/domain-rules.sh` before Edit, Write, and MultiEdit. OpenCode runs `plugins/domain-rules.ts` before write, edit, patch, and multiedit. The hook runs the project script (default `scripts/check-domain-rules.sh`). The harness ships no project rules.
+- `./install.sh --local --status` prints the overlay files, the exclude entries, and whether domain-rules is enabled.
+
 ## [0.4.19] - 2026-10-26
 
 - The Cursor plugin build defaults to Monolith. The primary agent may write, there is no first-tool gate, and `/orchestrate` is optional. `cop` and `comment-judge` are the merged reviewers. Folded specialists stay skills. The `threejs` and `openspec` umbrella skills stay in the plugin. Tier defaults stay Cursor models only: `grok-4.7`, `grok-4.6`, and `composer-2.5`.

@@ -1,6 +1,6 @@
 ---
 name: setup-harness
-description: "Write the per-tier Cursor model files used by the conductor. Defaults are Grok 4.7. Also offer the project pull request template."
+description: "Write the per-tier Cursor model files used by the main agent. Defaults are Grok 4.7. Also offer the project pull request template."
 disable-model-invocation: true
 ---
 
@@ -53,7 +53,7 @@ If a slug is not in that set, ignore it and use the tier default. Log why: the s
    cheap: {{cheapDefault}}
    ```
 
-3. Tell the user both files apply to new chats, and to pick Grok 4.7 xhigh in the model picker for the main (conductor) chat, because a plugin cannot set the parent model.
+3. Tell the user both files apply to new chats, and to pick Grok 4.7 xhigh in the model picker for the main agent chat, because a plugin cannot set the parent model.
 4. Offer `.github/pull_request_template.md` to the project. If that file exists, leave it. If it is missing, write the template below and tell the user the path.
 
 ```markdown

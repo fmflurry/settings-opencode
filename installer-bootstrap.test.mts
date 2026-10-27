@@ -29,6 +29,14 @@ import { fileURLToPath } from "node:url";
 import { parseJsonc } from "./scripts/cursor-plugin/lib.mjs";
 
 const repoRoot = dirname(fileURLToPath(import.meta.url));
+
+function claudeSettingsModel(file: string): unknown {
+  return (JSON.parse(readFileSync(file, "utf8")) as { model?: unknown }).model;
+}
+
+test("Claude settings template defaults the main agent to the opus alias", () => {
+  assert.equal(claudeSettingsModel(join(repoRoot, ".claude/settings.json")), "opus");
+});
 const bootstrapPath = join(repoRoot, "bootstrap.sh");
 const powerShellBootstrapPath = join(repoRoot, "bootstrap.ps1");
 const installerPath = join(repoRoot, "install.sh");
@@ -534,6 +542,38 @@ test("global both install keeps Claude mirror separate from the OpenCode target"
       readFileSync(join(homeDir, ".claude", ".harness-variant"), "utf8").trim(),
       "conductor",
     );
+    const installedSettings = join(homeDir, ".claude", "settings.json");
+    assert.equal(claudeSettingsModel(installedSettings), "opus");
+    const kept = JSON.parse(readFileSync(installedSettings, "utf8")) as { model?: string };
+    kept.model = "sonnet";
+    writeFileSync(installedSettings, `${JSON.stringify(kept, null, 2)}\n`);
+    const again = spawnSync("bash", [installerPath, "--yes"], {
+      cwd: projectDir,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        HOME: homeDir,
+        PATH: `${fakeBin}:/usr/bin:/bin:/usr/sbin:/sbin`,
+        SHELL: "/bin/zsh",
+      },
+    });
+    assert.equal(again.status, 0, `${again.stdout}\n${again.stderr}`);
+    assert.equal(claudeSettingsModel(installedSettings), "sonnet");
+    const cleared = JSON.parse(readFileSync(installedSettings, "utf8")) as { model?: string };
+    delete cleared.model;
+    writeFileSync(installedSettings, `${JSON.stringify(cleared, null, 2)}\n`);
+    const filled = spawnSync("bash", [installerPath, "--yes"], {
+      cwd: projectDir,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        HOME: homeDir,
+        PATH: `${fakeBin}:/usr/bin:/bin:/usr/sbin:/sbin`,
+        SHELL: "/bin/zsh",
+      },
+    });
+    assert.equal(filled.status, 0, `${filled.stdout}\n${filled.stderr}`);
+    assert.equal(claudeSettingsModel(installedSettings), "opus");
   } finally {
     rmSync(tmpRoot, { recursive: true, force: true });
   }
@@ -607,6 +647,7 @@ test("non-interactive monolith install overlays both targets and leaves conducto
     assert.match(readFileSync(join(projectDir, ".opencode", "mcp.deferred.example.jsonc"), "utf8"), /blender/);
     assert.equal(readFileSync(join(projectDir, ".opencode", ".harness-variant"), "utf8").trim(), "monolith");
     assert.equal(readFileSync(join(projectDir, ".claude", ".harness-variant"), "utf8").trim(), "monolith");
+    assert.equal(claudeSettingsModel(join(projectDir, ".claude", "settings.json")), "opus");
     assert.equal(existsSync(join(projectDir, ".claude", "agents", "conductor.md")), false);
     assert.equal(existsSync(join(projectDir, ".claude", "agents", "code-reviewer.md")), true);
     assert.equal(existsSync(join(projectDir, ".claude", "hooks", "ship-stop-gate.sh")), true);
@@ -676,6 +717,7 @@ test("local --yes with no variant vendors Monolith and --variant conductor switc
     });
     const switchedOutput = `${switched.stdout}\n${switched.stderr}`;
     assert.equal(switched.status, 0, switchedOutput);
+    assert.equal(claudeSettingsModel(join(projectDir, ".claude", "settings.json")), "opus");
     assert.match(readFileSync(join(projectDir, "AGENTS.md"), "utf8"), /This install is Conductor\./);
     assert.equal(readFileSync(join(projectDir, ".cursor", ".harness-variant"), "utf8").trim(), "conductor");
     assert.equal(existsSync(join(projectDir, ".cursor", "rules", "monolith.mdc")), false);

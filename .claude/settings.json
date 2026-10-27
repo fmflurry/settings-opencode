@@ -211,7 +211,7 @@
     "csharp-lsp@claude-plugins-official": true
   },
   "skipDangerousModePermissionPrompt": true,
-  "model": "claude-opus-4-8",
+  "model": "opus",
   "deniedMcpServers": [
     {
       "serverName": "blender"

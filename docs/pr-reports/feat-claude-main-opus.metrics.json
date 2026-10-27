@@ -1,0 +1,37 @@
+{
+  "feature": {
+    "repo": "fmflurry/settings-opencode",
+    "branch": "feat/claude-main-opus",
+    "pr": null
+  },
+  "prs": [],
+  "wall_ms": 70000,
+  "active_ms": 70000,
+  "idle_gap_min": 5,
+  "sessions": {
+    "cursor": 0,
+    "claude": 0,
+    "opencode": 0
+  },
+  "tools": [],
+  "skills": [],
+  "agents": [
+    {
+      "name": "main",
+      "calls": 0
+    }
+  ],
+  "tool_failures": 0,
+  "failure_tools": [],
+  "duration_ms": null,
+  "guard_blocks": 8,
+  "guards": {},
+  "review_rounds": 0,
+  "fix_rounds": 0,
+  "tokens": null,
+  "tokens_known": 0,
+  "events": 8,
+  "first_ts": "2026-10-27T18:49:24Z",
+  "last_ts": "2026-10-27T18:50:34Z",
+  "partial": false
+}

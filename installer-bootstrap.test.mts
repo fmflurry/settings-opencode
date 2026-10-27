@@ -612,6 +612,13 @@ test("non-interactive monolith install overlays both targets and leaves conducto
     assert.equal(existsSync(join(projectDir, ".claude", "hooks", "ship-stop-gate.sh")), true);
     assert.equal(existsSync(join(projectDir, ".claude", "skills", "conductor", "SKILL.md")), true);
     assert.doesNotMatch(readFileSync(join(projectDir, ".claude", "CLAUDE.md"), "utf8"), /First-Tool Gate|cannot write/i);
+    assert.match(readFileSync(join(projectDir, "AGENTS.md"), "utf8"), /This install is Monolith\./);
+    assert.equal(readFileSync(join(projectDir, ".cursor", ".harness-variant"), "utf8").trim(), "monolith");
+    assert.equal(readFileSync(join(projectDir, ".agents", ".harness-variant"), "utf8").trim(), "monolith");
+    assert.match(readFileSync(join(projectDir, ".cursor", "rules", "monolith.mdc"), "utf8"), /allowed to write|may write/i);
+    assert.doesNotMatch(readFileSync(join(projectDir, ".cursor", "rules", "monolith.mdc"), "utf8"), /First-Tool Gate/);
+    assert.equal(existsSync(join(projectDir, ".agents", "cop.md")), true);
+    assert.equal(existsSync(join(projectDir, ".agents", "coder.md")), false);
     assert.match(readFileSync(join(repoRoot, "opencode.jsonc"), "utf8"), /"default_agent":\s*"conductor"/);
     assert.equal(existsSync(join(repoRoot, ".claude", "agents", "conductor.md")), true);
     assert.match(readFileSync(join(repoRoot, ".claude", "rules", "common", "orchestration.md"), "utf8"), /First-Tool Gate/);
@@ -624,6 +631,61 @@ function useRealNode(fakeBin: string): void {
   writeFileSync(join(fakeBin, "node"), `#!/usr/bin/env bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`);
   chmodSync(join(fakeBin, "node"), 0o755);
 }
+
+test("local --yes with no variant vendors Monolith and --variant conductor switches it", () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), "settings-opencode-install-"));
+  try {
+    const projectDir = join(tmpRoot, "project");
+    const homeDir = join(tmpRoot, "home");
+    const fakeBin = join(tmpRoot, "bin");
+    mkdirSync(projectDir);
+    mkdirSync(homeDir);
+    mkdirSync(fakeBin);
+    writeFakeNpm(fakeBin);
+    useRealNode(fakeBin);
+    const env = {
+      ...process.env,
+      HOME: homeDir,
+      PATH: `${fakeBin}:/usr/bin:/bin:/usr/sbin:/sbin`,
+      SHELL: "/bin/zsh",
+    };
+    delete env.HARNESS_VARIANT;
+
+    const installed = spawnSync("bash", [installerPath, "--local", "--yes"], {
+      cwd: projectDir,
+      encoding: "utf8",
+      env,
+    });
+    const output = `${installed.stdout}\n${installed.stderr}`;
+    assert.equal(installed.status, 0, output);
+    assert.match(output, /variant: monolith/);
+    assert.match(readFileSync(join(projectDir, "AGENTS.md"), "utf8"), /This install is Monolith\./);
+    assert.equal(readFileSync(join(projectDir, ".cursor", ".harness-variant"), "utf8").trim(), "monolith");
+    const baseline = readFileSync(join(projectDir, ".cursor", "rules", "monolith.mdc"), "utf8");
+    assert.match(baseline, /may write|allowed to write/i);
+    assert.doesNotMatch(baseline, /First-Tool Gate/);
+    assert.equal(existsSync(join(projectDir, ".agents", "cop.md")), true);
+    assert.equal(existsSync(join(projectDir, ".agents", "coder.md")), false);
+
+    rmSync(join(projectDir, ".opencode"), { recursive: true, force: true });
+    rmSync(join(projectDir, ".claude"), { recursive: true, force: true });
+    const switched = spawnSync("bash", [installerPath, "--local", "--yes", "--variant", "conductor"], {
+      cwd: projectDir,
+      encoding: "utf8",
+      env,
+    });
+    const switchedOutput = `${switched.stdout}\n${switched.stderr}`;
+    assert.equal(switched.status, 0, switchedOutput);
+    assert.match(readFileSync(join(projectDir, "AGENTS.md"), "utf8"), /This install is Conductor\./);
+    assert.equal(readFileSync(join(projectDir, ".cursor", ".harness-variant"), "utf8").trim(), "conductor");
+    assert.equal(existsSync(join(projectDir, ".cursor", "rules", "monolith.mdc")), false);
+    assert.match(readFileSync(join(projectDir, ".cursor", "rules", "conductor.mdc"), "utf8"), /First-Tool Gate/);
+    assert.equal(existsSync(join(projectDir, ".agents", "coder.md")), true);
+    assert.equal(existsSync(join(projectDir, ".agents", "cop.md")), false);
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
 
 test("status reads markers without installing", () => {
   const tmpRoot = mkdtempSync(join(tmpdir(), "settings-opencode-install-"));
@@ -819,7 +881,7 @@ test("local both install uses sibling OpenCode and ClaudeCode targets", () => {
     mkdirSync(fakeBin);
     writeFakeNpm(fakeBin);
 
-    const result = spawnSync("bash", [installerPath, "--local", "--yes"], {
+    const result = spawnSync("bash", [installerPath, "--local", "--yes", "--variant", "conductor"], {
       cwd: projectDir,
       encoding: "utf8",
       env: {
@@ -1152,7 +1214,7 @@ test("OpenCode local install syncs the repository config payload exactly", () =>
 
     const result = spawnSync(
       "bash",
-      [installerPath, "--local", "--yes", "--no-claude"],
+      [installerPath, "--local", "--yes", "--no-claude", "--variant", "conductor"],
       {
         cwd: projectDir,
         encoding: "utf8",

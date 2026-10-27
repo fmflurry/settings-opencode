@@ -15,9 +15,9 @@ Write one Cursor model per tier to both:
 
 | Tier | Default slug | Fallbacks | Use | Agents |
 | --- | --- | --- | --- | --- |
-| coding | `grok-4.7-xhigh` | `grok-4.7-xhigh` -> `grok-4.6-xhigh` -> `composer-2.5` | implementation, tests, build fixes | coder, tdd-guide, build-error-resolver, refactor-cleaner, e2e-runner, api-spec-architect, gaudi |
-| smart | `grok-4.7-xhigh` | `grok-4.7-xhigh` -> `grok-4.6-xhigh` -> `composer-2.5` | planning, architecture, review, security; expensive, so dispatch it only when needed | planner, architect, code-reviewer, security-reviewer, angular-cop, dotnet-cop, database-reviewer, postgres-dba, gdpr-specialist, ecosystem-auditor, why-synthesizer |
-| cheap | `grok-4.7-medium` | `grok-4.7-medium` -> `grok-4.6-medium` -> `composer-2.5` | git, codebase search, docs, comment triage | git-specialist, scout, writer, doc-updater, why-investigator, comment-judge, haruspex-commentorum |
+| coding | `grok-4.7-xhigh` | `grok-4.7-xhigh` -> `grok-4.6-xhigh` -> `composer-2.5` | implementation, tests, build fixes | build-error-resolver, e2e-runner |
+| smart | `grok-4.7-xhigh` | `grok-4.7-xhigh` -> `grok-4.6-xhigh` -> `composer-2.5` | planning, architecture, review, security; expensive, so dispatch it only when needed | code-reviewer, security-reviewer, cop, database-reviewer, ecosystem-auditor |
+| cheap | `grok-4.7-medium` | `grok-4.7-medium` -> `grok-4.6-medium` -> `composer-2.5` | git, codebase search, docs, comment triage | why-investigator, comment-judge |
 
 ## Allowed models
 

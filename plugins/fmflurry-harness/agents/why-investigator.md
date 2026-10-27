@@ -1,6 +1,6 @@
 ---
 name: why-investigator
-description: "Spawned by the why skill only. Investigates one evidence category (git/gh or one MCP source) for design rationale. Read-only."
+description: "Investigates one evidence category, git history or one MCP, for design rationale. Use from the why skill, one category per investigator, in parallel. Read-only."
 readonly: true
 tier: cheap
 ---

@@ -1,6 +1,6 @@
 ---
 name: e2e-runner
-description: "MUST delegate for browser automation, Playwright work, and critical user-flow E2E tests. Reads the project e2e override or discovered start command, ports, and test runner. Generates, runs, and reports artifacts."
+description: "Runs browser end-to-end flows and writes their artifacts. Use for Playwright or a critical user flow. The log stays out of the main session."
 readonly: false
 tier: coding
 ---

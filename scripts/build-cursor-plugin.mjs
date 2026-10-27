@@ -6,13 +6,30 @@ import { fileURLToPath } from 'node:url';
 import {
   parseJsonc, buildMcp, splitFrontmatter, unquote, claudeAgent, opencodeAgent, slug, mdc,
   firstHeading, globsFromPaths, walkMd, conductorRuleBody, conductorSkill, stripAtImports, sanitize,
-  buildHooks, portableHookScript, tierGuard, setupSkill, tierTable,
+  buildHooks, portableHookScript, tierGuard, setupSkill,
 } from './cursor-plugin/lib.mjs';
+import {
+  applyCursorMonolith, readmeValues, resolveBuildVariant, resolveOutDir, variantDescription,
+} from './cursor-plugin/variant.mjs';
 
 const repoDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const buildArgs = process.argv.slice(2);
+let variant;
+try {
+  variant = resolveBuildVariant(buildArgs);
+} catch (error) {
+  console.error(error.message);
+  process.exit(error.code === 'VARIANT' ? 2 : 1);
+}
 const config = JSON.parse(fs.readFileSync(path.join(repoDir, 'scripts/cursor-plugin/config.json'), 'utf8'));
 const repoName = (config.repository ?? '').split('/').pop().replace(/\.git$/, '') || path.basename(repoDir);
-const out = path.join(repoDir, 'plugins', config.name);
+let out;
+try {
+  out = resolveOutDir(buildArgs, repoDir, config.name);
+} catch (error) {
+  console.error(error.message);
+  process.exit(error.code === 'VARIANT' ? 2 : 1);
+}
 const claudeDir = path.join(repoDir, '.claude');
 const assertTiered = tierGuard(config);
 
@@ -30,7 +47,7 @@ fs.mkdirSync(out, { recursive: true });
 write('.cursor-plugin/plugin.json', JSON.stringify({
   name: config.name,
   displayName: config.displayName,
-  description: config.description,
+  description: variantDescription(variant),
   version: config.version,
   author: { name: 'fmflurry' },
   homepage: config.homepage,
@@ -132,6 +149,17 @@ write('hooks/scripts/codememory-mode.sh', portableHookScript(read(path.join(clau
 
 write('mcp.json', JSON.stringify(buildMcp(opencodeCfg), null, 2) + '\n');
 
+if (variant === 'monolith') {
+  try {
+    const installed = applyCursorMonolith(out, repoDir, config);
+    write('skills/setup-harness/SKILL.md', setupSkill(read(path.join(repoDir, 'scripts/cursor-plugin/templates/setup-harness.md')), installed));
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
+}
+write('.harness-variant', `${variant}\n`);
+
 // Source files embed author-machine paths (examples, config-sync docs); a published plugin must not.
 const TEXT_EXT = new Set(['.md', '.mdc', '.json', '.txt', '.yaml', '.yml']);
 (function scrub(dir) {
@@ -153,10 +181,10 @@ const counts = {
   commands: count('commands', '.md'),
   rules: count('rules', '.mdc'),
 };
-const values = {
-  ...counts,
-  tierTable: tierTable(config),
-  version: config.version,
-};
-write('README.md', read(path.join(repoDir, 'scripts/cursor-plugin/README.template.md')).replace(/\{\{(\w+)\}\}/g, (_, k) => values[k]));
+const values = readmeValues(variant, config, out, counts);
+write('README.md', read(path.join(repoDir, 'scripts/cursor-plugin/README.template.md')).replace(/\{\{(\w+)\}\}/g, (_, k) => {
+  if (!(k in values)) throw new Error(`README template: unknown placeholder {{${k}}}`);
+  return values[k];
+}));
+console.log(`variant=${variant}`);
 console.log(Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(' '));

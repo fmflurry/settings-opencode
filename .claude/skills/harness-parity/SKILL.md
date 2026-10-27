@@ -76,8 +76,8 @@ Whenever you **add, edit, rename, or delete** any artifact — no matter which h
 
 This settings repo keeps two installable harnesses. They share `skills/` (and the `.claude/skills/` mirror). A variant does not get its own copy of a skill.
 
-- **Conductor** is the repository root: `.claude/`, `opencode.jsonc`, `prompts/agents/`, `instructions/`. The conductor routes, and the primary agent does not write. `orchestration` is an install alias for this variant.
-- **Monolith** is `variants/monolith/`. The installer overlays that tree onto a copy. It does not edit the Conductor sources.
+- **Conductor** is the repository root: `.claude/`, `opencode.jsonc`, `prompts/agents/`, `instructions/`. The conductor routes, and the primary agent does not write. `orchestration` is an install alias for this variant. A global install (`./install.sh --yes`, `bootstrap.ps1` without `-Local`) stays Conductor when no variant is set.
+- **Monolith** is `variants/monolith/`. The installer overlays that tree onto a copy. It does not edit the Conductor sources. The Cursor plugin (`./install-cursor.sh`, `node scripts/build-cursor-plugin.mjs`) and a project install (`./install.sh --local`, `bootstrap.ps1 -Local`) default to Monolith. `./install-cursor.sh --variant conductor` and `HARNESS_VARIANT=conductor` build Conductor instead. `./install-cursor.sh --status` reads `.harness-variant` in the installed plugin. `--local` vendors `AGENTS.md`, `.cursor/rules`, and `.agents` for the same variant.
 
 Claude and OpenCode receive the same overlay: the same baseline text (`CLAUDE.md` and `AGENTS.md`), the same agent roster, and the same skill union. `scripts/variants/parity-check.mjs` checks that.
 

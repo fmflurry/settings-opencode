@@ -36,8 +36,8 @@
     & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -NoOpencode
 
 .EXAMPLE
-    # Lean Monolith overlay. Default, and an omitted variant, stay Conductor.
-    # orchestration is an alias of Conductor.
+    # Lean Monolith overlay. A global omitted variant stays Conductor.
+    # -Local with an omitted variant is Monolith. orchestration is an alias of Conductor.
     & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) monolith
     & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -Variant conductor
     & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -Status
@@ -86,7 +86,9 @@ if (-not $Status) {
         $Variant = $VariantName
     }
     if ([string]::IsNullOrWhiteSpace($Variant)) { $Variant = $env:HARNESS_VARIANT }
-    if ([string]::IsNullOrWhiteSpace($Variant)) { $Variant = 'conductor' }
+    if ([string]::IsNullOrWhiteSpace($Variant)) {
+        if ($Local) { $Variant = 'monolith' } else { $Variant = 'conductor' }
+    }
     $normalizedVariant = ConvertTo-HarnessVariant $Variant
     if ([string]::IsNullOrWhiteSpace($normalizedVariant)) {
         Write-Host "error: unknown harness variant '$Variant' (use conductor or monolith; orchestration is an alias of conductor)" -ForegroundColor Red
@@ -358,6 +360,10 @@ function Write-VariantStatus($name, $dir) {
 if ($Status) {
     Write-VariantStatus 'opencode' $OpencodeDir
     Write-VariantStatus 'claude' $ClaudeDir
+    if ($Local) {
+        Write-VariantStatus 'cursor' (Join-Path $InvokeDir '.cursor')
+        Write-VariantStatus 'agents' (Join-Path $InvokeDir '.agents')
+    }
     exit 0
 }
 
@@ -613,6 +619,12 @@ if ($Variant -eq 'monolith') {
     if ($doPruneClaude) {
         [System.IO.File]::WriteAllText((Join-Path $ClaudeDir '.harness-variant'), "conductor`n")
     }
+}
+
+if ($Local -and (($doOpencode -and $opencodeTargetReady) -or ($doClaude -and $claudeTargetReady))) {
+    Step "Vendoring project surfaces ($Variant)"
+    & node (Join-Path $SrcDir 'scripts/variants/vendor-project.mjs') '--repo' $SrcDir '--project' $InvokeDir '--variant' $Variant
+    if ($LASTEXITCODE -ne 0) { Die 'project vendor failed' }
 }
 
 # ------------------------------ next steps -----------------------------------

@@ -1,8 +1,8 @@
 {
   "name": "fmflurry-harness",
   "displayName": "fmflurry Harness",
-  "description": "Conductor routing, specialist agents, skills, commands, rules and MCP servers from the fmflurry harness.",
-  "version": "0.4.18",
+  "description": "Monolith harness for Cursor. The primary agent writes, skills load in this session, and review subagents stay isolated.",
+  "version": "0.4.19",
   "homepage": "https://github.com/fmflurry/settings-opencode/tree/master/plugins/fmflurry-harness",
   "repository": "https://github.com/fmflurry/settings-opencode",
   "keywords": ["agents", "conductor", "subagents", "skills", "rules", "hooks", "mcp", "code-memory"],
@@ -21,7 +21,7 @@
   "cursorModelFamilies": ["grok-4.7", "grok-4.6", "grok-4.5", "composer-2.5"],
   "agentTiers": {
     "coding": ["coder", "tdd-guide", "build-error-resolver", "refactor-cleaner", "e2e-runner", "api-spec-architect", "gaudi"],
-    "smart": ["planner", "architect", "code-reviewer", "security-reviewer", "angular-cop", "dotnet-cop", "database-reviewer", "postgres-dba", "gdpr-specialist", "ecosystem-auditor", "why-synthesizer"],
+    "smart": ["planner", "architect", "code-reviewer", "security-reviewer", "angular-cop", "dotnet-cop", "cop", "database-reviewer", "postgres-dba", "gdpr-specialist", "ecosystem-auditor", "why-synthesizer"],
     "cheap": ["git-specialist", "scout", "writer", "doc-updater", "why-investigator", "comment-judge", "haruspex-commentorum"]
   },
   "rules": {

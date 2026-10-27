@@ -2,6 +2,13 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.22] - 2026-10-27
+
+- KPI lines record a sanitised `skill` (`^[a-z0-9:-]{1,64}$`) when the tool is Skill, and `agent` (`subagent_type`) on Task/Agent calls and on subagent spawn and stop. Claude reads the agent from the transcript when SubagentStop omits it. OpenCode uses the child session's parent and agent.
+- Claude `PostToolUse`, Cursor `postToolUse`, and OpenCode `tool.execute.after` append `tool_result` with `tool_name`, `duration_ms`, and `ok`. The installer registers that hook for global and project installs, in Claude settings and the Cursor plugin. The hook never blocks the tool.
+- Tokens: OpenCode sums input and output from `message.updated` onto the session end or the subagent stop. Claude sums input and output from the stop transcript (8 MiB cap). Cursor leaves `tokens` null. Prompts, arguments, and absolute paths stay out of the log. `AGENT_HARNESS_KPI=0` still disables writes.
+- The field list is `docs/kpi-events.md`.
+
 ## [0.4.20] - 2026-10-27
 
 - `./install.sh --local` applies a project-owned `.harness-local/` directory on top of the vendored `.claude/`, `.opencode/`, `AGENTS.md`, `.cursor/`, and `.agents` trees. Overlay files win. The installer never creates, edits, or deletes `.harness-local/`. Conductor and Monolith both do this. A local install with no variant stays Monolith.

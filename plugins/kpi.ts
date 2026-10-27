@@ -1,57 +1,63 @@
 import type { PluginInput } from "@opencode-ai/plugin";
 import { emitKpi } from "./lib/kpi-emit.ts";
-
-const ID = /^[A-Za-z0-9._:-]{1,200}$/;
-const TOOL = /^[A-Za-z0-9._:-]{1,64}$/;
+import {
+  createKpiState,
+  onOpenCodeEvent,
+  onToolAfter,
+  onToolBefore,
+} from "./lib/kpi-capture.ts";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
-}
-
-function sessionId(props: Record<string, unknown>): string {
-  const direct = props.sessionID;
-  if (typeof direct === "string" && ID.test(direct)) return direct;
-  const info = asRecord(props.info);
-  const nested = info?.id;
-  if (typeof nested === "string" && ID.test(nested)) return nested;
-  return "";
-}
-
-function parentId(props: Record<string, unknown>): string {
-  const info = asRecord(props.info);
-  const parent = info?.parentID ?? props.parentID;
-  return typeof parent === "string" ? parent : "";
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 /**
  * OpenCode side of the harness KPI log. Independent of llm-metrics.
- * Records session boundaries, tool names, and subagent spawns. Tokens stay
- * null unless a later hook is given a numeric usage field by the host.
+ * Records session boundaries, skill names, subagent types, and tool results.
+ * message.updated usage is summed onto the later session_end or subagent_stop.
+ * Cursor is not this plugin; its hook leaves tokens null.
  */
 export const KpiPlugin = async ({ directory }: PluginInput) => {
+  const state = createKpiState();
+  const emit = (batches: string[][]): void => {
+    for (const args of batches) {
+      if (args.length > 0) emitKpi(directory, args);
+    }
+  };
   return {
-    "tool.execute.before": async (input: { tool?: string; sessionID?: string }) => {
-      const tool = input.tool ?? "";
-      if (!TOOL.test(tool)) return;
-      const args = ["tool_call", `tool_name=${tool}`];
-      if (input.sessionID && ID.test(input.sessionID)) args.push(`session=${input.sessionID}`);
-      emitKpi(directory, args);
+    "tool.execute.before": async (
+      input: { tool?: string; sessionID?: string; callID?: string },
+      output?: { args?: unknown },
+    ) => {
+      try {
+        emit(onToolBefore(state, input, output?.args));
+      } catch {
+        /* fail open */
+      }
+    },
+
+    "tool.execute.after": async (
+      input: { tool?: string; sessionID?: string; callID?: string; args?: unknown },
+      output?: unknown,
+    ) => {
+      try {
+        const args = onToolAfter(state, input, output);
+        if (args.length > 0) emitKpi(directory, args);
+      } catch {
+        /* fail open */
+      }
     },
 
     event: async (eventOrPayload: { event?: unknown } | unknown) => {
-      const raw = (eventOrPayload as { event?: unknown }).event ?? eventOrPayload;
-      const event = asRecord(raw);
-      if (!event || typeof event.type !== "string") return;
-      const props = asRecord(event.properties) ?? {};
-      const sid = sessionId(props);
-      const sessionArg = sid ? [`session=${sid}`] : [];
-      if (event.type === "session.created") {
-        if (parentId(props)) emitKpi(directory, ["subagent_spawn", ...sessionArg]);
-        else emitKpi(directory, ["session_start", ...sessionArg]);
-        return;
-      }
-      if (event.type === "session.idle" || event.type === "session.deleted") {
-        emitKpi(directory, ["session_end", ...sessionArg]);
+      try {
+        const raw = (eventOrPayload as { event?: unknown }).event ?? eventOrPayload;
+        const event = asRecord(raw);
+        if (!event) return;
+        emit(onOpenCodeEvent(state, event));
+      } catch {
+        /* fail open */
       }
     },
   };

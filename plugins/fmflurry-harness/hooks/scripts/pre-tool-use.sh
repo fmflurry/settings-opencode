@@ -56,11 +56,32 @@ KPI_SH="${BASH_SOURCE[0]%/*}/kpi-emit.sh"
 KPI_TOOL="${TASK_MARKER_TOOL_NAME:-$TOOL_NAME}"
 if [ -n "$KPI_TOOL" ] && [ -f "$KPI_SH" ]; then
   KPI_SESSION="$(printf '%s' "${TASK_MARKER_INPUT:-}" | jq -r '.session_id // empty' 2>/dev/null || true)"
+  KPI_SKILL=""
+  KPI_AGENT=""
+  case "$KPI_TOOL" in
+    Skill|skill|use_skill|load_skill)
+      KPI_SKILL="$(printf '%s' "${TASK_MARKER_INPUT:-}" | jq -r '
+        def text: if type == "string" then . else "" end;
+        ((.tool_input.skill // .tool_input.skill_name // .tool_input.name // .skill // "") | text) as $n
+        | ((.tool_input.command // .command // "") | text | sub("^/+"; "")) as $c
+        | (if $n != "" then $n else $c end | ascii_downcase) as $s
+        | if ($s | test("^[a-z0-9:-]{1,64}$")) then $s else "" end
+      ' 2>/dev/null || true)"
+      ;;
+    Task|Agent|task|agent)
+      KPI_AGENT="$(printf '%s' "${TASK_MARKER_INPUT:-}" | jq -r '
+        (.tool_input.subagent_type // .tool_input.agent_type // .subagent_type // .agent_type // .tool_input.agent // "")
+        | if type == "string" and test("^[A-Za-z0-9._:-]{1,64}$") then . else "" end
+      ' 2>/dev/null || true)"
+      ;;
+  esac
   KPI_ARGS=(tool_call "tool_name=$KPI_TOOL")
   [ -n "$KPI_SESSION" ] && KPI_ARGS+=("session=$KPI_SESSION")
+  [ -n "$KPI_SKILL" ] && KPI_ARGS+=("skill=$KPI_SKILL")
+  [ -n "$KPI_AGENT" ] && KPI_ARGS+=("agent=$KPI_AGENT")
   "$KPI_SH" "${KPI_ARGS[@]}" >/dev/null 2>&1 || true
   case "$KPI_TOOL" in
-    Task|Agent)
+    Task|Agent|task|agent)
       KPI_ARGS[0]=subagent_spawn
       "$KPI_SH" "${KPI_ARGS[@]}" >/dev/null 2>&1 || true
       ;;

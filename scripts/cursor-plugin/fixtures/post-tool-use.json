@@ -1,0 +1,1 @@
+{"tool_name":"Shell","tool_input":{"command":"echo SUPER_SECRET_PROMPT"},"tool_output":"SUPER_SECRET_OUTPUT","duration_ms":15,"tool_use_id":"abc125","cwd":"/project","conversation_id":"conv-1","generation_id":"gen-1","hook_event_name":"postToolUse","cursor_version":"1.0.0","workspace_roots":["/project"],"user_email":null,"transcript_path":"/var/secret/abs.jsonl"}

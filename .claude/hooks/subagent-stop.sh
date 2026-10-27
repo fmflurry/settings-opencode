@@ -38,11 +38,7 @@ type notify_log >/dev/null 2>&1 && notify_log claude-code SubagentStop "$SESSION
 
 KPI_SH="${BASH_SOURCE[0]%/*}/kpi-emit.sh"
 if [ -f "$KPI_SH" ]; then
-  if [ -n "$SESSION_ID" ]; then
-    "$KPI_SH" subagent_stop "session=$SESSION_ID" >/dev/null 2>&1 || true
-  else
-    "$KPI_SH" subagent_stop >/dev/null 2>&1 || true
-  fi
+  printf '%s' "$INPUT" | "$KPI_SH" >/dev/null 2>&1 || true
 fi
 
 exit 0

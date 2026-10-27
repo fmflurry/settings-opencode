@@ -117,6 +117,17 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/kpi-emit.sh"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "matcher": "*",

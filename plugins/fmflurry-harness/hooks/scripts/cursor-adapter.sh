@@ -32,21 +32,56 @@ case "$EVENT" in
       tool_name: ((.tool_name // "") | if . == "Shell" then "Bash" else sub("^MCP:"; "") end),
       tool_use_id: (.tool_use_id // ""), tool_input: (.tool_input // {})
     }' 2>/dev/null)" || allow_and_exit ;;
+  postToolUse)
+    PAYLOAD="$(printf '%s' "$INPUT" | jq -ce '
+      def short($v; $n): if ($v | type) == "string" and ($v | length) <= $n then $v else null end;
+      (.tool_name // "") as $raw
+      | (if $raw == "Shell" then "Bash" else ($raw | sub("^MCP:"; "")) end) as $tn
+      | ($tn | ascii_downcase) as $tl
+      | {
+          session_id: (.conversation_id // .session_id // ""),
+          hook_event_name: "PostToolUse",
+          tool_name: $tn,
+          duration_ms: (
+            (.duration_ms // .duration // .elapsed_ms // null)
+            | if type == "number" and . >= 0 and . < 86400000 then floor else null end
+          ),
+          ok: (
+            if .is_error == true or .ok == false or .success == false
+               or ((.error | type) == "string" and .error != "")
+               or ((.error | type) == "object")
+               or (.status == "error" or .status == "failed" or .status == "failure")
+            then false else true end
+          ),
+          tool_input: (
+            (.tool_input // {}) as $in
+            | if ($tl == "skill" or $tl == "use_skill" or $tl == "load_skill") then
+                {
+                  skill: short($in.skill // $in.skill_name // $in.name; 80),
+                  command: short($in.command; 80)
+                }
+              elif ($tl == "task" or $tl == "agent") then
+                {
+                  subagent_type: short($in.subagent_type // $in.agent_type; 64),
+                  agent: short(if ($in.agent | type) == "string" then $in.agent else null end; 64)
+                }
+              else {} end
+          )
+        }
+    ' 2>/dev/null)" || allow_and_exit ;;
   stop|subagentStop)
     PAYLOAD="$(printf '%s' "$INPUT" | jq -ce --arg ev "$EVENT" '{
       session_id: (.conversation_id // ""), transcript_path: (.transcript_path // ""),
       hook_event_name: (if $ev == "stop" then "Stop" else "SubagentStop" end),
       stop_hook_active: ((.loop_count // 0) > 0),
-      tokens: (.tokens // .token_count // null),
-      usage: (.usage // null)
+      subagent_type: (.subagent_type // .agent_type // ""),
+      agent_transcript_path: (.agent_transcript_path // "")
     }' 2>/dev/null)" || allow_and_exit ;;
   sessionStart|sessionEnd)
     PAYLOAD="$(printf '%s' "$INPUT" | jq -ce --arg ev "$EVENT" '{
       session_id: (.conversation_id // .session_id // ""), cwd: (.cwd // ""),
       hook_event_name: (if $ev == "sessionStart" then "SessionStart" else "Stop" end),
-      source: (.source // ""),
-      tokens: (.tokens // .token_count // null),
-      usage: (.usage // null)
+      source: (.source // "")
     }' 2>/dev/null)" || allow_and_exit ;;
   *) allow_and_exit ;;
 esac
@@ -65,7 +100,7 @@ ERR="$(cat "$ERR_FILE" 2>/dev/null)"
 rm -f "$ERR_FILE"
 
 case "$EVENT" in
-  sessionStart|sessionEnd)
+  sessionStart|sessionEnd|postToolUse)
     printf '{}\n'
     exit 0 ;;
   stop|subagentStop)

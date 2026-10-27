@@ -280,7 +280,13 @@ export function sanitize(text, repoDir, repoName = 'settings-opencode') {
   return text.replace(checkout, '<repo>').replace(authorCheckout, '<repo>').replace(/\/Users\/[^/\s"'`)]+/g, '/home/user');
 }
 
-const HOOK_EVENT_MAP = { PreToolUse: 'preToolUse', Stop: 'stop', SubagentStop: 'subagentStop', SessionStart: 'sessionStart' };
+const HOOK_EVENT_MAP = {
+  PreToolUse: 'preToolUse',
+  PostToolUse: 'postToolUse',
+  Stop: 'stop',
+  SubagentStop: 'subagentStop',
+  SessionStart: 'sessionStart',
+};
 const CURSOR_TOOL = {
   Bash: 'Shell', Edit: 'Write', MultiEdit: 'Write', Write: 'Write', Read: 'Read', Grep: 'Grep', Task: 'Task', Agent: 'Task',
 };

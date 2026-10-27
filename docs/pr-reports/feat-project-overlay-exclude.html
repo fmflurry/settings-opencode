@@ -98,6 +98,7 @@
       <tr><td>OpenCode</td><td class="mono">tool.execute.before write|edit|patch|multiedit → plugins/domain-rules.ts</td></tr>
     </tbody>
   </table>
+  <p class="note">Paths are compared after symlink resolution, so a harness clone under macOS <code>/tmp</code> still applies the overlay. A skipped root prints the reason. A local install records <code>./.claude/mods/autonomy-status</code> and, for Monolith, <code>.opencode/instructions/monolith.md</code>.</p>
   <p class="note">Status: <code>./install.sh --local --status</code> and <code>bootstrap.ps1 -Local -Status</code>. A second local refresh passes the variant again (<code>--variant monolith</code> or <code>--variant conductor</code>).</p>
 </main>
 </body>

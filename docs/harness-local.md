@@ -21,6 +21,17 @@ The installer never creates, edits, or deletes `.harness-local/` or anything ins
 
 Overlay files are copied after excludes. A file present in the overlay stays, including when the same path is listed in `exclude`.
 
+The installer resolves the harness directory and the project root before it compares them (`cd -P` and `pwd -P`, or `realpath` when that is unavailable). A clone reached through a symlink, including macOS `/tmp` (a link to `/private/tmp`), still applies `.harness-local/`.
+
+If a managed root is not overlaid, the installer prints why. A root is skipped when that target was disabled, was not installed, or is the source checkout.
+
+A `--local` install records project-relative paths where the tools accept them:
+
+- `.claude/settings.json` sets `CLAUDE_CODE_PLUGIN_DIRS` to `./.claude/mods/autonomy-status`
+- Monolith sets the `instructions` entry in `.opencode/opencode.jsonc` to `.opencode/instructions/monolith.md`
+
+A global install keeps `~/.claude/mods/autonomy-status` and `~/.config/opencode/instructions/monolith.md`.
+
 ## `exclude`
 
 UTF-8 text. One entry per line. Blank lines and lines starting with `#` are ignored.

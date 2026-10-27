@@ -2,11 +2,11 @@
   "feature": {
     "repo": "fmflurry/settings-opencode",
     "branch": "feat/kpi-feature-report",
-    "pr": null
+    "pr": 55
   },
   "prs": [],
-  "wall_ms": 181000,
-  "active_ms": 181000,
+  "wall_ms": 794000,
+  "active_ms": 247000,
   "idle_gap_min": 5,
   "sessions": {
     "cursor": 2,
@@ -60,7 +60,7 @@
     "mean": 28,
     "max": 40
   },
-  "guard_blocks": 5,
+  "guard_blocks": 13,
   "guards": {
     "git": 1
   },
@@ -68,8 +68,8 @@
   "fix_rounds": 1,
   "tokens": 230,
   "tokens_known": 3,
-  "events": 20,
+  "events": 28,
   "first_ts": "2026-10-27T12:32:05Z",
-  "last_ts": "2026-10-27T12:35:06Z",
+  "last_ts": "2026-10-27T12:45:19Z",
   "partial": false
 }

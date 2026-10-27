@@ -1,6 +1,6 @@
 ---
 name: database-reviewer
-description: "MUST delegate for PostgreSQL, SQL, Supabase, RLS, migrations, schema design, query performance, or DB security. Read-only — findings only; repo changes go to coder."
+description: "Reviews SQL, PostgreSQL, Supabase, RLS, and migrations. Use for a schema or query change. Read-only."
 readonly: true
 tier: smart
 ---

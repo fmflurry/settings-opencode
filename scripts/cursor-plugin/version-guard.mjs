@@ -9,7 +9,10 @@ export function pluginSourcePaths(config) {
   return [
     'plugins/fmflurry-harness/',
     'scripts/build-cursor-plugin.mjs',
+    'scripts/cursor-plugin/variant.mjs',
     'scripts/sync-skills.sh',
+    'variants/monolith/',
+    'variants/conductor/AGENTS.md',
     'scripts/cursor-plugin/config.json',
     'scripts/cursor-plugin/lib.mjs',
     'scripts/cursor-plugin/README.template.md',

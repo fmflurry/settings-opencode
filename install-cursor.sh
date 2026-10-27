@@ -11,6 +11,8 @@
 #   --migrate-legacy   Remove files the previous installer copied into ~/.cursor
 #   --uninstall        Remove the installed plugin
 #   --no-backup        Skip the backup made by --migrate-legacy
+#   --variant NAME     monolith (default) or conductor. orchestration is an alias.
+#   --status           Print the installed variant and exit.
 #   --help, -h
 #
 set -euo pipefail
@@ -27,6 +29,9 @@ DO_UNINSTALL=0
 DO_MIGRATE=0
 DO_LINK=0
 NO_BACKUP=0
+DO_STATUS=0
+VARIANT_ARG=""
+POSITIONAL_VARIANT=""
 
 if [ -t 1 ]; then
     BOLD=$'\033[1m'; RED=$'\033[31m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; BLUE=$'\033[34m'
@@ -71,10 +76,50 @@ Flags:
   --migrate-legacy   Remove files the previous installer copied into ~/.cursor
   --uninstall        Remove $PLUGIN_DST
   --no-backup        Skip the backup made by --migrate-legacy
+  --variant NAME     monolith (default) or conductor. orchestration is an alias
+                     of conductor. Same as HARNESS_VARIANT. The flag wins.
+  --status           Print the installed variant and exit. Does not build.
   --help, -h         Show this help
 
+  monolith, conductor
+                     Same as --variant. A positional name does not prompt.
+
 Builds $PLUGIN_SRC and installs it to $PLUGIN_DST.
+The default build is Monolith. Conductor:
+
+  ./install-cursor.sh --variant conductor
+  HARNESS_VARIANT=conductor ./install-cursor.sh
 EOF
+}
+
+normalize_variant() {
+    local value
+    value="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+    case "$value" in
+        conductor|orchestration|1) printf 'conductor' ;;
+        monolith|2) printf 'monolith' ;;
+        *) return 1 ;;
+    esac
+}
+
+print_cursor_variant() {
+    local marker raw
+    if [ ! -e "$PLUGIN_DST" ] && [ ! -L "$PLUGIN_DST" ]; then
+        printf 'cursor: %s (not installed)\n' "$PLUGIN_DST"
+        return 0
+    fi
+    marker="$PLUGIN_DST/.harness-variant"
+    if [ ! -f "$marker" ]; then
+        printf 'cursor: %s (not recorded)\n' "$PLUGIN_DST"
+        return 0
+    fi
+    raw="$(tr '[:upper:]' '[:lower:]' < "$marker" | tr -d '[:space:]')"
+    case "$raw" in
+        conductor|orchestration) printf 'cursor: %s Conductor\n' "$PLUGIN_DST" ;;
+        monolith) printf 'cursor: %s Monolith\n' "$PLUGIN_DST" ;;
+        "") printf 'cursor: %s (not recorded)\n' "$PLUGIN_DST" ;;
+        *) printf 'cursor: %s unknown (%s)\n' "$PLUGIN_DST" "$raw" ;;
+    esac
 }
 
 while [ $# -gt 0 ]; do
@@ -84,21 +129,76 @@ while [ $# -gt 0 ]; do
         --migrate-legacy) DO_MIGRATE=1 ;;
         --uninstall)      DO_UNINSTALL=1 ;;
         --no-backup)      NO_BACKUP=1 ;;
+        --status)         DO_STATUS=1 ;;
+        --variant)
+            if [ $# -lt 2 ] || [ -z "${2:-}" ]; then
+                err "--variant needs conductor or monolith"
+                exit 2
+            fi
+            VARIANT_ARG="$2"
+            shift
+            ;;
+        --variant=*)      VARIANT_ARG="${1#--variant=}" ;;
+        conductor|Conductor|CONDUCTOR|monolith|Monolith|MONOLITH|orchestration|Orchestration|ORCHESTRATION|1|2)
+            if [ -n "$POSITIONAL_VARIANT" ]; then
+                err "only one variant name is allowed"
+                exit 2
+            fi
+            POSITIONAL_VARIANT="$1"
+            ;;
         --help|-h)        print_help; exit 0 ;;
         *) err "unknown flag: $1"; print_help; exit 2 ;;
     esac
     shift
 done
 
+if [ "$DO_STATUS" = "1" ]; then
+    print_cursor_variant
+    exit 0
+fi
+
+if [ -n "$POSITIONAL_VARIANT" ] && [ -n "$VARIANT_ARG" ]; then
+    pos_norm="$(normalize_variant "$POSITIONAL_VARIANT")" || {
+        err "unknown variant '${POSITIONAL_VARIANT}': use conductor or monolith"
+        exit 2
+    }
+    flag_norm="$(normalize_variant "$VARIANT_ARG")" || {
+        err "unknown variant '${VARIANT_ARG}': use conductor or monolith"
+        exit 2
+    }
+    if [ "$pos_norm" != "$flag_norm" ]; then
+        err "variant '${POSITIONAL_VARIANT}' conflicts with --variant '${VARIANT_ARG}'"
+        exit 2
+    fi
+    VARIANT="$pos_norm"
+elif [ -n "$VARIANT_ARG" ]; then
+    VARIANT="$(normalize_variant "$VARIANT_ARG")" || {
+        err "unknown variant '${VARIANT_ARG}': use conductor or monolith (orchestration is an alias of conductor)"
+        exit 2
+    }
+elif [ -n "$POSITIONAL_VARIANT" ]; then
+    VARIANT="$(normalize_variant "$POSITIONAL_VARIANT")" || {
+        err "unknown variant '${POSITIONAL_VARIANT}': use conductor or monolith"
+        exit 2
+    }
+elif [ -n "${HARNESS_VARIANT:-}" ]; then
+    VARIANT="$(normalize_variant "$HARNESS_VARIANT")" || {
+        err "unknown variant '${HARNESS_VARIANT}': use conductor or monolith (orchestration is an alias of conductor)"
+        exit 2
+    }
+else
+    VARIANT="monolith"
+fi
+
 require_node() {
     command -v node >/dev/null 2>&1 || { err "node is required"; exit 1; }
 }
 
 build_plugin() {
-    step "Build plugin"
-    node "$REPO_DIR/scripts/build-cursor-plugin.mjs"
+    step "Build plugin ($VARIANT)"
+    node "$REPO_DIR/scripts/build-cursor-plugin.mjs" --variant "$VARIANT"
     [ -f "$PLUGIN_SRC/.cursor-plugin/plugin.json" ] || { err "build produced no plugin at $PLUGIN_SRC"; exit 1; }
-    ok "built $PLUGIN_SRC"
+    ok "built $PLUGIN_SRC ($VARIANT)"
 }
 
 install_plugin() {

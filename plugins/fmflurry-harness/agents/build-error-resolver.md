@@ -1,6 +1,6 @@
 ---
 name: build-error-resolver
-description: "MUST delegate when build, typecheck, lint, or TypeScript errors occur. Fixes only those errors with minimal diffs."
+description: "Fixes build, typecheck, and lint errors with a minimal diff. Use when the build is red and the log is large."
 readonly: false
 tier: coding
 ---

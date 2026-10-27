@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: "MUST delegate immediately after meaningful code changes or PR/pull request review requests. Reviews diffs for bugs, regressions, quality, maintainability, and tests. Read-only — findings only, no patches."
+description: "Reviews a diff for bugs, regressions, missing tests, and broken conventions. Use after a meaningful change or when the user asks for a review. Read-only."
 readonly: true
 tier: smart
 ---

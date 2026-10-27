@@ -2,6 +2,12 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.19] - 2026-10-26
+
+- The Cursor plugin build defaults to Monolith. The primary agent may write, there is no first-tool gate, and `/orchestrate` is optional. `cop` and `comment-judge` are the merged reviewers. Folded specialists stay skills. The `threejs` and `openspec` umbrella skills stay in the plugin. Tier defaults stay Cursor models only: `grok-4.7`, `grok-4.6`, and `composer-2.5`.
+- `./install-cursor.sh --variant conductor` and `HARNESS_VARIANT=conductor ./install-cursor.sh` build Conductor. `./install-cursor.sh --status` prints the installed variant from `.harness-variant`.
+- `./install.sh --local` vendors `AGENTS.md`, `.cursor/rules`, and `.agents` into the project and defaults to Monolith. Global `./install.sh --yes` stays Conductor. `--variant` and `HARNESS_VARIANT` override both. `orchestration` remains an alias of Conductor.
+
 ## [0.4.18] - 2026-10-26
 
 - Pull requests opened or updated by the harness include a show-me visual report. `agent-harness pr-report` writes `docs/pr-reports/<branch-slug>.html` and `.png` (offline HTML, one `@media` breakpoint) and copies both into `/opt/cursor/artifacts/pr-reports/` when that directory is writable. The PR template section `## Visual report` embeds the PNG and links the HTML.

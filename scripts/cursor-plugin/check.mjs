@@ -56,21 +56,80 @@ if (fs.existsSync(agentsDir)) {
 }
 
 if (!fs.existsSync(path.join(skillsDir, 'setup-harness/SKILL.md'))) errors.push('missing skills/setup-harness/SKILL.md');
-const conductorRule = path.join(out, 'rules/conductor.mdc');
-const conductorText = fs.existsSync(conductorRule) ? fs.readFileSync(conductorRule, 'utf8') : '';
+const variantFile = path.join(out, '.harness-variant');
+const variant = fs.existsSync(variantFile) ? fs.readFileSync(variantFile, 'utf8').trim().toLowerCase() : '';
+if (variant !== 'monolith' && variant !== 'conductor') {
+  errors.push(`.harness-variant must be monolith or conductor, got ${JSON.stringify(variant)}`);
+}
+const modelRuleRel = variant === 'conductor' ? 'rules/conductor.mdc' : 'rules/monolith.mdc';
+const modelRulePath = path.join(out, modelRuleRel);
+const modelText = fs.existsSync(modelRulePath) ? fs.readFileSync(modelRulePath, 'utf8') : '';
 for (const slug of Object.values(config.defaultTierModels)) {
-  if (!conductorText.includes(slug)) errors.push(`rules/conductor.mdc: missing default slug ${slug}`);
+  if (!modelText.includes(slug)) errors.push(`${modelRuleRel}: missing default slug ${slug}`);
 }
 for (const [tier, slugs] of Object.entries(config.tierFallbacks ?? {})) {
   for (const slug of slugs) {
-    if (!conductorText.includes(slug)) errors.push(`rules/conductor.mdc: missing ${tier} fallback ${slug}`);
+    if (!modelText.includes(slug)) errors.push(`${modelRuleRel}: missing ${tier} fallback ${slug}`);
   }
 }
 for (const family of config.cursorModelFamilies ?? []) {
-  if (!conductorText.includes(family)) errors.push(`rules/conductor.mdc: missing Cursor family ${family}`);
+  if (!modelText.includes(family)) errors.push(`${modelRuleRel}: missing Cursor family ${family}`);
 }
-if (!/third-party/.test(conductorText) || !/-fast/.test(conductorText)) {
-  errors.push('rules/conductor.mdc: missing Cursor-only model hard rule');
+if (!/third-party/.test(modelText) || !/-fast/.test(modelText)) {
+  errors.push(`${modelRuleRel}: missing Cursor-only model hard rule`);
+}
+if (variant === 'monolith') {
+  const folded = [
+    'conductor', 'coder', 'planner', 'writer', 'doc-updater', 'scout', 'tdd-guide', 'git-specialist',
+    'architect', 'angular-cop', 'dotnet-cop', 'haruspex-commentorum', 'why-synthesizer',
+  ];
+  for (const name of folded) {
+    if (fs.existsSync(path.join(agentsDir, `${name}.md`))) errors.push(`monolith plugin still has agents/${name}.md`);
+  }
+  if (fs.existsSync(path.join(out, 'rules/conductor.mdc'))) errors.push('monolith plugin still has rules/conductor.mdc');
+  const rulesDir = path.join(out, 'rules');
+  if (fs.existsSync(rulesDir)) {
+    for (const file of fs.readdirSync(rulesDir).filter((name) => name.endsWith('.mdc'))) {
+      const text = fs.readFileSync(path.join(rulesDir, file), 'utf8');
+      if (/First-Tool Gate/.test(text)) errors.push(`rules/${file}: still has a first-tool gate`);
+      if (/cannot write or edit files directly/i.test(text)) errors.push(`rules/${file}: still forbids the primary agent from writing`);
+    }
+  }
+  if (!/primary agent/i.test(modelText) || !/allowed to write|may write/i.test(modelText)) {
+    errors.push('rules/monolith.mdc does not allow the primary agent to write');
+  }
+  for (const skill of ['threejs', 'openspec']) {
+    if (!fs.existsSync(path.join(skillsDir, skill, 'SKILL.md'))) errors.push(`missing umbrella skill ${skill}`);
+  }
+  const conductorSkillPath = path.join(skillsDir, 'conductor/SKILL.md');
+  const conductorSkill = fs.existsSync(conductorSkillPath) ? fs.readFileSync(conductorSkillPath, 'utf8') : '';
+  if (!/optional/i.test(conductorSkill) || !conductorSkill.includes('The primary agent still writes.')) {
+    errors.push('skills/conductor/SKILL.md is not the Monolith overlay');
+  }
+  const orchestratePath = path.join(out, 'commands/orchestrate.md');
+  const orchestrate = fs.existsSync(orchestratePath) ? fs.readFileSync(orchestratePath, 'utf8') : '';
+  if (!/optional/i.test(orchestrate) || !/monolith/i.test(orchestrate)) {
+    errors.push('commands/orchestrate.md is not the optional Monolith command');
+  }
+  for (const name of ['cop', 'comment-judge']) {
+    if (!fs.existsSync(path.join(agentsDir, `${name}.md`))) errors.push(`monolith plugin missing agents/${name}.md`);
+  }
+  const copText = fs.existsSync(path.join(agentsDir, 'cop.md')) ? fs.readFileSync(path.join(agentsDir, 'cop.md'), 'utf8') : '';
+  if (!copText.includes('tier: smart') || !copText.includes('angular-cop') || !copText.includes('dotnet-cop')) {
+    errors.push('agents/cop.md must be the merged smart-tier cop');
+  }
+  const judgeText = fs.existsSync(path.join(agentsDir, 'comment-judge.md'))
+    ? fs.readFileSync(path.join(agentsDir, 'comment-judge.md'), 'utf8')
+    : '';
+  if (!/persona=haruspex|haruspex/.test(judgeText)) errors.push('agents/comment-judge.md must cover the haruspex persona');
+}
+if (variant === 'conductor') {
+  if (!fs.existsSync(path.join(agentsDir, 'coder.md'))) errors.push('conductor plugin is missing agents/coder.md');
+  if (fs.existsSync(path.join(agentsDir, 'cop.md'))) errors.push('conductor plugin includes the Monolith cop agent');
+  if (fs.existsSync(path.join(out, 'rules/monolith.mdc'))) errors.push('conductor plugin has rules/monolith.mdc');
+  const orchestration = path.join(out, 'rules/orchestration.mdc');
+  const orchestrationText = fs.existsSync(orchestration) ? fs.readFileSync(orchestration, 'utf8') : '';
+  if (!/First-Tool Gate/.test(orchestrationText)) errors.push('rules/orchestration.mdc: conductor build lost the first-tool gate');
 }
 const setupText = fs.existsSync(path.join(skillsDir, 'setup-harness/SKILL.md'))
   ? fs.readFileSync(path.join(skillsDir, 'setup-harness/SKILL.md'), 'utf8')

@@ -236,11 +236,18 @@ normalize_variant() {
 }
 
 ask_variant() {
-    local reply normalized
+    local reply normalized default_label default_value
+    if [ "$LOCAL_MODE" = "1" ]; then
+        default_label="Monolith"
+        default_value="monolith"
+    else
+        default_label="Conductor"
+        default_value="conductor"
+    fi
     while :; do
-        printf "    ${BOLD}?${RESET} Choose harness variant: Conductor or Monolith [Conductor] "
+        printf "    ${BOLD}?${RESET} Choose harness variant: Conductor or Monolith [%s] " "$default_label"
         read_reply reply
-        reply="${reply:-conductor}"
+        reply="${reply:-$default_value}"
         if normalized="$(normalize_variant "$reply")"; then
             HARNESS_VARIANT="$normalized"
             return 0
@@ -266,19 +273,23 @@ Flags:
   --uninstall     Remove the env-var block and copies created by this script
                   (does not delete the cloned repo or your data)
   --local         Project-scoped install into the current working directory.
-                  Copies repo into ./.opencode and ./.claude.
-                  Does not touch global shell rc files. Combine with --yes,
-                  --no-claude, --no-opencode, and --uninstall as normal. Do
-                  NOT run this from inside the settings-opencode repo itself.
+                  Copies the repo into ./.opencode and ./.claude, then vendors
+                  ./AGENTS.md, ./.cursor/rules, and ./.agents for the variant.
+                  The project default is Monolith. Does not touch global shell
+                  rc files. Combine with --yes, --no-claude, --no-opencode,
+                  and --uninstall as normal. Do NOT run this from inside the
+                  settings-opencode repo itself.
   conductor, monolith
                   Install that variant without prompts (both harnesses, global
                   scope, same as --yes). orchestration is an alias of conductor.
                   Combine with --local, --no-claude, or --no-opencode.
-  --variant NAME  conductor (default) or monolith. orchestration is an alias
-                  of conductor. Same as HARNESS_VARIANT. The flag wins over
-                  the env. --yes with neither flag nor env stays Conductor.
-  --status        Print the installed variant for OpenCode and Claude Code,
-                  then exit. Does not install or prompt.
+  --variant NAME  conductor or monolith. orchestration is an alias of
+                  conductor. Same as HARNESS_VARIANT. The flag wins over the
+                  env. Global --yes with neither set stays Conductor. --local
+                  --yes with neither set is Monolith.
+  --status        Print the installed variant and exit. Does not install or
+                  prompt. Global mode reports OpenCode and Claude Code.
+                  --local also reports ./.cursor and ./.agents.
   --help, -h      Show this message
 
 Target paths (global mode):
@@ -626,6 +637,24 @@ apply_harness_variant() {
     fi
     step "Applying Monolith variant"
     node "$REPO_DIR/scripts/variants/apply-monolith.mjs" --repo "$REPO_DIR" "${args[@]}"
+}
+
+# Project installs also refresh the files Cursor sessions and coding bots read.
+vendor_project_surfaces() {
+    [ "$LOCAL_MODE" = "1" ] || return 0
+    local ready=0
+    if [ "$SKIP_OPENCODE" != "1" ] && [ "$OPENCODE_TARGET_READY" = "1" ]; then
+        ready=1
+    fi
+    if [ "$SKIP_CLAUDE" != "1" ] && [ "$CLAUDE_TARGET_READY" = "1" ]; then
+        ready=1
+    fi
+    [ "$ready" = "1" ] || return 0
+    step "Vendoring project surfaces ($HARNESS_VARIANT)"
+    node "$REPO_DIR/scripts/variants/vendor-project.mjs" \
+        --repo "$REPO_DIR" \
+        --project "$INVOKE_DIR" \
+        --variant "$HARNESS_VARIANT"
 }
 
 # ------------------------------ env-var block --------------------------------
@@ -1560,6 +1589,10 @@ if [ "$DO_STATUS" = "1" ]; then
     fi
     print_installed_variant "opencode" "$TARGET_OPENCODE"
     print_installed_variant "claude" "$TARGET_CLAUDE"
+    if [ "$LOCAL_MODE" = "1" ]; then
+        print_installed_variant "cursor" "$INVOKE_DIR/.cursor"
+        print_installed_variant "agents" "$INVOKE_DIR/.agents"
+    fi
     exit 0
 fi
 
@@ -1635,7 +1668,11 @@ if [ "$ASSUME_YES" != "1" ] && [ "$DO_UNINSTALL" != "1" ]; then
 fi
 
 if [ -z "$HARNESS_VARIANT" ]; then
-    HARNESS_VARIANT=conductor
+    if [ "$LOCAL_MODE" = "1" ]; then
+        HARNESS_VARIANT=monolith
+    else
+        HARNESS_VARIANT=conductor
+    fi
 fi
 
 # Apply local-mode target overrides before any other logic runs.
@@ -1702,6 +1739,7 @@ fi
 
 sync_skills
 apply_harness_variant
+vendor_project_surfaces
 if [ "$SKIP_OPENCODE" != "1" ] && [ "$OPENCODE_TARGET_READY" != "1" ]; then
     err "OpenCode target runtime is absent; refusing a successful install"
     exit 1

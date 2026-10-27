@@ -43,7 +43,7 @@ docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgre
 
 **Severity:** CRITICAL (data not on the named volume `postgres-data`; anonymous volume; restart loses data); HIGH (bind-mount into repo tree); else OK.
 
-**Remediation:** a volume/mount fix is a compose change → dispatch `coder` with a precise brief, then a human applies it. Never re-point or delete a volume without a verified restorable backup (see `postgres-backup-restore` §5 restore-drill).
+**Remediation:** a volume/mount fix is a compose change. If `coder` is installed, dispatch to that agent with a precise brief, then a human applies it. Otherwise the main agent loads the `coder` skill, writes the compose change inline, and a human applies it. Never re-point or delete a volume without a verified restorable backup (see `postgres-backup-restore` §5 restore-drill).
 
 ---
 

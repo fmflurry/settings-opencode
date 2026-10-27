@@ -1,6 +1,6 @@
 ---
 description: Find failing PR checks, inspect logs or check links, and apply focused fixes. Routing depends on failure type (build/test/security). Usage: /fix-ci [branch|PR]
-agent: conductor
+agent: main
 ---
 
 # Fix CI Command

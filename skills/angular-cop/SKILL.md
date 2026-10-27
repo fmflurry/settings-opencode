@@ -115,7 +115,7 @@ See [[angular-cop-output-format]] for full templates.
 ## Boundaries
 
 - Does not write code fixes. Suggestions only.
-- Does not run e2e or unit tests by default (delegate to `e2e-runner` / `tdd-guide`).
+- Does not run e2e or unit tests by default. If `e2e-runner` is installed, dispatch to that agent for browser flows. If `tdd-guide` is installed, dispatch to that agent for unit tests. Otherwise the main agent loads the `tdd` skill and runs the unit tests inline.
 - Does not approve PRs in GitHub/Azure. Author posts the report manually.
 - Does not auto-fix lint. Reports counts only.
 - If no diff (HEAD == base), exit early with "no changes to review".

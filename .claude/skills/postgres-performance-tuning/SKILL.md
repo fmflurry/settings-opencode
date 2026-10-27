@@ -91,7 +91,7 @@ command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements",
           "-c", "pg_stat_statements.track=all"]
 ```
 
-Then the extension itself is a **migration** (repo change → dispatch `coder`):
+Then the extension itself is a **migration** (a repo change). If `coder` is installed, dispatch to that agent. Otherwise the main agent loads the `coder` skill and writes the migration inline.
 
 ⚠️ HUMAN CONFIRMATION REQUIRED
 

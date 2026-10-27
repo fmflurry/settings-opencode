@@ -1,6 +1,6 @@
 ---
 description: Spawn N parallel candidates at the same task, pick a base, graft the strongest parts of the losers into it, and verify the synthesized result. Usage: /chimera <task>
-agent: conductor
+agent: main
 ---
 
 # Chimera Command

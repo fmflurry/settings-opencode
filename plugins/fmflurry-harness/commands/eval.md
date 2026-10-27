@@ -1,6 +1,6 @@
 ---
 description: Run evaluation against acceptance criteria
-agent: conductor
+agent: main
 ---
 
 # Eval Command

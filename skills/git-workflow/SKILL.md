@@ -1,6 +1,6 @@
 ---
 name: git-workflow
-description: Use this skill for any git work such as creating branches, staging changes, writing commit messages, pushing branches, or preparing pull requests. Delegates git execution to the git-specialist agent.
+description: Use this skill for any git work such as creating branches, staging changes, writing commit messages, pushing branches, or preparing pull requests. If the `git-specialist` agent is installed, delegate to that agent. Otherwise the main agent does the work inline by following this skill.
 ---
 
 # Git Workflow Skill
@@ -19,11 +19,11 @@ Use this skill whenever the task involves git.
 
 ## Required Delegation
 
-When git work is needed, delegate to the dedicated `git-specialist` subagent via the `/git` command.
+When git work is needed: if the `git-specialist` agent is installed, delegate to that agent via the `/git` command. Otherwise the main agent does the work inline by following this skill.
 
-- Do not handle substantive git workflow directly in the main agent when `/git` can handle it.
-- Use the `git-specialist` agent for branch naming, commit message drafting, staging, commits, and pushes.
-- Keep non-git implementation work in the main agent, then switch to `/git` for repository operations.
+- If `git-specialist` is installed, do not handle substantive git workflow in the main agent when `/git` can handle it. Otherwise the main agent does that git work inline.
+- If `git-specialist` is installed, that agent owns branch naming, commit message drafting, staging, commits, and pushes. Otherwise the main agent does those inline.
+- Keep non-git implementation work in the main agent. If `git-specialist` is installed, switch to `/git` for repository operations. Otherwise stay in this session and follow this skill.
 - If you are already the `git-specialist` agent, execute the git task directly and do not re-delegate it. Follow the Canonical spec section below.
 
 ## Commit Convention
@@ -95,7 +95,7 @@ Every branch name must follow this format:
 
 ## Git Specialist Expectations
 
-The `git-specialist` agent must:
+If the `git-specialist` agent is installed, it must follow this list. Otherwise the main agent follows the same list inline.
 
 - inspect repository status before acting
 - draft compliant branch names and commit messages
@@ -133,7 +133,7 @@ For git tasks, return:
 
 ## Canonical spec
 
-**Applies to `git-specialist` and to any agent about to run `git commit` or `git push`.** This is the canonical spec for commit cohesion and staging discipline. `git-specialist` operates against these rules and does not restate them. Other agents delegate.
+**Applies to `git-specialist` when that agent is installed, and to the main agent when it is not, and to any agent about to run `git commit` or `git push`.** This is the canonical spec for commit cohesion and staging discipline. The agent doing the git work operates against these rules and does not restate them. If `git-specialist` is installed, other agents delegate to that agent. Otherwise they follow this spec inline.
 
 ## Commit Message Format
 
@@ -158,7 +158,7 @@ rules above are unchanged. The same English requirement applies to PR titles and
 
 ## Precedence (mandatory)
 
-This is the canonical spec — `git-specialist` operates against these exact rules. Do not restate the full spec elsewhere; reference this section instead.
+This is the canonical spec. If `git-specialist` is installed, that agent operates against these exact rules. Otherwise the main agent does. Do not restate the full spec elsewhere; reference this section instead.
 
 Logical cohesion is the hard rule; commit size is a signal, never a blocker. A commit is one coherent logical set of changes. Size never justifies breaking a coherent set apart. When cohesion and a size number conflict, cohesion wins.
 
@@ -225,13 +225,13 @@ When a change spans layers, split commits in this order. Each commit should stay
 
 ## Commit Sequencing (commit-as-you-go)
 
-- Each logical unit is committed immediately and atomically by `git-specialist`.
-- When a change spans multiple logical units, `git-specialist` sequences it into multiple atomic commits itself, in compilability order (see Canonical Split Order above). No separate planning agent is involved; commit sequencing is `git-specialist`'s own job.
+- Each logical unit is committed immediately and atomically. If `git-specialist` is installed, that agent makes the commit. Otherwise the main agent makes it inline.
+- When a change spans multiple logical units, sequence it into multiple atomic commits, in compilability order (see Canonical Split Order above). If `git-specialist` is installed, that agent does the sequencing. Otherwise the main agent does. No separate planning agent is involved.
 - Every split produced this way MUST pass the Legal-Split Test above — cohesion defines a "logical unit", not a size threshold.
 
 ## Pull Request Workflow
 
-The `/create-pull-request` command owns the PR body contract (`## Content` / `## QA tests` / `## Locked decisions` / `## Non-blocking follow-ups`). When that command is not used, `git-specialist` falls back to its own minimal template (short `## Summary` section) and drops empty sections. Either body also includes `## Visual report`, from the `pr-visual-report` skill. A docs typo or a version bump only may skip, with the reason stated.
+The `/create-pull-request` command owns the PR body contract (`## Content` / `## QA tests` / `## Locked decisions` / `## Non-blocking follow-ups`). When that command is not used, the agent doing the git work falls back to a minimal template (short `## Summary` section) and drops empty sections. If `git-specialist` is installed, that agent owns the fallback. Otherwise the main agent does. Either body also includes `## Visual report`, from the `pr-visual-report` skill. A docs typo or a version bump only may skip, with the reason stated.
 
 In all cases:
 1. Analyze full commit history (not just the latest commit)
@@ -241,12 +241,12 @@ In all cases:
 ## Feature Implementation Workflow
 
 1. **Plan First**
-   - Use **planner** agent to create implementation plan
+   - If `planner` is installed, dispatch to that agent to create the implementation plan. Otherwise the main agent loads the `planner` skill and writes the plan inline.
    - Identify dependencies and risks
    - Break down into phases
 
 2. **TDD Approach**
-   - Use **tdd-guide** agent
+   - If `tdd-guide` is installed, dispatch to that agent. Otherwise the main agent loads the `tdd` skill and follows RED, GREEN, IMPROVE inline.
    - Write tests first (RED)
    - Implement to pass tests (GREEN)
    - Refactor (IMPROVE)

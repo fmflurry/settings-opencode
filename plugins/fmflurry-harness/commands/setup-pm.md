@@ -1,6 +1,6 @@
 ---
 description: Configure package manager preference
-agent: conductor
+agent: main
 ---
 
 # Setup Package Manager Command

@@ -67,14 +67,14 @@ each overlapping PR's decision. A `Wait or cancel` outcome escalates.
 
 ## 3. Plan
 
-Dispatch `planner` with the goal, the clarified answers, the assumptions and `<wt>`. Ask for an ordered list of phases,
+If the `planner` agent is installed, dispatch to that agent with the goal, the clarified answers, the assumptions and `<wt>`. Otherwise the main agent loads the `planner` skill and writes the plan inline. Ask for an ordered list of phases,
 each with one verifiable check. Keep the plan in the decision log, not in chat.
 
 ## 4. Implement
 
-- Write the failing tests first: dispatch `tdd-guide` with the brief contract. FILES are absolute paths under `<wt>`.
-- Then dispatch `coder` to make them pass. One brief per coherent unit. Parallel dispatches need disjoint FILES.
-- Commit through `git-specialist` with `<wt>` as its working tree, following the git workflow rule. Stage by explicit
+- Write the failing tests first. If `tdd-guide` is installed, dispatch to that agent with the brief contract. Otherwise the main agent loads the `tdd` skill and writes the tests inline. FILES are absolute paths under `<wt>`.
+- Then make them pass. If `coder` is installed, dispatch to that agent. Otherwise the main agent loads the `coder` skill and implements inline. One brief per coherent unit. Parallel dispatches need disjoint FILES.
+- Commit with `<wt>` as the working tree, following the git workflow rule. If `git-specialist` is installed, dispatch to that agent. Otherwise the main agent loads the `git-workflow` skill and commits inline. Stage by explicit
   path. Commit messages are in English.
 
 ## 5. Verify
@@ -99,7 +99,7 @@ review and a passing security review for the exact diff being pushed (the diff a
 - Dispatch in one message, so they run in parallel, each on `git -C <wt> diff <base>...HEAD`:
   - `code-reviewer`: correctness, regressions, tests.
   - `security-reviewer`: auth, secrets, input, CI workflows, permissions.
-  - `angular-cop` when Angular or TypeScript changed; `dotnet-cop` when .NET changed.
+  - If `angular-cop` is installed, dispatch to that agent when Angular or TypeScript changed. Otherwise dispatch to `cop` when that agent is installed (it loads the `angular-cop` skill). If `dotnet-cop` is installed, dispatch to that agent when .NET changed. Otherwise dispatch to `cop` when that agent is installed (it loads the `dotnet-cop` skill). If neither cop agent is installed, the main agent loads the matching skill and reviews inline.
   - `database-reviewer` when SQL changed.
   - `/code-review` is optional, if available.
 - Verify each finding against the code. Drop the findings you cannot confirm.
@@ -115,8 +115,7 @@ review and a passing security review for the exact diff being pushed (the diff a
 
 ## 7. Push and open the PR
 
-Dispatch `git-specialist` with `<wt>`, the branch name, the base (`<base>`), an English conventional-commit title, and
-a body file. It runs these commands from `<wt>`:
+If `git-specialist` is installed, dispatch to that agent with `<wt>`, the branch name, the base (`<base>`), an English conventional-commit title, and a body file. Otherwise the main agent loads the `git-workflow` skill and runs these commands from `<wt>`:
 
 ```bash
 git -C <wt> push -u origin <type>/<scope>-<short-description>
@@ -234,8 +233,7 @@ the blocked path.
    # writes <wt>/docs/agent-reports/<yyyy-mm-dd>-<slug>.png
    ```
 
-3. Commit the PNG through `git-specialist` (explicit path, `docs(report): ...` or the goal's type, per the git workflow
-   rule). Push it, then `agent-harness goal sha <sha>`.
+3. Commit the PNG (explicit path, `docs(report): ...` or the goal's type, per the git workflow skill). If `git-specialist` is installed, dispatch to that agent. Otherwise the main agent loads the `git-workflow` skill and commits inline. Push it, then `agent-harness goal sha <sha>`.
 4. Because the push changes the head, wait for CI on the new head (`gh pr checks <n> --watch`). A docs-only change may
    skip some checks; that is expected, and only the required checks that ran must be green.
 5. Embed the image in the PR body with a commit-SHA permalink, where `<sha>` is the commit that holds the PNG

@@ -4,7 +4,7 @@ description: Commit relevant changes and push through the git workflow
 
 # Push Changes Command
 
-> CC: delegate this to the `git-specialist` subagent via the Agent tool (subagent_type: `git-specialist`). The subagent inspects the repo and runs the steps below.
+> `git-specialist` is not installed. The main agent does this inline and loads the `git-workflow` skill
 
 ## Task
 

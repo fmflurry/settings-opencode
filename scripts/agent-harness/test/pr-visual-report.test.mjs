@@ -216,3 +216,108 @@ test('pr-report rejects an external stylesheet link', () => {
   assert.equal(result.status, 1);
   assert.match(result.stderr, /offline/);
 });
+
+const metricsTable = [
+  '## Metrics',
+  '',
+  '| Metric | Value |',
+  '| --- | --- |',
+  '| Wall | 12m |',
+  '| Active | 9m (gaps over 5m excluded) |',
+  '| Sessions | cursor 1, claude 0, opencode 0 |',
+  '| Tokens | n/a |',
+  '| Tool failures | 0 |',
+  '| Guard blocks | 0 |',
+  '| Review rounds | 0 |',
+  '| Fix rounds | 0 |',
+  '',
+  'Status: complete',
+  '',
+].join('\n');
+
+test('check warns when metrics are missing and still accepts the visual report', () => {
+  const result = bash(hook, ['--check'], { input: good });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /warning: metrics missing/);
+});
+
+test('check warns on a partial metrics table without failing', () => {
+  const body = `${good}\n## Metrics\n\n| Metric | Value |\n| --- | --- |\n| Wall | n/a |\n| Active | n/a |\n| Sessions | cursor 0, claude 0, opencode 0 |\n| Tokens | n/a |\n\nStatus: partial\n`;
+  const result = bash(hook, ['--check'], { input: body });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /warning: metrics partial/);
+});
+
+test('check stays quiet when the metrics table is complete', () => {
+  const result = bash(hook, ['--check'], { input: `${good}\n${metricsTable}` });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
+});
+
+test('a skipped visual report does not warn about metrics', () => {
+  const result = bash(hook, ['--check'], { input: skipped });
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stderr, /metrics missing/);
+});
+
+test('pr-report inserts the metrics panel and prints the table', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-report-'));
+  const git = (...args) => {
+    const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+  };
+  git('init', '-q', '-b', 'feat/demo-report');
+  git('config', 'user.email', 't@t');
+  git('config', 'user.name', 't');
+  const html = path.join(dir, 'in.html');
+  fs.writeFileSync(html, '<!doctype html><style>@media (max-width:600px){body{color:#111}}</style><main><p>demo</p></main>');
+  const metrics = path.join(dir, 'in.metrics.json');
+  fs.writeFileSync(metrics, JSON.stringify({
+    feature: { repo: 'o/r', branch: 'feat/demo-report', pr: 4 },
+    prs: [4],
+    wall_ms: 60000,
+    active_ms: 30000,
+    idle_gap_min: 5,
+    sessions: { cursor: 1, claude: 0, opencode: 0 },
+    tools: [{ name: 'Read', count: 2 }],
+    skills: [{ name: 'pr-visual-report', count: 1 }],
+    agents: [{ name: 'main', calls: 2 }, { name: 'coder', calls: 1 }],
+    tool_failures: 0,
+    failure_tools: [],
+    duration_ms: null,
+    guard_blocks: 0,
+    guards: {},
+    review_rounds: 0,
+    fix_rounds: 0,
+    tokens: null,
+    tokens_known: 0,
+    events: 3,
+    first_ts: '2026-10-27T10:00:00Z',
+    last_ts: '2026-10-27T10:01:00Z',
+    partial: false,
+    prompt: 'SUPER_SECRET',
+    args: '/home/secret',
+  }));
+  const stub = path.join(dir, 'shot.sh');
+  fs.writeFileSync(stub, '#!/bin/bash\nbase=$(basename "$1" .html)\nprintf png > "$2/$base.png"\nprintf "%s\\n" "$2/$base.png"\n');
+  fs.chmodSync(stub, 0o755);
+  const art = path.join(dir, 'artifacts');
+  fs.mkdirSync(art);
+  const result = bash(report, [html, '--metrics', metrics], {
+    cwd: dir,
+    env: { ...process.env, AGENT_HARNESS_TEST: '1', PR_REPORT_SCREENSHOT: stub, PR_REPORT_ARTIFACT_DIR: art },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const page = fs.readFileSync(path.join(dir, 'docs/pr-reports/feat-demo-report.html'), 'utf8');
+  assert.equal(page.includes('id="kpi-metrics"'), true);
+  assert.equal(page.includes('SUPER_SECRET'), false);
+  assert.equal(page.includes('/home/secret'), false);
+  assert.equal(/https?:/.test(page), false);
+  const stored = fs.readFileSync(path.join(dir, 'docs/pr-reports/feat-demo-report.metrics.json'), 'utf8');
+  assert.equal(stored.includes('SUPER_SECRET'), false);
+  assert.equal(stored.includes('/home'), false);
+  assert.match(result.stdout, /## Metrics/);
+  assert.match(result.stdout, /\| Wall \| 1m00s \|/);
+  assert.match(result.stdout, /\| Tokens \| n\/a \|/);
+  assert.match(result.stdout, /Status: complete/);
+});

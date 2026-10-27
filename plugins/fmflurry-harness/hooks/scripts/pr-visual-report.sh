@@ -44,6 +44,50 @@ visual_ok() {
   return 1
 }
 
+section_between() {
+  local heading="$1"
+  printf '%s\n' "$2" | awk -v heading="$heading" '
+    $0 ~ ("^" heading "[[:space:]]*$") { found=1; next }
+    found && /^##[^#]/ { exit }
+    found { print }
+  '
+}
+
+metrics_warn() {
+  local body="$1" section visual skip_line missing="" label wall_line active_line
+  body="${body//$'\r'/}"
+  section="$(section_between "## Metrics" "$body")"
+  visual="$(section_between "## Visual report" "$body")"
+  if [ -z "$section" ]; then
+    skip_line="$(printf '%s\n' "$visual" | grep -E '^[[:space:]]*[-*] \[[xX]\][[:space:]]+Skip([^[:alnum:]]|$)' | head -n 1 || true)"
+    if [ -n "$skip_line" ]; then
+      return 0
+    fi
+    if printf '%s\n' "$visual" | grep -Eq '\|[[:space:]]*Wall[[:space:]]*\|'; then
+      section="$visual"
+    fi
+  fi
+  if [ -z "$section" ]; then
+    say "pr-report-check: warning: metrics missing"
+    return 0
+  fi
+  for label in Wall Active Sessions Tokens; do
+    printf '%s\n' "$section" | grep -Eq "\\|[[:space:]]*${label}[[:space:]]*\\|" || missing="${missing}${label} "
+  done
+  if [ -n "$missing" ]; then
+    say "pr-report-check: warning: metrics partial (missing ${missing% })"
+    return 0
+  fi
+  wall_line="$(printf '%s\n' "$section" | grep -Ei '^[[:space:]]*\|[[:space:]]*Wall[[:space:]]*\|' | head -n 1 || true)"
+  active_line="$(printf '%s\n' "$section" | grep -Ei '^[[:space:]]*\|[[:space:]]*Active[[:space:]]*\|' | head -n 1 || true)"
+  if printf '%s\n' "$section" | grep -Eq 'Status:[[:space:]]*partial' \
+    || printf '%s\n' "$wall_line" | grep -Eiq '[[:space:]]n/a[[:space:]]*\|' \
+    || printf '%s\n' "$active_line" | grep -Eiq '[[:space:]]n/a[[:space:]]*\|'; then
+    say "pr-report-check: warning: metrics partial"
+  fi
+  return 0
+}
+
 read_body_file() {
   local f="$1" dir="$2" path
   case "$f" in
@@ -164,7 +208,8 @@ take_body_flags() {
   else
     BODY="$PAYLOAD"
   fi
-  visual_ok "$BODY"
+  visual_ok "$BODY" || return 1
+  metrics_warn "$BODY"
 }
 
 skip_flags() {
@@ -277,8 +322,11 @@ if [ "${1:-}" = "--check" ]; then
       exit 2
       ;;
   esac
-  visual_ok "$BODY"
-  exit $?
+  if visual_ok "$BODY"; then
+    metrics_warn "$BODY"
+    exit 0
+  fi
+  exit 1
 fi
 
 input="$(cat 2>/dev/null || true)"

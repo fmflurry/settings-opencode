@@ -1,0 +1,75 @@
+{
+  "feature": {
+    "repo": "fmflurry/settings-opencode",
+    "branch": "feat/kpi-feature-report",
+    "pr": null
+  },
+  "prs": [],
+  "wall_ms": 181000,
+  "active_ms": 181000,
+  "idle_gap_min": 5,
+  "sessions": {
+    "cursor": 2,
+    "claude": 1,
+    "opencode": 1
+  },
+  "tools": [
+    {
+      "name": "Read",
+      "count": 1
+    },
+    {
+      "name": "Shell",
+      "count": 1
+    },
+    {
+      "name": "Skill",
+      "count": 1
+    },
+    {
+      "name": "Task",
+      "count": 1
+    }
+  ],
+  "skills": [
+    {
+      "name": "pr-visual-report",
+      "count": 1
+    }
+  ],
+  "agents": [
+    {
+      "name": "main",
+      "calls": 3
+    },
+    {
+      "name": "coder",
+      "calls": 1
+    }
+  ],
+  "tool_failures": 1,
+  "failure_tools": [
+    {
+      "name": "Shell",
+      "count": 1
+    }
+  ],
+  "duration_ms": {
+    "n": 2,
+    "sum": 55,
+    "mean": 28,
+    "max": 40
+  },
+  "guard_blocks": 5,
+  "guards": {
+    "git": 1
+  },
+  "review_rounds": 1,
+  "fix_rounds": 1,
+  "tokens": 230,
+  "tokens_known": 3,
+  "events": 20,
+  "first_ts": "2026-10-27T12:32:05Z",
+  "last_ts": "2026-10-27T12:35:06Z",
+  "partial": false
+}

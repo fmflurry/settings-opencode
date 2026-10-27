@@ -79,3 +79,31 @@ OpenCode (`plugins/kpi.ts`):
 - `session.idle` and `session.deleted` write `session_end` for a root session, or `subagent_stop` with `agent` for a child session. `tokens` is the sum of the stored message totals.
 
 `install.sh` merges `SessionStart` and `PostToolUse` commands for `kpi-emit.sh` into Claude settings. Global installs use `~/.claude/hooks`. Project installs (`--local`) use `./.claude/hooks`. Conductor and Monolith share that merge.
+
+## Feature report
+
+`agent-harness kpi feature` reads the same log for one feature. The feature key is `repo` + `branch`. The PR number is added once an event on that branch has `pr`, or when `--pr` is passed. `--branch` defaults to the current branch. `--pr` without `--branch` uses the branch on the events for that PR, and still counts earlier events on that branch that have no PR number yet.
+
+```bash
+agent-harness kpi feature
+agent-harness kpi feature --pr 53 --json
+agent-harness kpi feature --html --log ~/.agent-harness/kpi/events.jsonl
+```
+
+The text report, and the sanitised `docs/pr-reports/<branch-slug>.metrics.json` written next to it, contain:
+
+| Value | Rule |
+| --- | --- |
+| Wall | Last event time minus first event time |
+| Active | Sum of gaps between events. A gap longer than `--gap` minutes is idle and is left out. The default is 5 |
+| Sessions | Distinct `session_id` per host (`cursor`, `claude`, `opencode`) |
+| Tools and skills | Counts of `tool_call` only. `tool_result` does not add a call |
+| Agents | `tool_call` counts for `main`, or for a subagent when the event's session is that child. A Task/Agent call on the parent session stays on `main`. A subagent with no tool calls of its own is counted once per spawn |
+| Failures and durations | `tool_result` with `ok: false`, and `duration_ms` when it is a non-negative number below 24 hours |
+| Guard blocks | `guard_block` events, split by `git`, `ask`, `secret`, and `budget` |
+| Review and fix rounds | `review_round` and `fix_round` events. If those events are absent, the report uses `review_rounds` or `fix_iterations` from a later outcome |
+| Tokens | Sum of `session_end` and `subagent_stop` totals. `n/a` when none of those events carried a number |
+
+`partial` is true when the branch has no events, or the repo or branch is unknown. Unknown tokens are not partial.
+
+The metrics file keeps only those aggregates. Names must already match the field patterns above. Prompts, arguments, and absolute paths are not written. `pr-report` reads the file, inserts a Metrics panel into the show-me HTML, and prints a `## Metrics` table for the PR body. `pr-report-check` warns when that table is missing or partial and still accepts a valid visual report. Conductor and Monolith both run `kpi feature` before the visual report.

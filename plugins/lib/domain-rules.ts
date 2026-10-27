@@ -12,8 +12,17 @@ export type DomainDecision =
   | { action: "error"; message: string }
   | { action: "run"; project: string; script: string; scriptPath: string };
 
+function canonicalPath(value: string): string {
+  const resolved = path.resolve(value);
+  try {
+    return fs.realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
+}
+
 function findHarnessLocal(start: string): string | null {
-  let dir = path.resolve(start);
+  let dir = canonicalPath(start);
   for (;;) {
     const marker = path.join(dir, ".harness-local");
     if (fs.existsSync(marker) && fs.statSync(marker).isDirectory()) return dir;
@@ -130,7 +139,7 @@ export function executeDomainRules(
 }
 
 const invoked = Boolean(process.argv[1])
-  && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+  && canonicalPath(process.argv[1]) === canonicalPath(fileURLToPath(import.meta.url));
 if (invoked) {
   const result = executeDomainRules(decideDomainRules(process.cwd()), { inherit: true });
   process.exit(result.code);

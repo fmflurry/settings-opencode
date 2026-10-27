@@ -97,6 +97,26 @@ test("a script symlink that leaves the project is refused", () => {
   }
 });
 
+test("domain-rules runs when the hook directory is a symlink", () => {
+  const root = project();
+  const linkRoot = fs.mkdtempSync(path.join(os.tmpdir(), "domain-hook-link-"));
+  try {
+    fs.mkdirSync(path.join(root, ".harness-local"));
+    fs.writeFileSync(
+      path.join(root, ".harness-local/domain-rules.json"),
+      '{"enabled": true, "script": "scripts/check-domain-rules.sh"}\n',
+    );
+    const hooksLink = path.join(linkRoot, "hooks");
+    fs.symlinkSync(path.join(repo, ".claude/hooks"), hooksLink);
+    const ran = spawnSync("bash", [path.join(hooksLink, "domain-rules.sh")], { cwd: root, encoding: "utf8" });
+    assert.equal(ran.status, 2, `${ran.stdout}\n${ran.stderr}`);
+    assert.equal(fs.readFileSync(path.join(root, "ran.txt"), "utf8"), "ran");
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(linkRoot, { recursive: true, force: true });
+  }
+});
+
 test("the OpenCode plugin blocks edits only when the project script is enabled", async () => {
   const root = project();
   try {

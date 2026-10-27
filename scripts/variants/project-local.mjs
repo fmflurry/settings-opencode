@@ -359,6 +359,15 @@ export function applyProjectLocal(project, roots) {
   return { pruned, overlaid: selected.length };
 }
 
+function canonicalPath(value) {
+  const resolved = path.resolve(value);
+  try {
+    return fs.realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
+}
+
 function main() {
   const argv = process.argv.slice(2);
   const projectArg = flag(argv, '--project');
@@ -366,7 +375,7 @@ function main() {
     console.error('project-local: --project needs a path');
     process.exit(2);
   }
-  const project = path.resolve(projectArg);
+  const project = canonicalPath(projectArg);
   const apply = argv.includes('--apply');
   const status = argv.includes('--status');
   if (apply === status) {
@@ -396,6 +405,6 @@ function main() {
 }
 
 const here = fileURLToPath(import.meta.url);
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(here)) {
+if (process.argv[1] && canonicalPath(process.argv[1]) === canonicalPath(here)) {
   main();
 }

@@ -28,8 +28,17 @@ const repo = flag('--repo');
 const opencodeDir = args.includes('--opencode') ? flag('--opencode') : null;
 const claudeDir = args.includes('--claude') ? flag('--claude') : null;
 
+function canonicalPath(value) {
+  const resolved = path.resolve(value);
+  try {
+    return fs.realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
+}
+
 function samePath(a, b) {
-  return path.resolve(a) === path.resolve(b);
+  return canonicalPath(a) === canonicalPath(b);
 }
 
 if (opencodeDir && samePath(opencodeDir, repo)) {

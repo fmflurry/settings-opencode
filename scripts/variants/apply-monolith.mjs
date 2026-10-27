@@ -33,8 +33,17 @@ if (baseline !== agentsMd) {
   process.exit(1);
 }
 
+function canonicalPath(value) {
+  const resolved = path.resolve(value);
+  try {
+    return fs.realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
+}
+
 function samePath(a, b) {
-  return path.resolve(a) === path.resolve(b);
+  return canonicalPath(a) === canonicalPath(b);
 }
 
 if (claudeDir && samePath(claudeDir, path.join(repo, '.claude'))) {
@@ -179,6 +188,7 @@ function applyClaude(dir) {
 function instructionEntry(dir) {
   const globalDir = path.join(process.env.HOME || '', '.config', 'opencode');
   if (samePath(dir, globalDir)) return '~/.config/opencode/instructions/monolith.md';
+  if (path.basename(path.resolve(dir)) === '.opencode') return '.opencode/instructions/monolith.md';
   return path.join(dir, 'instructions', 'monolith.md');
 }
 

@@ -24,14 +24,24 @@ function flag(name) {
   return value;
 }
 
-const repo = path.resolve(flag('--repo') || path.resolve(here, '../..'));
-const project = path.resolve(flag('--project') || '');
+function canonicalPath(value) {
+  const resolved = path.resolve(value);
+  try {
+    return fs.realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
+}
+
+const projectArg = flag('--project');
+const repo = canonicalPath(flag('--repo') || path.resolve(here, '../..'));
+const project = canonicalPath(projectArg || '.');
 const pluginArg = flag('--plugin');
-if (!project || project === path.resolve('.')) {
+if (!projectArg) {
   console.error('vendor-project: --project needs a path');
   process.exit(2);
 }
-if (path.resolve(project) === path.resolve(repo)) {
+if (project === repo) {
   console.error('vendor-project: refusing to vendor into the settings repo');
   process.exit(1);
 }

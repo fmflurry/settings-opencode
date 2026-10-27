@@ -427,9 +427,17 @@ if (Test-Path (Join-Path $SrcDir '.git')) {
 if ($LASTEXITCODE -ne 0) { Die 'git fetch/clone failed' }
 Ok "source ready at $SrcDir"
 
+# ProviderPath so a symlinked working directory matches the clone.
+$SrcDir = (Resolve-Path -LiteralPath $SrcDir).ProviderPath
+$InvokeDir = (Resolve-Path -LiteralPath $InvokeDir).ProviderPath
+if ($Local) {
+    $OpencodeDir = Join-Path $InvokeDir '.opencode'
+    $ClaudeDir = Join-Path $InvokeDir '.claude'
+}
+
 # ------------------------------ local guard ----------------------------------
 
-if ($Local -and ($InvokeDir -eq $SrcDir)) {
+if ($Local -and (Test-SamePath $InvokeDir $SrcDir)) {
     Die 'run -Local from your project directory, not the settings-opencode clone'
 }
 
@@ -629,13 +637,35 @@ if ($Variant -eq 'monolith') {
     }
 }
 
-if ($Local -and (($doOpencode -and $opencodeTargetReady) -or ($doClaude -and $claudeTargetReady))) {
-    Step "Vendoring project surfaces ($Variant)"
-    & node (Join-Path $SrcDir 'scripts/variants/vendor-project.mjs') '--repo' $SrcDir '--project' $InvokeDir '--variant' $Variant
-    if ($LASTEXITCODE -ne 0) { Die 'project vendor failed' }
+if ($Local) {
+    if (($doOpencode -and $opencodeTargetReady) -or ($doClaude -and $claudeTargetReady)) {
+        Step "Vendoring project surfaces ($Variant)"
+        & node (Join-Path $SrcDir 'scripts/variants/vendor-project.mjs') '--repo' $SrcDir '--project' $InvokeDir '--variant' $Variant
+        if ($LASTEXITCODE -ne 0) { Die 'project vendor failed' }
+    }
     $roots = @()
-    if ($doClaude -and $claudeTargetReady -and -not $claudeTargetIsSource) { $roots += 'claude' }
-    if ($doOpencode -and $opencodeTargetReady -and -not $opencodeTargetIsSource) { $roots += 'opencode' }
+    $skipReasons = @()
+    if (-not $doClaude) {
+        $skipReasons += 'claude skipped (-NoClaude)'
+    } elseif (-not $claudeTargetReady) {
+        $skipReasons += 'claude skipped (target not installed)'
+    } elseif ($claudeTargetIsSource) {
+        $skipReasons += 'claude skipped (target is the source checkout)'
+    } else {
+        $roots += 'claude'
+    }
+    if (-not $doOpencode) {
+        $skipReasons += 'opencode skipped (-NoOpencode)'
+    } elseif (-not $opencodeTargetReady) {
+        $skipReasons += 'opencode skipped (target not installed)'
+    } elseif ($opencodeTargetIsSource) {
+        $skipReasons += 'opencode skipped (target is the source checkout)'
+    } else {
+        $roots += 'opencode'
+    }
+    if ($skipReasons.Count -gt 0) {
+        Warn ("project overlay: " + ($skipReasons -join '; '))
+    }
     if ($roots.Count -gt 0) {
         $roots += 'surfaces'
         Step 'Applying project overlay'

@@ -24,6 +24,8 @@ test('monolith overlay keeps conductor sources and installs the lean roster', ()
   copyTree(path.join(repo, 'commands'), path.join(opencode, 'commands'));
   fs.copyFileSync(path.join(repo, 'opencode.jsonc'), path.join(opencode, 'opencode.jsonc'));
   copyTree(path.join(repo, '.claude'), claude);
+  const conductorOpencode = path.join(tmp, 'conductor-opencode');
+  fs.cpSync(opencode, conductorOpencode, { recursive: true });
 
   const before = fs.readFileSync(path.join(repo, 'opencode.jsonc'), 'utf8');
   const result = spawnSync(process.execPath, [applyScript, '--repo', repo, '--opencode', opencode, '--claude', claude], {
@@ -33,6 +35,7 @@ test('monolith overlay keeps conductor sources and installs the lean roster', ()
   assert.equal(fs.readFileSync(path.join(repo, 'opencode.jsonc'), 'utf8'), before);
 
   const cfg = parseJsonc(fs.readFileSync(path.join(opencode, 'opencode.jsonc'), 'utf8'));
+  assert.equal(cfg.instructions[0], path.join(opencode, 'instructions', 'monolith.md'));
   assert.equal(cfg.default_agent, 'main');
   assert.equal(cfg.agent.conductor, undefined);
   assert.equal(cfg.agent.planner, undefined);
@@ -76,5 +79,25 @@ test('monolith overlay keeps conductor sources and installs the lean roster', ()
   assert.equal(fs.readFileSync(path.join(claude, '.harness-variant'), 'utf8').trim(), 'monolith');
   assert.equal(fs.existsSync(path.join(claude, 'skills/conductor/SKILL.md')), true);
   assert.equal(fs.existsSync(path.join(opencode, 'skills/conductor/SKILL.md')), true);
+
+  const projectOpencode = path.join(tmp, '.opencode');
+  fs.cpSync(conductorOpencode, projectOpencode, { recursive: true });
+  const local = spawnSync(process.execPath, [applyScript, '--repo', repo, '--opencode', projectOpencode], {
+    encoding: 'utf8',
+  });
+  assert.equal(local.status, 0, `${local.stdout}\n${local.stderr}`);
+  const localCfg = parseJsonc(fs.readFileSync(path.join(projectOpencode, 'opencode.jsonc'), 'utf8'));
+  assert.deepEqual(localCfg.instructions, ['.opencode/instructions/monolith.md']);
+
+  const home = path.join(tmp, 'home');
+  const globalDir = path.join(home, '.config', 'opencode');
+  fs.cpSync(conductorOpencode, globalDir, { recursive: true });
+  const globalApply = spawnSync(process.execPath, [applyScript, '--repo', repo, '--opencode', globalDir], {
+    encoding: 'utf8',
+    env: { ...process.env, HOME: home },
+  });
+  assert.equal(globalApply.status, 0, `${globalApply.stdout}\n${globalApply.stderr}`);
+  const globalCfg = parseJsonc(fs.readFileSync(path.join(globalDir, 'opencode.jsonc'), 'utf8'));
+  assert.deepEqual(globalCfg.instructions, ['~/.config/opencode/instructions/monolith.md']);
   fs.rmSync(tmp, { recursive: true, force: true });
 });

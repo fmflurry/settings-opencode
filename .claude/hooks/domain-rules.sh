@@ -13,7 +13,7 @@ if [ ! -f "$config_dir/.harness-local/domain-rules.json" ] \
   && { [ -z "${CLAUDE_PROJECT_DIR:-}" ] || [ ! -f "$CLAUDE_PROJECT_DIR/.harness-local/domain-rules.json" ]; }; then
   exit 0
 fi
-here="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+here="$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)"
 cli=""
 if [ -f "$here/domain-rules.ts" ]; then
   cli="$here/domain-rules.ts"

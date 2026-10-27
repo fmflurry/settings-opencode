@@ -8,6 +8,7 @@ Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cur
 - `.harness-local/exclude` lists skill ids and harness paths the installer must not install and must prune on every run. A skill id removes that skill from `.claude/skills`, `.opencode/skills`, and `.agents/skills`.
 - The domain-rules hook stays off unless `.harness-local/domain-rules.json` sets `"enabled": true`. Claude runs `.claude/hooks/domain-rules.sh` before Edit, Write, and MultiEdit. OpenCode runs `plugins/domain-rules.ts` before write, edit, patch, and multiedit. The hook runs the project script (default `scripts/check-domain-rules.sh`). The harness ships no project rules.
 - `./install.sh --local --status` prints the overlay files, the exclude entries, and whether domain-rules is enabled.
+- A local install reached through a symlink, including macOS `/tmp`, still applies `.harness-local/` and prints why a root was skipped. Project settings use `./.claude/mods/autonomy-status`. Monolith records `.opencode/instructions/monolith.md`.
 
 ## [0.4.19] - 2026-10-26
 

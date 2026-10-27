@@ -203,6 +203,26 @@ test('status reports domain-rules without creating the project tree', () => {
   }
 });
 
+test('overlay applies through a symlinked script and a symlinked project', () => {
+  const project = tmpProject();
+  const linkRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'project-local-link-'));
+  const scriptLink = path.join(linkRoot, 'project-local.mjs');
+  const projectLink = path.join(linkRoot, 'project');
+  try {
+    fs.symlinkSync(script, scriptLink);
+    fs.symlinkSync(project, projectLink, 'dir');
+    write(path.join(project, '.claude', 'CLAUDE.md'), 'vendored\n');
+    write(path.join(project, '.harness-local', '.claude', 'CLAUDE.md'), 'via symlink\n');
+    const result = spawnSync(process.execPath, [scriptLink, '--project', projectLink, '--apply'], { encoding: 'utf8' });
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout, /project-local: pruned 0, overlaid 1/);
+    assert.equal(fs.readFileSync(path.join(project, '.claude', 'CLAUDE.md'), 'utf8'), 'via symlink\n');
+  } finally {
+    fs.rmSync(project, { recursive: true, force: true });
+    fs.rmSync(linkRoot, { recursive: true, force: true });
+  }
+});
+
 test('an overlay does not follow a directory symlink out of the project', () => {
   const project = tmpProject();
   const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'overlay-escape-'));

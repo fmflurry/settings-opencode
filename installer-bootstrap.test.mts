@@ -1721,6 +1721,26 @@ function seedProjectOverlay(projectDir: string, ruleName: string): void {
   chmodSync(join(projectDir, "scripts/check-domain-rules.sh"), 0o755);
 }
 
+function pluginDirs(projectDir: string): string {
+  const settings = JSON.parse(readFileSync(join(projectDir, ".claude/settings.json"), "utf8")) as {
+    env: { CLAUDE_CODE_PLUGIN_DIRS: string };
+  };
+  return settings.env.CLAUDE_CODE_PLUGIN_DIRS;
+}
+
+function assertRelativeLocalPaths(projectDir: string, variant: "monolith" | "conductor"): void {
+  const dirs = pluginDirs(projectDir);
+  const entries = dirs.split(":").filter(Boolean);
+  assert.equal(entries.includes("./.claude/mods/autonomy-status"), true, dirs);
+  assert.equal(entries.includes("~/.claude/mods/autonomy-status"), false, dirs);
+  assert.equal(entries.some((entry) => entry.startsWith("/") && entry.includes("/.claude/mods/autonomy-status")), false, dirs);
+  if (variant === "monolith") {
+    const opencode = readFileSync(join(projectDir, ".opencode/opencode.jsonc"), "utf8");
+    assert.match(opencode, /"\.opencode\/instructions\/monolith\.md"/);
+    assert.equal(opencode.includes(join(projectDir, ".opencode", "instructions", "monolith.md")), false);
+  }
+}
+
 function assertProjectOverlay(projectDir: string, variant: "monolith" | "conductor"): void {
   assert.equal(readFileSync(join(projectDir, "AGENTS.md"), "utf8"), "Project AGENTS overlay.\n");
   assert.equal(readFileSync(join(projectDir, ".claude/CLAUDE.md"), "utf8"), "project claude overlay\n");
@@ -1736,6 +1756,7 @@ function assertProjectOverlay(projectDir: string, variant: "monolith" | "conduct
   assert.equal(readFileSync(join(projectDir, ".cursor/.harness-variant"), "utf8").trim(), variant);
   assert.match(readFileSync(join(projectDir, ".claude/settings.json"), "utf8"), /bash \.\/\.claude\/hooks\/domain-rules\.sh/);
   assert.match(readFileSync(join(projectDir, ".opencode/opencode.jsonc"), "utf8"), /\.\/plugins\/domain-rules\.ts/);
+  assertRelativeLocalPaths(projectDir, variant);
   const ran = spawnSync("bash", [join(projectDir, ".claude/hooks/domain-rules.sh")], {
     cwd: projectDir,
     encoding: "utf8",
@@ -1794,10 +1815,22 @@ function installLocalVariant(variant: "monolith" | "conductor"): void {
     };
     install("first", firstArgs);
     assertProjectOverlay(projectDir, variant);
+    assert.equal(pluginDirs(projectDir), "./.claude/mods/autonomy-status");
     assert.equal(fingerprintTree(join(projectDir, ".harness-local")), owned);
+    const settingsPath = join(projectDir, ".claude/settings.json");
+    const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as {
+      env: { CLAUDE_CODE_PLUGIN_DIRS: string };
+    };
+    settings.env.CLAUDE_CODE_PLUGIN_DIRS = [
+      join(projectDir, ".claude/mods/autonomy-status"),
+      "~/.claude/mods/autonomy-status",
+      "/opt/other-plugin",
+    ].join(":");
+    writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
     writeFileSync(join(projectDir, ".claude/user-note.txt"), "user\n");
     install("second", secondArgs);
     assertProjectOverlay(projectDir, variant);
+    assert.equal(pluginDirs(projectDir), "./.claude/mods/autonomy-status:/opt/other-plugin");
     assert.equal(readFileSync(join(projectDir, ".claude/user-note.txt"), "utf8"), "user\n");
     assert.equal(fingerprintTree(join(projectDir, ".harness-local")), owned);
     assert.equal(readFileSync(join(projectDir, "scripts/check-domain-rules.sh"), "utf8").includes("ran"), true);
@@ -1812,4 +1845,78 @@ test("local monolith install applies the project overlay and prunes excluded ski
 
 test("local conductor install applies the project overlay and prunes excluded skills", () => {
   installLocalVariant("conductor");
+});
+
+test("local install through a symlinked harness directory applies the overlay", () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), "settings-opencode-symlink-harness-"));
+  try {
+    const realBase = join(tmpRoot, "private");
+    const linkBase = join(tmpRoot, "tmp");
+    const projectDir = join(realBase, "project");
+    const homeDir = join(tmpRoot, "home");
+    const fakeBin = join(tmpRoot, "bin");
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(homeDir, { recursive: true });
+    mkdirSync(fakeBin, { recursive: true });
+    symlinkSync(realBase, linkBase);
+    symlinkSync(repoRoot, join(linkBase, "harness"));
+    writeFakeNpm(fakeBin);
+    useRealNode(fakeBin);
+    seedProjectOverlay(projectDir, "monolith.mdc");
+    const env = {
+      ...process.env,
+      HOME: homeDir,
+      PATH: `${fakeBin}:/usr/bin:/bin:/usr/sbin:/sbin`,
+      SHELL: "/bin/zsh",
+    };
+    delete env.HARNESS_VARIANT;
+    const result = spawnSync("bash", [join(linkBase, "harness", "install.sh"), "--local", "--yes"], {
+      cwd: join(linkBase, "project"),
+      encoding: "utf8",
+      env,
+    });
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout, /project-local: pruned \d+, overlaid [1-9]/);
+    assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /project overlay:/);
+    assertProjectOverlay(projectDir, "monolith");
+    assert.equal(pluginDirs(projectDir), "./.claude/mods/autonomy-status");
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test("local install prints why an overlay root is skipped", () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), "settings-opencode-overlay-skip-"));
+  try {
+    const projectDir = join(tmpRoot, "project");
+    const homeDir = join(tmpRoot, "home");
+    const fakeBin = join(tmpRoot, "bin");
+    mkdirSync(projectDir);
+    mkdirSync(homeDir);
+    mkdirSync(fakeBin);
+    writeFakeNpm(fakeBin);
+    useRealNode(fakeBin);
+    seedProjectOverlay(projectDir, "monolith.mdc");
+    const env = {
+      ...process.env,
+      HOME: homeDir,
+      PATH: `${fakeBin}:/usr/bin:/bin:/usr/sbin:/sbin`,
+      SHELL: "/bin/zsh",
+    };
+    delete env.HARNESS_VARIANT;
+    const result = spawnSync("bash", [installerPath, "--local", "--yes", "--no-opencode"], {
+      cwd: projectDir,
+      encoding: "utf8",
+      env,
+    });
+    const output = `${result.stdout}\n${result.stderr}`;
+    assert.equal(result.status, 0, output);
+    assert.match(output, /project overlay: opencode skipped \(--no-opencode\)/);
+    assert.match(result.stdout, /project-local: pruned \d+, overlaid [1-9]/);
+    assert.equal(readFileSync(join(projectDir, ".claude/CLAUDE.md"), "utf8"), "project claude overlay\n");
+    assert.equal(existsSync(join(projectDir, ".opencode")), false);
+    assert.equal(pluginDirs(projectDir), "./.claude/mods/autonomy-status");
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true });
+  }
 });

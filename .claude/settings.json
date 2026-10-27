@@ -106,6 +106,15 @@
             "command": "bash ~/.claude/hooks/pr-visual-report.sh"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/domain-rules.sh"
+          }
+        ]
       }
     ],
     "Stop": [

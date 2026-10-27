@@ -11,11 +11,12 @@
 #   --no-claude     Force-skip claude (wins over allowlist)
 #   --uninstall     Remove env-var block and installed copies (does not delete the repo)
 #   --local         Project-scoped install into the current working directory
-#                   (./.opencode, ./.claude). Does not touch shell rc files.
+#                   (./.opencode, ./.claude). Applies .harness-local/ on top.
+#                   Does not touch shell rc files.
 #   --variant NAME  conductor (default) or monolith. orchestration is an alias.
 #                   HARNESS_VARIANT too. A bare conductor or monolith is the
 #                   same choice and skips the prompts.
-#   --status        Print the installed variant and exit.
+#   --status        Print the installed variant and, with --local, the overlay.
 #   --help, -h      Show usage
 #
 set -euo pipefail
@@ -275,9 +276,12 @@ Flags:
   --local         Project-scoped install into the current working directory.
                   Copies the repo into ./.opencode and ./.claude, then vendors
                   ./AGENTS.md, ./.cursor/rules, and ./.agents for the variant.
-                  The project default is Monolith. Does not touch global shell
-                  rc files. Combine with --yes, --no-claude, --no-opencode,
-                  and --uninstall as normal. Do NOT run this from inside the
+                  Then applies ./.harness-local/ on top (overlay wins) and
+                  prunes paths listed in ./.harness-local/exclude. That
+                  directory is project-owned and is never written. The project
+                  default is Monolith. Does not touch global shell rc files.
+                  Combine with --yes, --no-claude, --no-opencode, and
+                  --uninstall as normal. Do NOT run this from inside the
                   settings-opencode repo itself.
   conductor, monolith
                   Install that variant without prompts (both harnesses, global
@@ -289,7 +293,9 @@ Flags:
                   --yes with neither set is Monolith.
   --status        Print the installed variant and exit. Does not install or
                   prompt. Global mode reports OpenCode and Claude Code.
-                  --local also reports ./.cursor and ./.agents.
+                  --local also reports ./.cursor, ./.agents, the
+                  .harness-local overlay, exclude entries, and whether the
+                  domain-rules hook is enabled.
   --help, -h      Show this message
 
 Target paths (global mode):
@@ -581,6 +587,48 @@ print_installed_variant() {
         "") printf '%s: %s (not recorded)\n' "$name" "$dir" ;;
         *) printf '%s: %s unknown (%s)\n' "$name" "$dir" "$raw" ;;
     esac
+}
+
+print_project_local_status() {
+    if ! command -v node >/dev/null 2>&1; then
+        printf '%s\n' "overlay: (node unavailable)"
+        return 0
+    fi
+    node "$REPO_DIR/scripts/variants/project-local.mjs" --project "$INVOKE_DIR" --status
+}
+
+install_domain_rules_helper() {
+    [ "$CLAUDE_TARGET_READY" = "1" ] || return 0
+    if same_directory "$TARGET_CLAUDE" "$REPO_DIR/.claude"; then
+        return 0
+    fi
+    mkdir -p "$TARGET_CLAUDE/hooks"
+    cp "$REPO_DIR/plugins/lib/domain-rules.ts" "$TARGET_CLAUDE/hooks/domain-rules.ts"
+    chmod +x "$TARGET_CLAUDE/hooks/domain-rules.sh" 2>/dev/null || true
+}
+
+apply_project_local() {
+    [ "$LOCAL_MODE" = "1" ] || return 0
+    local roots=()
+    if [ "$SKIP_CLAUDE" != "1" ] && [ "$CLAUDE_TARGET_READY" = "1" ]; then
+        if ! same_directory "$TARGET_CLAUDE" "$REPO_DIR/.claude"; then
+            roots+=(claude)
+        fi
+    fi
+    if [ "$SKIP_OPENCODE" != "1" ] && [ "$OPENCODE_TARGET_READY" = "1" ] && [ "$OPENCODE_TARGET_IS_SOURCE" != "1" ]; then
+        roots+=(opencode)
+    fi
+    if [ "${#roots[@]}" -eq 0 ]; then
+        return 0
+    fi
+    roots+=(surfaces)
+    local joined
+    joined="$(IFS=,; printf '%s' "${roots[*]}")"
+    step "Applying project overlay"
+    node "$REPO_DIR/scripts/variants/project-local.mjs" \
+        --project "$INVOKE_DIR" \
+        --apply \
+        --roots "$joined"
 }
 
 # Conductor is the copied tree. Returning to it deletes Monolith-only paths.
@@ -1293,7 +1341,7 @@ merge_agent_harness_settings() {
     fi
 
     local hook_name
-    for hook_name in autonomy-context autonomy-ask-guard autonomy-git-guard pr-visual-report orca-notify ship-stop-gate; do
+    for hook_name in autonomy-context autonomy-ask-guard autonomy-git-guard pr-visual-report orca-notify ship-stop-gate domain-rules; do
         if [ ! -f "$TARGET_CLAUDE/hooks/$hook_name.sh" ]; then
             err "registered hook script is missing: $TARGET_CLAUDE/hooks/$hook_name.sh"
             exit 1
@@ -1323,6 +1371,7 @@ merge_agent_harness_settings() {
         | addhook("PreToolUse"; "AskUserQuestion"; "bash " + $h + "/autonomy-ask-guard.sh")
         | addhook("PreToolUse"; "Bash"; "bash " + $h + "/autonomy-git-guard.sh")
         | addhook("PreToolUse"; "Bash"; "bash " + $h + "/pr-visual-report.sh")
+        | addhook("PreToolUse"; "Edit|Write|MultiEdit"; "bash " + $h + "/domain-rules.sh")
         | addhook("Notification"; "permission_prompt|idle_prompt"; "bash " + $h + "/orca-notify.sh")
         | addhook("Stop"; ""; "bash " + $h + "/ship-stop-gate.sh")
         | .permissions.allow = (if ((.permissions.allow // []) | index("Bash(agent-harness *)")) then .permissions.allow else ((.permissions.allow // []) + ["Bash(agent-harness *)"]) end)
@@ -1592,6 +1641,7 @@ if [ "$DO_STATUS" = "1" ]; then
     if [ "$LOCAL_MODE" = "1" ]; then
         print_installed_variant "cursor" "$INVOKE_DIR/.cursor"
         print_installed_variant "agents" "$INVOKE_DIR/.agents"
+        print_project_local_status
     fi
     exit 0
 fi
@@ -1724,6 +1774,7 @@ if [ "$SKIP_OPENCODE" != "1" ]; then
     fi
 fi
 install_claude_mirror
+install_domain_rules_helper
 install_notify_scripts
 install_agent_harness_scripts
 merge_agent_harness_settings
@@ -1740,6 +1791,7 @@ fi
 sync_skills
 apply_harness_variant
 vendor_project_surfaces
+apply_project_local
 if [ "$SKIP_OPENCODE" != "1" ] && [ "$OPENCODE_TARGET_READY" != "1" ]; then
     err "OpenCode target runtime is absent; refusing a successful install"
     exit 1

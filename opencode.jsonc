@@ -799,6 +799,7 @@
     "./plugins/secret-file-guard.ts",
     "./plugins/tool-budget.ts",
     "./plugins/autonomy.ts",
+    "./plugins/domain-rules.ts",
   ],
   "provider": {
     "llama.cpp": {

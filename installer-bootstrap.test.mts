@@ -1682,3 +1682,134 @@ function collectEntry(
 
   entries[relativePath] = `file:${createHash("sha256").update(readFileSync(path)).digest("hex")}`;
 }
+
+function fingerprintTree(root: string): string {
+  const hash = createHash("sha256");
+  const walk = (dir: string, prefix: string): void => {
+    for (const name of readdirSync(dir).sort()) {
+      const full = join(dir, name);
+      const rel = prefix ? `${prefix}/${name}` : name;
+      const stat = lstatSync(full);
+      if (stat.isSymbolicLink()) hash.update(`link:${rel}:${readlinkSync(full)}`);
+      else if (stat.isDirectory()) walk(full, rel);
+      else {
+        hash.update(`file:${rel}`);
+        hash.update(readFileSync(full));
+      }
+    }
+  };
+  walk(root, "");
+  return hash.digest("hex");
+}
+
+function seedProjectOverlay(projectDir: string, ruleName: string): void {
+  const write = (rel: string, text: string): void => {
+    const full = join(projectDir, rel);
+    mkdirSync(dirname(full), { recursive: true });
+    writeFileSync(full, text);
+  };
+  write("KEEP.txt", "keep\n");
+  write("src/app.ts", "export const n = 1;\n");
+  write(".harness-local/exclude", "# replaced by the project ddd skill\nangular-ddd\nskills/dotnet-ddd\n");
+  write(".harness-local/AGENTS.md", "Project AGENTS overlay.\n");
+  write(".harness-local/.claude/CLAUDE.md", "project claude overlay\n");
+  write(".harness-local/.claude/skills/ddd/SKILL.md", "project ddd\n");
+  write(".harness-local/.opencode/skills/ddd/SKILL.md", "project ddd\n");
+  write(".harness-local/.agents/skills/ddd/SKILL.md", "project ddd\n");
+  write(`.harness-local/.cursor/rules/${ruleName}`, "project cursor rule\n");
+  write("scripts/check-domain-rules.sh", "#!/bin/bash\nprintf ran >> \"$HARNESS_PROJECT_ROOT/ran.txt\"\nexit 1\n");
+  chmodSync(join(projectDir, "scripts/check-domain-rules.sh"), 0o755);
+}
+
+function assertProjectOverlay(projectDir: string, variant: "monolith" | "conductor"): void {
+  assert.equal(readFileSync(join(projectDir, "AGENTS.md"), "utf8"), "Project AGENTS overlay.\n");
+  assert.equal(readFileSync(join(projectDir, ".claude/CLAUDE.md"), "utf8"), "project claude overlay\n");
+  for (const root of [".claude", ".opencode", ".agents"]) {
+    assert.equal(readFileSync(join(projectDir, root, "skills/ddd/SKILL.md"), "utf8"), "project ddd\n");
+    assert.equal(existsSync(join(projectDir, root, "skills/angular-ddd")), false, root);
+    assert.equal(existsSync(join(projectDir, root, "skills/dotnet-ddd")), false, root);
+  }
+  assert.equal(readFileSync(join(projectDir, "KEEP.txt"), "utf8"), "keep\n");
+  assert.equal(readFileSync(join(projectDir, "src/app.ts"), "utf8"), "export const n = 1;\n");
+  const rule = variant === "monolith" ? "monolith.mdc" : "conductor.mdc";
+  assert.equal(readFileSync(join(projectDir, ".cursor/rules", rule), "utf8"), "project cursor rule\n");
+  assert.equal(readFileSync(join(projectDir, ".cursor/.harness-variant"), "utf8").trim(), variant);
+  assert.match(readFileSync(join(projectDir, ".claude/settings.json"), "utf8"), /bash \.\/\.claude\/hooks\/domain-rules\.sh/);
+  assert.match(readFileSync(join(projectDir, ".opencode/opencode.jsonc"), "utf8"), /\.\/plugins\/domain-rules\.ts/);
+  const ran = spawnSync("bash", [join(projectDir, ".claude/hooks/domain-rules.sh")], {
+    cwd: projectDir,
+    encoding: "utf8",
+  });
+  assert.equal(ran.status, 0, `${ran.stdout}\n${ran.stderr}`);
+  assert.equal(existsSync(join(projectDir, "ran.txt")), false);
+}
+
+function installLocalVariant(variant: "monolith" | "conductor"): void {
+  const tmpRoot = mkdtempSync(join(tmpdir(), "settings-opencode-overlay-"));
+  try {
+    const projectDir = join(tmpRoot, "project");
+    const homeDir = join(tmpRoot, "home");
+    const fakeBin = join(tmpRoot, "bin");
+    mkdirSync(projectDir);
+    mkdirSync(homeDir);
+    mkdirSync(fakeBin);
+    writeFakeNpm(fakeBin);
+    useRealNode(fakeBin);
+    seedProjectOverlay(projectDir, variant === "monolith" ? "monolith.mdc" : "conductor.mdc");
+    const owned = fingerprintTree(join(projectDir, ".harness-local"));
+    const env = {
+      ...process.env,
+      HOME: homeDir,
+      PATH: `${fakeBin}:/usr/bin:/bin:/usr/sbin:/sbin`,
+      SHELL: "/bin/zsh",
+    };
+    delete env.HARNESS_VARIANT;
+
+    const status = spawnSync("bash", [installerPath, "--local", "--status"], {
+      cwd: projectDir,
+      encoding: "utf8",
+      env,
+    });
+    assert.equal(status.status, 0, `${status.stdout}\n${status.stderr}`);
+    assert.match(status.stdout, /skill angular-ddd/);
+    assert.match(status.stdout, /skill dotnet-ddd/);
+    assert.match(status.stdout, /file \.claude\/CLAUDE\.md/);
+    assert.match(status.stdout, /domain-rules: disabled/);
+    assert.equal(existsSync(join(projectDir, ".opencode")), false);
+    assert.equal(fingerprintTree(join(projectDir, ".harness-local")), owned);
+
+    const firstArgs = variant === "monolith"
+      ? ["--local", "--yes"]
+      : ["--local", "--yes", "--variant", "conductor"];
+    // A later --yes without an explicit variant leaves an existing local tree
+    // untouched. Re-vendoring passes the variant again.
+    const secondArgs = ["--local", "--yes", "--variant", variant];
+    const install = (label: string, args: string[]) => {
+      const result = spawnSync("bash", [installerPath, ...args], {
+        cwd: projectDir,
+        encoding: "utf8",
+        env,
+      });
+      assert.equal(result.status, 0, `${label}\n${result.stdout}\n${result.stderr}`);
+    };
+    install("first", firstArgs);
+    assertProjectOverlay(projectDir, variant);
+    assert.equal(fingerprintTree(join(projectDir, ".harness-local")), owned);
+    writeFileSync(join(projectDir, ".claude/user-note.txt"), "user\n");
+    install("second", secondArgs);
+    assertProjectOverlay(projectDir, variant);
+    assert.equal(readFileSync(join(projectDir, ".claude/user-note.txt"), "utf8"), "user\n");
+    assert.equal(fingerprintTree(join(projectDir, ".harness-local")), owned);
+    assert.equal(readFileSync(join(projectDir, "scripts/check-domain-rules.sh"), "utf8").includes("ran"), true);
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true });
+  }
+}
+
+test("local monolith install applies the project overlay and prunes excluded skills", () => {
+  installLocalVariant("monolith");
+});
+
+test("local conductor install applies the project overlay and prunes excluded skills", () => {
+  installLocalVariant("conductor");
+});

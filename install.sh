@@ -13,7 +13,7 @@
 #   --local         Project-scoped install into the current working directory
 #                   (./.opencode, ./.claude). Applies .harness-local/ on top.
 #                   Does not touch shell rc files.
-#   --variant NAME  conductor (default) or monolith. orchestration is an alias.
+#   --variant NAME  monolith (default) or conductor. orchestration is an alias.
 #                   HARNESS_VARIANT too. A bare conductor or monolith is the
 #                   same choice and skips the prompts.
 #   --status        Print the installed variant and, with --local, the overlay.
@@ -272,18 +272,11 @@ normalize_variant() {
 }
 
 ask_variant() {
-    local reply normalized default_label default_value
-    if [ "$LOCAL_MODE" = "1" ]; then
-        default_label="Monolith"
-        default_value="monolith"
-    else
-        default_label="Conductor"
-        default_value="conductor"
-    fi
+    local reply normalized
     while :; do
-        printf "    ${BOLD}?${RESET} Choose harness variant: Conductor or Monolith [%s] " "$default_label"
+        printf "    ${BOLD}?${RESET} Choose harness variant: Conductor or Monolith [Monolith] "
         read_reply reply
-        reply="${reply:-$default_value}"
+        reply="${reply:-monolith}"
         if normalized="$(normalize_variant "$reply")"; then
             HARNESS_VARIANT="$normalized"
             return 0
@@ -322,10 +315,10 @@ Flags:
                   Install that variant without prompts (both harnesses, global
                   scope, same as --yes). orchestration is an alias of conductor.
                   Combine with --local, --no-claude, or --no-opencode.
-  --variant NAME  conductor or monolith. orchestration is an alias of
+  --variant NAME  monolith (default) or conductor. orchestration is an alias of
                   conductor. Same as HARNESS_VARIANT. The flag wins over the
-                  env. Global --yes with neither set stays Conductor. --local
-                  --yes with neither set is Monolith.
+                  env. With neither set, Monolith is the default, including
+                  global --yes. conductor selects Conductor.
   --status        Print the installed variant and exit. Does not install or
                   prompt. Global mode reports OpenCode and Claude Code.
                   --local also reports ./.cursor, ./.agents, the
@@ -733,8 +726,11 @@ apply_harness_variant() {
         fi
     fi
     if [ "$wrote" != "1" ]; then
-        err "monolith variant had no writable install target"
-        exit 1
+        # The source checkout is the Conductor tree. Overlaying it would rewrite
+        # the repo, so a target that is the checkout is skipped and the install
+        # still succeeds. A target that was never written fails later.
+        warn "monolith overlay skipped; no copy was written outside the source checkout"
+        return 0
     fi
     step "Applying Monolith variant"
     node "$REPO_DIR/scripts/variants/apply-monolith.mjs" --repo "$REPO_DIR" "${args[@]}"
@@ -1395,7 +1391,7 @@ merge_agent_harness_settings() {
     fi
 
     local hook_name
-    for hook_name in autonomy-context autonomy-ask-guard autonomy-git-guard pr-visual-report orca-notify ship-stop-gate domain-rules; do
+    for hook_name in autonomy-context autonomy-ask-guard autonomy-git-guard pr-visual-report orca-notify ship-stop-gate domain-rules cloud-session-bootstrap; do
         if [ ! -f "$TARGET_CLAUDE/hooks/$hook_name.sh" ]; then
             err "registered hook script is missing: $TARGET_CLAUDE/hooks/$hook_name.sh"
             exit 1
@@ -1426,6 +1422,7 @@ merge_agent_harness_settings() {
                 (if $m == "" then {} else {matcher: $m} end) + {hooks: [{type: "command", command: $cmd}]}
             ]) end;
         .hooks = ((.hooks // {}) | with_entries(.value |= (if type == "array" then map(if (.hooks | type) == "array" then .hooks |= map(bashify) else . end) else . end)))
+        | addhook("SessionStart"; ""; "bash " + $h + "/cloud-session-bootstrap.sh")
         | addhook("SessionStart"; ""; "bash " + $h + "/autonomy-context.sh")
         | addhook("SessionStart"; ""; "bash " + $h + "/kpi-emit.sh")
         | addhook("PostToolUse"; ""; "bash " + $h + "/kpi-emit.sh")
@@ -1791,11 +1788,7 @@ if [ "$ASSUME_YES" != "1" ] && [ "$DO_UNINSTALL" != "1" ]; then
 fi
 
 if [ -z "$HARNESS_VARIANT" ]; then
-    if [ "$LOCAL_MODE" = "1" ]; then
-        HARNESS_VARIANT=monolith
-    else
-        HARNESS_VARIANT=conductor
-    fi
+    HARNESS_VARIANT=monolith
 fi
 
 # Apply local-mode target overrides before any other logic runs.

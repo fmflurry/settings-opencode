@@ -37,7 +37,7 @@
     & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -NoOpencode
 
 .EXAMPLE
-    # Lean Monolith overlay. A global omitted variant stays Conductor.
+    # Monolith is the default. conductor selects Conductor.
     # -Local with an omitted variant is Monolith. orchestration is an alias of Conductor.
     & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) monolith
     & ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -Variant conductor
@@ -61,7 +61,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 function ConvertTo-HarnessVariant([string]$value) {
-    if ([string]::IsNullOrWhiteSpace($value)) { return 'conductor' }
+    if ([string]::IsNullOrWhiteSpace($value)) { return 'monolith' }
     switch ($value.Trim().ToLowerInvariant()) {
         '1' { return 'conductor' }
         '2' { return 'monolith' }
@@ -87,9 +87,7 @@ if (-not $Status) {
         $Variant = $VariantName
     }
     if ([string]::IsNullOrWhiteSpace($Variant)) { $Variant = $env:HARNESS_VARIANT }
-    if ([string]::IsNullOrWhiteSpace($Variant)) {
-        if ($Local) { $Variant = 'monolith' } else { $Variant = 'conductor' }
-    }
+    if ([string]::IsNullOrWhiteSpace($Variant)) { $Variant = 'monolith' }
     $normalizedVariant = ConvertTo-HarnessVariant $Variant
     if ([string]::IsNullOrWhiteSpace($normalizedVariant)) {
         Write-Host "error: unknown harness variant '$Variant' (use conductor or monolith; orchestration is an alias of conductor)" -ForegroundColor Red

@@ -201,6 +201,14 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bash ~/.claude/hooks/cloud-session-bootstrap.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "bash ~/.claude/hooks/autonomy-context.sh"
           }
         ]

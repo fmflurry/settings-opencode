@@ -491,16 +491,19 @@ test("global both install keeps Claude mirror separate from the OpenCode target"
     mkdirSync(homeDir);
     mkdirSync(fakeBin);
     writeFakeNpm(fakeBin);
+    useRealNode(fakeBin);
+    const env = {
+      ...process.env,
+      HOME: homeDir,
+      PATH: `${fakeBin}:/usr/bin:/bin:/usr/sbin:/sbin`,
+      SHELL: "/bin/zsh",
+    };
+    delete env.HARNESS_VARIANT;
 
     const result = spawnSync("bash", [installerPath, "--yes"], {
       cwd: projectDir,
       encoding: "utf8",
-      env: {
-        ...process.env,
-        HOME: homeDir,
-        PATH: `${fakeBin}:/usr/bin:/bin:/usr/sbin:/sbin`,
-        SHELL: "/bin/zsh",
-      },
+      env,
     });
     const output = `${result.stdout}\n${result.stderr}`;
 
@@ -526,23 +529,24 @@ test("global both install keeps Claude mirror separate from the OpenCode target"
     );
     assert.match(
       readFileSync(join(homeDir, ".config", "opencode", "opencode.jsonc"), "utf8"),
-      /"default_agent":\s*"conductor"/,
-      `default --yes install must stay on the Conductor variant\n${output}`,
+      /"default_agent":\s*"main"/,
+      `default --yes install must use the Monolith variant\n${output}`,
     );
     assert.equal(
       existsSync(join(homeDir, ".claude", "agents", "conductor.md")),
-      true,
-      `default --yes install must keep the conductor agent\n${output}`,
+      false,
+      `default --yes install must not install the conductor agent\n${output}`,
     );
     assert.equal(
       readFileSync(join(homeDir, ".config", "opencode", ".harness-variant"), "utf8").trim(),
-      "conductor",
+      "monolith",
     );
     assert.equal(
       readFileSync(join(homeDir, ".claude", ".harness-variant"), "utf8").trim(),
-      "conductor",
+      "monolith",
     );
     const installedSettings = join(homeDir, ".claude", "settings.json");
+    assert.match(readFileSync(installedSettings, "utf8"), /cloud-session-bootstrap\.sh/);
     assert.equal(claudeSettingsModel(installedSettings), "opus");
     const kept = JSON.parse(readFileSync(installedSettings, "utf8")) as { model?: string };
     kept.model = "sonnet";
@@ -550,12 +554,7 @@ test("global both install keeps Claude mirror separate from the OpenCode target"
     const again = spawnSync("bash", [installerPath, "--yes"], {
       cwd: projectDir,
       encoding: "utf8",
-      env: {
-        ...process.env,
-        HOME: homeDir,
-        PATH: `${fakeBin}:/usr/bin:/bin:/usr/sbin:/sbin`,
-        SHELL: "/bin/zsh",
-      },
+      env,
     });
     assert.equal(again.status, 0, `${again.stdout}\n${again.stderr}`);
     assert.equal(claudeSettingsModel(installedSettings), "sonnet");
@@ -565,12 +564,7 @@ test("global both install keeps Claude mirror separate from the OpenCode target"
     const filled = spawnSync("bash", [installerPath, "--yes"], {
       cwd: projectDir,
       encoding: "utf8",
-      env: {
-        ...process.env,
-        HOME: homeDir,
-        PATH: `${fakeBin}:/usr/bin:/bin:/usr/sbin:/sbin`,
-        SHELL: "/bin/zsh",
-      },
+      env,
     });
     assert.equal(filled.status, 0, `${filled.stdout}\n${filled.stderr}`);
     assert.equal(claudeSettingsModel(installedSettings), "opus");
@@ -1528,6 +1522,7 @@ test("OpenCode reinstall removes the known managed root notification helper copy
     mkdirSync(fakeBin);
     mkdirSync(pluginDir, { recursive: true });
     writeFakeNpm(fakeBin);
+    useRealNode(fakeBin);
     writeFileSync(staleHelper, readRepoFile("plugins/lib/notification-gate.ts"));
 
     const result = spawnSync("bash", [installerPath, "--yes", "--no-claude"], {

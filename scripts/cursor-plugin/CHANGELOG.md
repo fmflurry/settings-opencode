@@ -2,6 +2,12 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.28] - 2026-10-28
+
+- `SessionStart` runs `.claude/hooks/cloud-session-bootstrap.sh` when `CLAUDE_CODE_REMOTE=true` and the project does not vendor the harness. Vendored means a `.claude/.harness-variant` file, or `.claude/CLAUDE.md` together with `.claude/hooks/autonomy-context.sh`, or a `plugin.json` that contains a `"version"` field (`.cursor-plugin/plugin.json` or `plugins/fmflurry-harness/.cursor-plugin/plugin.json`). The hook shallow-clones `https://github.com/fmflurry/settings-opencode` into a temp directory and runs `install.sh --yes monolith`. Success is quiet. A clone or install failure logs a warning and exits 0. The hook does nothing when `CLAUDE_CODE_REMOTE` is unset. The installer merges the command into Claude settings. The Cursor plugin build mirrors the script.
+- `./install.sh --yes` with no variant installs Monolith, and so does `settings-sync` when no variant is passed and `HARNESS_VARIANT` is unset. The interactive prompt defaults to Monolith. `conductor` selects Conductor. `orchestration` remains an alias of Conductor. `bootstrap.ps1` with no variant installs Monolith.
+- The git guard allows a multi-megabyte quoted `echo` in one awk pass. Git Bash no longer lowercases that command and scans it with `=~` before the quote walker. A guarded token or an expansion still goes through the full parser.
+
 ## [0.4.27] - 2026-10-28
 
 - `security-reviewer` reads three vendored attack-class references under `skills/security-review/references/` only when the diff touches that surface: `ATTACK-CLASSES.md` (injection, access control, SSRF, deserialization), `WEB-PROTOCOL-AND-AUTH.md` (sessions and identity protocols), and `CLIENT-SIDE.md` (DOM and browser trust). They are verbatim copies from cloudflare/security-audit-skill at `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8`, MIT.

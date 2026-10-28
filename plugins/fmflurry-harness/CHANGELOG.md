@@ -9,6 +9,7 @@ Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cur
 - `ship-init` and `teardown-merged-worktree` have to be the only command. A chain with `&&`, `;`, or `|` is denied.
 - A `guard_block` is written once when both the global hook and a project hook are installed. The global hook skips when the repo vendors `kpi-emit.sh`, and a second write of the same block is dropped. `agent-harness kpi report` also collapses duplicate guard blocks already in the log.
 - `pr-visual-report` is stored as the guard name, with `git`, `ask`, `secret`, and `budget`.
+- A command with no guarded token skips the parser. A quoted span longer than 4096 bytes is not walked character by character: short quotes stay as written, and a long literal becomes one marker. `$(...)` and backticks inside a long double quote are still checked.
 
 ## [0.4.25] - 2026-10-27
 

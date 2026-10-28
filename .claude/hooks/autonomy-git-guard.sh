@@ -51,6 +51,14 @@ else fields="$(jq -j '(.cwd // ""), "\u0001", (.tool_input.command // "")' <<<"$
 cwd="${fields%%$'\001'*}"
 cmd="${fields:$((${#cwd} + 1))}"
 [ -n "$cmd" ] || exit 0
+# One scan. A command with none of these cannot name git, gh, a delete, a redirect,
+# an expansion, or a protected-path write, so the quote walker never starts.
+# The right-hand side stays unquoted: bash 3.2 treats a quoted =~ operand as a literal.
+GG_FAST_RE='git|gh|rm|mv|cp|ln|tee|sed|dd|perl|python|node|ruby|rsync|find|trash|truncate|touch|install|sponge|direnv|orca|ship-init|ship-merge|worktree|teardown|agent-harness|cleanup|xargs|pushd|popd|<|>|\$|\{|`|\\'
+probe="$cmd"
+if [ "$WIN" = 1 ] && [ "${BASH_VERSINFO[0]:-3}" -ge 4 ]; then probe="${cmd,,}"; fi
+if [[ ! "$probe" =~ $GG_FAST_RE ]]; then exit 0; fi
+unset probe
 cwd="${cwd:-$PWD}"
 if [ "$WIN" = 1 ]; then winconv "$cwd"; cwd="$WP"; fi
 gg_mark input
@@ -1216,6 +1224,7 @@ function lexfeed(s,   n, p, ch, m, lim, i, c, nxt, rest, k) {
   else xadd(" ")
 }
 function body_subs(line,   n, i, c, depth, qq, start) {
+  if (index(line, "$") == 0 && index(line, "`") == 0) return
   n = length(line); i = 1; qq = 0
   while (i <= n) {
     c = substr(line, i, 1)
@@ -1689,6 +1698,145 @@ if [[ "$cmd" == *'<<'* ]]; then
   cmd="$(LC_ALL=C awk -v mode=body "$GG_AWK" <<<"$cmd")" || deny_unparsed
   [[ "$cmd" == *$'\n\037BODYEND' ]] || deny_unparsed
   cmd="${cmd%$'\n\037BODYEND'}"
+fi
+# A quoted span longer than qmax is data. Short quotes stay byte for byte.
+# $(...), backticks, and backslash escapes stay so a hidden push is still checked.
+# One index scan per plain run; the char walker never sees the body.
+if [[ "$cmd" == *\"* || "$cmd" == *\'* ]]; then
+  GG_SQUASH='
+function note_needles(s) {
+  if (index(s, ".claude/") || index(s, ".github/") || index(s, ".opencode/") || index(s, "goal.json") || index(s, "autonomy.on") || index(s, "opencode.jsonc") || index(s, "AGENTS.md") || index(s, "CLAUDE.md") || index(s, "agents.md") || index(s, "claude.md") || index(s, ".envrc") || index(s, "tools/agent-harness/") || index(s, "tools/ci/")) qprot = 1
+  if ((index(s, "rmtree") || index(s, "rm_rf") || index(s, "rmSync") || index(s, "remove_tree") || index(s, "rmdir")) && (index(s, "worktree") || index(s, "/orca/workspaces/"))) qpy = 1
+}
+function quote_marker(   m) {
+  m = ""
+  if (qprot) m = ".claude/state/goal.json"
+  if (qpy) {
+    if (m != "") m = m " "
+    m = m "rmtree /orca/workspaces/worktree"
+  }
+  if (m == "") m = "x"
+  return m
+}
+function become_big() {
+  if (qbig) return
+  qbig = 1
+  if (held_raw && held != "") printf "%s", held
+  held = ""; held_raw = 0; need_mark = 1
+}
+function note_plain(s,   n) {
+  n = length(s)
+  if (n == 0) return
+  if (index(s, ".") || index(s, "/") || index(s, "r") || index(s, "w")) note_needles(s)
+  if (qbig) { need_mark = 1; return }
+  if (qlen + n > qmax) { become_big(); return }
+  held = held s; qlen += n
+}
+function keep_raw(s,   n) {
+  n = length(s)
+  if (n == 0) return
+  if (qbig) { printf "%s", s; return }
+  if (qlen + n > qmax) {
+    if (held != "") printf "%s", held
+    held = ""; held_raw = 0; qbig = 1; qlen = qmax + 1
+    printf "%s", s
+    return
+  }
+  held = held s; held_raw = 1; qlen += n
+}
+function emit_close(ch) {
+  if (!qbig) printf "%s", held
+  else if (need_mark || qprot || qpy) printf "%s", quote_marker()
+  printf "%s", ch
+  q = 0; qlen = 0; qbig = 0; qprot = 0; qpy = 0; held = ""; held_raw = 0; need_mark = 0
+}
+function eat_sq(   k) {
+  k = index(rest, SQ)
+  if (k == 0) { note_plain(rest); rest = ""; return }
+  if (k > 1) note_plain(substr(rest, 1, k - 1))
+  emit_close(SQ)
+  rest = substr(rest, k + 1)
+}
+function dq_special(s,   a, b, c, d, m) {
+  m = 0
+  a = index(s, "\\"); if (a && (m == 0 || a < m)) m = a
+  b = index(s, "$"); if (b && (m == 0 || b < m)) m = b
+  c = index(s, "`"); if (c && (m == 0 || c < m)) m = c
+  d = index(s, DQ); if (d && (m == 0 || d < m)) m = d
+  return m
+}
+function eat_dq(   k, c, j, depth, n, inner) {
+  while (rest != "") {
+    k = dq_special(rest)
+    if (k == 0) { note_plain(rest); rest = ""; return }
+    if (k > 1) note_plain(substr(rest, 1, k - 1))
+    c = substr(rest, k, 1)
+    if (c == DQ) { emit_close(DQ); rest = substr(rest, k + 1); return }
+    if (c == "\\") {
+      if (k >= length(rest)) { keep_raw("\\"); rest = ""; return }
+      keep_raw(substr(rest, k, 2))
+      rest = substr(rest, k + 2)
+      continue
+    }
+    if (c == "`") {
+      inner = substr(rest, k + 1)
+      j = index(inner, "`")
+      if (j == 0) { keep_raw(substr(rest, k)); rest = ""; return }
+      keep_raw(substr(rest, k, j + 1))
+      rest = substr(rest, k + j + 1)
+      continue
+    }
+    if (substr(rest, k + 1, 1) == "(") {
+      depth = 1; n = length(rest); j = k + 2
+      while (j <= n && depth > 0) {
+        c = substr(rest, j, 1)
+        if (c == "(") depth++
+        else if (c == ")") depth--
+        j++
+      }
+      keep_raw(substr(rest, k, j - k))
+      rest = substr(rest, j)
+      continue
+    }
+    keep_raw("$")
+    rest = substr(rest, k + 1)
+  }
+}
+BEGIN { SQ = "\047"; DQ = "\""; q = 0; if (!qmax) qmax = 4096 }
+{
+  rest = $0
+  cont = 1
+  while (cont) {
+    cont = 0
+    if (q == 1 || q == 2) {
+      if (q == 1) eat_sq(); else eat_dq()
+      if (q != 0) { note_plain("\n"); break }
+      if (rest == "") { printf "\n"; break }
+      cont = 1
+      continue
+    }
+    is = index(rest, SQ); id = index(rest, DQ)
+    if (is == 0 && id == 0) { printf "%s\n", rest; break }
+    if (id == 0 || (is && is < id)) { k = is; q = 1 }
+    else { k = id; q = 2 }
+    printf "%s", substr(rest, 1, k)
+    rest = substr(rest, k + 1)
+    cont = 1
+  }
+}
+END {
+  if (q != 0) {
+    if (!qbig) printf "%s", held
+    else if (need_mark || qprot || qpy) printf "%s", quote_marker()
+  }
+  printf "\037SQUASHEND\n"
+}
+'
+  squashed="$(LC_ALL=C awk -v qmax=4096 "$GG_SQUASH" <<<"$cmd")" || deny_unparsed
+  squashed="${squashed%$'\n'}"
+  [[ "$squashed" == *$'\037SQUASHEND' ]] || deny_unparsed
+  cmd="${squashed%$'\037SQUASHEND'}"
+  cmd="${cmd%$'\n'}"
 fi
 if [[ "$cmd" == *\\* ]]; then
   cmd="$(LC_ALL=C awk -v mode=join "$GG_AWK" <<<"$cmd")" || deny_unparsed

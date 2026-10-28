@@ -115,6 +115,15 @@
             "command": "bash ~/.claude/hooks/domain-rules.sh"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/cache-invalidation.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -135,6 +144,15 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/stop.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/cache-invalidation.sh"
           }
         ]
       },

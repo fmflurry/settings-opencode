@@ -1,6 +1,6 @@
 ---
 name: flurryx
-description: Signal-first reactive state management for Angular. Bridge RxJS streams into cache-aware stores, keyed resources, mirrored state, and replayable history. Use when generating or modifying Angular code that uses flurryx for state management, or when scaffolding new feature modules that follow the flurryx facade pattern.
+description: Signal-first reactive state management for Angular. Bridge RxJS streams into cache-aware stores, keyed resources, mirrored state, and replayable history. Use when generating or modifying Angular code that uses flurryx for state management, when a write must invalidate a cached slot, or when scaffolding new feature modules that follow the flurryx facade pattern.
 ---
 
 # flurryx
@@ -448,6 +448,33 @@ store.replayDeadLetterCommand(id, async (entry) => ({ resolved: true, clear: tru
 Dead letter entry: `{ id, message, attempts, error, httpStatus, httpMessage, command, failedAt }`.
 DLQ command meta on `update` -> `update(key, state, { deadLetter: { error, httpStatus?, httpMessage?, command? } })`. `syncToStore`/`syncToKeyedStore` populate this from HTTP-like errors automatically.
 
+## Stale data
+
+A stale slot is not a reason to delete `@SkipIfCached`, drop `CACHE_NO_TIMEOUT`, or shrink a TTL. The cache stays. The write that changes the cached data invalidates or updates that entry in the same change.
+
+Same module: `store.invalidateCacheFor('LIST')`. Keyed: `store.invalidateCacheFor('ITEMS', id)`. `clear` / `clearKeyedOne` also drop that slot's cached entries when the state itself must go. A mirror forwards `onCacheInvalidate`.
+
+Another module does not import this store. It emits a change through a root-level service. The facade that owns the cache subscribes and invalidates.
+
+```ts
+@Injectable({ providedIn: 'root' })
+export class ListChanges {
+  private readonly changed = new Subject<string>();
+  readonly changed$ = this.changed.asObservable();
+  notify(key: string): void { this.changed.next(key); }
+}
+
+// writer, after the successful write
+this.changes.notify('LIST');
+
+// facade that caches LIST
+this.changes.changed$.subscribe((key) => {
+  if (key === 'LIST') this.store.invalidateCacheFor('LIST');
+});
+```
+
+Tests cover the cached hit and a refetch, or a fresh value, after that invalidation.
+
 ## Anti-Patterns
 
 - Component subscribes to flurryx fetches
@@ -455,6 +482,7 @@ DLQ command meta on `update` -> `update(key, state, { deadLetter: { error, httpS
 - Component injects `HttpClient` when belongs in facade/adapter
 - DTOs into presentation models when mapper exists
 - `@SkipIfCached` on always-fresh flows
+- Removing, bypassing, or shortening `@SkipIfCached`, `CACHE_NO_TIMEOUT`, or a TTL to fix stale data
 - `@Loading` outside (above) `@SkipIfCached`
 - `BehaviorSubject` where store slot would own state
 - Subclassing `BaseStore`

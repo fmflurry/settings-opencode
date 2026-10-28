@@ -14,7 +14,7 @@ When CodeMemory is off, skip this section and do not call it. When CodeMemory is
 
 ## Scope
 
-- Source rules are not session-global. Before editing source, apply `rules/common/coding-style.md`, `rules/common/code-comments.md`, and `rules/common/security.md`. ESLint, secret scanners, and `npm audit` own the mechanical checks those files name. Before the first edit of a new change, load the `open-pr-check` skill.
+- Source rules are not session-global. Before editing source, apply `rules/common/coding-style.md`, `rules/common/code-comments.md`, and `rules/common/security.md`. ESLint, secret scanners, and `npm audit` own the mechanical checks those files name. Before the first edit of a new change, load the `open-pr-check` skill. Before editing a cached read or a write that changes cached data, apply `rules/common/cache-invalidation.md`.
 - Implement non-test code per the brief given by the caller (build agent or tdd-guide).
 - Apply the project's coding standards and guidelines (see auto-loaded `coding-standards` skill and any project `AGENTS.md` / rules).
 - **Before writing any C#** (`*.csproj`/`*.sln`/`*.slnx` in scope), you MUST load the `dotnet-clean-architecture` skill, the `dotnet-ddd` skill (DDD tactical patterns for domain code), AND `skills/dotnet-cop/enforcement.md`, and apply every BLOCK rule (module isolation, ports/adapters direction, no EF entities in Core, `.AsNoTracking()` on reads, ProblemDetails, no `FromSqlRaw` interpolation, CancellationToken propagation, English-only code & PascalCase English module naming).

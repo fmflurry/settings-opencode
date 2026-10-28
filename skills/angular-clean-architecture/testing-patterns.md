@@ -26,6 +26,20 @@ describe('CompaniesFacade', () => {
     facade.loadAll();
     expect(getCompaniesUseCase.execute).not.toHaveBeenCalled();
   });
+
+  it('should refetch after a write invalidates the cache', () => {
+    facade.loadAll();
+    expect(getCompaniesUseCase.execute).not.toHaveBeenCalled();
+
+    // The write that changes this data calls invalidateCacheFor.
+    mockStore.invalidateCacheFor('COMPANIES');
+    mockStore.get.and.returnValue(
+      signal({ data: null, isLoading: false, status: 'Idle' })
+    );
+
+    facade.loadAll();
+    expect(getCompaniesUseCase.execute).toHaveBeenCalledTimes(1);
+  });
 });
 ```
 
@@ -117,4 +131,4 @@ describe('GetCompaniesAdapter', () => {
 - Target **80%+ coverage**
 - Never mock flurryx internals (`syncToStore`, decorators) — test their observable effect on the store mock
 - Store is `providedIn: 'root'` — in tests, override with `{ provide: XStore, useValue: mockStore }`
-- `@SkipIfCached` tests: pre-populate store mock with `status: 'Success'` to verify skip behavior
+- `@SkipIfCached` tests: pre-populate store mock with `status: 'Success'` to verify the cached hit, then invalidate (`invalidateCacheFor` or `onCacheInvalidate`) and assert a refetch or a fresh value after the write

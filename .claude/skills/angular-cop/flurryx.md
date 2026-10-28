@@ -42,8 +42,34 @@ loadList() { ... }
 loadList() { ... }
 ```
 
-### `@SkipIfCached` on a method that has no cache value
-Only use `@SkipIfCached` when cache hits are intended. If the method always re-fetches, remove the decorator.
+### `@SkipIfCached` only when a hit is intended
+Add `@SkipIfCached` only when a cache hit is the intended behavior. Leave it off a method that must always reach the network. Do not remove, bypass, or shorten an existing decorator, `CACHE_NO_TIMEOUT`, or TTL to fix stale data.
+
+### Stale cache
+Keep the decorator. Invalidate from the write that changes the cached data, in the same change.
+
+Same module: `store.invalidateCacheFor('LIST')` (keyed: `store.invalidateCacheFor('ITEMS', id)`). A mirror forwards `onCacheInvalidate`.
+
+Cross-module: the writer emits a root-level change signal. The facade that owns the cache subscribes and calls `invalidateCacheFor`. Do not import the other module's store.
+
+```ts
+@Injectable({ providedIn: 'root' })
+export class ListChanges {
+  private readonly changed = new Subject<string>();
+  readonly changed$ = this.changed.asObservable();
+  notify(key: string): void { this.changed.next(key); }
+}
+
+// writer, after the successful write
+this.changes.notify('LIST');
+
+// caching facade
+this.changes.changed$.subscribe((key) => {
+  if (key === 'LIST') this.store.invalidateCacheFor('LIST');
+});
+```
+
+Tests cover the cached hit and a refetch, or a fresh value, after that invalidation.
 
 ### Store key not UPPER_SNAKE_CASE
 ```ts

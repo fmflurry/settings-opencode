@@ -82,6 +82,14 @@ FORBIDDEN between modules — a module never imports another module's store or `
 | Facade, UseCase, Adapter | Route-level `providers: [...]` | Disposed on leave; re-created on re-entry |
 | `@SkipIfCached` | Prevents re-fetch | Store still holds data from previous visit |
 
+## Invalidation
+
+`@SkipIfCached` stays unless the task, spec, or PR description explicitly says to remove it. An instructed removal still names the knock-on effects (callers that expect the cached hit, tests that only cover the skip). Stale data is not a reason to delete the decorator, drop `CACHE_NO_TIMEOUT`, or shrink the TTL. Fix it at the write, in the same change.
+
+- Same module: `store.invalidateCacheFor('COMPANIES')`. A mirror forwards `onCacheInvalidate`.
+- Another module: emit a root-level change signal or event. The facade that owns `COMPANIES` subscribes and calls `store.invalidateCacheFor('COMPANIES')`. It does not import the writer's store.
+- Tests: the cached hit, and a refetch or a fresh value after the write.
+
 ## Reset
 
 - Single slot: `store.clear('COMPANIES')`

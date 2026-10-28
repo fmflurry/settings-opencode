@@ -31,13 +31,14 @@
     ],
     "requested": [
       "common/code-comments", "common/coding-style", "common/security", "common/testing",
+      "common/cache-invalidation",
       "typescript/coding-style", "typescript/hooks", "typescript/patterns",
       "typescript/security", "typescript/testing"
     ],
     "drop": []
   },
   "hooks": {
-    "include": ["pre-tool-use.sh", "rtk-rewrite.sh", "prefer-code-memory.sh", "tool-budget.sh", "autonomy-git-guard.sh", "pr-visual-report.sh", "stop.sh", "ship-stop-gate.sh", "subagent-stop.sh", "kpi-emit.sh"]
+    "include": ["pre-tool-use.sh", "rtk-rewrite.sh", "prefer-code-memory.sh", "tool-budget.sh", "autonomy-git-guard.sh", "pr-visual-report.sh", "cache-invalidation.sh", "stop.sh", "ship-stop-gate.sh", "subagent-stop.sh", "kpi-emit.sh"]
   },
   "cursorHookEvents": [
     "sessionStart", "sessionEnd", "preToolUse", "postToolUse", "postToolUseFailure", "subagentStart", "subagentStop",

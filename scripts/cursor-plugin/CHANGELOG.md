@@ -10,6 +10,14 @@ Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cur
 - A `guard_block` is written once when both the global hook and a project hook are installed. The global hook skips when the repo vendors `kpi-emit.sh`, and a second write of the same block is dropped. `agent-harness kpi report` also collapses duplicate guard blocks already in the log.
 - `pr-visual-report` is stored as the guard name, with `git`, `ask`, `secret`, and `budget`.
 
+## [0.4.25] - 2026-10-27
+
+- Stale cached data is fixed by invalidating on the write, not by removing the cache. A path-scoped cache-invalidation rule (Claude paths, Cursor globs, OpenCode instruction off the always-on list) says: keep the decorator, TTL, HTTP cache, memory cache, or output cache; invalidate or update the affected entries in the same change; a cross-module write uses an explicit change signal; tests cover a refetch after the write.
+- The flurryx skill and angular-cop's flurryx page record that anti-pattern and the invalidate-on-write idiom. The line that said to remove `@SkipIfCached` when a method always re-fetches now only covers a method that was never meant to hit the cache.
+- code-reviewer and angular-cop rate as Important: a diff that drops or bypasses a cache without invalidation, and a write next to a cached read with no invalidation and no refresh-after-write test. dotnet-cop says the same for `IMemoryCache`, `HybridCache`, and output cache: evict or tag-invalidate on the write.
+- `.claude/hooks/cache-invalidation.sh` warns when the branch diff (merge-base through the worktree; or `git diff HEAD` when no merge-base exists) removes `@SkipIfCached`, `CACHE_NO_TIMEOUT`, or another cache marker and adds no `invalidateCacheFor` or `onCacheInvalidate`. It exits 0. Cursor surfaces that warning as a preToolUse agent message and still allows the tool. It does not block the stop. Content checks in `stop.sh` are warn-only, and a real deletion of a cache must stay possible. `ship-stop-gate` blocks only an unfinished autonomous goal.
+- A cache removal or bypass is allowed only when the task, spec, or PR description explicitly says so. An agent must not do it on its own to fix stale data. An instructed removal names knock-on effects. Review rates only an uninstructed removal as Important. The hook warning says the removal is fine when it was explicitly instructed, and otherwise says to invalidate on the write.
+
 ## [0.4.24] - 2026-10-27
 
 - Claude Code's main agent (the session default) uses the settings model alias opus in `.claude/settings.json`, for Conductor and Monolith. A fresh global `~/.claude` install and a fresh project `.claude` install both get it. The settings merge writes that alias only when the key is missing or empty, and leaves a value that is already set.

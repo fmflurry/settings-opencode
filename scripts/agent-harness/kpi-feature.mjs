@@ -51,7 +51,7 @@ function cleanHost(value) {
 }
 
 function cleanGuard(value) {
-  return value === 'git' || value === 'ask' || value === 'secret' || value === 'budget' ? value : null;
+  return value === 'git' || value === 'ask' || value === 'secret' || value === 'budget' || value === 'pr-visual-report' ? value : null;
 }
 
 function cleanStamp(value) {

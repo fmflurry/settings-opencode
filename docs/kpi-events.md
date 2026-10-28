@@ -29,7 +29,7 @@ The log has no prompts, tool arguments, secrets, or absolute paths. `skill` and 
 | `agent` | string | `subagent_type` on Task/Agent (OpenCode: `task`) and on `subagent_spawn` / `subagent_stop`. `^[A-Za-z0-9._:-]{1,64}$` |
 | `duration_ms` | number or null | On `tool_result`. Null when the host did not send a duration. Non-negative and below 24 hours |
 | `ok` | boolean | On `tool_result`. False when the host reports an error; otherwise true |
-| `guard` | string | `git`, `ask`, `secret`, or `budget` |
+| `guard` | string | `git`, `ask`, `secret`, `budget`, or `pr-visual-report` |
 | `outcome` | string | `merged`, `blocked`, `escalated`, or `open` |
 | `pr` | number | Pull request number |
 | `review` | string | `code` or `security` |
@@ -100,7 +100,7 @@ The text report, and the sanitised `docs/pr-reports/<branch-slug>.metrics.json` 
 | Tools and skills | Counts of `tool_call` only. `tool_result` does not add a call |
 | Agents | `tool_call` counts for `main`, or for a subagent when the event's session is that child. A Task/Agent call on the parent session stays on `main`. A subagent with no tool calls of its own is counted once per spawn |
 | Failures and durations | `tool_result` with `ok: false`, and `duration_ms` when it is a non-negative number below 24 hours |
-| Guard blocks | `guard_block` events, split by `git`, `ask`, `secret`, and `budget` |
+| Guard blocks | `guard_block` events, split by `git`, `ask`, `secret`, `budget`, and `pr-visual-report`. A repeated block with the same timestamp, guard, repo, branch, session, variant, and tool is counted once |
 | Review and fix rounds | `review_round` and `fix_round` events. If those events are absent, the report uses `review_rounds` or `fix_iterations` from a later outcome |
 | Tokens | Sum of `session_end` and `subagent_stop` totals. `n/a` when none of those events carried a number |
 

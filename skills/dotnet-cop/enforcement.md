@@ -34,6 +34,10 @@ Review fails when any of these is present. Emit them as 🔴 Important [bug], �
 | **Synonym for a canonical term** | Type/endpoint names a concept with a term absent from `docs/architecture/ubiquitous-language.md` | Ubiquitous language: one term per concept; synonyms fragment the vocabulary |
 | **False or stale comment** | Comment asserts behavior the code does not perform (e.g., "thread-safe" without synchronization); or comment true at write time but made false by subsequent diff changes | Truthfulness is non-negotiable. Comments are code documentation and must match reality, or they become bugs. See `~/.claude/rules/common/code-comments.md` §Truthfulness clause. |
 | **Forbidden comment class** | Comment narrates what code does, restates signature, references task/PR/agent, logs history, claims quality, suppresses linting without reason, or repeats a type name | These belong in commit messages or removal, never in code. See `~/.claude/rules/common/code-comments.md` §Forbidden comment classes. |
+| **Uninstructed cache removal or bypass to fix staleness** | Diff drops or shortens `IMemoryCache`, `HybridCache`, `[OutputCache]`, or `[ResponseCache]` without an evict or tag-invalidate on the write (`cache.Remove`, `EvictByTag`, `RemoveByTag`), and the task, spec, or PR description does not explicitly ask for that removal | The agent chose this to refresh stale data. Keep the cache. Evict the key or tag-invalidate on the write. |
+| **Write of cached data with no eviction and no fresh-read test** | A new write of cached data has no `cache.Remove`, `EvictByTag`, or `RemoveByTag`, and no test that reads a fresh value after the write | Evict the key or tag-invalidate on the write, in the same change. A cross-module write emits an explicit event; the owner evicts. |
+
+An explicit request to remove or bypass the cache, stated in the task, spec, or PR description, is a note. It is not BLOCK. The note names knock-on effects: callers that still expect the cached value, and tests that only cover the hit. The write-without-eviction row above stays BLOCK either way.
 
 ---
 

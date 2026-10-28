@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Visual report — cache invalidation</title>
+<style>
+  :root {
+    --ink: #1c1915;
+    --muted: #5c564c;
+    --paper: #f4f0e6;
+    --card: #fffdf8;
+    --line: #e0d6c6;
+    --accent: #0f6e6b;
+    --warn: #8a4b12;
+    --ok: #1d6b3a;
+    --bad: #8f2d2d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 16px/1.45 "Segoe UI", "Helvetica Neue", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 28px 22px 48px; }
+  .kicker {
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 0 0 6px;
+  }
+  h1 { font-size: 28px; line-height: 1.15; margin: 0 0 8px; letter-spacing: -0.02em; }
+  .lede { color: var(--muted); max-width: 74ch; margin: 0; }
+  h2 { font-size: 16px; margin: 26px 0 10px; }
+  .flow, .cols, .ladder { display: grid; gap: 10px; }
+  .flow { grid-template-columns: 1fr 28px 1fr 28px 1fr; align-items: stretch; }
+  .cols { grid-template-columns: 1fr 1fr; }
+  .ladder { grid-template-columns: 1fr 1fr 1fr; }
+  .box {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .arrow { align-self: center; justify-self: center; color: var(--accent); font-size: 22px; line-height: 1; }
+  .box h3 { margin: 0 0 6px; font-size: 15px; }
+  .box p, .box li { color: var(--muted); font-size: 14px; }
+  .box p { margin: 0; }
+  ul { margin: 6px 0 0; padding-left: 18px; }
+  code, pre {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+  }
+  code { background: #f3ecdf; padding: 0 4px; border-radius: 4px; }
+  pre {
+    margin: 8px 0 0;
+    background: #1c1915;
+    color: #f4f0e6;
+    padding: 10px 12px;
+    border-radius: 8px;
+    white-space: pre-wrap;
+  }
+  .bad { border-left: 4px solid var(--bad); }
+  .good { border-left: 4px solid var(--ok); }
+  .warn { border-left: 4px solid var(--warn); }
+  .note { border-left: 4px solid var(--accent); }
+  .ok { color: var(--ok); font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 8px 12px; font-size: 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+  @media (max-width: 720px) {
+    .flow, .cols, .ladder { grid-template-columns: 1fr; }
+    .arrow { transform: rotate(90deg); }
+    h1 { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <p class="kicker">fmflurry-harness 0.4.25 · base master, after #56</p>
+  <h1>Invalidate on the write. Remove a cache only when told.</h1>
+  <p class="lede">A cached read that shows old data after a write is not a reason for the agent to delete <code>@SkipIfCached</code>, <code>CACHE_NO_TIMEOUT</code>, or a TTL. The cache stays. The write emits a change signal. The facade that owns the slot calls <code>store.invalidateCacheFor</code>. Specs cover the cached hit and the refetch. A removal is allowed only when the task, spec, or PR description explicitly says so, and the change names the knock-on effects.</p>
+
+  <h2>Who decides to remove the cache</h2>
+  <div class="cols">
+    <article class="box bad">
+      <h3>Agent's own fix</h3>
+      <p>Stale list after a create in another module. The agent deletes the decorator or shortens the TTL so the next read always hits the network. That is Important. Invalidate from the write instead.</p>
+      <pre>@SkipIfCached('LIST', store, true, CACHE_NO_TIMEOUT)
+load() { /* fetch */ }</pre>
+    </article>
+    <article class="box note">
+      <h3>Explicit instruction</h3>
+      <p>The task, spec, or PR description says to remove the cache. The removal is allowed. It is a note, not Important. Name callers that still expect the cached value, and tests that only cover the hit.</p>
+      <pre>task: remove @SkipIfCached on load()
+note: callers lose the cached hit</pre>
+    </article>
+  </div>
+
+  <h2>Cross-module refresh</h2>
+  <div class="flow">
+    <article class="box">
+      <h3>Write</h3>
+      <p>Create succeeds in the other module.</p>
+    </article>
+    <div class="arrow">→</div>
+    <article class="box">
+      <h3>Signal</h3>
+      <p>Root service emits the cache key. No store import across the module boundary.</p>
+    </article>
+    <div class="arrow">→</div>
+    <article class="box">
+      <h3>Refetch</h3>
+      <p>Facade calls <code>invalidateCacheFor</code>. The next read misses the cache and loads the fresh value.</p>
+    </article>
+  </div>
+
+  <h2>Enforcement ladder</h2>
+  <div class="ladder">
+    <article class="box">
+      <h3>1. Rule and skills</h3>
+      <p>Path-scoped rule for TypeScript and C#. Removal or bypass is allowed only on an explicit instruction. An instructed removal still names knock-on effects.</p>
+      <ul>
+        <li><code>rules/common/cache-invalidation.md</code></li>
+        <li><code>instructions/cache-invalidation.md</code></li>
+        <li>flurryx, angular-cop, store and test patterns</li>
+        <li>.NET: evict or tag-invalidate</li>
+      </ul>
+    </article>
+    <article class="box">
+      <h3>2. Review</h3>
+      <p>code-reviewer, angular-cop, and dotnet-cop. Only an uninstructed removal or bypass is Important. An instructed removal is a note.</p>
+      <ul>
+        <li>Uninstructed removal, no invalidation — Important</li>
+        <li>Write beside a cached read, no refresh test — Important, unchanged</li>
+      </ul>
+    </article>
+    <article class="box warn">
+      <h3>3. Diff hook, warn-only</h3>
+      <p><code>cache-invalidation.sh</code> still exits 0. The message says the removal is fine if it was explicitly instructed. Otherwise invalidate on the write.</p>
+      <ul>
+        <li>Net removal of <code>@SkipIfCached</code>, <code>CACHE_NO_TIMEOUT</code>, or another cache marker</li>
+        <li>Quiet when the diff adds <code>invalidateCacheFor</code> or <code>onCacheInvalidate</code></li>
+      </ul>
+    </article>
+  </div>
+
+  <h2>Why the hook warns and does not block</h2>
+  <p class="lede">Content checks in <code>stop.sh</code> warn. <code>ship-stop-gate</code> blocks only an unfinished autonomous goal. The hook cannot read the task, so it cannot tell an instructed removal from an agent's own fix. It warns either way and still allows the tool. Blocking the stop would loop the agent on a removal the task asked for. A new write next to an untouched cache stays on the Important review.</p>
+
+  <h2>Where it lands</h2>
+  <table>
+    <thead><tr><th>Surface</th><th>What changed</th></tr></thead>
+    <tbody>
+      <tr><td>Claude</td><td>Path-scoped rule. PreToolUse and Stop run the hook.</td></tr>
+      <tr><td>OpenCode</td><td>Same text in <code>instructions/cache-invalidation.md</code>, not in the always-on list. Coder and tdd-guide load it.</td></tr>
+      <tr><td>Cursor</td><td>Monolith and Conductor builds emit <code>rules/cache-invalidation.mdc</code> (globs, not always apply) and the hook on Write, Shell, and stop.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Checks</h2>
+  <div class="cols">
+    <article class="box">
+      <h3>Suite</h3>
+      <p><span class="ok">241 passed</span>, 0 failed, 2 skipped. <code>node scripts/cursor-plugin/check.mjs</code> printed <code>cursor-plugin check OK</code>. Conductor build includes the rule and the hook.</p>
+    </article>
+    <article class="box">
+      <h3>Hook specs</h3>
+      <p>11 tests: removal warns and the text says the removal is fine if explicitly instructed, otherwise invalidate on the write. Invalidation is quiet, a move is quiet, a commented-out decorator warns, a shortened <code>CACHE_NO_TIMEOUT</code> warns, Cursor allows and shows the rule, stop does not block.</p>
+    </article>
+  </div>
+
+<section id="kpi-metrics" style="margin-top:28px">
+<h2 style="font-size:18px;margin:0 0 8px">Metrics</h2>
+<p style="margin:0 0 10px;color:#57534e">fmflurry/settings-opencode  feat/cache-invalidation-rule  pr n/a. Status: complete.</p>
+<table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #d6d3d1"><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Wall</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">1m52s</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Active</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">1m52s (gaps over 5m excluded)</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Sessions</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">cursor 0, claude 0, opencode 0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tokens</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">n/a</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tool failures</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Guard blocks</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">8</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Review rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Fix rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr></table>
+<p style="margin:10px 0 0">Tools: none</p>
+<p style="margin:4px 0 0">Skills: none</p>
+<p style="margin:4px 0 0">Agents: main 0</p>
+<p style="margin:4px 0 0">Failure tools: none. Durations: n/a.</p>
+</section>
+</main>
+</body>
+</html>

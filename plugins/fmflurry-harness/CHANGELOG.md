@@ -2,11 +2,28 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
-## [0.4.26] - 2026-10-27
+## [0.4.27] - 2026-10-28
 
 - `security-reviewer` reads three vendored attack-class references under `skills/security-review/references/` only when the diff touches that surface: `ATTACK-CLASSES.md` (injection, access control, SSRF, deserialization), `WEB-PROTOCOL-AND-AUTH.md` (sessions and identity protocols), and `CLIENT-SIDE.md` (DOM and browser trust). They are verbatim copies from cloudflare/security-audit-skill at `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8`, MIT.
 - Every finding cites `file:line`, the data flow from source to sink, and a repro or test, and is classified Confirmed, Needs validation, or Rejected. Only a Confirmed Important finding blocks. Needs validation is listed separately.
 - Conductor and Monolith share the references and the agent text. The Cursor plugin build and the skill sync copy them into the install.
+
+## [0.4.26] - 2026-10-28
+
+- The git guard denies an unparsed command only when it contains a guarded git or gh operation the parser cannot resolve. A variable `-C` on `status`, `diff`, `log`, `ls-remote`, or `merge-base` is allowed. Heredoc bodies are not commands: a quoted body is literal, and an unquoted body is data except for `$(...)` and backticks. Quoted strings are not scanned as commands.
+- Push ref parsing ignores redirections and pipes. `git push -u origin <branch> 2>&1` uses the branch as the review key.
+- `ship-init` and `teardown-merged-worktree` have to be the only command. A chain with `&&`, `;`, or `|` is denied.
+- A `guard_block` is written once when both the global hook and a project hook are installed. The global hook skips when the repo vendors `kpi-emit.sh`, and a second write of the same block is dropped. `agent-harness kpi report` also collapses duplicate guard blocks already in the log.
+- `pr-visual-report` is stored as the guard name, with `git`, `ask`, `secret`, and `budget`.
+- A command with no guarded token skips the parser. A quoted span longer than 4096 bytes is not walked character by character: short quotes stay as written, and a long literal becomes one marker. `$(...)` and backticks inside a long double quote are still checked.
+
+## [0.4.25] - 2026-10-27
+
+- Stale cached data is fixed by invalidating on the write, not by removing the cache. A path-scoped cache-invalidation rule (Claude paths, Cursor globs, OpenCode instruction off the always-on list) says: keep the decorator, TTL, HTTP cache, memory cache, or output cache; invalidate or update the affected entries in the same change; a cross-module write uses an explicit change signal; tests cover a refetch after the write.
+- The flurryx skill and angular-cop's flurryx page record that anti-pattern and the invalidate-on-write idiom. The line that said to remove `@SkipIfCached` when a method always re-fetches now only covers a method that was never meant to hit the cache.
+- code-reviewer and angular-cop rate as Important: a diff that drops or bypasses a cache without invalidation, and a write next to a cached read with no invalidation and no refresh-after-write test. dotnet-cop says the same for `IMemoryCache`, `HybridCache`, and output cache: evict or tag-invalidate on the write.
+- `.claude/hooks/cache-invalidation.sh` warns when the branch diff (merge-base through the worktree; or `git diff HEAD` when no merge-base exists) removes `@SkipIfCached`, `CACHE_NO_TIMEOUT`, or another cache marker and adds no `invalidateCacheFor` or `onCacheInvalidate`. It exits 0. Cursor surfaces that warning as a preToolUse agent message and still allows the tool. It does not block the stop. Content checks in `stop.sh` are warn-only, and a real deletion of a cache must stay possible. `ship-stop-gate` blocks only an unfinished autonomous goal.
+- A cache removal or bypass is allowed only when the task, spec, or PR description explicitly says so. An agent must not do it on its own to fix stale data. An instructed removal names knock-on effects. Review rates only an uninstructed removal as Important. The hook warning says the removal is fine when it was explicitly instructed, and otherwise says to invalidate on the write.
 
 ## [0.4.24] - 2026-10-27
 

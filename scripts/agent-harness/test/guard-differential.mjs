@@ -108,7 +108,131 @@ if (process.platform === 'darwin') shells.push('/bin/bash')
 const jobs = []
 for (const shell of shells) for (const mode of ['on', 'off']) for (const command of cases) jobs.push({ shell, mode, command })
 
+function decisionOf(out) {
+  if (out.includes('"deny"')) return 'deny'
+  if (out.includes('"ask"')) return 'ask'
+  return 'allow'
+}
+
+// Text that the shell still executes: heredoc bodies and quoted strings are data.
+// $(...) and backticks stay, including inside double quotes and unquoted heredocs.
+function executedShell(command) {
+  let out = ''
+  let i = 0
+  let q = 0
+  const s = String(command)
+  const extract = (line) => {
+    let acc = ''
+    let k = 0
+    let qq = 0
+    while (k < line.length) {
+      const c = line[k]
+      if (qq === 1) { if (c === "'") qq = 0; k++; continue }
+      if (qq === 2) {
+        if (c === '\\') { k += 2; continue }
+        if (c === '"') qq = 0
+        k++; continue
+      }
+      if (c === "'") { qq = 1; k++; continue }
+      if (c === '"') { qq = 2; k++; continue }
+      if (c === '`') {
+        const end = line.indexOf('`', k + 1)
+        acc += line.slice(k, end === -1 ? line.length : end + 1)
+        k = end === -1 ? line.length : end + 1
+        continue
+      }
+      if (c === '$' && line[k + 1] === '(') {
+        const start = k
+        let depth = 1
+        k += 2
+        while (k < line.length && depth > 0) {
+          if (line[k] === '(') depth++
+          else if (line[k] === ')') depth--
+          k++
+        }
+        acc += line.slice(start, k)
+        continue
+      }
+      k++
+    }
+    return acc
+  }
+  while (i < s.length) {
+    if (q === 0 && s.startsWith('<<', i) && s[i + 2] !== '<') {
+      let j = i + 2
+      if (s[j] === '-') j++
+      while (s[j] === ' ' || s[j] === '\t') j++
+      let quoted = false
+      let delim = ''
+      while (j < s.length && !' \t;&|<>()\n'.includes(s[j])) {
+        const c = s[j]
+        if (c === "'" || c === '"') { quoted = true; j++; continue }
+        if (c === '\\' && j + 1 < s.length) { quoted = true; delim += s[j + 1]; j += 2; continue }
+        delim += c
+        j++
+      }
+      const nl = s.indexOf('\n', i)
+      const lineEnd = nl === -1 ? s.length : nl + 1
+      out += s.slice(i, lineEnd)
+      i = lineEnd
+      if (delim) {
+        while (i < s.length) {
+          const nl2 = s.indexOf('\n', i)
+          const line = s.slice(i, nl2 === -1 ? s.length : nl2)
+          i = nl2 === -1 ? s.length : nl2 + 1
+          if (line.replace(/^\t+/, '') === delim || line === delim) break
+          if (!quoted) {
+            const subs = extract(line)
+            if (subs) out += `${subs}\n`
+          }
+        }
+      }
+      continue
+    }
+    const c = s[i]
+    if (q === 1) { if (c === "'") q = 0; i++; continue }
+    if (q === 2) {
+      if (c === '\\' && i + 1 < s.length) {
+        const n = s[i + 1]
+        if (n === '$' || n === '"' || n === '\\' || n === '`') out += n
+        else out += c + n
+        i += 2
+        continue
+      }
+      if (c === '"') { q = 0; i++; continue }
+      if (c === '`') {
+        const end = s.indexOf('`', i + 1)
+        out += s.slice(i, end === -1 ? s.length : end + 1)
+        i = end === -1 ? s.length : end + 1
+        continue
+      }
+      if (c === '$' && s[i + 1] === '(') {
+        const start = i
+        let depth = 1
+        i += 2
+        while (i < s.length && depth > 0) {
+          if (s[i] === '(') depth++
+          else if (s[i] === ')') depth--
+          i++
+        }
+        out += s.slice(start, i)
+        continue
+      }
+      i++
+      continue
+    }
+    if (c === "'") { q = 1; i++; continue }
+    if (c === '"') { q = 2; i++; continue }
+    out += c
+    i++
+  }
+  return out
+}
+
+const GUARDED = /\bgit\s+push\b|\bgh\s+pr\s+(merge|create)\b|\bgit\s+reset\s+--hard\b|\bgit\s+worktree\s+(remove|move|prune)\b|\brm\s+-[^\n]*\brf\b|[<>]\s*\.(claude|github|opencode)\b/
+
 const diffs = []
+const relaxations = []
 const stderrRuns = []
 const seen = { deny: 0, ask: 0, allow: 0 }
 let next = 0
@@ -117,13 +241,20 @@ const worker = async () => {
     const { shell, mode, command } = jobs[next++]
     const [a, b] = await Promise.all([run(shell, baseline, command, mode), run(shell, current, command, mode)])
     seen[b.out.includes('"deny"') ? 'deny' : b.out.includes('"ask"') ? 'ask' : 'allow']++
-    if (a.code !== b.code || a.out !== b.out) diffs.push({ shell, mode, command, a, b })
     if (b.err !== '') stderrRuns.push({ shell, mode, command, err: b.err })
+    if (a.code === b.code && a.out === b.out) continue
+    const from = decisionOf(a.out)
+    const to = decisionOf(b.out)
+    if (from === 'deny' && to === 'allow' && a.code === b.code && !GUARDED.test(executedShell(command))) {
+      relaxations.push({ shell, mode, command })
+      continue
+    }
+    diffs.push({ shell, mode, command, a, b })
   }
 }
 await Promise.all(Array.from({ length: 4 }, worker))
 
-console.log(`guard differential: ${cases.length} cases x ${shells.length} shell(s) x 2 modes = ${jobs.length} comparisons vs ${baselineSha}, ${diffs.length} differences`)
+console.log(`guard differential: ${cases.length} cases x ${shells.length} shell(s) x 2 modes = ${jobs.length} comparisons vs ${baselineSha}, ${diffs.length} differences, ${relaxations.length} intended relaxations`)
 console.log(`decisions: ${seen.deny} deny, ${seen.ask} ask, ${seen.allow} allow`)
 if (seen.deny === 0 || seen.allow === 0) { console.log('corpus exercised only one decision'); process.exit(1) }
 for (const d of diffs.slice(0, 10)) {

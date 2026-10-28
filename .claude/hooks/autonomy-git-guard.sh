@@ -97,6 +97,67 @@ deny_branch_delete() { emit deny "Blocked by git-guard: branch deletion only via
 deny_config() { emit deny "Blocked by git-guard: git config injection (-c, --config-env, GIT_CONFIG_*) is not allowed."; }
 deny_unparsed() { emit deny "Blocked by git-guard: cannot parse this command safely (substitution, expansion, or ANSI-C quoting)."; }
 deny_review() { emit deny "Blocked by git-guard: $1"; }
+# Read-only git does not publish or rewrite. A variable -C on one of these is not a guarded operation.
+git_ro() {
+  case "$1" in
+    status | diff | log | ls-remote | merge-base) return 0 ;;
+  esac
+  return 1
+}
+# Redirections are not ref names. 2>&1 used to be split into the word 2> and then used as the review key.
+redir_word() {
+  REDIR_NEED=0
+  case "$1" in
+    [0-9]*[\<\>]* | [\>\<]* | '&>'* | '&>>'*) ;;
+    *) return 1 ;;
+  esac
+  case "$1" in
+    [0-9]*'>>' | [0-9]*'<<' | [0-9]*'<>' | [0-9]*'>' | [0-9]*'<' | [0-9]*'>&' | [0-9]*'<&' | '&>' | '&>>' | '<<<' | '<<-')
+      REDIR_NEED=1 ;;
+    [0-9]*'>&'[0-9-]* | [0-9]*'<&'[0-9-]*) ;;
+    [0-9]*'>>'?*) ;;
+    [0-9]*'<<'?*) ;;
+    [0-9]*'<>'?*) ;;
+    [0-9]*'>'?*) ;;
+    [0-9]*'<'?*) ;;
+    '&>'?*) ;;
+    '&>>'?*) ;;
+    *) REDIR_NEED=1 ;;
+  esac
+  return 0
+}
+strip_redir_args() {
+  local a need=0
+  GG_ARGS=()
+  for a in "$@"; do
+    if [ "$need" = 1 ]; then need=0; continue; fi
+    if redir_word "$a"; then
+      [ "$REDIR_NEED" = 1 ] && need=1
+      continue
+    fi
+    GG_ARGS+=("$a")
+  done
+}
+# sh -c 'cd dir && git push' is one quoted script. Re-queue the script's commands so the push is still checked.
+queue_shell_script() {
+  [ "$shell_c" = 1 ] || return 1
+  local script="${ct[*]}" line more
+  local -a add=() pre=() post=()
+  [[ "$script" == *[\;\&\|]* ]] || return 1
+  more="$(LC_ALL=C awk -v mode=lex "$GG_AWK" <<<"$script")" || return 1
+  [[ "$more" == *$'\n\037LEXEND' ]] || return 1
+  more="${more%$'\n\037LEXEND'}"
+  more="${more%%$'\037NCMD '*}"
+  while IFS= read -r line; do
+    [ -n "${line//[[:space:]]/}" ] && add+=("$line")
+  done <<<"$more"
+  [ "${#add[@]}" -gt 1 ] || return 1
+  pre=("${GGL[@]:0:$LI}")
+  post=("${GGL[@]:$LI}")
+  GGL=("${pre[@]}" "${add[@]}" "${post[@]}")
+  nlines=${#GGL[@]}
+  return 0
+}
 is_protected_token() {
   local t="${1//[<>]/}"
   if [ "$WIN" = 1 ]; then t="${t//\\//}"; lc "$t"; t="$LCV"; fi
@@ -302,6 +363,8 @@ push_gate() {
 
 check_push() {
   local gdir="$1" a ref; shift
+  strip_redir_args "$@"
+  set -- ${GG_ARGS+"${GG_ARGS[@]}"}
   local pos=()
   if [[ "$*" != *'$'* && " $* " != *" -"* ]]; then
     pos=("$@")
@@ -363,7 +426,7 @@ worktree_destroy_in() {
 }
 
 check_git() {
-  local gdir="$cwd" n=$# a kv sub="" j=2
+  local gdir="$cwd" n=$# a kv sub="" j=2 c_exp=0
   cd_sync
   [ -n "$CD_BASE" ] && [ "$CD_BASE" != "?" ] && gdir="$CD_BASE"
   local args=("$@")
@@ -373,9 +436,12 @@ check_git() {
     case "$a" in
       -C)
         kv="${args[$j]:-}"
-        [[ "$kv" == *'$'* || "$kv" == *'`'* ]] && [ "$AUTO" = 1 ] && deny_unparsed
-        case "$kv" in /*) gdir="$kv" ;; *) gdir="$gdir/$kv" ;; esac
-        GIT_LOC+=(-C "$kv"); j=$((j + 2)) ;;
+        if [[ "$kv" == *'$'* || "$kv" == *'`'* ]]; then c_exp=1
+        else
+          case "$kv" in /*) gdir="$kv" ;; *) gdir="$gdir/$kv" ;; esac
+          GIT_LOC+=(-C "$kv")
+        fi
+        j=$((j + 2)) ;;
       --git-dir | --work-tree)
         kv="${args[$j]:-}"
         [[ "$kv" == *'$'* || "$kv" == *'`'* ]] && deny_unparsed
@@ -398,6 +464,7 @@ check_git() {
   case "$sub" in
     *'$'* | *'`'* | *'{'*'}'*) deny_unparsed ;;
   esac
+  if [ "$c_exp" = 1 ] && [ "$AUTO" = 1 ] && ! git_ro "$sub"; then deny_unparsed; fi
   local rest=("${args[@]:$((j - 1))}")
   case "$sub" in
     commit | tag | stash | log | notes) ;;
@@ -1051,17 +1118,195 @@ function plainq(s,   w, c) {
   if (win) w = tolower(w)
   return !(w in ALLB) && w !~ /^python/
 }
-function segfeed(s,   n, i, parts) {
-  if (s !~ SEGSPECIAL) {
-    if (s ~ /^[A-Za-z0-9_]+$/) { n = win ? tolower(s) : s; if (!(n in ALLB) && n !~ /^python/) return }
-    segemit(s); return
+function xadd(s) {
+  if (s == "") return
+  apush("X", s)
+  xl = substr(s, length(s), 1)
+}
+function note_cmd(s) {
+  gsub(/^[ \t\r\f\v({]+/, "", s)
+  if (s != "") ncmd++
+}
+function lexflush(   s) {
+  s = aget("X"); xl = ""
+  if (s == "") return
+  note_cmd(s)
+  if (lexprint) print s "\n"
+  else segemit(s)
+}
+function lexplain(s,   n, i, parts) {
+  if (index(s, ">") || index(s, "&")) {
+    gsub(/>&/, ">\003", s)
+    gsub(/&>/, "\003>", s)
   }
-  gsub("[\047\"]", "", s)
-  gsub(/\$\(/, ";", s)
-  gsub(/`/, ";", s)
+  gsub(/\$\(/, "\n", s)
+  gsub(/`/, "\n", s)
   gsub(/[;&|]/, "\n", s)
+  gsub(/\003/, "\\&", s)
   n = split(s, parts, "\n")
-  for (i = 1; i <= n; i++) segemit(parts[i])
+  for (i = 1; i <= n; i++) {
+    if (parts[i] == "") continue
+    note_cmd(parts[i])
+    if (lexprint) print parts[i] "\n"
+    else segemit(parts[i])
+  }
+}
+function lexfeed(s,   n, p, ch, m, lim, i, c, nxt, rest, k) {
+  if (lq == 1 && index(s, SQ) == 0) { xadd(s); xadd(" "); return }
+  if (lq == 2 && index(s, DQ) == 0 && index(s, BS) == 0 && index(s, "$") == 0 && index(s, "`") == 0) { xadd(s); xadd(" "); return }
+  if (lq == 0 && index(s, SQ) == 0 && index(s, DQ) == 0 && index(s, BS) == 0 && index(s, "`") == 0) {
+    if (s ~ /^[A-Za-z0-9_]+$/) {
+      if (!lexprint) { n = win ? tolower(s) : s; if (!(n in ALLB) && n !~ /^python/) { note_cmd(s); return } }
+    }
+    if (s !~ SEGSPECIAL) {
+      note_cmd(s)
+      if (lexprint) { if (s != "") print s "\n" }
+      else segemit(s)
+      return
+    }
+    lexplain(s); return
+  }
+  n = length(s); p = 1
+  while (p <= n) {
+    ch = substr(s, p, CH + 1); m = length(ch); lim = (m > CH) ? CH : m
+    i = 1
+    while (i <= lim) {
+      c = substr(ch, i, 1)
+      if (lq == 1) {
+        rest = substr(ch, i, lim - i + 1)
+        k = index(rest, SQ)
+        if (k == 0) { xadd(rest); i = lim + 1; continue }
+        if (k > 1) xadd(substr(rest, 1, k - 1))
+        lq = 0; i += k; continue
+      }
+      if (lq == 2) {
+        if (c == BS && i < m) {
+          nxt = substr(ch, i + 1, 1); i += 2
+          if (nxt == "$" || nxt == DQ || nxt == BS || nxt == "`") xadd(nxt)
+          else { xadd(c); xadd(nxt) }
+          continue
+        }
+        if (c == DQ) { lq = 0; i++; continue }
+        if (c == "`") { lexflush(); i++; continue }
+        if (c == "$" && i < m && substr(ch, i + 1, 1) == "(") { lexflush(); i += 2; continue }
+        xadd(c); i++; continue
+      }
+      if (c == SQ) { lq = 1; i++; continue }
+      if (c == DQ) { lq = 2; i++; continue }
+      if (c == BS && i < m) {
+        nxt = substr(ch, i + 1, 1); i += 2
+        if (nxt == ";" || nxt == "&" || nxt == "|" || nxt == "\n") lexflush()
+        else xadd(nxt)
+        continue
+      }
+      if (c == "$" && i < m && substr(ch, i + 1, 1) == "(") { lexflush(); i += 2; continue }
+      if (c == "`") { lexflush(); i++; continue }
+      if (c == ";" || c == "|" || c == "\n") { lexflush(); i++; continue }
+      if (c == "&") {
+        nxt = (i < m) ? substr(ch, i + 1, 1) : ""
+        if (nxt == ">" || xl == ">") xadd(c)
+        else lexflush()
+        i++; continue
+      }
+      xadd(c); i++
+    }
+    p += i - 1
+  }
+  if (lq == 0) lexflush()
+  else xadd(" ")
+}
+function body_subs(line,   n, i, c, depth, qq, start) {
+  n = length(line); i = 1; qq = 0
+  while (i <= n) {
+    c = substr(line, i, 1)
+    if (qq == 1) { if (c == SQ) qq = 0; i++; continue }
+    if (qq == 2) {
+      if (c == BS) { i += 2; continue }
+      if (c == DQ) qq = 0
+      i++; continue
+    }
+    if (c == SQ) { qq = 1; i++; continue }
+    if (c == DQ) { qq = 2; i++; continue }
+    if (c == "`") {
+      start = i; i++
+      while (i <= n && substr(line, i, 1) != "`") i++
+      print substr(line, start, i - start + 1) "\n"
+      if (i <= n) i++
+      continue
+    }
+    if (c == "$" && substr(line, i + 1, 1) == "(") {
+      start = i; depth = 1; i += 2
+      while (i <= n && depth > 0) {
+        c = substr(line, i, 1); i++
+        if (c == "(") depth++
+        else if (c == ")") depth--
+      }
+      print substr(line, start, i - start) "\n"
+      continue
+    }
+    i++
+  }
+}
+function body_queue(line, i,   n, c, strip, quoted, delim) {
+  n = length(line); strip = 0; quoted = 0; delim = ""
+  if (substr(line, i, 1) == "-") { strip = 1; i++ }
+  while (i <= n && (substr(line, i, 1) == " " || substr(line, i, 1) == "\t")) i++
+  while (i <= n) {
+    c = substr(line, i, 1)
+    if (c == " " || c == "\t" || c == ";" || c == "&" || c == "|" || c == "<" || c == ">" || c == "(" || c == ")") break
+    if (c == SQ || c == DQ) { quoted = 1; i++; continue }
+    if (c == BS) {
+      quoted = 1
+      if (i < n) { delim = delim substr(line, i + 1, 1); i += 2; continue }
+      i++; continue
+    }
+    delim = delim c; i++
+  }
+  if (delim != "") {
+    hd_n++; hd_d[hd_n] = delim; hd_q[hd_n] = quoted; hd_t[hd_n] = strip
+  }
+  return i
+}
+function body_close(line,   s) {
+  s = line
+  if (hd_t[hd_i]) sub(/^\t+/, "", s)
+  if (s != hd_d[hd_i]) return 0
+  hd_i++
+  if (hd_i > hd_n) { hd_n = 0; hd_i = 1 }
+  return 1
+}
+function bodyrec(line,   n, i, c) {
+  if (hd_i <= hd_n) {
+    if (body_close(line)) return
+    if (!hd_q[hd_i]) body_subs(line)
+    return
+  }
+  n = length(line); i = 1
+  while (i <= n) {
+    c = substr(line, i, 1)
+    if (bq == 1) { if (c == SQ) bq = 0; i++; continue }
+    if (bq == 3) {
+      if (c == BS) { i += 2; continue }
+      if (c == SQ) bq = 0
+      i++; continue
+    }
+    if (bq == 2) {
+      if (c == BS) { i += 2; continue }
+      if (c == DQ) bq = 0
+      i++; continue
+    }
+    if (c == SQ) { bq = 1; i++; continue }
+    if (c == DQ) { bq = 2; i++; continue }
+    if (c == "$" && substr(line, i + 1, 1) == SQ) { bq = 3; i += 2; continue }
+    if (c == BS) { i += 2; continue }
+    if (c == "<" && substr(line, i + 1, 1) == "<") {
+      if (substr(line, i + 2, 1) == "<") { i += 3; continue }
+      i = body_queue(line, i + 2)
+      continue
+    }
+    i++
+  }
+  print line "\n"
 }
 function maybe_prot(t) {
   if (win) t = tolower(t)
@@ -1137,7 +1382,11 @@ function scanrec(rec, more,   L, n, p, ch, m, lim, i, c) {
       c = substr(ch, i, 1); i++
       if (q == 0) {
         if (c == " " || c == "\t" || c == "\r") { fw(); continue }
-        if (c == "\n" || c == ";" || c == "&" || c == "|") { fsg(); continue }
+        if (c == "\n" || c == ";" || c == "|") { fsg(); continue }
+        if (c == "&") {
+          if (substr(ch, i, 1) == ">" || substr(wb, length(wb), 1) == ">") { wb = wb c; continue }
+          fsg(); continue
+        }
         if (c == BS) { wb = wb c; if (i <= m) { wb = wb substr(ch, i, 1); i++ }; continue }
         if (c == SQ) { q = 1; wb = wb c; continue }
         if (c == DQ) { q = 2; wb = wb c; continue }
@@ -1201,31 +1450,39 @@ BEGIN {
   ASG = "^[A-Za-z_][A-Za-z0-9_]*="
   SEGSPECIAL = "[\047\"`;&|$]"
   PLAINX = "[\047\"`;&|$>\\\\]"
-  isseg = (mode == "seg"); islit = (mode == "lit"); isboth = (mode == "both")
+  isseg = (mode == "seg"); islit = (mode == "lit"); isboth = (mode == "both"); islex = (mode == "lex"); isbody = (mode == "body")
+  lexprint = islex
   for (k in LK) ALLB[k] = 1
   for (k in PY) ALLB[k] = 1
   ALLB["git"] = 1; ALLB["gh"] = 1; ALLB["rm"] = 1; ALLB["cd"] = 1; ALLB["pushd"] = 1; ALLB["popd"] = 1
   SPECIAL = "[\\\\\047\"\n\037/={]"
-  CH = 512; SQ = "\047"; US = "\037"; RSEP = "\036"; DQ = "\""; BS = "\\"; q = 0; ex = 0; nk = 0; ns = 0; lbuf = ""; prevc = ""; bs = 0; prevtxt = ""; ncb = 0; ORS = "" }
+  CH = 512; SQ = "\047"; US = "\037"; RSEP = "\036"; DQ = "\""; BS = "\\"; q = 0; ex = 0; nk = 0; ns = 0; lbuf = ""; prevc = ""; bs = 0; prevtxt = ""; ncb = 0; ORS = ""
+  lq = 0; xl = ""; bq = 0; hd_n = 0; hd_i = 1; ncmd = 0 }
+isbody { bodyrec($0); next }
+islex { lexfeed($0); next }
 isseg { segemit($0); next }
 islit { acc = (NR > 1) ? acc "\n" $0 : $0; next }
 {
   if (isboth) {
     if (hv) { scanrec(prev, 1); hv = 0 }
     if ((q == 1 || q == 2) && nw > 0 && md == 1 && $0 !~ PLAINX && plainq($0)) next
-    segfeed($0)
+    lexfeed($0)
   }
   if (hv) { if (mode == "join") joinrec(prev, 1); else scanrec(prev, 1) }
   prev = $0; hv = 1
 }
 END {
+  if (isbody) { print US "BODYEND"; exit }
+  if (islex) { lexflush(); print US "NCMD " ncmd "\n" US "LEXEND\n"; exit }
   if (mode == "lit") { print stripnl(lit(acc)) "\n" US "LEND\n"; exit }
   if (hv) { if (mode == "join") joinrec(prev, 0); else scanrec(prev, 0) }
   if (mode == "join") print "\n" US "JEND"
   if (mode == "scan") { fsg(); cdflush(); print US "SCANEND\n" }
   if (mode == "both") { fsg(); cdflush(); print US "SCANEND\n" }
+  if (mode == "both" && lq != 0) lexflush()
   if (mode == "both" || mode == "seg") {
     for (i = 1; i <= ns; i++) print sg[i] "\n"
+    if (mode == "both") print US "NCMD " ncmd "\n"
     print US "SEND\n"
   }
 }
@@ -1258,7 +1515,7 @@ note_assign_idx() {
 }
 
 screen_git() {
-  local i="$1" w gdir="$cwd" sub="" sub_u=0 opt_u=0 opt val
+  local i="$1" w gdir="$cwd" sub="" sub_u=0 opt_u=0 c_exp=0 opt val
   local -a lit=()
   sr_sync
   [ -n "$SR_CD" ] && [ "$SR_CD" != "?" ] && gdir="$SR_CD"
@@ -1270,7 +1527,10 @@ screen_git() {
       -C | --git-dir | --work-tree | --namespace | --exec-path | --super-prefix | -c | --config-env)
         opt="$w"; i=$((i + 1))
         [ "$i" -ge "${#words[@]}" ] && break
-        if [ "${exp_f[$i]}" = 1 ] || [ "${brace_f[$i]}" = 1 ]; then opt_u=1; i=$((i + 1)); continue; fi
+        if [ "${exp_f[$i]}" = 1 ] || [ "${brace_f[$i]}" = 1 ]; then
+          if [ "$opt" = -C ]; then c_exp=1; else opt_u=1; fi
+          i=$((i + 1)); continue
+        fi
         val="${lit_f[$i]}"
         case "$opt" in
           -C)
@@ -1293,6 +1553,7 @@ screen_git() {
   done
   [ "$sub_u" = 1 ] && deny_unparsed
   if [ "$opt_u" = 1 ] && { [ "$AUTO" = 1 ] || [ "$sub" = worktree ]; }; then deny_unparsed; fi
+  if [ "$c_exp" = 1 ] && { [ "$sub" = worktree ] || { [ "$AUTO" = 1 ] && ! git_ro "$sub"; }; }; then deny_unparsed; fi
   if [ "$GIT_ENV_U" = 1 ] && { [ "$AUTO" = 1 ] || [ "$sub" = worktree ]; }; then deny_unparsed; fi
   [ "$AUTO" = 1 ] && [ "$GIT_CFG_RISK" = 1 ] && deny_config
   case "$sub" in
@@ -1354,7 +1615,7 @@ screen_segment() {
            esac ;;
       esac
     fi
-    if [ "$u" = 0 ] && [[ "$w" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then note_assign_idx "$i"; i=$((i + 1)); continue; fi
+    if [[ "$w" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then note_assign_idx "$i"; i=$((i + 1)); continue; fi
     if [ "$u" = 0 ] && is_prefix_keyword "$b"; then i=$((i + 1)); continue; fi
     if [ "$u" = 0 ] && [[ "$b" =~ ^(env|sudo|command|exec|nice|nohup|xargs|timeout|time)$ ]]; then
       wb="$b"; i=$((i + 1))
@@ -1423,6 +1684,12 @@ screen_segment() {
 gg_lines() { local IFS=$'\n'; set -f; GGL=($1); LI=0; }
 
 command -v awk >/dev/null 2>&1 || deny_unparsed
+# A heredoc body is data, not a command. Quoted bodies are literal. Unquoted bodies still run $(...) and backticks.
+if [[ "$cmd" == *'<<'* ]]; then
+  cmd="$(LC_ALL=C awk -v mode=body "$GG_AWK" <<<"$cmd")" || deny_unparsed
+  [[ "$cmd" == *$'\n\037BODYEND' ]] || deny_unparsed
+  cmd="${cmd%$'\n\037BODYEND'}"
+fi
 if [[ "$cmd" == *\\* ]]; then
   cmd="$(LC_ALL=C awk -v mode=join "$GG_AWK" <<<"$cmd")" || deny_unparsed
   [[ "$cmd" == *$'\n\037JEND' ]] || deny_unparsed
@@ -1437,9 +1704,8 @@ case "$BASE_A$BASE_B" in *\\* | *\"* | *\'* | *$'\n'*) pushfast=0 ;; esac
 gate_on && pushfast=0
 merged=0
 if [[ "$cmd" != *\\* ]]; then
-  # Without a backslash the legacy tokenizer's text is the command with quotes removed and "$(", backticks
-  # and ;&| turned into line breaks, so one awk pass yields both the quote-aware scan and the filtered
-  # legacy segments.
+  # One awk pass yields the quote-aware scan and the legacy segments. Splits stay outside quotes,
+  # and >& / &> stay one token so a redirection is not a ref.
   merged=1
   both_out="$(LC_ALL=C awk -v mode=both -v pytag=1 -v win="$WIN" -v altsdef="$ALTS_DEFAULT" -v pushfast="$pushfast" -v basea="$BASE_A" -v baseb="$BASE_B" "$GG_AWK" <<<"$cmd")" || deny_unparsed
   gg_lines "$both_out"
@@ -1492,11 +1758,20 @@ fi
 if [[ "$cmd" == *worktree-rm* ]] && grep -Eq '(^|[^[:alnum:]_])(export|declare +-x|set +-a)( |$)' <<<"$cmd"; then deny_worktree; fi
 [[ "$cmd" == *--confirmed* && "$cmd" == *worktree-rm* ]] && ASKED_WT=1
 
+ncmd_all=0
 if [ "$merged" = 0 ]; then
 legacy_cmd="$cmd"
 # Inside quotes a backslash in a Windows path is literal, so the legacy tokenizer reads it as a separator.
 [ "$WIN" = 1 ] && legacy_cmd="$(sed -E 's#\\([^"\\ $`'"'"'])#/\1#g' <<<"$cmd")"
-segments="$(tr -d "'\"" <<<"$legacy_cmd" | sed -E 's/\$\(/;/g; s/`/;/g; s/\\(.)/\1/g' | tr ';&|' '\n\n\n')"
+segments="$(LC_ALL=C awk -v mode=lex "$GG_AWK" <<<"$legacy_cmd")" || deny_unparsed
+[[ "$segments" == *$'\n\037LEXEND' ]] || deny_unparsed
+segments="${segments%$'\n\037LEXEND'}"
+ncmd_all=0
+if [[ "$segments" == *$'\037NCMD '* ]]; then
+  ncmd_all="${segments##*$'\037NCMD '}"
+  ncmd_all="${ncmd_all%%$'\n'*}"
+  segments="${segments%%$'\037NCMD '*}"
+fi
 pyinert=0
 if [[ "$segments" != *python* && "$segments" != *perl* && "$segments" != *node* && "$segments" != *ruby* ]]; then
   pyinert=1
@@ -1510,11 +1785,14 @@ gg_lines "$segments"
 fi
 PSEG=""; PIN=""; PYI=""
 seg_ended=0
+segs=0
+life=0
 nlines=${#GGL[@]}
 while [ "$LI" -lt "$nlines" ]; do
   seg="${GGL[LI]}"; LI=$((LI + 1))
   case "$seg" in
     $'\037SEND') seg_ended=1; break ;;
+    $'\037NCMD '*) ncmd_all="${seg#*$'\037NCMD '}"; continue ;;
     $'\036'*)
       if [ -z "$PYI" ]; then
         ensure_pyrm
@@ -1540,8 +1818,12 @@ while [ "$LI" -lt "$nlines" ]; do
     done
   fi
   [ "$AUTO" = 1 ] && [[ "$seg" == *'>'* ]] && check_redirects "${toks[@]}"
+  strip_redir_args "${toks[@]}"
+  toks=()
+  [ "${#GG_ARGS[@]}" -gt 0 ] && toks=("${GG_ARGS[@]}")
+  [ "${#toks[@]}" -gt 0 ] || continue
 
-  i=0 has_assign=0 XARGS=0 pref=0
+  i=0 has_assign=0 XARGS=0 pref=0 shell_c=0
   GIT_DIR_VAL="" GIT_WT_VAL="" GIT_CFG_RISK=0 GIT_ENV_U=0 SAW_LOC=0
   GIT_LOC=()
   while [ "$i" -lt "${#toks[@]}" ]; do
@@ -1583,16 +1865,24 @@ while [ "$LI" -lt "$nlines" ]; do
       done
       [ "$found" = 1 ] || break
       pref=1
+      shell_c=1
       i=$((j + 1))
     else break
     fi
   done
   ct=("${toks[@]:$i}")
   [ "${#ct[@]}" -gt 0 ] || continue
+  if queue_shell_script; then continue; fi
   RAW0="${ct[0]}"
   c0="${ct[0]##*/}"
   if [ "$WIN" = 1 ]; then lc "$c0"; c0="${LCV%.exe}"; fi
   ct[0]="$c0"
+  segs=$((segs + 1))
+  case "$c0" in
+    agent-harness | agent-harness.sh)
+      case "${ct[1]:-}" in ship-init | teardown-merged-worktree) life=1 ;; esac ;;
+    ship-init.sh | teardown-merged-worktree.sh) life=1 ;;
+  esac
 
   if [ "$pref" = 1 ] && [ "$c0" != git ] && worktree_destroy_in "${ct[@]}"; then deny_worktree; fi
   case "$c0" in
@@ -1644,6 +1934,7 @@ while [ "$LI" -lt "$nlines" ]; do
     python | python[0-9]* | perl | node | ruby) interpreter_inline_hits_protected "${ct[@]:1}" && deny ;;
   esac
 done
+[ "$life" = 1 ] && { [ "$segs" -gt 1 ] || [ "${ncmd_all:-0}" -gt 1 ]; } && deny_harness_cmd
 [ "$seg_ended" = 1 ] || deny_unparsed
 gg_mark legacy_loop
 

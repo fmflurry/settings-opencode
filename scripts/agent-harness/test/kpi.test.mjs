@@ -51,7 +51,7 @@ test('kpi-emit appends a stamped event and drops prompt text', () => {
   assert.equal(lines[0].tool_name, 'Bash');
   assert.equal(lines[0].session_id, 'sess-1');
   assert.equal(lines[0].tokens, null);
-  assert.equal(lines[0].harness_version, '0.4.24');
+  assert.equal(lines[0].harness_version, '0.4.26');
   assert.match(lines[0].ts, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(JSON.stringify(lines[0]).includes('super-secret-token'), false);
   assert.equal(JSON.stringify(lines[0]).includes('tool_input'), false);
@@ -99,7 +99,7 @@ test('kpi-emit records Claude token totals and leaves Cursor tokens null', () =>
 test('version stamp matches the cursor plugin', () => {
   const config = JSON.parse(fs.readFileSync(path.join(repo, 'scripts/cursor-plugin/config.json'), 'utf8'));
   const script = fs.readFileSync(emit, 'utf8');
-  assert.equal(config.version, '0.4.24');
+  assert.equal(config.version, '0.4.26');
   assert.match(script, new RegExp(`AGENT_HARNESS_VERSION:-${config.version}`));
 });
 
@@ -533,4 +533,74 @@ test('report tolerates skill, agent, and tool_result fields', () => {
   assert.equal(readEvents(`${JSON.stringify(events[2])}\nnot json\n`).length, 1);
   assert.match(formatText(report), /conductor/);
   assert.match(formatHtml(report), /conductor/);
+});
+
+test('guard name pr-visual-report is stored', () => {
+  const home = tmpdir();
+  const log = path.join(home, 'events.jsonl');
+  const ran = spawnSync('bash', [emit, 'guard_block', 'guard=pr-visual-report'], {
+    encoding: 'utf8',
+    env: { ...emitEnv(home, log), AGENT_HARNESS_KPI_TS: '2026-10-28T00:00:00Z' },
+  });
+  assert.equal(ran.status, 0, ran.stderr);
+  const lines = linesOf(log);
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].guard, 'pr-visual-report');
+  assert.equal(lines[0].kind, 'guard_block');
+});
+
+test('a repeated guard block in the same second is written once', () => {
+  const home = tmpdir();
+  const log = path.join(home, 'events.jsonl');
+  const env = { ...emitEnv(home, log), AGENT_HARNESS_KPI_TS: '2026-10-28T00:00:01Z' };
+  const first = spawnSync('bash', [emit, 'guard_block', 'guard=git'], { encoding: 'utf8', env });
+  const second = spawnSync('bash', [emit, 'guard_block', 'guard=git'], { encoding: 'utf8', env });
+  assert.equal(first.status, 0, first.stderr);
+  assert.equal(second.status, 0, second.stderr);
+  const lines = linesOf(log);
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].guard, 'git');
+});
+
+test('two guards in the same second both stay', () => {
+  const home = tmpdir();
+  const log = path.join(home, 'events.jsonl');
+  const env = { ...emitEnv(home, log), AGENT_HARNESS_KPI_TS: '2026-10-28T00:00:02Z' };
+  spawnSync('bash', [emit, 'guard_block', 'guard=git'], { encoding: 'utf8', env });
+  spawnSync('bash', [emit, 'guard_block', 'guard=ask'], { encoding: 'utf8', env });
+  const lines = linesOf(log);
+  assert.deepEqual(lines.map((line) => line.guard).sort(), ['ask', 'git']);
+});
+
+test('the global hook skips when the repo vendors kpi-emit', () => {
+  const home = tmpdir();
+  const repoDir = path.join(home, 'repo');
+  fs.mkdirSync(path.join(repoDir, '.claude/hooks'), { recursive: true });
+  fs.writeFileSync(path.join(repoDir, '.claude/hooks/kpi-emit.sh'), '#!/bin/bash\nexit 0\n');
+  fs.mkdirSync(path.join(home, '.claude/hooks'), { recursive: true });
+  const globalEmit = path.join(home, '.claude/hooks/kpi-emit.sh');
+  fs.copyFileSync(emit, globalEmit);
+  fs.chmodSync(globalEmit, 0o755);
+  const log = path.join(home, 'events.jsonl');
+  const init = spawnSync('git', ['init', '-q', '-b', 'feat'], { cwd: repoDir });
+  assert.equal(init.status, 0, init.stderr);
+  const ran = spawnSync('bash', [globalEmit, 'guard_block', 'guard=git'], {
+    encoding: 'utf8',
+    cwd: repoDir,
+    env: { ...emitEnv(home, log), AGENT_HARNESS_KPI_TS: '2026-10-28T00:00:03Z' },
+  });
+  assert.equal(ran.status, 0, ran.stderr);
+  assert.equal(fs.existsSync(log), false);
+});
+
+test('report dedupes identical guard blocks and keeps different guards', () => {
+  const block = {
+    ts: '2026-10-28T00:00:04Z', kind: 'guard_block', variant: 'monolith', tool: 'claude',
+    repo: 'o/r', branch: 'feat', session_id: 's', guard: 'git', tokens: null, harness_version: '0.4.26',
+  };
+  const ask = { ...block, guard: 'ask' };
+  const events = readEvents([block, block, ask].map((event) => JSON.stringify(event)).join('\n'));
+  assert.equal(events.length, 2);
+  const report = aggregate(events);
+  assert.equal(report.variants.monolith.guard_blocks, 2);
 });

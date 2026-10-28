@@ -1479,6 +1479,37 @@ check "git-guard pushd rotation (on): pushd -1; git push denies" \
   test "$(wg_decision on "$WGF/main" "$PD; pushd -1 >/dev/null; git push")" = deny
 rm -f "$WGF/st/autonomy.on"
 
+# ---- false alarms: ordinary shell is not an unparsed guarded git operation
+for mode in off on; do
+  reset; [ "$mode" = on ] && flag_on
+  GUARD_CWD="$TMP/work"
+  check "git-guard ($mode) allows an assignment that runs grep" allowed 'f=$(grep -rl TODO src)'
+  check "git-guard ($mode) allows merge-base in a substitution then diff" allowed 'B=$(git merge-base HEAD origin/main); git diff $B..HEAD'
+  check "git-guard ($mode) allows git diff of a substituted range" allowed 'git diff $B..HEAD'
+  check "git-guard ($mode) allows status with a variable -C" allowed 'W=/tmp/proj; git -C $W status'
+  check "git-guard ($mode) allows diff with a variable -C" allowed 'W=/tmp/proj; git -C "$W" diff'
+  check "git-guard ($mode) allows log with a variable -C" allowed 'W=/tmp/proj; git -C $W log -1'
+  check "git-guard ($mode) allows ls-remote with a variable -C" allowed 'W=/tmp/proj; git -C $W ls-remote'
+  check "git-guard ($mode) allows merge-base with a variable -C" allowed 'W=/tmp/proj; git -C $W merge-base HEAD HEAD'
+  check "git-guard ($mode) allows grep of a quoted alternation" allowed 'grep -rn "a\|b" src'
+  check "git-guard ($mode) allows a quoted alternation that mentions git push" allowed 'grep -rn "foo\|git push origin master"'
+  check "git-guard ($mode) allows a redirect whose path is a variable" allowed 'VAR=x cat > $VAR/file.txt'
+  check "git-guard ($mode) allows a token substitution passed to curl" allowed 'T=$(az account get-access-token --query accessToken -o tsv); curl -H "Authorization: Bearer $T" https://example.invalid'
+  check "git-guard ($mode) allows a semicolon inside double quotes" allowed 'echo "a; git push origin master"'
+  check "git-guard ($mode) allows && inside double quotes" allowed 'echo "a && git push origin master"'
+  check "git-guard ($mode) allows a quoted heredoc body" allowed $'cat > file.cs <<\'EOF\'\ngit push origin master\nif (a && b) { }\nEOF'
+  check "git-guard ($mode) allows a quoted python heredoc that names a protected path" allowed $'python3 - <<\'E\'\nopen(".claude/state/goal.json","w").write("x")\nE'
+  check "git-guard ($mode) allows a plain push line inside an unquoted heredoc" allowed $'cat <<EOF\ngit push origin master\nEOF'
+done
+reset; flag_on
+GUARD_CWD="$TMP/work"
+check "git-guard denies a variable -C on push" denied 'git -C $W push origin feat'
+check "git-guard denies a push after a heredoc" denied $'cat <<EOF\nhello\nEOF\ngit push origin master'
+check "git-guard denies a command substitution inside an unquoted heredoc" denied $'cat <<EOF\n$(git push origin master)\nEOF'
+check "git-guard denies a quoted base ref" denied 'git push origin "master"'
+check "git-guard denies an inline python write of a protected path" denied 'python3 -c "open('"'"'.claude/settings.json'"'"','"'"'w'"'"')"'
+check "git-guard denies ANSI-C quoting of git" denied $'$\'git\' push origin master'
+
 # ---- review gate before push
 reset; flag_on; fresh_work
 GUARD_CWD="$TMP/work"
@@ -1492,11 +1523,19 @@ gate_goal
 check "review gate: no verdicts denies git push -u origin feat/x" denied "git push -u origin feat/x"
 check "review gate: no verdicts denies git push of the branch" denied "git push -u origin feat"
 check "review gate: no verdicts denies quote-aware git push \"origin\"" denied 'git push "origin" feat/x'
+check "review gate: no verdicts denies a redirected push" denied "git push -u origin feat 2>&1"
+check "review gate: 2>&1 is not the review key" bash -c 'case "$1" in *2\>*) exit 1 ;; esac' _ "$(gate_reason 'git push -u origin feat 2>&1')"
+check "review gate: a pipe is not the review key" bash -c 'case "$1" in *2\>*) exit 1 ;; esac' _ "$(gate_reason 'git push -u origin feat 2>&1 | tail -3')"
 check "review gate: denial reason names the review" grep -qi 'review' <<<"$(gate_reason 'git push -u origin feat')"
 rv code pass
 check "review gate: code pass alone still denies" denied "git push -u origin feat"
 rv security pass
 check "review gate: code and security pass allow" allowed "git push -u origin feat"
+check "review gate: code and security pass allow a push with 2>&1" allowed "git push -u origin feat 2>&1"
+check "review gate: code and security pass allow a push piped to tail" allowed "git push -u origin feat 2>&1 | tail -3"
+check "review gate: code and security pass allow a push redirected to a file" allowed "git push -u origin feat >/tmp/out"
+check "review gate: code and security pass allow stderr discarded" allowed "git push -u origin feat 2>/dev/null"
+check "review gate: code and security pass allow an append redirect" allowed "git push -u origin feat >>/tmp/out"
 rv security fail
 check "review gate: a later security fail denies" denied "git push -u origin feat"
 
@@ -2393,6 +2432,7 @@ GUARD_CWD="$TMP/work"
 LG_ALLOW=(
   "agent-harness teardown-merged-worktree 5"
   "agent-harness ship-init feat ui hud-theme"
+  "agent-harness ship-init feat ui hud-theme 2>&1"
   "agent-harness ship-init feat ui hud-theme --goal build the hud"
   "agent-harness ship-init --adopt 7"
   "agent-harness ship-init --adopt 7 --goal resume the hud"
@@ -2460,6 +2500,10 @@ LG_DENY=(
   "agent-harness ship-init --adopt abc"
   "agent-harness ship-init --adopt 7 8"
   "FOO=1 agent-harness ship-init feat ui x"
+  "agent-harness ship-init feat ui x && echo hi"
+  "agent-harness ship-init feat ui x; echo hi"
+  "agent-harness ship-init feat ui x | tee /tmp/x"
+  "true && agent-harness ship-init feat ui x"
 )
 for mode in off on; do
   reset; [ "$mode" = on ] && flag_on

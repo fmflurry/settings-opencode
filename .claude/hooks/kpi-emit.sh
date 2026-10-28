@@ -14,7 +14,7 @@ if [ "${AGENT_HARNESS_TEST:-}" = "1" ] && [ -z "${AGENT_HARNESS_KPI_LOG:-}" ]; t
 fi
 command -v jq >/dev/null 2>&1 || exit 0
 
-HARNESS_VERSION="${AGENT_HARNESS_VERSION:-0.4.24}"
+HARNESS_VERSION="${AGENT_HARNESS_VERSION:-0.4.26}"
 TRANSCRIPT_MAX=8388608
 
 log="${AGENT_HARNESS_KPI_LOG:-}"
@@ -324,7 +324,7 @@ case "$kind" in
 esac
 
 case "$guard" in
-  git|ask|secret|budget) ;;
+  git|ask|secret|budget|pr-visual-report) ;;
   *) guard="" ;;
 esac
 case "$outcome" in
@@ -359,8 +359,35 @@ session="$(safe_token "$session")"
 variant="$(read_variant)"
 repo="$(read_repo)"
 branch="$(read_branch)"
-ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)"
+if [ -n "${AGENT_HARNESS_KPI_TS:-}" ]; then ts="$AGENT_HARNESS_KPI_TS"; else ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)"; fi
 [ -n "$ts" ] || exit 0
+
+# A global hook and a project-vendored hook both see the same block. The project copy writes it.
+project_hook_owns_emit() {
+  local self top proj pdir
+  self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P 2>/dev/null)" || return 1
+  case "$self" in
+    "${HOME:-}/.claude/hooks" | "${HOME:-}/.config/opencode/scripts/agent-harness/hooks") ;;
+    *) return 1 ;;
+  esac
+  top="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+  for proj in "$top/.claude/hooks/kpi-emit.sh" "$top/.opencode/hooks/kpi-emit.sh"; do
+    [ -f "$proj" ] || continue
+    pdir="$(cd "$(dirname "$proj")" && pwd -P 2>/dev/null)" || continue
+    [ "$pdir" != "$self" ] && return 0
+  done
+  return 1
+}
+project_hook_owns_emit && exit 0
+
+guard_block_seen() {
+  [ "$kind" = guard_block ] || return 1
+  [ -f "$log" ] || return 1
+  awk -v ts="$ts" -v guard="$guard" -v repo="$repo" -v branch="$branch" -v session="$session" -v variant="$variant" -v tool="$tool" '
+    index($0, "\"kind\":\"guard_block\"") && index($0, "\"ts\":\"" ts "\"") && index($0, "\"guard\":\"" guard "\"") && index($0, "\"repo\":\"" repo "\"") && index($0, "\"branch\":\"" branch "\"") && index($0, "\"session_id\":\"" session "\"") && index($0, "\"variant\":\"" variant "\"") && index($0, "\"tool\":\"" tool "\"") { found = 1; exit }
+    END { exit found ? 0 : 1 }
+  ' "$log"
+}
 
 write_event() {
   local line
@@ -419,10 +446,25 @@ write_event() {
 }
 
 mkdir -p "$(dirname "$log")" 2>/dev/null || exit 0
+held=0
+if [ "$kind" = guard_block ]; then
+  lock="${log}.guard.lock"
+  _i=0
+  while [ "$_i" -lt 20 ]; do
+    if mkdir "$lock" 2>/dev/null; then held=1; break; fi
+    _i=$((_i + 1))
+    sleep 0.02
+  done
+  if [ "$held" = 1 ] && guard_block_seen; then
+    rmdir "$lock" 2>/dev/null || true
+    exit 0
+  fi
+fi
 {
   write_event "$kind"
   if [ "$also_spawn" = 1 ]; then
     write_event subagent_spawn
   fi
-} >>"$log" 2>/dev/null || exit 0
+} >>"$log" 2>/dev/null || true
+[ "$held" = 1 ] && rmdir "$lock" 2>/dev/null || true
 exit 0

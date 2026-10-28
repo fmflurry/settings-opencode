@@ -18,14 +18,34 @@ export function parseSince(spec, now = Date.now()) {
   return now - n * unit;
 }
 
+function guardBlockKey(event) {
+  if (event.kind !== 'guard_block') return null;
+  return [
+    event.ts ?? '',
+    event.guard ?? '',
+    event.repo ?? '',
+    event.branch ?? '',
+    event.session_id ?? '',
+    event.variant ?? '',
+    event.tool ?? '',
+  ].join('\0');
+}
+
 export function readEvents(text) {
   const events = [];
+  const seen = new Set();
   for (const line of String(text).split('\n')) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     try {
       const event = JSON.parse(trimmed);
-      if (event && typeof event === 'object' && !Array.isArray(event)) events.push(event);
+      if (!event || typeof event !== 'object' || Array.isArray(event)) continue;
+      const key = guardBlockKey(event);
+      if (key) {
+        if (seen.has(key)) continue;
+        seen.add(key);
+      }
+      events.push(event);
     } catch {
       /* skip a corrupt line */
     }

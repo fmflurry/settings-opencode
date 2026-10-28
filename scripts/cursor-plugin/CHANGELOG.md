@@ -2,6 +2,14 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.26] - 2026-10-28
+
+- The git guard denies an unparsed command only when it contains a guarded git or gh operation the parser cannot resolve. A variable `-C` on `status`, `diff`, `log`, `ls-remote`, or `merge-base` is allowed. Heredoc bodies are not commands: a quoted body is literal, and an unquoted body is data except for `$(...)` and backticks. Quoted strings are not scanned as commands.
+- Push ref parsing ignores redirections and pipes. `git push -u origin <branch> 2>&1` uses the branch as the review key.
+- `ship-init` and `teardown-merged-worktree` have to be the only command. A chain with `&&`, `;`, or `|` is denied.
+- A `guard_block` is written once when both the global hook and a project hook are installed. The global hook skips when the repo vendors `kpi-emit.sh`, and a second write of the same block is dropped. `agent-harness kpi report` also collapses duplicate guard blocks already in the log.
+- `pr-visual-report` is stored as the guard name, with `git`, `ask`, `secret`, and `budget`.
+
 ## [0.4.24] - 2026-10-27
 
 - Claude Code's main agent (the session default) uses the settings model alias opus in `.claude/settings.json`, for Conductor and Monolith. A fresh global `~/.claude` install and a fresh project `.claude` install both get it. The settings merge writes that alias only when the key is missing or empty, and leaves a value that is already set.

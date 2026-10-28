@@ -46,3 +46,5 @@ bump the plugin version + changelog in any PR touching plugin sources.
 ## License
 
 MIT
+
+Attack-class references under `skills/security-review/references/` are verbatim copies from [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) at commit `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8` (MIT, Copyright (c) 2025-2026 Cloudflare, Inc.). The license text is `skills/security-review/references/LICENSE-cloudflare-security-audit`.

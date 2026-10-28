@@ -732,7 +732,7 @@ Unpinned templates (16) — available in `commands/`, plus Claude-side/OpenSpec 
 
 ### Skills
 
-Grouped below. `scripts/sync-skills.sh` computes the canonical union (root `skills/` ∪ `.claude/skills/`, root wins on conflicts), excludes the runtime dir `skills/skill-creator/`, and copies into both harness targets. Attribution for vendored skills lives in [`skills/THIRD_PARTY_NOTICES.md`](skills/THIRD_PARTY_NOTICES.md).
+Grouped below. `scripts/sync-skills.sh` computes the canonical union (root `skills/` ∪ `.claude/skills/`, root wins on conflicts), excludes the runtime dir `skills/skill-creator/`, and copies into both harness targets. Attribution for vendored skills lives in [`skills/THIRD_PARTY_NOTICES.md`](skills/THIRD_PARTY_NOTICES.md). Attack-class references in [`skills/security-review/references/`](skills/security-review/references/) are verbatim copies from [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) at `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8` (MIT, Copyright (c) 2025-2026 Cloudflare, Inc.). The license text is [`LICENSE-cloudflare-security-audit`](skills/security-review/references/LICENSE-cloudflare-security-audit).
 
 - **Planning & design (5):** `socratic-design`, `chimera`, `api-spec-openapi`, `why`, `blast-radius`.
 - **Review & quality (6):** `comment-judge`, `interfectio-commentarum`, `verify-this`, `create-verification-skill`, `test-behavior-not-implementation`, `ai-ecosystem-audit`.
@@ -1211,7 +1211,7 @@ Non epinglees (16): `/checkpoint`, `/pm2`, `/setup-pm`, `/ecosystem-audit`, `/cr
 
 ### Skills
 
-Groupes ci-dessous. `scripts/sync-skills.sh` calcule l'union canonique (root `skills/` ∪ `.claude/skills/`, root gagne), exclut le runtime `skills/skill-creator/`, et copie vers chaque cible. Attribution dans [`skills/THIRD_PARTY_NOTICES.md`](skills/THIRD_PARTY_NOTICES.md).
+Groupes ci-dessous. `scripts/sync-skills.sh` calcule l'union canonique (root `skills/` ∪ `.claude/skills/`, root gagne), exclut le runtime `skills/skill-creator/`, et copie vers chaque cible. Attribution dans [`skills/THIRD_PARTY_NOTICES.md`](skills/THIRD_PARTY_NOTICES.md). Les références de classes d'attaque dans [`skills/security-review/references/`](skills/security-review/references/) sont des copies conformes de [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) au commit `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8` (MIT, Copyright (c) 2025-2026 Cloudflare, Inc.). Le texte de licence est [`LICENSE-cloudflare-security-audit`](skills/security-review/references/LICENSE-cloudflare-security-audit).
 
 - **Planification & design (5):** `socratic-design`, `chimera`, `api-spec-openapi`, `why`, `blast-radius`.
 - **Revue & qualite (6):** `comment-judge`, `interfectio-commentarum`, `verify-this`, `create-verification-skill`, `test-behavior-not-implementation`, `ai-ecosystem-audit`.

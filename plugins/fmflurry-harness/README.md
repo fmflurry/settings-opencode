@@ -48,10 +48,12 @@ After install, run `/setup-harness`. It writes `~/.cursor/rules/fmflurry-harness
 
 ## Versioning
 
-Manifest version 0.4.24. The build reads it from `scripts/cursor-plugin/config.json` and writes `.cursor-plugin/plugin.json`. History is in `CHANGELOG.md`.
+Manifest version 0.4.26. The build reads it from `scripts/cursor-plugin/config.json` and writes `.cursor-plugin/plugin.json`. History is in `CHANGELOG.md`.
 
 bump the plugin version + changelog in any PR touching plugin sources.
 
 ## License
 
 MIT
+
+Attack-class references under `skills/security-review/references/` are verbatim copies from [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) at commit `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8` (MIT, Copyright (c) 2025-2026 Cloudflare, Inc.). The license text is `skills/security-review/references/LICENSE-cloudflare-security-audit`.

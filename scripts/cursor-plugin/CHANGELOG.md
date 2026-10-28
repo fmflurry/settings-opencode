@@ -2,6 +2,12 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.26] - 2026-10-27
+
+- `security-reviewer` reads three vendored attack-class references under `skills/security-review/references/` only when the diff touches that surface: `ATTACK-CLASSES.md` (injection, access control, SSRF, deserialization), `WEB-PROTOCOL-AND-AUTH.md` (sessions and identity protocols), and `CLIENT-SIDE.md` (DOM and browser trust). They are verbatim copies from cloudflare/security-audit-skill at `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8`, MIT.
+- Every finding cites `file:line`, the data flow from source to sink, and a repro or test, and is classified Confirmed, Needs validation, or Rejected. Only a Confirmed Important finding blocks. Needs validation is listed separately.
+- Conductor and Monolith share the references and the agent text. The Cursor plugin build and the skill sync copy them into the install.
+
 ## [0.4.24] - 2026-10-27
 
 - Claude Code's main agent (the session default) uses the settings model alias opus in `.claude/settings.json`, for Conductor and Monolith. A fresh global `~/.claude` install and a fresh project `.claude` install both get it. The settings merge writes that alias only when the key is missing or empty, and leaves a value that is already set.

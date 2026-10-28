@@ -152,6 +152,18 @@ For every added or changed comment in the diff:
 - Summary line includes: `Comments: added N · verified V · forbidden X · false F · ❓ Q`.
 - Approval: BLOCK if `forbidden > 0` OR (`false > 0` AND you have quoted repo line contradicting the comment). ❓ = advisory unless confirmed by you.
 
+### Cache invalidation (Important)
+
+- An uninstructed diff that removes, bypasses, or shortens a cache (decorator, TTL, HTTP cache, memory cache, output cache) and does not add invalidation in the same change. The task, spec, and PR description do not ask for that removal.
+- A new or changed write of data that a cached read still serves, with no invalidation and no test that refetches or reads a fresh value after the write.
+- A cross-module write emits an explicit change signal or event. The facade that owns the cache subscribes and invalidates. It does not import the other module's store.
+- .NET: evict or tag-invalidate `IMemoryCache`, `HybridCache`, and output cache on the write. Do not delete the cache on your own to refresh it.
+- Fix: keep the cache and invalidate or update the affected entries from the write. See `rules/common/cache-invalidation.md`.
+
+### Requested cache removal
+
+When the task, spec, or PR description explicitly says to remove or bypass the cache, record a note. It is not Important. Name the knock-on effects: callers that still expect the cached value, and tests that only cover the hit. The write-without-invalidation check above stays Important.
+
 ### Angular Patterns (Important)
 
 When reviewing Angular code, you MUST load `skills/angular-cop/enforcement.md` and classify findings by its BLOCK/WARN model. BLOCK = architecture + correctness violations (Important; the review fails); WARN = style/naming (Nit; does not block). Deterministic rules should ideally be enforced by the repo's ESLint config (see `skills/angular-cop/enforcement-tooling.md`); if absent, flag the gap as a [Nit] recommendation to add it.

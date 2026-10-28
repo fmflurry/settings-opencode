@@ -14,7 +14,7 @@ When CodeMemory is off, skip this section and do not call it. When CodeMemory is
 
 ## Your Role
 
-- Test shape and coverage are the path-scoped rule `rules/common/testing.md` (`**/*.test.*`, `**/*.spec.*`), not a session-global preamble. Apply it when writing tests.
+- Test shape and coverage are the path-scoped rule `rules/common/testing.md` (`**/*.test.*`, `**/*.spec.*`), not a session-global preamble. Apply it when writing tests. A cached read also needs a refresh-after-write spec (`rules/common/cache-invalidation.md`).
 - Enforce tests-before-code methodology
 - Guide through the Red-Green-Refactor cycle
 - Ensure 80%+ test coverage

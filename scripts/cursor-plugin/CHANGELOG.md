@@ -2,6 +2,15 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.26] - 2026-10-28
+
+- The git guard denies an unparsed command only when it contains a guarded git or gh operation the parser cannot resolve. A variable `-C` on `status`, `diff`, `log`, `ls-remote`, or `merge-base` is allowed. Heredoc bodies are not commands: a quoted body is literal, and an unquoted body is data except for `$(...)` and backticks. Quoted strings are not scanned as commands.
+- Push ref parsing ignores redirections and pipes. `git push -u origin <branch> 2>&1` uses the branch as the review key.
+- `ship-init` and `teardown-merged-worktree` have to be the only command. A chain with `&&`, `;`, or `|` is denied.
+- A `guard_block` is written once when both the global hook and a project hook are installed. The global hook skips when the repo vendors `kpi-emit.sh`, and a second write of the same block is dropped. `agent-harness kpi report` also collapses duplicate guard blocks already in the log.
+- `pr-visual-report` is stored as the guard name, with `git`, `ask`, `secret`, and `budget`.
+- A command with no guarded token skips the parser. A quoted span longer than 4096 bytes is not walked character by character: short quotes stay as written, and a long literal becomes one marker. `$(...)` and backticks inside a long double quote are still checked.
+
 ## [0.4.25] - 2026-10-27
 
 - Stale cached data is fixed by invalidating on the write, not by removing the cache. A path-scoped cache-invalidation rule (Claude paths, Cursor globs, OpenCode instruction off the always-on list) says: keep the decorator, TTL, HTTP cache, memory cache, or output cache; invalidate or update the affected entries in the same change; a cross-module write uses an explicit change signal; tests cover a refetch after the write.

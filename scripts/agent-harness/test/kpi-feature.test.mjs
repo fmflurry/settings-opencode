@@ -156,6 +156,18 @@ test('cli rejects a path-shaped repo', () => {
   );
 });
 
+test('feature report counts pr-visual-report and collapses a duplicate guard block', () => {
+  const git = {
+    ts: '2026-10-27T10:04:00Z', kind: 'guard_block', variant: 'conductor', tool: 'cursor',
+    repo: 'o/r', branch: 'feat/demo', session_id: 'main-1', guard: 'git', tokens: null,
+  };
+  const visual = { ...git, ts: '2026-10-27T10:04:01Z', guard: 'pr-visual-report' };
+  const text = [git, git, visual].map((event) => JSON.stringify(event)).join('\n');
+  const report = aggregateFeature(readEvents(text), { repo: 'o/r', branch: 'feat/demo', gapMin: 5 });
+  assert.equal(report.guard_blocks, 2);
+  assert.deepEqual(report.guards, { git: 1, 'pr-visual-report': 1 });
+});
+
 test('dispatcher accepts feature and rejects an unknown kpi command', () => {
   const help = spawnSync('bash', [kpiSh, 'feature', '--help'], { encoding: 'utf8' });
   assert.equal(help.status, 0, help.stderr);

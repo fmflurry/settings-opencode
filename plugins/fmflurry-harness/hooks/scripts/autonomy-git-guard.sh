@@ -56,7 +56,8 @@ cmd="${fields:$((${#cwd} + 1))}"
 # The right-hand side stays unquoted: bash 3.2 treats a quoted =~ operand as a literal.
 GG_FAST_RE='git|gh|rm|mv|cp|ln|tee|sed|dd|perl|python|node|ruby|rsync|find|trash|truncate|touch|install|sponge|direnv|orca|ship-init|ship-merge|worktree|teardown|agent-harness|cleanup|xargs|pushd|popd|<|>|\$|\{|`|\\'
 probe="$cmd"
-if [ "$WIN" = 1 ] && [ "${BASH_VERSINFO[0]:-3}" -ge 4 ]; then probe="${cmd,,}"; fi
+# Git Bash on bash 3.2 has no ${var,,}. lc is the hook's own lowercase, defined for WIN.
+if [ "$WIN" = 1 ]; then lc "$cmd"; probe="$LCV"; fi
 if [[ ! "$probe" =~ $GG_FAST_RE ]]; then exit 0; fi
 unset probe
 cwd="${cwd:-$PWD}"

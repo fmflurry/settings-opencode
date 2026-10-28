@@ -65,8 +65,9 @@
   .bad { border-left: 4px solid var(--bad); }
   .good { border-left: 4px solid var(--ok); }
   .warn { border-left: 4px solid var(--warn); }
+  .note { border-left: 4px solid var(--accent); }
   .ok { color: var(--ok); font-weight: 700; }
-  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
   th, td { text-align: left; padding: 8px 12px; font-size: 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
   th { font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
   @media (max-width: 720px) {
@@ -78,23 +79,23 @@
 </head>
 <body>
 <main>
-  <p class="kicker">fmflurry-harness 0.4.25 · stacked on #56</p>
-  <h1>Keep the cache. Invalidate it on the write.</h1>
-  <p class="lede">A cached read that shows old data after a write in another module is not a reason to delete <code>@SkipIfCached</code> or <code>CACHE_NO_TIMEOUT</code>. The cache stays. The write emits a change signal. The facade that owns the slot calls <code>store.invalidateCacheFor</code>. Specs cover the cached hit and the refetch.</p>
+  <p class="kicker">fmflurry-harness 0.4.25 · base master, after #56</p>
+  <h1>Invalidate on the write. Remove a cache only when told.</h1>
+  <p class="lede">A cached read that shows old data after a write is not a reason for the agent to delete <code>@SkipIfCached</code>, <code>CACHE_NO_TIMEOUT</code>, or a TTL. The cache stays. The write emits a change signal. The facade that owns the slot calls <code>store.invalidateCacheFor</code>. Specs cover the cached hit and the refetch. A removal is allowed only when the task, spec, or PR description explicitly says so, and the change names the knock-on effects.</p>
 
-  <h2>Wrong fix, then the idiom</h2>
+  <h2>Who decides to remove the cache</h2>
   <div class="cols">
     <article class="box bad">
-      <h3>Wrong</h3>
-      <p>Stale list after a create in another module. The agent deletes the decorator or shortens the TTL so the next read always hits the network.</p>
+      <h3>Agent's own fix</h3>
+      <p>Stale list after a create in another module. The agent deletes the decorator or shortens the TTL so the next read always hits the network. That is Important. Invalidate from the write instead.</p>
       <pre>@SkipIfCached('LIST', store, true, CACHE_NO_TIMEOUT)
 load() { /* fetch */ }</pre>
     </article>
-    <article class="box good">
-      <h3>Right</h3>
-      <p>The writer does not touch the other module's store. A root-level signal carries the change. The facade invalidates that key.</p>
-      <pre>changes.notify('LIST')
-store.invalidateCacheFor('LIST')</pre>
+    <article class="box note">
+      <h3>Explicit instruction</h3>
+      <p>The task, spec, or PR description says to remove the cache. The removal is allowed. It is a note, not Important. Name callers that still expect the cached value, and tests that only cover the hit.</p>
+      <pre>task: remove @SkipIfCached on load()
+note: callers lose the cached hit</pre>
     </article>
   </div>
 
@@ -120,7 +121,7 @@ store.invalidateCacheFor('LIST')</pre>
   <div class="ladder">
     <article class="box">
       <h3>1. Rule and skills</h3>
-      <p>Path-scoped rule for TypeScript and C#. Not always-on. OpenCode keeps the same text off the startup instructions and points coder and tdd-guide at it.</p>
+      <p>Path-scoped rule for TypeScript and C#. Removal or bypass is allowed only on an explicit instruction. An instructed removal still names knock-on effects.</p>
       <ul>
         <li><code>rules/common/cache-invalidation.md</code></li>
         <li><code>instructions/cache-invalidation.md</code></li>
@@ -129,16 +130,16 @@ store.invalidateCacheFor('LIST')</pre>
       </ul>
     </article>
     <article class="box">
-      <h3>2. Review, Important</h3>
-      <p>code-reviewer and angular-cop BLOCK. dotnet-cop BLOCK for <code>IMemoryCache</code>, <code>HybridCache</code>, and output cache.</p>
+      <h3>2. Review</h3>
+      <p>code-reviewer, angular-cop, and dotnet-cop. Only an uninstructed removal or bypass is Important. An instructed removal is a note.</p>
       <ul>
-        <li>Cache removed or bypassed, no invalidation</li>
-        <li>Write beside a cached read, no refresh-after-write test</li>
+        <li>Uninstructed removal, no invalidation — Important</li>
+        <li>Write beside a cached read, no refresh test — Important, unchanged</li>
       </ul>
     </article>
     <article class="box warn">
       <h3>3. Diff hook, warn-only</h3>
-      <p><code>cache-invalidation.sh</code> on the branch diff. Exit 0. Cursor preToolUse allows the tool and shows the rule. Stop does not block.</p>
+      <p><code>cache-invalidation.sh</code> still exits 0. The message says the removal is fine if it was explicitly instructed. Otherwise invalidate on the write.</p>
       <ul>
         <li>Net removal of <code>@SkipIfCached</code>, <code>CACHE_NO_TIMEOUT</code>, or another cache marker</li>
         <li>Quiet when the diff adds <code>invalidateCacheFor</code> or <code>onCacheInvalidate</code></li>
@@ -147,7 +148,7 @@ store.invalidateCacheFor('LIST')</pre>
   </div>
 
   <h2>Why the hook warns and does not block</h2>
-  <p class="lede">Content checks in <code>stop.sh</code> warn. <code>ship-stop-gate</code> blocks only an unfinished autonomous goal. A real deletion of a cache must stay possible, and a comment-only or generated diff can look like a removal. Blocking the stop would loop the agent. The hook cannot see a new write next to an untouched cache; that case stays on the Important review.</p>
+  <p class="lede">Content checks in <code>stop.sh</code> warn. <code>ship-stop-gate</code> blocks only an unfinished autonomous goal. The hook cannot read the task, so it cannot tell an instructed removal from an agent's own fix. It warns either way and still allows the tool. Blocking the stop would loop the agent on a removal the task asked for. A new write next to an untouched cache stays on the Important review.</p>
 
   <h2>Where it lands</h2>
   <table>
@@ -163,11 +164,11 @@ store.invalidateCacheFor('LIST')</pre>
   <div class="cols">
     <article class="box">
       <h3>Suite</h3>
-      <p><span class="ok">241 passed</span>, 0 failed, 2 skipped. <code>node scripts/cursor-plugin/check.mjs</code> passed. Conductor build includes the rule and the hook.</p>
+      <p><span class="ok">241 passed</span>, 0 failed, 2 skipped. <code>node scripts/cursor-plugin/check.mjs</code> printed <code>cursor-plugin check OK</code>. Conductor build includes the rule and the hook.</p>
     </article>
     <article class="box">
       <h3>Hook specs</h3>
-      <p>11 tests: removal warns, invalidation is quiet, a move is quiet, a commented-out decorator warns, a shortened <code>CACHE_NO_TIMEOUT</code> warns, Cursor allows and shows the rule, stop does not block.</p>
+      <p>11 tests: removal warns and the text says the removal is fine if explicitly instructed, otherwise invalidate on the write. Invalidation is quiet, a move is quiet, a commented-out decorator warns, a shortened <code>CACHE_NO_TIMEOUT</code> warns, Cursor allows and shows the rule, stop does not block.</p>
     </article>
   </div>
 

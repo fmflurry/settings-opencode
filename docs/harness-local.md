@@ -1,6 +1,6 @@
 # Project harness overlay
 
-`./install.sh --local` and `bootstrap.ps1 -Local` vendor the harness, then read `.harness-local/` from the project. Conductor and Monolith both do this. A local install with no variant stays Monolith.
+`./install.sh --local` and `bootstrap.ps1 -Local` vendor the harness, then read `.harness-local/` from the project. Conductor and Monolith both do this. A local install with no variant stays Monolith. A global `./install.sh --yes` with no variant is Monolith too. `conductor` selects Conductor.
 
 The installer never creates, edits, or deletes `.harness-local/` or anything inside it. It also does not create or delete project files outside the managed paths below.
 

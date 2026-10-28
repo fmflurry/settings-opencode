@@ -53,6 +53,9 @@
     ],
     "sessionStart": [
       {
+        "command": "bash ${CURSOR_PLUGIN_ROOT}/hooks/scripts/cursor-adapter.sh ${CURSOR_PLUGIN_ROOT}/hooks/scripts/cloud-session-bootstrap.sh sessionStart"
+      },
+      {
         "command": "bash ${CURSOR_PLUGIN_ROOT}/hooks/scripts/cursor-adapter.sh ${CURSOR_PLUGIN_ROOT}/hooks/scripts/kpi-emit.sh sessionStart"
       }
     ],

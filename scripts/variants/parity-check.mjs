@@ -53,7 +53,7 @@ const hooks = [
   'autonomy-ask-guard.sh', 'autonomy-context.sh', 'autonomy-git-guard.sh', 'codememory-mode.sh',
   'notification.sh', 'orca-notify.sh', 'prefer-code-memory.sh', 'pre-tool-use.sh', 'rtk-rewrite.sh',
   'ship-stop-gate.sh', 'stop.sh', 'subagent-stop.sh', 'tool-budget.sh', 'kpi-emit.sh',
-  'pr-visual-report.sh', 'domain-rules.sh', 'cache-invalidation.sh',
+  'pr-visual-report.sh', 'domain-rules.sh', 'cache-invalidation.sh', 'cloud-session-bootstrap.sh',
 ];
 for (const hook of hooks) {
   if (!exists(path.join('.claude/hooks', hook))) fail(`missing hook ${hook}`);

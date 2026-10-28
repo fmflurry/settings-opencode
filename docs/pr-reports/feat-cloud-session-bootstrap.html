@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Visual report — feat/cloud-session-bootstrap</title>
+<style>
+  :root {
+    --ink: #1c1915;
+    --muted: #5c564c;
+    --paper: #f4f0e6;
+    --card: #fffdf8;
+    --line: #e0d6c6;
+    --accent: #0f6e6b;
+    --warn: #8a4b12;
+    --ok: #1d6b3a;
+    --no: #8d3b32;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 16px/1.45 "Segoe UI", "Helvetica Neue", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 28px 22px 48px; }
+  .kicker {
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 0 0 6px;
+  }
+  h1 { font-size: 28px; line-height: 1.15; margin: 0 0 8px; letter-spacing: -0.02em; }
+  .lede { color: var(--muted); max-width: 74ch; margin: 0; }
+  h2 { font-size: 16px; margin: 26px 0 10px; }
+  .flow, .cols { display: grid; gap: 10px; }
+  .flow { grid-template-columns: 1fr 28px 1fr 28px 1fr 28px 1fr; align-items: stretch; }
+  .cols { grid-template-columns: 1fr 1fr; }
+  .box, .arrow {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 0;
+    color: var(--accent);
+    font-size: 22px;
+    padding: 0;
+  }
+  .step {
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin: 0 0 4px;
+  }
+  .box h3 { margin: 0 0 4px; font-size: 16px; }
+  .box p { margin: 0; color: var(--muted); font-size: 14px; }
+  code {
+    font-family: ui-monospace, "Cascadia Code", monospace;
+    font-size: 0.92em;
+    background: #f3ecdf;
+    padding: 0 4px;
+    border-radius: 4px;
+  }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 12px; overflow: hidden; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 14px; }
+  th { font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+  .run { color: var(--ok); font-weight: 700; }
+  .skip { color: var(--no); font-weight: 700; }
+  .note {
+    margin-top: 14px;
+    border-left: 4px solid var(--warn);
+    background: var(--card);
+    padding: 12px 14px;
+    border-radius: 0 12px 12px 0;
+  }
+  .note strong { color: var(--warn); }
+  @media (max-width: 860px) {
+    .flow, .cols { grid-template-columns: 1fr; }
+    .arrow { transform: rotate(90deg); height: 28px; }
+    h1 { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <p class="kicker">settings-opencode 0.4.28 · feat/cloud-session-bootstrap</p>
+  <h1>A remote Claude session installs Monolith. A local one stays quiet.</h1>
+  <p class="lede">SessionStart runs <code>cloud-session-bootstrap.sh</code> first. The hook clones the settings repo and runs <code>install.sh --yes monolith</code> only when the host is remote and the project does not already vendor the harness. Every other path exits 0 before git runs. A clone or install failure logs a warning and still exits 0.</p>
+
+  <h2>What SessionStart decides</h2>
+  <div class="flow">
+    <div class="box">
+      <p class="step">1 · Gate</p>
+      <h3>Remote only</h3>
+      <p><code>CLAUDE_CODE_REMOTE</code> must be the string <code>true</code>. Unset, <code>false</code>, or any other value is a no-op.</p>
+    </div>
+    <div class="arrow" aria-hidden="true">→</div>
+    <div class="box">
+      <p class="step">2 · Vendored?</p>
+      <h3>Project already has it</h3>
+      <p>A <code>.harness-variant</code> stamp, <code>CLAUDE.md</code> plus <code>autonomy-context.sh</code>, or a <code>plugin.json</code> with a <code>version</code> field skips the clone.</p>
+    </div>
+    <div class="arrow" aria-hidden="true">→</div>
+    <div class="box">
+      <p class="step">3 · Install</p>
+      <h3>Shallow clone</h3>
+      <p>Clone <code>fmflurry/settings-opencode</code> at depth 1 into a temp dir, then <code>install.sh --yes monolith</code>. Output is discarded.</p>
+    </div>
+    <div class="arrow" aria-hidden="true">→</div>
+    <div class="box">
+      <p class="step">4 · Session</p>
+      <h3>Never fail start</h3>
+      <p>Missing git, a failed clone, or a failed install prints one warning on stderr and exits 0. The temp dir is removed.</p>
+    </div>
+  </div>
+
+  <h2>When the hook runs</h2>
+  <table>
+    <thead>
+      <tr><th>Condition</th><th>Result</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Remote, empty project</td><td class="run">clone + install Monolith</td></tr>
+      <tr><td>Same remote project, run again</td><td class="run">install again, still exit 0</td></tr>
+      <tr><td>Variable unset, or not exactly <code>true</code></td><td class="skip">no-op</td></tr>
+      <tr><td>Vendored <code>.claude</code> harness or plugin version marker</td><td class="skip">no-op</td></tr>
+      <tr><td>Only <code>.claude/settings.json</code>, no harness files</td><td class="run">still installs</td></tr>
+      <tr><td>Clone or <code>install.sh</code> fails</td><td class="run">warning, exit 0</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Default variant</h2>
+  <div class="cols">
+    <div class="box">
+      <p class="step">No name given</p>
+      <h3>Monolith</h3>
+      <p><code>./install.sh --yes</code>, <code>settings-sync</code>, <code>bootstrap.ps1</code>, and the interactive prompt all install Monolith. <code>HARNESS_VARIANT</code> still wins when it is already set.</p>
+    </div>
+    <div class="box">
+      <p class="step">Name it</p>
+      <h3>Conductor</h3>
+      <p><code>conductor</code> or <code>--variant conductor</code> still selects Conductor. <code>orchestration</code> remains an alias. The source checkout stays the Conductor tree.</p>
+    </div>
+  </div>
+  <div class="note">
+    <strong>Wired in two places.</strong>
+    The installer merges <code>bash ~/.claude/hooks/cloud-session-bootstrap.sh</code> as the first SessionStart command. The Cursor plugin build mirrors the same script onto <code>sessionStart</code>.
+  </div>
+
+<section id="kpi-metrics" style="margin-top:28px">
+<h2 style="font-size:18px;margin:0 0 8px">Metrics</h2>
+<p style="margin:0 0 10px;color:#57534e">fmflurry/settings-opencode  feat/cloud-session-bootstrap  pr n/a. Status: complete.</p>
+<table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #d6d3d1"><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Wall</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">2m35s</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Active</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">2m35s (gaps over 5m excluded)</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Sessions</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">cursor 0, claude 0, opencode 0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tokens</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">n/a</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tool failures</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Guard blocks</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">2</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Review rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Fix rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr></table>
+<p style="margin:10px 0 0">Tools: none</p>
+<p style="margin:4px 0 0">Skills: none</p>
+<p style="margin:4px 0 0">Agents: main 0</p>
+<p style="margin:4px 0 0">Failure tools: none. Durations: n/a.</p>
+</section>
+</main>
+</body>
+</html>

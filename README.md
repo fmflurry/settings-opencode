@@ -23,11 +23,11 @@
 
 ### Choisir sa variante
 
-Conductor reste le défaut de l'install globale : le conducteur route, et l'agent principal n'écrit pas. Monolith est le défaut du plugin Cursor et de l'install projet (`./install.sh --local`) : l'agent principal écrit, et `/orchestrate` est optionnel. `orchestration` reste un alias de Conductor. Un changement de variante retire les agents, commandes et règles de l'autre.
+Monolith est le défaut (`./install.sh --yes`, `settings-sync`, `bootstrap.ps1`, le plugin Cursor, et `./install.sh --local`) : l'agent principal écrit, et `/orchestrate` est optionnel. Conductor reste disponible avec `conductor` : le conducteur route, et l'agent principal n'écrit pas. `orchestration` reste un alias de Conductor. Un changement de variante retire les agents, commandes et règles de l'autre.
 
 ```bash
-./install.sh                         # menu interactif ; variante par défaut Conductor
-./install.sh conductor               # OpenCode et Claude Code, scope global
+./install.sh                         # menu interactif ; variante par défaut Monolith
+./install.sh conductor               # Conductor : OpenCode et Claude Code, scope global
 ./install.sh monolith
 ./install.sh --local                 # projet : AGENTS.md, .cursor, .agents, défaut Monolith
 ./install.sh --local --variant conductor
@@ -39,7 +39,9 @@ HARNESS_VARIANT=monolith ./install.sh --yes
 ./install-cursor.sh --status
 ```
 
-Windows : `bootstrap.ps1 conductor`, `bootstrap.ps1 monolith`, `bootstrap.ps1 -Local`, `bootstrap.ps1 -Status`. `-Local` sans variante est Monolith.
+Windows : `bootstrap.ps1` sans variante est Monolith, `bootstrap.ps1 conductor`, `bootstrap.ps1 monolith`, `bootstrap.ps1 -Local`, `bootstrap.ps1 -Status`.
+
+Sur une session Claude Code distante (`CLAUDE_CODE_REMOTE=true`), `SessionStart` lance `.claude/hooks/cloud-session-bootstrap.sh` quand le projet ne vendore pas déjà le harness. Le hook fait un clone superficiel de ce dépôt et lance `install.sh --yes monolith`. Il ne fait rien en local, ni quand `.claude` est le harness, ni quand un `plugin.json` porte un champ `version`. Un échec de clone ou d'install écrit un avertissement et sort 0.
 
 ### Mesurer les variantes
 
@@ -74,11 +76,11 @@ agent-harness eval --run-model
 
 Two variants share this repo. The counts below are the **Conductor** tree at the repo root, counted fresh on **2026-10-02**.
 
-**Conductor** is the global default (`./install.sh` without `--local`). A read-only `conductor` routes every change. It cannot write. The roster is 1 conductor plus 25 specialists, including `postgres-dba`.
+**Monolith** is the default (`./install.sh --yes`, `settings-sync`, `bootstrap.ps1`, the Cursor plugin, and `./install.sh --local`). It keeps **9 agents** (review and noisy output). The main agent coordinates and may write. `/orchestrate` loads the `conductor` skill and stays optional. Folded roles, including `postgres-dba`, are not installed. Live Postgres work goes to `database-reviewer` or the main agent.
 
-**Monolith** is the default for the Cursor plugin and for `./install.sh --local`. It keeps **9 agents** (review and noisy output). The main agent coordinates and may write. `/orchestrate` loads the `conductor` skill and stays optional. Folded roles, including `postgres-dba`, are not installed. Live Postgres work goes to `database-reviewer` or the main agent.
+**Conductor** is selected with `./install.sh conductor`. A read-only `conductor` routes every change. It cannot write. The roster is 1 conductor plus 25 specialists, including `postgres-dba`.
 
-A bot on the Cursor plugin or a project install follows Monolith.
+A default install follows Monolith. On a remote Claude Code session (`CLAUDE_CODE_REMOTE=true`), `SessionStart` runs `.claude/hooks/cloud-session-bootstrap.sh` when the project does not already vendor the harness. The hook shallow-clones this repo and runs `install.sh --yes monolith`. It does nothing locally, it does nothing when `.claude` is the harness or a plugin `version` marker is present, and a clone or install failure logs a warning and exits 0.
 
 | Thing                        | Count | Notes                                                                                  |
 | ---------------------------- | ----- | -------------------------------------------------------------------------------------- |
@@ -250,7 +252,7 @@ cd ~/Workspace/settings-opencode
 ./install.sh
 ```
 
-`install.sh` is interactive by default. It asks which harness to install (Claude Code, OpenCode, or both), which variant (Conductor or Monolith), and whether the scope is global or local. The variant question comes first. Without `--local`, its default is Conductor. `./install.sh --local` defaults that question to Monolith:
+`install.sh` is interactive by default. It asks which harness to install (Claude Code, OpenCode, or both), which variant (Conductor or Monolith), and whether the scope is global or local. The variant question comes first. Monolith is the default. `conductor` selects Conductor:
 
 1. Verify your prerequisites (`git`, `bun`/`npm`).
 2. **OpenCode** (if selected): merge repo files into `~/.config/opencode` (or `./.opencode` if `--local`) without removing existing user config.
@@ -266,8 +268,8 @@ Useful flags:
 | Flag            | Behaviour                                                                                                                                                                                   |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | _(none)_        | Interactive walk-through: prompt `[Y/n]` for OpenCode (default Y) and Claude Code (default Y).                                                                                               |
-| `--yes`, `-y`   | Non-interactive — accept all defaults: OpenCode ✓, Claude Code ✓. Global variant is Conductor. With `--local`, the variant is Monolith. Existing normal directories are merged, not removed or backed up. |
-| `--variant`     | `conductor` or `monolith`. `orchestration` is an alias of `conductor`. Same as `HARNESS_VARIANT`. The flag wins over the env. Global `--yes` with neither set stays Conductor. `--local --yes` with neither set is Monolith. |
+| `--yes`, `-y`   | Non-interactive — accept all defaults: OpenCode ✓, Claude Code ✓. Monolith is the default, including a global install. Existing normal directories are merged, not removed or backed up. |
+| `--variant`     | `monolith` (default) or `conductor`. `orchestration` is an alias of `conductor`. Same as `HARNESS_VARIANT`. The flag wins over the env. With neither set, Monolith is the default, including global `--yes`. `conductor` selects Conductor. |
 | `--status`      | Print the installed variant for OpenCode and Claude Code, then exit. `--local` also prints `./.cursor`, `./.agents`, the `.harness-local` overlay, exclude entries, and domain-rules state. A marker of `orchestration` is reported as Conductor. |
 | `--local`       | Project-scoped install into the current directory (`./.opencode`, `./.claude` as independent siblings) and vendors `./AGENTS.md`, `./.cursor/rules`, and `./.agents`. Applies `.harness-local/` on top and prunes `.harness-local/exclude`. Skips the global shell-rc env block (prints it as a hint instead). Default variant is Monolith. |
 | `--opencode`    | **Allow-list:** install OpenCode only (if combined with other flags, only those are installed).                                                                                             |
@@ -277,7 +279,7 @@ Useful flags:
 | `--uninstall`   | Remove the env-var block and optionally remove copied local/global dirs after confirmation. **Never deletes the cloned repo or your data without confirmation.**                               |
 | `--help`, `-h`  | Print usage.                                                                                                                                                                                |
 
-Conductor is the conductor-led tree at the repo root. Monolith (`variants/monolith/`) is a lean overlay applied to the install copy: the primary agent writes, `/orchestrate` is optional, and OpenCode and Claude Code get the same roster. Skills stay one shared tree. `install-cursor.sh` builds that Monolith plugin unless `--variant conductor` or `HARNESS_VARIANT=conductor` is set. `./install.sh --local` vendors the same variant into the project. `./install.sh conductor` and `./install.sh monolith` switch without the menu and remove the other variant's leftovers.
+Conductor is the conductor-led tree at the repo root. Monolith (`variants/monolith/`) is a lean overlay applied to the install copy: the primary agent writes, `/orchestrate` is optional, and OpenCode and Claude Code get the same roster. Skills stay one shared tree. `./install.sh --yes` with no variant installs Monolith. `install-cursor.sh` builds that Monolith plugin unless `--variant conductor` or `HARNESS_VARIANT=conductor` is set. `./install.sh --local` vendors the same variant into the project. `./install.sh conductor` and `./install.sh monolith` switch without the menu and remove the other variant's leftovers.
 
 ### Project overlay (`.harness-local/`)
 
@@ -524,7 +526,7 @@ Hooks and the OpenCode code-memory plugins no-op when the decision is off. `FMFL
 - Mode notes: `contexts/*.md`.
 - Global instructions: `instructions/*.md` (6 loaded at session start; file-bound and situational docs are skills or unloaded instruction files).
 - Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`, `scripts/llm-metrics-dashboard.ts` (live llm-metrics dashboard), `scripts/settings-sync.sh`, `scripts/sync-skills.sh` (sync canonical skill set to both harnesses), `scripts/skill-drift-check.sh` (read-only drift detector).
-- Install entry points: `bootstrap.sh`, `bootstrap.ps1`, `install.sh`, `install-cursor.sh`. Global `./install.sh --yes` stays Conductor. `./install.sh --local` and `./install-cursor.sh` default to Monolith. `--variant` and `HARNESS_VARIANT` override both. `orchestration` is an alias of Conductor.
+- Install entry points: `bootstrap.sh`, `bootstrap.ps1`, `install.sh`, `install-cursor.sh`. `./install.sh --yes`, `settings-sync`, and `bootstrap.ps1` install Monolith when no variant is set. `./install.sh --local` and `./install-cursor.sh` default to Monolith. `conductor` selects Conductor. `--variant` and `HARNESS_VARIANT` override the default. `orchestration` is an alias of Conductor. A remote Claude Code session runs `.claude/hooks/cloud-session-bootstrap.sh` on `SessionStart` when `CLAUDE_CODE_REMOTE=true` and the project does not vendor the harness.
 - Claude mirror: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/agents/`, `.claude/skills/` (synced from the canonical set on install), `.claude/commands/`.
 - Intentional exclusions (`.gitignore`): `node_modules/`, `antigravity-*`, `.DS_Store`, local `.env*` files except `.env.example`, runtime dir `skills/skill-creator/` (not synced).
 
@@ -1091,7 +1093,7 @@ Les hooks et les plugins OpenCode code-memory ne font rien quand la décision es
 - Contextes (memos de mode): `contexts/*.md`.
 - Instructions globales: `instructions/*.md` (6 chargees au demarrage; le reste est un skill ou un fichier non charge).
 - Scripts: `scripts/setup-package-manager.js`, `scripts/codemaps/generate.ts`, `scripts/llm-metrics-dashboard.ts`, `scripts/settings-sync.sh`, `scripts/sync-skills.sh`, `scripts/skill-drift-check.sh`.
-- Installeurs: `bootstrap.sh`, `bootstrap.ps1`, `install.sh`, `install-cursor.sh`. `./install.sh` demande Conductor (defaut global) ou Monolith; `./install.sh conductor`, `./install.sh monolith`, `--variant` et `HARNESS_VARIANT` font le meme choix sans prompt. `orchestration` est un alias de Conductor. `./install.sh --local` et `./install-cursor.sh` sont Monolith par defaut. `./install.sh --status` et `./install-cursor.sh --status` affichent la variante installee. `./install.sh --local` applique aussi `.harness-local/` (jamais modifié par l'installeur) par-dessus `.claude/`, `.opencode/`, `AGENTS.md`, `.cursor/` et `.agents/`, y compris quand le clone est atteint par un lien symbolique. Un répertoire ignoré affiche la raison. Le mode local écrit `./.claude/mods/autonomy-status`, et Monolith écrit `.opencode/instructions/monolith.md`. `.harness-local/exclude` liste les skills et chemins à ne pas réinstaller. Le hook domain-rules reste éteint tant que `.harness-local/domain-rules.json` ne contient pas `"enabled": true`. Détail: `docs/harness-local.md`. `./install.sh --local --status` affiche l'overlay et les exclusions.
+- Installeurs: `bootstrap.sh`, `bootstrap.ps1`, `install.sh`, `install-cursor.sh`. `./install.sh` demande Conductor ou Monolith (defaut Monolith); `./install.sh --yes` et `settings-sync` installent Monolith sans variante. `./install.sh conductor`, `./install.sh monolith`, `--variant` et `HARNESS_VARIANT` font le meme choix sans prompt. `orchestration` est un alias de Conductor. `./install.sh --local` et `./install-cursor.sh` sont Monolith par defaut. Une session Claude Code distante (`CLAUDE_CODE_REMOTE=true`) lance `.claude/hooks/cloud-session-bootstrap.sh` au `SessionStart` si le projet ne vendore pas le harness. `./install.sh --status` et `./install-cursor.sh --status` affichent la variante installee. `./install.sh --local` applique aussi `.harness-local/` (jamais modifié par l'installeur) par-dessus `.claude/`, `.opencode/`, `AGENTS.md`, `.cursor/` et `.agents/`, y compris quand le clone est atteint par un lien symbolique. Un répertoire ignoré affiche la raison. Le mode local écrit `./.claude/mods/autonomy-status`, et Monolith écrit `.opencode/instructions/monolith.md`. `.harness-local/exclude` liste les skills et chemins à ne pas réinstaller. Le hook domain-rules reste éteint tant que `.harness-local/domain-rules.json` ne contient pas `"enabled": true`. Détail: `docs/harness-local.md`. `./install.sh --local --status` affiche l'overlay et les exclusions.
 - Mirror Claude Code: `.claude/CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/`, `.claude/rules/`, `.claude/agents/`, `.claude/skills/`, `.claude/commands/`.
 - Exclusions volontaires (`.gitignore`): `node_modules/`, `antigravity-*`, `.DS_Store`, fichiers locaux `.env*` sauf `.env.example`, répertoire runtime `skills/skill-creator/`.
 

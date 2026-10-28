@@ -1,0 +1,37 @@
+{
+  "feature": {
+    "repo": "fmflurry/settings-opencode",
+    "branch": "feat/security-reviewer-attack-refs",
+    "pr": 57
+  },
+  "prs": [],
+  "wall_ms": 62000,
+  "active_ms": 62000,
+  "idle_gap_min": 5,
+  "sessions": {
+    "cursor": 0,
+    "claude": 0,
+    "opencode": 0
+  },
+  "tools": [],
+  "skills": [],
+  "agents": [
+    {
+      "name": "main",
+      "calls": 0
+    }
+  ],
+  "tool_failures": 0,
+  "failure_tools": [],
+  "duration_ms": null,
+  "guard_blocks": 8,
+  "guards": {},
+  "review_rounds": 0,
+  "fix_rounds": 0,
+  "tokens": null,
+  "tokens_known": 0,
+  "events": 8,
+  "first_ts": "2026-10-27T23:52:29Z",
+  "last_ts": "2026-10-27T23:53:31Z",
+  "partial": false
+}

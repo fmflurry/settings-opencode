@@ -17,6 +17,25 @@ test('cursor build variant defaults to monolith and the flag wins', () => {
   assert.throws(() => resolveBuildVariant(['--variant', 'lean'], {}), /unknown variant/);
 });
 
+const ATTACK_REFS = [
+  'ATTACK-CLASSES.md',
+  'WEB-PROTOCOL-AND-AUTH.md',
+  'CLIENT-SIDE.md',
+  'LICENSE-cloudflare-security-audit',
+];
+
+function assertAttackRefs(out) {
+  const root = path.join(out, 'skills/security-review/references');
+  for (const name of ATTACK_REFS) {
+    assert.equal(fs.existsSync(path.join(root, name)), true, name);
+  }
+  const agent = fs.readFileSync(path.join(out, 'agents/security-reviewer.md'), 'utf8');
+  assert.match(agent, /skills\/security-review\/references\/ATTACK-CLASSES\.md/);
+  assert.match(agent, /WEB-PROTOCOL-AND-AUTH\.md/);
+  assert.match(agent, /CLIENT-SIDE\.md/);
+  assert.match(agent, /Classify each candidate as Confirmed, Needs validation, or Rejected/);
+}
+
 function built(args, env) {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'cursor-variant-'));
   const result = spawnSync(process.execPath, [build, '--out', out, ...args], {
@@ -57,7 +76,8 @@ test('default cursor plugin build is monolith', () => {
     assert.match(orchestrate, /optional/i);
     assert.match(orchestrate, /monolith/i);
     const plugin = JSON.parse(fs.readFileSync(path.join(out, '.cursor-plugin/plugin.json'), 'utf8'));
-    assert.equal(plugin.version, '0.4.26');
+    assert.equal(plugin.version, '0.4.27');
+    assertAttackRefs(out);
     assert.match(plugin.description, /primary agent writes/i);
     const setup = fs.readFileSync(path.join(out, 'skills/setup-harness/SKILL.md'), 'utf8');
     assert.match(setup, /build-error-resolver/);
@@ -79,6 +99,7 @@ test('conductor cursor plugin build keeps the first-tool gate', () => {
     assert.match(fs.readFileSync(path.join(out, 'rules/conductor.mdc'), 'utf8'), /grok-4\.7-medium/);
     const plugin = JSON.parse(fs.readFileSync(path.join(out, '.cursor-plugin/plugin.json'), 'utf8'));
     assert.match(plugin.description, /Conductor routing/);
+    assertAttackRefs(out);
   } finally {
     fs.rmSync(out, { recursive: true, force: true });
   }

@@ -2,6 +2,12 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.27] - 2026-10-28
+
+- `security-reviewer` reads three vendored attack-class references under `skills/security-review/references/` only when the diff touches that surface: `ATTACK-CLASSES.md` (injection, access control, SSRF, deserialization), `WEB-PROTOCOL-AND-AUTH.md` (sessions and identity protocols), and `CLIENT-SIDE.md` (DOM and browser trust). They are verbatim copies from cloudflare/security-audit-skill at `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8`, MIT.
+- Every finding cites `file:line`, the data flow from source to sink, and a repro or test, and is classified Confirmed, Needs validation, or Rejected. Only a Confirmed Important finding blocks. Needs validation is listed separately.
+- Conductor and Monolith share the references and the agent text. The Cursor plugin build and the skill sync copy them into the install.
+
 ## [0.4.26] - 2026-10-28
 
 - The git guard denies an unparsed command only when it contains a guarded git or gh operation the parser cannot resolve. A variable `-C` on `status`, `diff`, `log`, `ls-remote`, or `merge-base` is allowed. Heredoc bodies are not commands: a quoted body is literal, and an unquoted body is data except for `$(...)` and backticks. Quoted strings are not scanned as commands.

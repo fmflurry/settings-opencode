@@ -79,6 +79,10 @@ test('monolith overlay keeps conductor sources and installs the lean roster', ()
   assert.equal(fs.readFileSync(path.join(claude, '.harness-variant'), 'utf8').trim(), 'monolith');
   assert.equal(fs.existsSync(path.join(claude, 'skills/conductor/SKILL.md')), true);
   assert.equal(fs.existsSync(path.join(opencode, 'skills/conductor/SKILL.md')), true);
+  assert.match(fs.readFileSync(path.join(claude, 'agents/security-reviewer.md'), 'utf8'), /references\/ATTACK-CLASSES\.md/);
+  assert.match(fs.readFileSync(path.join(opencode, 'prompts/agents/security-reviewer.txt'), 'utf8'), /references\/ATTACK-CLASSES\.md/);
+  assert.equal(fs.existsSync(path.join(claude, 'skills/security-review/references/ATTACK-CLASSES.md')), true);
+  assert.equal(fs.existsSync(path.join(claude, 'skills/security-review/references/LICENSE-cloudflare-security-audit')), true);
 
   const projectOpencode = path.join(tmp, '.opencode');
   fs.cpSync(conductorOpencode, projectOpencode, { recursive: true });

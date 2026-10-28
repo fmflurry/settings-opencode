@@ -59,6 +59,17 @@ SOFTWARE.
 
 ---
 
+## Attack-class references from cloudflare/security-audit-skill
+
+Three reference files under `security-review/references/` are copied verbatim from:
+
+- **Repository:** https://github.com/cloudflare/security-audit-skill
+- **Source paths:** `skills/security-audit/ATTACK-CLASSES.md`, `skills/security-audit/WEB-PROTOCOL-AND-AUTH.md`, `skills/security-audit/CLIENT-SIDE.md`
+- **Pinned commit:** `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8`
+- **License:** MIT, Copyright (c) 2025-2026 Cloudflare, Inc.
+
+The upstream license text is `security-review/references/LICENSE-cloudflare-security-audit`. Each copied file has a header with the source URL, that commit, and the MIT license. The bodies are unchanged. `security-reviewer` reads a file only when the diff touches that attack surface.
+
 ## Project-specific overrides
 
 Project-specific or org-specific versions of these skills may exist under `.claude/skills/` (Claude Code) or `.opencode/skills/` (OpenCode). When present, these override the generic versions in this directory.

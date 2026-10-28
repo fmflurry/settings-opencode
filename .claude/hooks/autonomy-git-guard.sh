@@ -55,11 +55,83 @@ cmd="${fields:$((${#cwd} + 1))}"
 # an expansion, or a protected-path write, so the quote walker never starts.
 # The right-hand side stays unquoted: bash 3.2 treats a quoted =~ operand as a literal.
 GG_FAST_RE='git|gh|rm|mv|cp|ln|tee|sed|dd|perl|python|node|ruby|rsync|find|trash|truncate|touch|install|sponge|direnv|orca|ship-init|ship-merge|worktree|teardown|agent-harness|cleanup|xargs|pushd|popd|<|>|\$|\{|`|\\'
-probe="$cmd"
-# Git Bash on bash 3.2 has no ${var,,}. lc is the hook's own lowercase, defined for WIN.
-if [ "$WIN" = 1 ]; then lc "$cmd"; probe="$LCV"; fi
-if [[ ! "$probe" =~ $GG_FAST_RE ]]; then exit 0; fi
-unset probe
+# Git Bash's =~ walks a multi-megabyte subject even when the only hit is a
+# backslash inside quotes, and lowercasing that subject copies it. A 200K-line
+# quoted echo then misses the 1500ms budget before the quote walker starts.
+# One awk pass allows that command; any guarded token or expansion falls through.
+GG_HUGE='
+BEGIN {
+  RS = "\034"
+  word = "git|gh|rm|mv|cp|ln|tee|sed|dd|perl|python|node|ruby|rsync|find|trash|truncate|touch|install|sponge|direnv|orca|ship-init|ship-merge|worktree|teardown|agent-harness|cleanup|xargs|pushd|popd"
+  prot = "\\.claude/|\\.github/|\\.opencode/|goal\\.json|autonomy\\.on|opencode\\.jsonc|AGENTS\\.md|CLAUDE\\.md|agents\\.md|claude\\.md|\\.envrc|tools/agent-harness/|tools/ci/|rmtree|rm_rf|rmSync|remove_tree|rmdir"
+}
+function outside_bad(t) {
+  return t ~ word || t ~ prot || index(t, "<") || index(t, ">") || index(t, "$") || index(t, "{") || index(t, "`") || index(t, "\\")
+}
+function eat_sq(   end, inner) {
+  end = index(s, "\047")
+  inner = (end == 0) ? s : substr(s, 1, end - 1)
+  if (inner ~ word || inner ~ prot) exit 1
+  if (end == 0) { s = ""; return }
+  s = substr(s, end + 1)
+}
+function eat_dq(   a, b, c, d, p, ch, n, pre) {
+  while (s != "") {
+    a = index(s, "\\"); b = index(s, "$"); c = index(s, "`"); d = index(s, "\"")
+    p = 0
+    if (a) p = a
+    if (b && (p == 0 || b < p)) p = b
+    if (c && (p == 0 || c < p)) p = c
+    if (d && (p == 0 || d < p)) p = d
+    if (p == 0) {
+      if (s ~ word || s ~ prot) exit 1
+      s = ""
+      return
+    }
+    if (p > 1) {
+      pre = substr(s, 1, p - 1)
+      if (pre ~ word || pre ~ prot) exit 1
+    }
+    ch = substr(s, p, 1)
+    if (ch == "\"") { s = substr(s, p + 1); return }
+    if (ch != "\\") exit 1
+    n = substr(s, p + 1, 1)
+    if (n == "" || n == "$" || n == "`" || n == "\\" || n == "\"" || n == "\n") exit 1
+    s = substr(s, p + 1)
+  }
+}
+{
+  s = $0
+  if (win == 1) s = tolower(s)
+  sub(/\n$/, "", s)
+  while (s != "") {
+    sq = index(s, "\047")
+    dq = index(s, "\"")
+    if (sq == 0 && dq == 0) {
+      if (outside_bad(s)) exit 1
+      break
+    }
+    if (sq && (dq == 0 || sq < dq)) {
+      if (sq > 1 && outside_bad(substr(s, 1, sq - 1))) exit 1
+      s = substr(s, sq + 1)
+      eat_sq()
+    } else {
+      if (dq > 1 && outside_bad(substr(s, 1, dq - 1))) exit 1
+      s = substr(s, dq + 1)
+      eat_dq()
+    }
+  }
+}
+'
+if [ "${#cmd}" -gt 262144 ] && [[ "$cmd" != *$'\034'* ]]; then
+  if LC_ALL=C awk -v win="$WIN" "$GG_HUGE" <<<"$cmd"; then exit 0; fi
+else
+  probe="$cmd"
+  # Git Bash on bash 3.2 has no ${var,,}. lc is the hook's own lowercase, defined for WIN.
+  if [ "$WIN" = 1 ]; then lc "$cmd"; probe="$LCV"; fi
+  if [[ ! "$probe" =~ $GG_FAST_RE ]]; then exit 0; fi
+  unset probe
+fi
 cwd="${cwd:-$PWD}"
 if [ "$WIN" = 1 ]; then winconv "$cwd"; cwd="$WP"; fi
 gg_mark input

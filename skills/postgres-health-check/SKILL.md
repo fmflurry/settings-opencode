@@ -1,13 +1,13 @@
 ---
 name: postgres-health-check
-description: "Read-only PostgreSQL instance health battery: connectivity/uptime, cache hit ratio, dead tuples & autovacuum hotspots, XID wraparound distance, long-running & idle-in-transaction sessions, unused indexes, checkpoint stats, archiver health, connection count vs max_connections, and docker container/volume checks. Use when asked about db health, postgres check, vacuum, bloat, wraparound, autovacuum, database slow, or connection count. Target: postgres:16-alpine (container gc-platform-postgres). Read alongside the postgres-dba agent."
+description: "Read-only PostgreSQL instance health battery: connectivity/uptime, cache hit ratio, dead tuples & autovacuum hotspots, XID wraparound distance, long-running & idle-in-transaction sessions, unused indexes, checkpoint stats, archiver health, connection count vs max_connections, and docker container/volume checks. Use when asked about db health, postgres check, vacuum, bloat, wraparound, autovacuum, database slow, or connection count. Target: postgres:16-alpine (container gc-platform-postgres). If `postgres-dba` is installed, read this alongside that agent; otherwise read it alongside `database-reviewer` or do the work in the main agent."
 ---
 
 # PostgreSQL Instance Health Check
 
 **Target version:** `postgres:16-alpine` — this repository's `gc-platform-postgres` container (db `gcplatform`, owner role `gcplatform`, runtime role `gc_kourou_app_login`).
 
-**Contract:** every check below is a read-only diagnostic (SELECT against `pg_stat_*`/`pg_catalog`, `pg_isready`, `docker` read commands). Each check gives: **query → interpretation → severity → remediation**. Remediations that mutate state are emitted ONLY as `⚠️ HUMAN CONFIRMATION REQUIRED` blocks — the `postgres-dba` agent never executes them.
+**Contract:** every check below is a read-only diagnostic (SELECT against `pg_stat_*`/`pg_catalog`, `pg_isready`, `docker` read commands). Each check gives: **query → interpretation → severity → remediation**. Remediations that mutate state are emitted ONLY as `⚠️ HUMAN CONFIRMATION REQUIRED` blocks — if `postgres-dba` is installed, that agent never executes them; otherwise `database-reviewer` or the main agent does not either.
 
 **Connection:**
 

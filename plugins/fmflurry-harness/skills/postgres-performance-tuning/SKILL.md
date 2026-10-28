@@ -1,13 +1,13 @@
 ---
 name: postgres-performance-tuning
-description: "PostgreSQL performance tuning for the docker instance: memory sizing vs the 1g mem_limit (shared_buffers, effective_cache_size, work_mem math), checkpoint tuning (max_wal_size, checkpoint_completion_target, pg_stat_checkpointer), pg_stat_statements enablement via compose, slow-query triage, EXPLAIN (ANALYZE, BUFFERS) interpretation, and pgbouncer transaction-pooling constraints (SET/LISTEN-NOTIFY/PREPARE/advisory locks/WITH HOLD). Use when asked about postgres tuning, slow queries, shared_buffers, work_mem, pg_stat_statements, pgbouncer, or checkpoint tuning. Target: postgres:16-alpine (container gc-platform-postgres). Read alongside the postgres-dba agent."
+description: "PostgreSQL performance tuning for the docker instance: memory sizing vs the 1g mem_limit (shared_buffers, effective_cache_size, work_mem math), checkpoint tuning (max_wal_size, checkpoint_completion_target, pg_stat_checkpointer), pg_stat_statements enablement via compose, slow-query triage, EXPLAIN (ANALYZE, BUFFERS) interpretation, and pgbouncer transaction-pooling constraints (SET/LISTEN-NOTIFY/PREPARE/advisory locks/WITH HOLD). Use when asked about postgres tuning, slow queries, shared_buffers, work_mem, pg_stat_statements, pgbouncer, or checkpoint tuning. Target: postgres:16-alpine (container gc-platform-postgres). If `postgres-dba` is installed, read this alongside that agent; otherwise read it alongside `database-reviewer` or do the work in the main agent."
 ---
 
 # PostgreSQL Performance Tuning
 
 **Target version:** `postgres:16-alpine` — this repository's `gc-platform-postgres` container: `mem_limit: 1g`, `mem_reservation: 512m`, no `command:` override (stock settings: `shared_buffers=128MB`, `max_connections=100`), no `shared_preload_libraries`.
 
-**Contract:** diagnostics are read-only (`pg_settings`, `pg_stat_*`, `EXPLAIN` on SELECTs only). Every config change below is emitted ONLY as a `⚠️ HUMAN CONFIRMATION REQUIRED` block — the `postgres-dba` agent never applies settings. Values marked ⚠️ are **established heuristics**, not guarantees: measure before and after every change, one parameter at a time.
+**Contract:** diagnostics are read-only (`pg_settings`, `pg_stat_*`, `EXPLAIN` on SELECTs only). Every config change below is emitted ONLY as a `⚠️ HUMAN CONFIRMATION REQUIRED` block — if `postgres-dba` is installed, that agent never applies settings; otherwise `database-reviewer` or the main agent does not either. Values marked ⚠️ are **established heuristics**, not guarantees: measure before and after every change, one parameter at a time.
 
 **Connection:**
 

@@ -1,13 +1,13 @@
 ---
 name: postgres-backup-restore
-description: "PostgreSQL backup & restore playbook for the docker instance: pg_dump/pg_dumpall recipes, WAL archiving + PITR setup (archive_mode, archive_command, recovery.signal, recovery_target_time, timelines), restore drills, and the PG16 no-incremental-backup constraint. Use when asked about backup, restore, PITR, pg_dump, pg_basebackup, WAL archiving, or disaster recovery. Target: postgres:16-alpine (container gc-platform-postgres). Read alongside the postgres-dba agent."
+description: "PostgreSQL backup & restore playbook for the docker instance: pg_dump/pg_dumpall recipes, WAL archiving + PITR setup (archive_mode, archive_command, recovery.signal, recovery_target_time, timelines), restore drills, and the PG16 no-incremental-backup constraint. Use when asked about backup, restore, PITR, pg_dump, pg_basebackup, WAL archiving, or disaster recovery. Target: postgres:16-alpine (container gc-platform-postgres). If `postgres-dba` is installed, read this alongside that agent; otherwise read it alongside `database-reviewer` or do the work in the main agent."
 ---
 
 # PostgreSQL Backup & Restore
 
 **Target version:** `postgres:16-alpine` — this repository's `gc-platform-postgres` container (db `gcplatform`, owner role `gcplatform`, data on named volume `postgres-data`).
 
-**Contract:** auditing is read-only (`SHOW`, `pg_stat_archiver`, `docker volume inspect`). Every backup/restore/ config command below is emitted ONLY as a `⚠️ HUMAN CONFIRMATION REQUIRED` block — the `postgres-dba` agent never executes backups, restores, or server-config changes. Restores are ALWAYS human-executed: a restore overwrites data and is irreversible in the wrong hands.
+**Contract:** auditing is read-only (`SHOW`, `pg_stat_archiver`, `docker volume inspect`). Every backup/restore/ config command below is emitted ONLY as a `⚠️ HUMAN CONFIRMATION REQUIRED` block — if `postgres-dba` is installed, that agent never executes backups, restores, or server-config changes; otherwise `database-reviewer` or the main agent does not either. Restores are ALWAYS human-executed: a restore overwrites data and is irreversible in the wrong hands.
 
 **Connection:**
 
@@ -174,4 +174,4 @@ docker volume inspect postgres-data
 docker inspect --format '{{range .Mounts}}{{.Type}} {{.Name}} -> {{.Destination}}{{println}}{{end}}' gc-platform-postgres
 ```
 
-**Interpretation:** data must sit on the **named volume `postgres-data`** at `/var/lib/postgresql/data`. Anonymous volume or bind-mount into the repo tree = CRITICAL (anonymous volumes vanish with `docker compose down`; repo-tree mounts corrupt on macOS Docker file-sharing). `docker volume rm postgres-data` is in the postgres-dba never-execute list — deletion is a human decision with a fresh backup in hand.
+**Interpretation:** data must sit on the **named volume `postgres-data`** at `/var/lib/postgresql/data`. Anonymous volume or bind-mount into the repo tree = CRITICAL (anonymous volumes vanish with `docker compose down`; repo-tree mounts corrupt on macOS Docker file-sharing). `docker volume rm postgres-data` stays on the never-execute list if `postgres-dba` is installed, and `database-reviewer` or the main agent does not run it otherwise — deletion is a human decision with a fresh backup in hand.

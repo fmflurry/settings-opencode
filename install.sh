@@ -1260,8 +1260,9 @@ install_claude_mirror() {
     fi
 
     local source_claude="$REPO_DIR/.claude"
-    # Seed settings.json on fresh installs; the fixed runtime merger preserves
-    # unrelated entries and replaces only its managed hook.
+    # Seed settings.json on fresh installs. The runtime merger adds managed
+    # hooks and fills "model": "opus" only when that key is missing or empty.
+    # A model value already in the file is a user override and is left as written.
     if [ ! -d "$source_claude" ]; then
         warn ".claude/ not found in repo, skipping"
         return 0
@@ -1450,6 +1451,9 @@ merge_agent_harness_settings() {
                 elif $cur == "" then $mod
                 else $cur + ":" + $mod end
               end)
+        | if ((.model | type) == "string" and (.model | length) > 0) then .
+          else .model = "opus"
+          end
     ' "$settings" > "$tmp"; then
         rm -f "$tmp"
         warn "could not merge agent-harness entries into $settings (invalid JSON?) — left unchanged"

@@ -2,7 +2,7 @@
 
 **Scope:** the **instance/OPS side** of applying EF Core migrations against `gc-platform-postgres` (db `gcplatform`). Lock behaviour at apply time, the `CREATE INDEX CONCURRENTLY`-vs-transaction conflict, post-migration bloat/vacuum watch, and live model-drift detection.
 
-**Boundary:** code-side correctness — migration design, schema design, index design in code, RLS policy code, whether a migration *should* exist — belongs to the `database-reviewer` agent. This reference never duplicates that; it cross-references it. The `postgres-dba` agent stays read-only/advisory: every mutation below is a `⚠️ HUMAN CONFIRMATION REQUIRED` block.
+**Boundary:** code-side correctness — migration design, schema design, index design in code, RLS policy code, whether a migration *should* exist — belongs to the `database-reviewer` agent. This reference never duplicates that; it cross-references it. If `postgres-dba` is installed, that agent stays read-only/advisory; otherwise `database-reviewer` or the main agent stays read-only for these checks. Every mutation below is a `⚠️ HUMAN CONFIRMATION REQUIRED` block.
 
 **Connection:**
 

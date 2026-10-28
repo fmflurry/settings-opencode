@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Visual report — feat/claude-main-opus</title>
+<style>
+  :root {
+    --ink: #1c1915;
+    --muted: #5c564c;
+    --paper: #f4f0e6;
+    --card: #fffdf8;
+    --line: #e0d6c6;
+    --accent: #0f6e6b;
+    --warn: #8a4b12;
+    --ok: #1d6b3a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 16px/1.45 "Segoe UI", "Helvetica Neue", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 28px 22px 48px; }
+  .kicker {
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 0 0 6px;
+  }
+  h1 { font-size: 28px; line-height: 1.15; margin: 0 0 8px; letter-spacing: -0.02em; }
+  .lede { color: var(--muted); max-width: 72ch; margin: 0; }
+  h2 { font-size: 16px; margin: 26px 0 10px; }
+  .flow, .cols, .files { display: grid; gap: 10px; }
+  .flow { grid-template-columns: 1fr 28px 1fr 28px 1fr; align-items: stretch; }
+  .cols, .files { grid-template-columns: 1fr 1fr; }
+  .box {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .arrow { align-self: center; justify-self: center; color: var(--accent); font-size: 22px; line-height: 1; }
+  .box h3 { margin: 0 0 6px; font-size: 15px; }
+  .box p, .box li { color: var(--muted); font-size: 14px; }
+  .box p { margin: 0; }
+  ul { margin: 6px 0 0; padding-left: 18px; }
+  code, pre {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+  }
+  code { background: #f3ecdf; padding: 0 4px; border-radius: 4px; }
+  pre {
+    margin: 8px 0 0;
+    background: #1c1915;
+    color: #f4f0e6;
+    padding: 10px 12px;
+    border-radius: 8px;
+    white-space: pre-wrap;
+  }
+  .ok { color: var(--ok); font-weight: 700; }
+  .warn { border-left: 4px solid var(--warn); }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); }
+  th, td { text-align: left; padding: 8px 12px; font-size: 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+  @media (max-width: 720px) {
+    .flow, .cols, .files { grid-template-columns: 1fr; }
+    .arrow { transform: rotate(90deg); }
+    h1 { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <p class="kicker">fmflurry-harness 0.4.24 · feat/claude-main-opus</p>
+  <h1>Claude Code's main agent defaults to the opus alias</h1>
+  <p class="lede">Conductor and Monolith share <code>.claude/settings.json</code>. The session model is the alias <code>opus</code>. A fresh <code>~/.claude</code> install and a fresh project <code>.claude</code> both receive it. An existing <code>model</code> value stays when the installer merges hooks.</p>
+
+  <h2>How the setting lands</h2>
+  <div class="flow">
+    <article class="box">
+      <h3>Template</h3>
+      <p><code>.claude/settings.json</code> carries the key for both variants. <code>apply-monolith.mjs</code> leaves that file alone.</p>
+      <pre>"model": "opus"</pre>
+    </article>
+    <div class="arrow" aria-hidden="true">▶</div>
+    <article class="box">
+      <h3>Seed</h3>
+      <p><code>copy_claude_allowlist</code> copies the file only when the destination has no <code>settings.json</code>. That covers global <code>~/.claude</code> and <code>./install.sh --local</code>.</p>
+    </article>
+    <div class="arrow" aria-hidden="true">▶</div>
+    <article class="box">
+      <h3>Merge</h3>
+      <p><code>merge_agent_harness_settings</code> writes <code>opus</code> when <code>model</code> is missing or empty. A string that is already set, including a user pin, is left as written.</p>
+    </article>
+  </div>
+
+  <h2>Two variants, one Claude default</h2>
+  <div class="cols">
+    <article class="box">
+      <h3>Conductor</h3>
+      <p>Global <code>./install.sh</code> default. The conductor routes and cannot write. <code>postgres-dba</code> is installed. The Claude session model is still <code>opus</code>.</p>
+    </article>
+    <article class="box">
+      <h3>Monolith</h3>
+      <p>Cursor plugin and <code>./install.sh --local</code> default. 9 agents. The main agent coordinates and may write. <code>/orchestrate</code> loads the <code>conductor</code> skill. Live Postgres goes to <code>database-reviewer</code> or the main agent when <code>postgres-dba</code> is absent.</p>
+    </article>
+  </div>
+
+  <h2>Wording a bot was reading as always-on</h2>
+  <table>
+    <thead><tr><th>Place</th><th>Now</th></tr></thead>
+    <tbody>
+      <tr><td><code>scripts/cursor-plugin/templates/setup-harness.md</code></td><td>The model picker line says the main agent chat.</td></tr>
+      <tr><td>Shared Postgres skills</td><td>If <code>postgres-dba</code> is installed, read alongside that agent. Otherwise <code>database-reviewer</code> or the main agent.</td></tr>
+      <tr><td><code>README.md</code></td><td>The 26-agent table is labeled Conductor. Monolith is called out as 9 agents, main agent coordinates, <code>/orchestrate</code> loads the conductor skill.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Left unchanged</h2>
+  <div class="files">
+    <article class="box">
+      <h3>Cursor and OpenCode</h3>
+      <ul>
+        <li>Cursor tier files and <code>defaultTierModels</code></li>
+        <li><code>opencode.jsonc</code> and <code>prompts/agents/conductor.txt</code></li>
+        <li><code>prompts/agents/postgres-dba.txt</code></li>
+        <li>Subagent tiers</li>
+      </ul>
+    </article>
+    <article class="box warn">
+      <h3>Risk</h3>
+      <p>A machine that already has <code>model</code> set, including the previous pin <code>claude-opus-4-8</code>, keeps that value on reinstall. Delete the key, or replace the file, to pick up the alias. OpenCode env vars and Cursor tier slugs stay on their own paths.</p>
+    </article>
+  </div>
+
+  <h2>Checks</h2>
+  <article class="box">
+    <p><span class="ok">cursor-plugin check OK.</span> <code>npm test</code>: 230 pass, 0 fail, 2 skipped. The template test asserts <code>model</code> is <code>opus</code>. The installer test keeps <code>sonnet</code> on reinstall and fills <code>opus</code> when the key is absent. The Postgres test rejects an unconditional <code>postgres-dba</code> dispatch.</p>
+  </article>
+
+<section id="kpi-metrics" style="margin-top:28px">
+<h2 style="font-size:18px;margin:0 0 8px">Metrics</h2>
+<p style="margin:0 0 10px;color:#57534e">fmflurry/settings-opencode  feat/claude-main-opus  pr n/a. Status: complete.</p>
+<table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #d6d3d1"><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Wall</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">1m10s</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Active</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">1m10s (gaps over 5m excluded)</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Sessions</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">cursor 0, claude 0, opencode 0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tokens</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">n/a</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tool failures</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Guard blocks</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">8</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Review rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Fix rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr></table>
+<p style="margin:10px 0 0">Tools: none</p>
+<p style="margin:4px 0 0">Skills: none</p>
+<p style="margin:4px 0 0">Agents: main 0</p>
+<p style="margin:4px 0 0">Failure tools: none. Durations: n/a.</p>
+</section>
+</main>
+</body>
+</html>

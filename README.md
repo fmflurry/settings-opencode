@@ -72,7 +72,13 @@ agent-harness eval --run-model
 
 ## What's inside
 
-A hardened primary `conductor` agent backed by **25 specialist sub-agents**, wired together by a routing gate, a brief contract, and a verification gate. Here's the shape of it, counted fresh on **2026-10-02**:
+Two variants share this repo. The counts below are the **Conductor** tree at the repo root, counted fresh on **2026-10-02**.
+
+**Conductor** is the global default (`./install.sh` without `--local`). A read-only `conductor` routes every change. It cannot write. The roster is 1 conductor plus 25 specialists, including `postgres-dba`.
+
+**Monolith** is the default for the Cursor plugin and for `./install.sh --local`. It keeps **9 agents** (review and noisy output). The main agent coordinates and may write. `/orchestrate` loads the `conductor` skill and stays optional. Folded roles, including `postgres-dba`, are not installed. Live Postgres work goes to `database-reviewer` or the main agent.
+
+A bot on the Cursor plugin or a project install follows Monolith.
 
 | Thing                        | Count | Notes                                                                                  |
 | ---------------------------- | ----- | -------------------------------------------------------------------------------------- |
@@ -390,7 +396,7 @@ rsync -a ~/.config/opencode/.claude/ ~/.claude/
 What this installs:
 
 - `.claude/CLAUDE.md` — global user instructions Claude Code reads on every session.
-- `.claude/settings.json` — permissions, hooks, env vars (`API_TIMEOUT_MS`, autocompact threshold, etc.). Seeded on first install only; user edits preserved on reinstall.
+- `.claude/settings.json` — permissions, hooks, env vars (`API_TIMEOUT_MS`, autocompact threshold, etc.), and `"model": "opus"` for the Claude Code main agent (Conductor and Monolith). Seeded on first install. A `model` value already in the file is left as written.
 - `.claude/hooks/*.sh` — pre-tool-use security warnings + stop hook.
 - `.claude/rules/{common,typescript}/*.md` — coding-style/testing/security rule packs.
 - `.claude/commands/*.md` — extra slash commands (`/create-pull-request`, `/update-codemaps`, and the Claude-only arena commands).
@@ -418,7 +424,11 @@ It should route to the `planner` sub-agent and return a structured plan without 
 
 ### Changing models
 
-Edit the `OPENCODE_MODEL_*` / `OPENCODE_REASONING_*` exports in your shell rc (`~/.zshrc`, `~/.bashrc`, …), then open a new shell.
+OpenCode: edit the `OPENCODE_MODEL_*` / `OPENCODE_REASONING_*` exports in your shell rc (`~/.zshrc`, `~/.bashrc`, …), then open a new shell. OpenCode reads those variables. Claude Code reads `.claude/settings.json`. Cursor reads its tier files.
+
+Claude Code: the main agent (the session default) is `"model": "opus"` in `.claude/settings.json`, for Conductor and Monolith. Subagent tiers stay as they are. A fresh global `~/.claude` install and a fresh project `.claude` install both receive that alias. If `model` is already set, the installer leaves that value alone when it merges hooks.
+
+Cursor: tier files stay Cursor models. This change does not edit `~/.cursor/rules/fmflurry-harness-models.mdc` or `~/.agents/fmflurry-harness-models.md`.
 
 ### Updating
 
@@ -545,7 +555,7 @@ Six concerns wired in one file:
 
 ### How the harness works today
 
-The interesting part isn't the agent list — it's the machinery that keeps a literal model on rails. Each rule lives in an `instructions/` file loaded at startup.
+This section describes **Conductor**. On Monolith the main agent may write, there is no first-tool gate, and `/orchestrate` loads the `conductor` skill. The interesting part of Conductor is the machinery that keeps a literal model on rails. Each rule lives in an `instructions/` file loaded at startup.
 
 #### 1. The conductor cannot write
 
@@ -634,7 +644,9 @@ Why this exists: GPT/Claude often infer delegation from short descriptions, but 
 
 ### Agents
 
-Defined in `opencode.jsonc` under `agent` — **26 entries**: the primary plus 25 subagents. `build` and `plan` are built-in overrides and ship **disabled**.
+This table is the **Conductor** roster, defined in `opencode.jsonc` under `agent` — **26 entries**: the primary plus 25 subagents. `build` and `plan` are built-in overrides and ship **disabled**.
+
+**Monolith** does not install this roster. It keeps 9 agents. The main agent coordinates and may write. `/orchestrate` loads the `conductor` skill.
 
 | Agent                  | Access          | Role                                                                                                                    | Trigger notes                     |
 | ---------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
@@ -799,7 +811,7 @@ Reusable OpenCode tools exposed via `tools/index.ts`:
 ### Claude Code mirror (`.claude/`)
 
 - `CLAUDE.md` — global user instructions (no `any`, facade != UseCase).
-- `settings.json` — allow/deny permissions, env (`API_TIMEOUT_MS=3000000`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80`), `PreToolUse` / `PostToolUse` / `Stop` hooks. Seeded on first install; personal edits preserved on reinstall.
+- `settings.json` — allow/deny permissions, env (`API_TIMEOUT_MS=3000000`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80`), `"model": "opus"` for the Claude Code main agent, and `PreToolUse` / `PostToolUse` / `Stop` hooks. Conductor and Monolith share this file. Seeded on first install into `~/.claude` and into a project's `.claude`. A `model` value already set is preserved on reinstall.
 - `hooks/*.sh` — seven hooks: pre-tool-use warnings, CodeMemory preference, RTK rewrite, tool-budget nudge, notification, stop, and subagent-stop.
 - `rules/common/*.md` + `rules/typescript/*.md` — 15 rule packs. Six are always-on. Code comments, coding style, security, and testing are path-scoped. The five `typescript/` packs stay path-scoped. Patterns, hooks, and the agent roster are skills.
 - `agents/*.md` — 26 agent definitions mirroring the OpenCode roster.
@@ -1102,7 +1114,9 @@ Le fichier orchestre six choses:
 
 ### Agents
 
-Definis dans `opencode.jsonc` (champ `agent`) — **26 entrees**: le primary plus 25 sous-agents. `build` et `plan` sont des overrides built-in, livres **desactives**.
+Ce tableau est le roster **Conductor**, defini dans `opencode.jsonc` (champ `agent`) — **26 entrees**: le primary plus 25 sous-agents. `build` et `plan` sont des overrides built-in, livres **desactives**.
+
+**Monolith** n'installe pas ce roster. Il garde 9 agents. L'agent principal coordonne et peut ecrire. `/orchestrate` charge le skill `conductor`.
 
 | Agent                  | Acces            | Role                                                                                                              | Declencheur                       |
 | ---------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------- |
@@ -1138,6 +1152,8 @@ Definis dans `opencode.jsonc` (champ `agent`) — **26 entrees**: le primary plu
 <a id="harness-fr"></a>
 
 ### Comment marche le harness
+
+Cette section decrit **Conductor**. Sur Monolith l'agent principal peut ecrire, il n'y a pas de first-tool gate, et `/orchestrate` charge le skill `conductor`.
 
 - **Le conductor n'ecrit pas.** `tools.write: false`, `tools.edit: false`, `permission.edit/write: deny`; sa Task allowlist enumere chaque specialiste, `*: deny` bloque le reste. `instructions/subagent-routing.md` impose un Task-first gate.
 - **Flux canonique:** `planner → (tdd-guide → coder) ou coder → code-reviewer → verify → git-specialist`.
@@ -1264,7 +1280,7 @@ Outils OpenCode reutilisables exposes via `tools/index.ts`:
 ### Mirror Claude Code (`.claude/`)
 
 - `CLAUDE.md` — instructions globales (no `any`, facade != UseCase).
-- `settings.json` — permissions allow/deny, env vars (`API_TIMEOUT_MS=3000000`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80`), hooks `PreToolUse` / `PostToolUse` / `Stop`. Initialisé à la première install; éditions conservées à la réinstall.
+- `settings.json` — permissions allow/deny, env vars (`API_TIMEOUT_MS=3000000`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80`), `"model": "opus"` pour l'agent principal Claude Code, hooks `PreToolUse` / `PostToolUse` / `Stop`. Conductor et Monolith partagent ce fichier. Initialisé à la première install dans `~/.claude` et dans le `.claude` du projet. Une valeur `model` déjà présente est conservée.
 - `hooks/*.sh` — sept hooks (warnings, CodeMemory, RTK rewrite, tool-budget, notification, stop, subagent-stop).
 - `rules/common/*.md` + `rules/typescript/*.md` — 15 packs. Six toujours charges, quatre bornes par `paths:`, cinq packs `typescript/`.
 - `agents/*.md` — 26 agents mirroir du roster OpenCode.

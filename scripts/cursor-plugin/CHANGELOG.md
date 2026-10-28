@@ -2,6 +2,13 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.24] - 2026-10-27
+
+- Claude Code's main agent (the session default) uses the settings model alias opus in `.claude/settings.json`, for Conductor and Monolith. A fresh global `~/.claude` install and a fresh project `.claude` install both get it. The settings merge writes that alias only when the key is missing or empty, and leaves a value that is already set.
+- `/setup-harness` talks about the main agent chat. It no longer calls that chat the conductor.
+- Shared Postgres skills name `postgres-dba` only when that agent is installed. Otherwise the work sits with `database-reviewer` or the main agent. Conductor still has `postgres-dba`. Monolith does not.
+- The README separates the Conductor roster from Monolith: 9 agents, the main agent coordinates, and `/orchestrate` loads the `conductor` skill.
+
 ## [0.4.23] - 2026-10-27
 
 - `agent-harness kpi feature` reports one feature (repo + branch, and the PR number once known): wall time, active time with gaps over 5 minutes excluded, sessions per host, top tools and skills, calls per agent, tool failures and durations, guard blocks, review and fix rounds, and tokens when the host sent them.

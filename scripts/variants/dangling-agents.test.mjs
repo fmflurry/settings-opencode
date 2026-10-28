@@ -98,6 +98,25 @@ test('command rewrite remaps agent frontmatter and strips removed subagent_type 
   assert.deepEqual(hits(kept), []);
 });
 
+test('shared postgres skills name postgres-dba only when that agent is installed', () => {
+  const files = [
+    'postgres-backup-restore/SKILL.md',
+    'postgres-container-ops/SKILL.md',
+    'postgres-health-check/SKILL.md',
+    'postgres-health-check/reference-migration-ops.md',
+    'postgres-performance-tuning/SKILL.md',
+  ];
+  for (const rel of files) {
+    const text = fs.readFileSync(path.join(repo, 'skills', rel), 'utf8');
+    assert.equal(formatHits(scanText(text, manifest, rel)), '', rel);
+    assert.match(text, /if `postgres-dba` is installed/i);
+    assert.match(text, /database-reviewer/);
+    assert.match(text, /main agent/);
+    const mirror = fs.readFileSync(path.join(repo, '.claude/skills', rel), 'utf8');
+    assert.equal(mirror, text, rel);
+  }
+});
+
 test('scanner allows folded-agent lists and the conductor skill, and flags a real dispatch', () => {
   const folded = 'Folded agents are not installed: conductor, scout, planner, coder, writer, tdd-guide, git-specialist.';
   assert.deepEqual(hits(folded), []);

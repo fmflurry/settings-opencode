@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Warn-only diff check for a cache removed without invalidation.
-# Exit 0 always. A real deletion of a cache must stay possible.
+# Exit 0 always. An explicit instruction to remove a cache must stay possible.
 # PreToolUse prints hook JSON (Cursor turns that into an allow + agent_message).
 # Stop prints the same text on stderr (Claude). It does not emit decision:block:
 # stop.sh content checks are warn-only, and ship-stop-gate blocks only an
@@ -102,7 +102,7 @@ if [ "$removed" -le "$added" ] || [ "$inv" -gt 0 ]; then
   exit 0
 fi
 
-msg="cache-invalidation: this diff removes a cache marker (@SkipIfCached, CACHE_NO_TIMEOUT, or another cache directive) and does not add invalidateCacheFor or onCacheInvalidate. Keep the cache. Invalidate it from the write that changes the data. Rule: rules/common/cache-invalidation.md (Cursor: rules/cache-invalidation.mdc)."
+msg="cache-invalidation: this diff removes a cache marker (@SkipIfCached, CACHE_NO_TIMEOUT, or another cache directive) and does not add invalidateCacheFor or onCacheInvalidate. The removal is fine if the task, spec, or PR description explicitly instructed it; name the knock-on effects. Otherwise invalidate on the write instead of removing the cache. Rule: rules/common/cache-invalidation.md (Cursor: rules/cache-invalidation.mdc)."
 
 case "$emit" in
   json)

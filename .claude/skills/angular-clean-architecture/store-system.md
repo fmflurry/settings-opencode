@@ -84,7 +84,7 @@ FORBIDDEN between modules — a module never imports another module's store or `
 
 ## Invalidation
 
-`@SkipIfCached` stays. Stale data is fixed at the write, in the same change. Do not delete the decorator, drop `CACHE_NO_TIMEOUT`, or shrink the TTL to force a refetch.
+`@SkipIfCached` stays unless the task, spec, or PR description explicitly says to remove it. An instructed removal still names the knock-on effects (callers that expect the cached hit, tests that only cover the skip). Stale data is not a reason to delete the decorator, drop `CACHE_NO_TIMEOUT`, or shrink the TTL. Fix it at the write, in the same change.
 
 - Same module: `store.invalidateCacheFor('COMPANIES')`. A mirror forwards `onCacheInvalidate`.
 - Another module: emit a root-level change signal or event. The facade that owns `COMPANIES` subscribes and calls `store.invalidateCacheFor('COMPANIES')`. It does not import the writer's store.

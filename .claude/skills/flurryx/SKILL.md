@@ -450,7 +450,7 @@ DLQ command meta on `update` -> `update(key, state, { deadLetter: { error, httpS
 
 ## Stale data
 
-A stale slot is not a reason to delete `@SkipIfCached`, drop `CACHE_NO_TIMEOUT`, or shrink a TTL. The cache stays. The write that changes the cached data invalidates or updates that entry in the same change.
+A stale slot is not a reason for you to delete `@SkipIfCached`, drop `CACHE_NO_TIMEOUT`, or shrink a TTL. Do that only when the task, spec, or PR description explicitly says to remove the cache, and then name the knock-on effects (callers that still expect the cached value, tests that only cover the hit). Otherwise the cache stays. The write that changes the cached data invalidates or updates that entry in the same change.
 
 Same module: `store.invalidateCacheFor('LIST')`. Keyed: `store.invalidateCacheFor('ITEMS', id)`. `clear` / `clearKeyedOne` also drop that slot's cached entries when the state itself must go. A mirror forwards `onCacheInvalidate`.
 
@@ -482,7 +482,7 @@ Tests cover the cached hit and a refetch, or a fresh value, after that invalidat
 - Component injects `HttpClient` when belongs in facade/adapter
 - DTOs into presentation models when mapper exists
 - `@SkipIfCached` on always-fresh flows
-- Removing, bypassing, or shortening `@SkipIfCached`, `CACHE_NO_TIMEOUT`, or a TTL to fix stale data
+- Removing, bypassing, or shortening `@SkipIfCached`, `CACHE_NO_TIMEOUT`, or a TTL on your own to fix stale data. An explicit instruction may remove it; name the knock-on effects
 - `@Loading` outside (above) `@SkipIfCached`
 - `BehaviorSubject` where store slot would own state
 - Subclassing `BaseStore`

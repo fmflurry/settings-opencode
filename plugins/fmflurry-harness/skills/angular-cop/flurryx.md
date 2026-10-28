@@ -43,10 +43,10 @@ loadList() { ... }
 ```
 
 ### `@SkipIfCached` only when a hit is intended
-Add `@SkipIfCached` only when a cache hit is the intended behavior. Leave it off a method that must always reach the network. Do not remove, bypass, or shorten an existing decorator, `CACHE_NO_TIMEOUT`, or TTL to fix stale data.
+Add `@SkipIfCached` only when a cache hit is the intended behavior. Leave it off a method that must always reach the network. Do not remove, bypass, or shorten an existing decorator, `CACHE_NO_TIMEOUT`, or TTL on your own to fix stale data. Removal is allowed only when the task, spec, or PR description explicitly says so; then name the knock-on effects (callers that still expect the cached value, tests that only cover the hit).
 
 ### Stale cache
-Keep the decorator. Invalidate from the write that changes the cached data, in the same change.
+Keep the decorator unless removal was explicitly instructed. Otherwise invalidate from the write that changes the cached data, in the same change.
 
 Same module: `store.invalidateCacheFor('LIST')` (keyed: `store.invalidateCacheFor('ITEMS', id)`). A mirror forwards `onCacheInvalidate`.
 

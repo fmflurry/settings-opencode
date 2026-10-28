@@ -55,6 +55,8 @@ test('staged removal of a cache marker warns and exits 0', () => {
   const result = run(dir, ['--text']);
   assert.equal(result.status, 0);
   assert.equal(warns(result), true);
+  assert.match(result.stdout, /explicitly instructed/);
+  assert.match(result.stdout, /invalidate on the write/);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -164,14 +166,16 @@ test('PreToolUse warns once per session and Stop does not block', () => {
   const first = run(dir, [], payload);
   assert.equal(first.status, 0);
   const body = JSON.parse(first.stdout);
-  assert.match(body.hookSpecificOutput.additionalContext, /rules\/common\/cache-invalidation\.md/);
+  assert.match(body.hookSpecificOutput.additionalContext, /explicitly instructed/);
+  assert.match(body.hookSpecificOutput.additionalContext, /invalidate on the write/);
   const second = run(dir, [], payload);
   assert.equal(second.status, 0);
   assert.equal(second.stdout, '');
   const stop = run(dir, [], JSON.stringify({ hook_event_name: 'Stop', session_id: 'sess-1' }));
   assert.equal(stop.status, 0);
   assert.equal(stop.stdout, '');
-  assert.match(stop.stderr, /cache-invalidation:/);
+  assert.match(stop.stderr, /explicitly instructed/);
+  assert.match(stop.stderr, /invalidate on the write/);
   assert.equal(stop.stderr.includes('decision'), false);
   fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -194,6 +198,7 @@ test('Cursor preToolUse allows the tool and surfaces the rule', () => {
   assert.equal(result.status, 0, result.stderr);
   const body = JSON.parse(result.stdout);
   assert.equal(body.permission, 'allow');
+  assert.match(body.agent_message, /explicitly instructed/);
   assert.match(body.agent_message, /cache-invalidation\.mdc/);
   const again = spawnSync('bash', [adapter, hook, 'preToolUse'], {
     cwd: dir,

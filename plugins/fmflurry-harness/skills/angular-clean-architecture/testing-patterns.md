@@ -131,4 +131,4 @@ describe('GetCompaniesAdapter', () => {
 - Target **80%+ coverage**
 - Never mock flurryx internals (`syncToStore`, decorators) — test their observable effect on the store mock
 - Store is `providedIn: 'root'` — in tests, override with `{ provide: XStore, useValue: mockStore }`
-- `@SkipIfCached` tests: pre-populate store mock with `status: 'Success'` to verify the cached hit, then invalidate (`invalidateCacheFor` or `onCacheInvalidate`) and assert a refetch or a fresh value after the write
+- `@SkipIfCached` tests: pre-populate store mock with `status: 'Success'` to verify the cached hit, then invalidate (`invalidateCacheFor` or `onCacheInvalidate`) and assert a refetch or a fresh value after the write. Do not delete the decorator in the test or the method to force that refetch unless the task explicitly says to remove the cache; then the spec states what no longer stays cached

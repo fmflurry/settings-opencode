@@ -867,13 +867,36 @@ HARNESS_FUNC_RE='(^|[^A-Za-z0-9_])(export[[:space:]]+-[A-Za-z]*f|(declare|typese
 
 ASKED=0
 ASKED_WT=0
+LEGIT_WT=0
+# A real worktree-rm entry point. Anything else that merely looks like the command still asks.
+wt_rm_entry() {
+  case "$1" in
+    scripts/agent-harness/worktree-rm.sh) return 0 ;;
+    "${CURSOR_PLUGIN_ROOT:-/nonexistent}/scripts/agent-harness/worktree-rm.sh" | "${CURSOR_PLUGIN_ROOT:-/nonexistent}/scripts/agent-harness/worktree-rm.sh") return 0 ;;
+    "$HOME/.config/opencode/scripts/agent-harness/worktree-rm.sh" | \~/.config/opencode/scripts/agent-harness/worktree-rm.sh) return 0 ;;
+    "$HOME/.local/share/fmflurry-harness/scripts/agent-harness/worktree-rm.sh" | \~/.local/share/fmflurry-harness/scripts/agent-harness/worktree-rm.sh) return 0 ;;
+  esac
+  return 1
+}
 check_worktree_rm() {
   local has_assign="$1" c0="$2"; shift 2
-  local rest=()
+  local rest=() legit=0 script
   case "$c0" in
-    bash | sh | zsh | dash) while [[ "${1:-}" == -* ]]; do shift; done; [[ "${1:-}" =~ worktree-rm\.sh$ ]] || return 1; shift; rest=("$@") ;;
-    agent-harness | agent-harness.sh) [ "${1:-}" = worktree-rm ] || return 1; shift; rest=("$@") ;;
-    worktree-rm.sh) rest=("$@") ;;
+    bash | sh | zsh | dash)
+      while [[ "${1:-}" == -* ]]; do shift; done
+      script="${1:-}"
+      [[ "${script##*/}" == worktree-rm.sh ]] || return 1
+      wt_rm_entry "$script" && legit=1
+      shift
+      rest=("$@") ;;
+    agent-harness | agent-harness.sh)
+      [ "${1:-}" = worktree-rm ] || return 1
+      case "$RAW0" in
+        agent-harness | "$HOME/.local/bin/agent-harness" | \~/.local/bin/agent-harness) legit=1 ;;
+      esac
+      shift
+      rest=("$@") ;;
+    worktree-rm.sh) wt_rm_entry "$RAW0" && legit=1; rest=("$@") ;;
     *) return 1 ;;
   esac
   [ "$has_assign" = 0 ] || deny_worktree
@@ -886,6 +909,7 @@ check_worktree_rm() {
     esac
   done
   [ "$paths" = 1 ] || deny_worktree
+  [ "$confirmed" = 1 ] && [ "$legit" = 1 ] && LEGIT_WT=1
   return 0
 }
 
@@ -2159,6 +2183,12 @@ done
 [ "$seg_ended" = 1 ] || deny_unparsed
 gg_mark legacy_loop
 
-[ "$ASKED_WT" = 1 ] && emit ask "worktree-rm --confirmed removes a worktree: confirm the human named this removal."
+if [ "$ASKED_WT" = 1 ]; then
+  if [ "$AUTO" = 1 ] && [ "$LEGIT_WT" = 1 ]; then
+    :
+  else
+    emit ask "worktree-rm --confirmed removes a worktree: confirm the human named this removal."
+  fi
+fi
 [ "$ASKED" = 1 ] && emit ask "ship-merge --confirmed merges with autonomy rails relaxed and deletes the merged branch: confirm with the user."
 exit 0

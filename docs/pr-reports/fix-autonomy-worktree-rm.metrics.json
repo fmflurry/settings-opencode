@@ -1,0 +1,37 @@
+{
+  "feature": {
+    "repo": "fmflurry/settings-opencode",
+    "branch": "fix/autonomy-worktree-rm",
+    "pr": null
+  },
+  "prs": [],
+  "wall_ms": null,
+  "active_ms": null,
+  "idle_gap_min": 5,
+  "sessions": {
+    "cursor": 0,
+    "claude": 0,
+    "opencode": 0
+  },
+  "tools": [],
+  "skills": [],
+  "agents": [
+    {
+      "name": "main",
+      "calls": 0
+    }
+  ],
+  "tool_failures": 0,
+  "failure_tools": [],
+  "duration_ms": null,
+  "guard_blocks": 0,
+  "guards": {},
+  "review_rounds": 0,
+  "fix_rounds": 0,
+  "tokens": null,
+  "tokens_known": 0,
+  "events": 0,
+  "first_ts": null,
+  "last_ts": null,
+  "partial": true
+}

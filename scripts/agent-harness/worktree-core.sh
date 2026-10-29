@@ -1,7 +1,9 @@
 #!/bin/bash -p
 # Sourced by worktree-rm.sh and teardown-merged-worktree.sh. Source it after lib.sh; do not execute it.
 # wt_remove <path> <confirmed 0|1> <rm|teardown>: checks, snapshot and removal of one worktree. Exits the calling
-# shell (run it in a subshell to keep control). It never looks at autonomy: that refusal belongs to worktree-rm.sh.
+# shell (run it in a subshell to keep control). It does not read the autonomy flag. worktree-rm.sh defines
+# wt_autonomy_merged while the flag is on; when origin/<base>..HEAD is non-zero, that function may accept a
+# squash-merged pull request, a reachable tip, or an equal tree.
 # Mode teardown (merged PR): skips the commits-ahead check (a squash merge leaves the branch ahead; the caller proved
 # MERGED and HEAD == merged head instead), reads Orca activity for the main checkout, and never falls back to git when
 # Orca refuses. A caller may define wt_recheck (prints a reason and fails on a stale premise); it runs right before removal.
@@ -24,7 +26,7 @@ wt_remove() {
   LIST=()
   while IFS= read -r l; do LIST+=("$(norm "$l")"); done < <(git -C "$T" worktree list --porcelain | sed -n 's/^worktree //p')
   M="${LIST[0]:-}"
-  [ -n "$M" ] || { M=.; stop listed "git worktree list failed"; }
+  [ -n "$M" ] || { M=.; stop listed "$T is not a worktree of a git repository"; }
 
   listed=0
   for l in "${LIST[@]}"; do [ "$l" = "$T" ] && listed=1; done
@@ -46,7 +48,11 @@ wt_remove() {
     [ -n "$base" ] || stop ahead "cannot resolve base branch"
     git -C "$T" rev-parse --verify -q "refs/remotes/origin/$base" >/dev/null || stop ahead "origin/$base missing"
     ahead="$(git -C "$T" rev-list --count "origin/$base..HEAD")"
-    [ "$ahead" = 0 ] && ok ahead "0 commits not on origin/$base" || stop ahead "$ahead commits not on origin/$base"
+    ahead_reason=""
+    if [ "$ahead" = 0 ]; then ok ahead "0 commits not on origin/$base"
+    elif declare -F wt_autonomy_merged >/dev/null && ahead_reason="$(wt_autonomy_merged "$T" "$base" "$ahead")"; then ok ahead "$ahead_reason"
+    elif declare -F wt_autonomy_merged >/dev/null; then stop ahead "${ahead_reason:-not merged into origin/$base}"
+    else stop ahead "$ahead commits not on origin/$base"; fi
   fi
 
   use_orca=0

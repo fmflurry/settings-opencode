@@ -85,6 +85,37 @@ test('cursor install prints the cli paths and is idempotent', () => {
   assert.match(again.stdout, /nothing to remove/);
 });
 
+test('installed tree copies mjs siblings and kpi feature --help runs', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ah-mjs-'));
+  const bin = path.join(home, 'bin');
+  const installed = bash(home, bin, installBody);
+  assert.equal(installed.status, 0, installed.stderr);
+  const dest = path.join(home, 'share', 'fmflurry-harness', 'scripts', 'agent-harness');
+  for (const name of ['kpi-feature.mjs', 'kpi-report.mjs', 'eval-run.mjs']) {
+    assert.equal(fs.existsSync(path.join(dest, name)), true, name);
+  }
+  const link = path.join(bin, 'agent-harness');
+  const installPath = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'];
+  const nodeVisible = installPath.some((dir) => fs.existsSync(path.join(dir, 'node')));
+  let help;
+  if (nodeVisible) {
+    help = spawnSync(link, ['kpi', 'feature', '--help'], { encoding: 'utf8' });
+  } else {
+    const nodeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ah-node-'));
+    fs.symlinkSync(process.execPath, path.join(nodeDir, 'node'));
+    // The installed dispatcher replaces PATH. Bind the test node over /usr/local/bin in a private mount.
+    help = spawnSync('unshare', [
+      '--user', '--mount', '--map-root-user',
+      'bash', '-c',
+      'mount --bind "$1" /usr/local/bin && exec "$2" kpi feature --help',
+      '_', nodeDir, link,
+    ], { encoding: 'utf8' });
+  }
+  assert.equal(help.status, 0, help.stderr);
+  assert.match(help.stdout, /usage: agent-harness kpi feature/);
+  assert.equal(`${help.stdout}${help.stderr}`.includes('Cannot find module'), false);
+});
+
 test('cursor uninstall leaves a wrapper that points somewhere else', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ah-foreign-'));
   const bin = path.join(home, 'bin');

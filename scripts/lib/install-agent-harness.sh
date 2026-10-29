@@ -33,9 +33,14 @@ install_agent_harness_tree() {
   [ -f "$src_dir/agent-harness.sh" ] || return 0
   mkdir -p "$dest"
   for script in "$src_dir"/*.sh; do
+    [ -f "$script" ] || continue
     base="$(basename "$script")"
     cp "$script" "$dest/$base"
     chmod +x "$dest/$base"
+  done
+  for script in "$src_dir"/*.mjs; do
+    [ -f "$script" ] || continue
+    cp "$script" "$dest/$(basename "$script")"
   done
   write_harness_marker "$dest/.installed"
   _ah_ok "installed agent-harness scripts into $dest"

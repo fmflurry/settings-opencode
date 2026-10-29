@@ -274,10 +274,12 @@ Then open the show-me HTML locally for the user. Do not create throwaway screens
 - Merge only through `agent-harness ship-merge`. Never `gh pr merge`, never a push to the base branch.
 - Never a push to the base branch, with or without force. Never `git push --mirror` or `--all`, never `--no-verify`.
   Never weaken a check: disabling or skipping a test, job or required check, `continue-on-error`, deleting a check, or lowering thresholds. Force pushes on the PR branch are allowed.
-- Worktree removal: the only path is `agent-harness teardown-merged-worktree <pr>`, for the registered worktree of a
-  MERGED PR, in autonomous mode. `agent-harness worktree-rm` and every other removal stay forbidden to agents in every
-  mode (see the worktree destruction rule, the `worktree-destruction-safety` skill). No deny-list commands
-  (see the autonomy rule).
+- Worktree removal: `agent-harness worktree-rm <path> --confirmed` when the worktree is clean and its branch is merged
+  into the default branch (tip reachable, trees equal, or `gh pr view --json state` is `MERGED` for that branch or its
+  upstream and HEAD is that pull request's head). It refuses a dirty worktree, unmerged work, the main checkout, and a path that is not a worktree of the
+  repo. `agent-harness teardown-merged-worktree <pr>` remains the path that also deletes the registered goal's branches
+  and registry after that PR is MERGED. Raw `git worktree remove` stays forbidden in every mode (see the worktree
+  destruction rule, the `worktree-destruction-safety` skill). No deny-list commands (see the autonomy rule).
 - Branches are deleted only by `agent-harness teardown-merged-worktree` or `agent-harness cleanup`, never by raw
   `git branch -D`, `git push --delete`, or the API.
 - A PR that matches `protectedPaths` is refused by `ship-merge` in autonomous mode. A human merges it with `--confirmed`.

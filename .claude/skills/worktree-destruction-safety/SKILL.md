@@ -45,9 +45,9 @@ The command:
 - waits for the removal to finish, then a settle window, then re-scans every other checkout;
 - restores a changed checkout only if its HEAD is unchanged and it is clean.
 
-It refuses while autonomy is on.
+In autonomous mode it removes the worktree only when the checks below pass, including a merged branch. With the flag off, a branch that is still ahead of `origin/<base>` is refused even when a pull request was squash-merged.
 
-Exit codes: `0` removed and verified. `1` refused (autonomy on, a check STOP, or a snapshot that could not be created); the output names the reason. `2` usage error. `3` dry run (no `--confirmed`). `4` removal failed, or a changed checkout could not be restored. On `4` the snapshot refs are kept, and the output gives inspect and restore commands (`git -C <checkout> stash apply --index <ref>`, plus the diff to inspect first).
+Exit codes: `0` removed and verified. `1` refused (a check STOP, or a snapshot that could not be created); the output names the reason. `2` usage error. `3` dry run (no `--confirmed`). `4` removal failed, or a changed checkout could not be restored. On `4` the snapshot refs are kept, and the output gives inspect and restore commands (`git -C <checkout> stash apply --index <ref>`, plus the diff to inspect first).
 
 On success, each snapshot's sha is printed before its ref is released. The commit stays recoverable until `git gc` prunes it.
 
@@ -87,19 +87,28 @@ In every mode, not only autonomy, the harness guard denies:
 - recursive `rm`, `mv`, `trash`, `rsync --delete`, and `find -delete` aimed at a worktree directory or its parent;
 - interpreter-level `rmtree` calls.
 
-`agent-harness worktree-rm <path> --confirmed` prompts the human before it runs. `git worktree prune -n` (dry run) stays allowed.
+With autonomy off, `agent-harness worktree-rm <path> --confirmed` prompts the human before it runs. With autonomy on, that exact command is allowed through and the script's checks are the boundary. Raw `git worktree remove` stays denied in every mode. `git worktree prune -n` (dry run) stays allowed.
 
 The guard is heuristic text matching. It cannot catch a command assembled at run time, such as a path built in a variable. The script's own checks are the real boundary; the guard is a speed bump, not a safety guarantee.
 
 ## Autonomy
 
-Worktree removal stays forbidden in autonomous mode (see the autonomy rule), with one exception: the goal teardown in [Goal worktrees](#goal-worktrees). `worktree-rm` refuses while the flag is on.
+Autonomous mode trusts the agent to finish its work, and worktree teardown is part of that. `agent-harness worktree-rm <path> --confirmed` runs while the flag is on only when every check in this skill passes and the branch is merged:
+
+- the path is a listed worktree of this repo, not the main checkout, and not the current directory
+- `git status --porcelain` is empty
+- the branch is merged into the default branch: the tip is reachable from `origin/<base>` or from the local default branch, or its tree equals that branch, or `gh pr view <branch> --json state` (or the same query for the upstream branch) reports `MERGED` and the worktree HEAD is that pull request's head
+
+It refuses a dirty worktree, unmerged work, the main worktree, and a path that is not one of the repo's worktrees. The message names the reason. Raw `git worktree remove` stays denied. With the flag off, the command is unchanged: the git guard still asks, and a squash-merged branch that is ahead of `origin/<base>` is still refused.
 
 ## Goal worktrees
 
-`/ship` goal worktrees are created by `agent-harness ship-init` and registered in `<git-common-dir>/agent-harness/goals/<slug>.json`. Removing one is allowed in one case only:
+`/ship` goal worktrees are created by `agent-harness ship-init` and registered in `<git-common-dir>/agent-harness/goals/<slug>.json`. Two commands remove one:
 
-- `agent-harness teardown-merged-worktree <pr>`, in autonomous mode, for the registered worktree of a PR that is MERGED. Every other worktree removal stays forbidden to agents in every mode, including `agent-harness worktree-rm`.
+- `agent-harness teardown-merged-worktree <pr>`, in autonomous mode, for the registered worktree of a PR that is MERGED. It also deletes that goal's branches and registry.
+- `agent-harness worktree-rm <path> --confirmed` removes a clean, merged worktree, including a goal worktree, and leaves the branch and the registry in place.
+
+Raw `git worktree remove` stays forbidden in every mode.
 
 The teardown runs these checks, and re-runs them right before removal:
 

@@ -338,6 +338,7 @@ export function portableHookScript(text) {
   return text
     .replaceAll('$HOME/.claude/state/notify', `${PORTABLE_STATE}/state/notify`)
     .replaceAll('$HOME/.claude/session-env', `${PORTABLE_STATE}/session-env`)
+    .replaceAll('\\~/.claude/scripts/agent-harness/worktree-rm.sh', '"${CURSOR_PLUGIN_ROOT:-/nonexistent}/scripts/agent-harness/worktree-rm.sh"')
     .replaceAll('$HOME/.claude/scripts/agent-harness', '${CURSOR_PLUGIN_ROOT:-/nonexistent}/scripts/agent-harness')
     .replaceAll('"$HOME/.claude/scripts" "$HOME/.config/opencode/scripts" ', '');
 }

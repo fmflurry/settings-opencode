@@ -1757,8 +1757,15 @@ wg deny "$WM" "echo /p | xargs rm -rf"
 wg deny "$WM" "python3 -c 'import shutil; shutil.rmtree(\"/Users/x/orca/workspaces/r/w\")'"
 wg deny "$WM" "orca --json worktree rm --worktree path:/x"
 wg deny "$WM" "export ORCA_BIN=/t; agent-harness worktree-rm /x --confirmed"
-wg ask "$WM" "bash -x scripts/agent-harness/worktree-rm.sh /p --confirmed"
-wg ask "$WM" "agent-harness worktree-rm /x --confirmed"
+check "git-guard worktree (off) ask: bash -x scripts/agent-harness/worktree-rm.sh /p --confirmed" test "$(wg_decision off "$WM" "bash -x scripts/agent-harness/worktree-rm.sh /p --confirmed")" = ask
+check "git-guard worktree (on) allow: bash -x scripts/agent-harness/worktree-rm.sh /p --confirmed" test "$(wg_decision on "$WM" "bash -x scripts/agent-harness/worktree-rm.sh /p --confirmed")" = allow
+check "git-guard worktree (off) ask: agent-harness worktree-rm /x --confirmed" test "$(wg_decision off "$WM" "agent-harness worktree-rm /x --confirmed")" = ask
+check "git-guard worktree (on) allow: agent-harness worktree-rm /x --confirmed" test "$(wg_decision on "$WM" "agent-harness worktree-rm /x --confirmed")" = allow
+check "git-guard worktree (on) allow: ~/.local/bin/agent-harness worktree-rm /x --confirmed" test "$(wg_decision on "$WM" "~/.local/bin/agent-harness worktree-rm /x --confirmed")" = allow
+check "git-guard worktree (on) ask: bash /tmp/evil/worktree-rm.sh /p --confirmed" test "$(wg_decision on "$WM" "bash /tmp/evil/worktree-rm.sh /p --confirmed")" = ask
+check "git-guard worktree (on) ask: /tmp/evil/agent-harness worktree-rm /x --confirmed" test "$(wg_decision on "$WM" "/tmp/evil/agent-harness worktree-rm /x --confirmed")" = ask
+check "git-guard worktree (on) ask: worktree-rm.sh /p --confirmed" test "$(wg_decision on "$WM" "worktree-rm.sh /p --confirmed")" = ask
+check "git-guard worktree (on) ask: bash /tmp/x/scripts/agent-harness/worktree-rm.sh /p --confirmed" test "$(wg_decision on "$WM" "bash /tmp/x/scripts/agent-harness/worktree-rm.sh /p --confirmed")" = ask
 wg allow "$WM" "git worktree prune -n"
 wg allow "$WM" "git worktree list"
 wg allow "$WM" "git worktree add ../y -b feat/y"
@@ -1965,8 +1972,74 @@ wtfx; dirty_main; out="$(wtrm "$WT" --confirmed 2>&1)"
 check "worktree-rm: release line prints sha" grep -Eq 'worktree-rm: snapshot refs/harness/snapshots/[0-9]+-1 = [0-9a-f]{40} \(recoverable until gc\)' <<<"$out"
 
 wtfx; flag_on; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
-check "worktree-rm: autonomy on refuses" test $rc -eq 1
-check "worktree-rm: autonomy on keeps target" test -d "$WT"
+check "worktree-rm: autonomous clean merged exits 0" test $rc -eq 0
+check "worktree-rm: autonomous clean merged removes directory" test ! -e "$WT"
+check "worktree-rm: autonomous clean merged reports removed" grep -q "worktree-rm: removed $WT" <<<"$out"
+
+wtfx
+echo feature >"$WT/feature"
+git -C "$WT" add feature && git -C "$WT" commit -qm feature
+echo later >"$WMAIN/later"
+git -C "$WMAIN" add later && git -C "$WMAIN" commit -qm later && git -C "$WMAIN" push -q origin master
+tip="$(git -C "$WT" rev-parse HEAD)"
+jq -n --arg h "$tip" '{state:"MERGED",headRefOid:$h,headRefName:"feat-x",baseRefName:"master"}' >"$FX/view.json"
+check "worktree-rm: squash fixture trees differ" test "$(git -C "$WT" rev-parse 'HEAD^{tree}')" != "$(git -C "$WMAIN" rev-parse 'origin/master^{tree}')"
+flag_on; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: autonomous squash-merged exits 0" test $rc -eq 0
+check "worktree-rm: autonomous squash-merged removes directory" test ! -e "$WT"
+check "worktree-rm: autonomous squash-merged names the pull request" grep -q 'pull request for feat-x is MERGED' <<<"$out"
+rm -f "$TMP/state/autonomy.on" "$FX/view.json"
+
+wtfx
+echo feature >"$WT/feature"
+git -C "$WT" add feature && git -C "$WT" commit -qm feature
+echo later >"$WMAIN/later"
+git -C "$WMAIN" add later && git -C "$WMAIN" commit -qm later && git -C "$WMAIN" push -q origin master
+jq -n --arg h "$(git -C "$WMAIN" rev-parse HEAD)" '{state:"MERGED",headRefOid:$h,headRefName:"feat-x",baseRefName:"master"}' >"$FX/view.json"
+flag_on; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: autonomous MERGED head mismatch exits 1" test $rc -eq 1
+check "worktree-rm: autonomous MERGED head mismatch names unmerged" grep -q 'unmerged:' <<<"$out"
+check "worktree-rm: autonomous MERGED head mismatch keeps the worktree" test -d "$WT"
+rm -f "$TMP/state/autonomy.on" "$FX/view.json"
+
+wtfx; flag_on; echo mine >"$WT/tracked"; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: autonomous dirty exits 1" test $rc -eq 1
+check "worktree-rm: autonomous dirty names uncommitted content" grep -q 'uncommitted or untracked content' <<<"$out"
+check "worktree-rm: autonomous dirty keeps the edit" grep -q mine "$WT/tracked"
+rm -f "$TMP/state/autonomy.on"
+
+wtfx; echo only >"$WT/only"; git -C "$WT" add only && git -C "$WT" commit -qm only
+rm -f "$FX/view.json"
+flag_on; out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: autonomous unmerged exits 1" test $rc -eq 1
+check "worktree-rm: autonomous unmerged names the reason" grep -q 'unmerged:' <<<"$out"
+check "worktree-rm: autonomous unmerged keeps the worktree" test -d "$WT"
+rm -f "$TMP/state/autonomy.on"
+
+wtfx; flag_on; out="$(wtrm "$WMAIN" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: autonomous main worktree exits 1" test $rc -eq 1
+check "worktree-rm: autonomous main worktree names main checkout" grep -q 'main checkout' <<<"$out"
+check "worktree-rm: autonomous main worktree survives" test -d "$WMAIN/.git"
+rm -f "$TMP/state/autonomy.on"
+
+wtfx; flag_on; mkdir -p "$WB/stray"; out="$(wtrm "$WB/stray" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: autonomous path outside worktrees exits 1" test $rc -eq 1
+check "worktree-rm: autonomous path outside worktrees names the reason" grep -q 'is not a worktree of a git repository' <<<"$out"
+check "worktree-rm: autonomous path outside worktrees survives" test -d "$WB/stray"
+rm -f "$TMP/state/autonomy.on"
+
+wtfx
+echo feature >"$WT/feature"
+git -C "$WT" add feature && git -C "$WT" commit -qm feature
+echo later >"$WMAIN/later"
+git -C "$WMAIN" add later && git -C "$WMAIN" commit -qm later && git -C "$WMAIN" push -q origin master
+tip="$(git -C "$WT" rev-parse HEAD)"
+jq -n --arg h "$tip" '{state:"MERGED",headRefOid:$h,headRefName:"feat-x",baseRefName:"master"}' >"$FX/view.json"
+out="$(wtrm "$WT" --confirmed 2>&1)"; rc=$?
+check "worktree-rm: autonomy off still refuses a squash-merged branch" test $rc -eq 1
+check "worktree-rm: autonomy off still reports commits not on origin" grep -q 'commits not on origin/master' <<<"$out"
+check "worktree-rm: autonomy off keeps the squash-merged worktree" test -d "$WT"
+rm -f "$FX/view.json"
 wtfx; wtrm >/dev/null 2>&1; check "worktree-rm: no args exits 2" test $? -eq 2
 wtrm "$WT" --bogus >/dev/null 2>&1; check "worktree-rm: unknown flag exits 2" test $? -eq 2
 wtrm "$WT" "$SIB" --confirmed >/dev/null 2>&1; check "worktree-rm: two paths exits 2" test $? -eq 2
@@ -1996,12 +2069,15 @@ G_DENY=(
   "ORCA_BIN=/x agent-harness worktree-rm $WT"
   "agent-harness worktree-rm /x --force"
 )
-G_ASK=("agent-harness worktree-rm /x --confirmed")
 G_ALLOW=("agent-harness worktree-rm /x" "git worktree list" "orca worktree list --json" "rm -rf build")
 for mode in off on; do
   reset; [ "$mode" = on ] && flag_on
   for c in "${G_DENY[@]}"; do check "worktree guard (flag $mode) denies: $c" denied "$c"; done
-  for c in "${G_ASK[@]}"; do check "worktree guard (flag $mode) asks: $c" asked "$c"; done
+  if [ "$mode" = off ]; then
+    check "worktree guard (flag off) asks: agent-harness worktree-rm /x --confirmed" asked "agent-harness worktree-rm /x --confirmed"
+  else
+    check "worktree guard (flag on) allows: agent-harness worktree-rm /x --confirmed" allowed "agent-harness worktree-rm /x --confirmed"
+  fi
   for c in "${G_ALLOW[@]}"; do check "worktree guard (flag $mode) allows: $c" allowed "$c"; done
 done
 GUARD_CWD="$TMP/work"
@@ -2513,10 +2589,17 @@ for mode in off on; do
   for c in "${LG_DENY[@]}"; do check "lifecycle guard (flag $mode) denies: $c" denied "$c"; done
   check "lifecycle guard (flag $mode) still denies worktree-rm --force" denied "agent-harness worktree-rm /x --force"
   check "lifecycle guard (flag $mode) still denies a git worktree remove" denied "git worktree remove /x"
-  check "lifecycle guard (flag $mode) still asks for worktree-rm --confirmed" asked "agent-harness worktree-rm /x --confirmed"
+  if [ "$mode" = off ]; then
+    check "lifecycle guard (flag off) still asks for worktree-rm --confirmed" asked "agent-harness worktree-rm /x --confirmed"
+  else
+    check "lifecycle guard (flag on) allows worktree-rm --confirmed" allowed "agent-harness worktree-rm /x --confirmed"
+  fi
 done
 reset; flag_on
-check "worktree-rm stays refused in autonomous mode" bash -c '! (cd "$1" && env -u CLAUDE_PROJECT_DIR AGENT_HARNESS_TEST=1 AGENT_STATE_DIR="$2" bash "$3/worktree-rm.sh" /x --confirmed) >/dev/null 2>&1' _ "$TMP/work" "$TMP/state" "$H"
+out="$(cd "$TMP/work" && env -u CLAUDE_PROJECT_DIR AGENT_HARNESS_TEST=1 AGENT_STATE_DIR="$TMP/state" bash "$H/worktree-rm.sh" /x --confirmed 2>&1)"; rc=$?
+check "worktree-rm autonomous: a missing path exits 1" test $rc -eq 1
+check "worktree-rm autonomous: a missing path names the reason" grep -q 'path not found' <<<"$out"
+check "worktree-rm autonomous: a missing path is not a blanket ban" bash -c '! grep -q "forbidden in autonomous mode" <<<"$1"' _ "$out"
 
 # ---- review fixes: one state location, registry mirror, teardown trust, injection, guard
 lw_stop() {

@@ -17,6 +17,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 [ -n "$pr" ] || { echo "$usage" >&2; exit 2; }
+goal_bind_registered_pr "$pr" || true
 
 refuse() { echo "cleanup refused: $1" >&2; exit 1; }
 say() { echo "cleanup: $*"; }

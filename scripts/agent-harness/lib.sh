@@ -23,7 +23,7 @@ else
   GH="$(type -P gh || echo gh)"
   ORCA="$(type -P orca || true)"
 fi
-# The state lives in the main checkout so every worktree of the repo sees the same goal and autonomy flag.
+# autonomy.on stays in the main checkout. Goal state is one file per worktree and branch.
 ROOT="$(git -C "${CLAUDE_PROJECT_DIR:-$PWD}" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p' || true)"
 [ -n "$ROOT" ] || ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
 DEFAULT_STATE_DIR="$ROOT/.claude/state"
@@ -33,7 +33,10 @@ if [ "$HARNESS_INSTALLED" = 0 ] && [ "${AGENT_HARNESS_TEST:-}" = 1 ]; then
   GH="${GH_BIN:-$GH}"
   ORCA="${ORCA_BIN:-$ORCA}"
 fi
-GOAL_FILE="$STATE_DIR/goal.json"
+# shellcheck source=scripts/agent-harness/goal-state.sh
+. "$HARNESS_DIR/goal-state.sh"
+goal_scope_select "${CLAUDE_PROJECT_DIR:-$PWD}" "$PWD"
+goal_bind_file "$STATE_DIR"
 # The repo's .envrc selects the gh account; a plain gh would use the personal token. Only its environment is used:
 # the binary stays the pinned $GH, so an agent-written .envrc cannot swap it.
 gh_cmd() {
@@ -217,6 +220,17 @@ goal_slug() {
     [ -z "$b" ] || s="$(reg_slug "$b")"
   fi
   printf '%s' "$s"
+}
+
+# Point GOAL_FILE at the registered worktree for this PR. A missing entry leaves the caller's file.
+goal_bind_registered_pr() {
+  local slug path
+  slug="$(reg_find_by_pr "$1" 2>/dev/null)" || return 1
+  path="$(reg_get "$slug" '.path // empty')"
+  [ -d "$path" ] || return 1
+  goal_scope_resolve "$path"
+  [ "${GS_KIND:-none}" != none ] || return 1
+  goal_bind_file "$STATE_DIR"
 }
 
 # reg_find_by_pr <pr>: prints the slug of the registered goal bound to the PR, else the goal.json goal when it tracks that PR.

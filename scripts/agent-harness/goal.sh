@@ -1,6 +1,6 @@
 #!/bin/bash -p
 # shellcheck disable=SC2016
-# Usage: goal.sh set "<goal>" [criteria...] | pr <n> | backup-add <branch> | sha <headsha> | review <code|security> <pass|fail> | bump (findings on stdin) | escalate "<reason>" | status | clear
+# Usage: goal.sh set "<goal>" [criteria...] | pr <n> | backup-add <branch> | sha <headsha> | review <code|security> <pass|fail> | bump (findings on stdin) | wait "<reason>" --ttl <N><s|m|h> | escalate "<reason>" | status | clear
 set -euo pipefail
 # shellcheck source=scripts/agent-harness/lib.sh
 . "${BASH_SOURCE[0]%/*}/lib.sh"
@@ -100,6 +100,36 @@ case "$cmd" in
       exit 3
     fi
     ;;
+  wait)
+    [ -f "$GOAL_FILE" ] || { echo "goal wait: no goal" >&2; exit 2; }
+    reason="${1:-}"
+    [ -n "$reason" ] || { echo "usage: goal.sh wait \"<reason>\" --ttl <N><s|m|h>" >&2; exit 2; }
+    shift
+    ttl=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --ttl)
+          [ $# -ge 2 ] || { echo "usage: goal.sh wait \"<reason>\" --ttl <N><s|m|h>" >&2; exit 2; }
+          ttl="$2"; shift 2 ;;
+        *) echo "usage: goal.sh wait \"<reason>\" --ttl <N><s|m|h>" >&2; exit 2 ;;
+      esac
+    done
+    if [[ ! "$ttl" =~ ^([1-9][0-9]*)([smh])$ ]]; then
+      echo "goal wait: ttl must look like 30m, 45s, or 2h" >&2
+      exit 2
+    fi
+    case "${BASH_REMATCH[2]}" in
+      s) secs="${BASH_REMATCH[1]}" ;;
+      m) secs=$(( ${BASH_REMATCH[1]} * 60 )) ;;
+      h) secs=$(( ${BASH_REMATCH[1]} * 3600 )) ;;
+    esac
+    if [ "$secs" -le 0 ] || [ "$secs" -gt 86400 ]; then
+      echo "goal wait: ttl must be between 1s and 24h" >&2
+      exit 2
+    fi
+    until=$(( $(date +%s) + secs ))
+    goal_update --arg r "$reason" --argjson u "$until" '.wait_reason = $r | .wait_until = $u'
+    ;;
   escalate)
     reason="${1:?reason}"
     escalate_goal "$reason"
@@ -107,5 +137,5 @@ case "$cmd" in
     ;;
   status) if [ -f "$GOAL_FILE" ]; then jq -c . "$GOAL_FILE"; else echo "no goal"; fi ;;
   clear) rm -f "$GOAL_FILE" ;;
-  *) echo "usage: goal.sh set|pr|backup-add|sha|review|bump|escalate|status|clear" >&2; exit 2 ;;
+  *) echo "usage: goal.sh set|pr|backup-add|sha|review|bump|wait|escalate|status|clear" >&2; exit 2 ;;
 esac

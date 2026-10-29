@@ -2,6 +2,12 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.30] - 2026-10-29
+
+- The ship stop gate counts local progress before a PR exists. A change to the registered worktree branch tip, to `.reviews`, or to a higher `fix_iterations` is progress, the same as a new PR head. Progress resets `stop_blocks` to 0. `total_blocks` still increases on every counted stop and still escalates at 30.
+- `agent-harness goal wait "<reason>" --ttl 30m` (1s through 24h) marks a bounded wait. Stops inside that TTL are allowed and not counted. The gate also skips the count while the hook input, a live pid, an inflight marker, or a known test or review process in the worktree shows background work. The Cursor adapter forwards status, type, and pids only. OpenCode passes the session id and running child sessions.
+- Before both review verdicts pass for the current local tip, the block says to finish local review. It does not say to push. The ship skill documents `goal wait`. Conductor and Monolith share this hook.
+
 ## [0.4.28] - 2026-10-28
 
 - `SessionStart` runs `.claude/hooks/cloud-session-bootstrap.sh` when `CLAUDE_CODE_REMOTE=true` and the project does not vendor the harness. Vendored means a `.claude/.harness-variant` file, or `.claude/CLAUDE.md` together with `.claude/hooks/autonomy-context.sh`, or a `plugin.json` that contains a `"version"` field (`.cursor-plugin/plugin.json` or `plugins/fmflurry-harness/.cursor-plugin/plugin.json`). The hook shallow-clones `https://github.com/fmflurry/settings-opencode` into a temp directory and runs `install.sh --yes monolith`. Success is quiet. A clone or install failure logs a warning and exits 0. The hook does nothing when `CLAUDE_CODE_REMOTE` is unset. The installer merges the command into Claude settings. The Cursor plugin build mirrors the script.

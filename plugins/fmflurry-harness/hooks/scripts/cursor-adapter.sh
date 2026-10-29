@@ -70,13 +70,31 @@ case "$EVENT" in
         }
     ' 2>/dev/null)" || allow_and_exit ;;
   stop|subagentStop)
-    PAYLOAD="$(printf '%s' "$INPUT" | jq -ce --arg ev "$EVENT" '{
-      session_id: (.conversation_id // ""), transcript_path: (.transcript_path // ""),
-      hook_event_name: (if $ev == "stop" then "Stop" else "SubagentStop" end),
-      stop_hook_active: ((.loop_count // 0) > 0),
-      subagent_type: (.subagent_type // .agent_type // ""),
-      agent_transcript_path: (.agent_transcript_path // "")
-    }' 2>/dev/null)" || allow_and_exit ;;
+    PAYLOAD="$(printf '%s' "$INPUT" | jq -ce --arg ev "$EVENT" '
+      def brief($v; $fallback):
+        if ($v | type) != "array" then []
+        else [ $v[] | if type == "object" then {
+            status: ((.status // .state // "running") | tostring),
+            type: ((.subagent_type // .type // .kind // .name // .agent // $fallback) | tostring)
+          } else {status: "running", type: $fallback} end ]
+        end;
+      {
+        session_id: (.conversation_id // .session_id // ""),
+        transcript_path: (.transcript_path // ""),
+        hook_event_name: (if $ev == "stop" then "Stop" else "SubagentStop" end),
+        stop_hook_active: ((.loop_count // 0) > 0),
+        subagent_type: (.subagent_type // .agent_type // ""),
+        agent_transcript_path: (.agent_transcript_path // ""),
+        background_tasks: brief(.background_tasks // .backgroundTasks; "task"),
+        subagents: brief(.subagents // .active_subagents // .running_subagents; "subagent"),
+        background_pids: (
+          if (.background_pids | type) == "array" then
+            [.background_pids[] | if type == "number" then .
+              elif type == "string" and test("^[0-9]+$") then tonumber else empty end]
+          else [] end
+        )
+      }
+    ' 2>/dev/null)" || allow_and_exit ;;
   sessionStart|sessionEnd)
     PAYLOAD="$(printf '%s' "$INPUT" | jq -ce --arg ev "$EVENT" '{
       session_id: (.conversation_id // .session_id // ""), cwd: (.cwd // ""),

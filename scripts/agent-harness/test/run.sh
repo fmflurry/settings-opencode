@@ -350,7 +350,29 @@ reset; green_fixtures; flag_on
 bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5; bash "$H/goal.sh" sha "$HEAD_SHA"
 jq '.stop_blocks = 3' "$TMP/state/goal.json" >"$TMP/g" && mv "$TMP/g" "$TMP/state/goal.json"
 mutate '.headRefOid="newhead"' view.json; stop >/dev/null
-check "stop-gate keeps stop_blocks across head change" test "$(jq -r .stop_blocks "$TMP/state/goal.json")" = 3
+check "stop-gate resets stop_blocks on head change" test "$(jq -r .stop_blocks "$TMP/state/goal.json")" = 0
+check "stop-gate head change still counts toward total_blocks" test "$(jq -r .total_blocks "$TMP/state/goal.json")" = 1
+
+reset
+bash "$H/goal.sh" wait "npm test" --ttl 30m >/dev/null 2>&1; rc=$?
+check "goal wait without a goal exits 2" test $rc -eq 2
+bash "$H/goal.sh" set g-wait
+bash "$H/goal.sh" wait >/dev/null 2>&1; rc=$?
+check "goal wait without a reason exits 2" test $rc -eq 2
+bash "$H/goal.sh" wait "npm test" >/dev/null 2>&1; rc=$?
+check "goal wait without a ttl exits 2" test $rc -eq 2
+bash "$H/goal.sh" wait "npm test" --ttl 30 >/dev/null 2>&1; rc=$?
+check "goal wait rejects a unitless ttl" test $rc -eq 2
+bash "$H/goal.sh" wait "npm test" --ttl 0m >/dev/null 2>&1; rc=$?
+check "goal wait rejects a zero ttl" test $rc -eq 2
+bash "$H/goal.sh" wait "npm test" --ttl 25h >/dev/null 2>&1; rc=$?
+check "goal wait rejects a ttl over 24h" test $rc -eq 2
+now="$(date +%s)"
+bash "$H/goal.sh" wait "npm test" --ttl 30m
+check "goal wait 30m exits 0" test $? -eq 0
+delta="$(( $(jq -r .wait_until "$TMP/state/goal.json") - now ))"
+check "goal wait 30m lands about 1800s ahead" test "$delta" -ge 1790 -a "$delta" -le 1810
+check "goal wait records the reason" test "$(jq -r .wait_reason "$TMP/state/goal.json")" = "npm test"
 
 
 # ---- ship-merge (configured: base master, required gate+export, tltb-review by the bot)
@@ -2857,6 +2879,183 @@ for gate in "${STOP_COPIES[@]}"; do
   check "stop-gate ($gl) unreadable PR: one waiting notification" test "$(grep -c 'waiting: PR state unreadable' "$FX/orca.log" 2>/dev/null)" = 1
   check "stop-gate ($gl) unreadable PR: says so on stderr" grep -qx 'ship-stop-gate: PR state unreadable; allowing stop' "$FX/err"
 done
+
+# 0.4.30: local progress, consecutive reset, bounded wait, stage-correct block
+sg_prep() {
+  lw_fixture git
+  LCWD=""
+  LH ship-init fix gate prog >"$FX/out" 2>"$FX/err"
+  T="$(cat "$FX/out")"
+  LS=fix-gate-prog
+  touch "$LM/.claude/state/autonomy.on"
+}
+sg_goal() { jq -r "$1" "$(lw_goal_file)"; }
+sg_set() { jq "$@" "$(lw_goal_file)" >"$FX/t" && mv "$FX/t" "$(lw_goal_file)"; }
+sg_stop() {
+  local gate="$1" input="${2:-}"
+  [ -n "$input" ] || input='{}'
+  ( cd "$LM" && printf '%s' "$input" | env -u AGENT_STATE_DIR CLAUDE_PROJECT_DIR="$LM" NOTIFY_STATE_DIR="$TMP/notify" PATH="$TMP/lsleep:$TMP/lbin:$PATH" bash "$gate" )
+}
+sg_commit() { ( cd "$T" && echo "c$RANDOM" >>c && git add c && git commit -qm C ) >/dev/null 2>&1; }
+sg_pin() {
+  local sha fp
+  sha="$(git -C "$T" rev-parse HEAD)"
+  fp="$(jq -c -S '.reviews // {}' "$(lw_goal_file)")"
+  sg_set --arg s "$sha" --arg fp "$fp" '.local_sha = $s | .reviews_fp = $fp | .seen_fix_iterations = (.fix_iterations // 0) | .pr = null | del(.wait_until, .wait_reason)'
+}
+for gate in "${STOP_COPIES[@]}"; do
+  gl="${gate#"$HERE"/}"
+  sg_prep
+  sg_stop "$gate" >/dev/null
+  check "stop-gate ($gl) pre-PR: first look stores local_sha" test "$(sg_goal .local_sha)" = "$(git -C "$T" rev-parse HEAD)"
+  sg_set '.stop_blocks = 4'
+  before="$(sg_goal .total_blocks)"
+  sg_commit
+  sg_stop "$gate" >/dev/null
+  check "stop-gate ($gl) pre-PR local commit resets stop_blocks" test "$(sg_goal .stop_blocks)" = 0
+  check "stop-gate ($gl) pre-PR local commit stores the new sha" test "$(sg_goal .local_sha)" = "$(git -C "$T" rev-parse HEAD)"
+  check "stop-gate ($gl) pre-PR local commit counts toward total_blocks" test "$(sg_goal .total_blocks)" = "$(( before + 1 ))"
+  check "stop-gate ($gl) pre-PR local commit stays active" test "$(sg_goal .status)" = active
+
+  sg_prep
+  sg_set '.stop_blocks = 4 | .reviews_fp = "{}"'
+  LCWD="$T" LH goal review code pass >"$FX/out" 2>"$FX/err"; rc=$?
+  check "stop-gate ($gl) goal review code records" test $rc -eq 0
+  LCWD="$T" LH goal review security pass >"$FX/out" 2>"$FX/err"; rc=$?
+  check "stop-gate ($gl) goal review security records" test $rc -eq 0
+  sg_stop "$gate" >/dev/null
+  check "stop-gate ($gl) changed reviews entry resets stop_blocks" test "$(sg_goal .stop_blocks)" = 0
+  check "stop-gate ($gl) changed reviews entry stays active" test "$(sg_goal .status)" = active
+
+  sg_prep
+  sg_pin
+  sg_set '.stop_blocks = 4 | .seen_fix_iterations = 0 | .fix_iterations = 0'
+  printf 'code:src/a.sh\n' | LCWD="$T" LH goal bump >"$FX/out" 2>"$FX/err"; rc=$?
+  check "stop-gate ($gl) goal bump exits 0" test $rc -eq 0
+  sg_stop "$gate" >/dev/null
+  check "stop-gate ($gl) higher fix_iterations resets stop_blocks" test "$(sg_goal .stop_blocks)" = 0
+  check "stop-gate ($gl) higher fix_iterations is stored" test "$(sg_goal .seen_fix_iterations)" = 1
+
+  sg_prep
+  sg_pin
+  sg_commit
+  sg_set '.stop_blocks = 4 | .total_blocks = 29'
+  sg_stop "$gate" >/dev/null
+  check "stop-gate ($gl) total ceiling still escalates on local progress" test "$(sg_goal .status)" = escalated
+  check "stop-gate ($gl) total ceiling reason" grep -q 'total stop blocks reached 30' "$(lw_goal_file)"
+  check "stop-gate ($gl) progress resets stop_blocks even at the ceiling" test "$(sg_goal .stop_blocks)" = 0
+
+  sg_prep
+  sg_set '.stop_blocks = 4 | .total_blocks = 2'
+  LCWD="" LH goal wait "npm test" --ttl 30m >"$FX/out" 2>"$FX/err"; rc=$?
+  check "stop-gate ($gl) goal wait from the main checkout exits 0" test $rc -eq 0
+  outs=""
+  for _ in 1 2 3 4 5 6; do outs="$outs$(sg_stop "$gate")"; done
+  check "stop-gate ($gl) wait: stops are allowed" test -z "$outs"
+  check "stop-gate ($gl) wait: stop_blocks unchanged" test "$(sg_goal .stop_blocks)" = 4
+  check "stop-gate ($gl) wait: total_blocks unchanged" test "$(sg_goal .total_blocks)" = 2
+  check "stop-gate ($gl) wait: goal stays active" test "$(sg_goal .status)" = active
+
+  sg_prep
+  sg_pin
+  sg_set --argjson u "$(( $(date +%s) - 5 ))" '.stop_blocks = 4 | .wait_until = $u | .wait_reason = "old"'
+  sg_stop "$gate" >/dev/null
+  check "stop-gate ($gl) expired wait counts and escalates" test "$(sg_goal .status)" = escalated
+  check "stop-gate ($gl) expired wait says finish local review" grep -q 'finish local review' "$(lw_goal_file)"
+  check "stop-gate ($gl) expired wait does not say push" bash -c '! grep -q push "$1"' _ "$(lw_goal_file)"
+
+  sg_prep
+  sg_pin
+  sg_stop "$gate" >"$FX/stop.out"
+  check "stop-gate ($gl) before reviews: blocks" test "$(jq -r .decision "$FX/stop.out")" = block
+  check "stop-gate ($gl) before reviews: says finish local review" grep -q 'finish local review' "$FX/stop.out"
+  check "stop-gate ($gl) before reviews: does not say push" bash -c '! grep -q push "$1"' _ "$FX/stop.out"
+
+  sg_prep
+  sha="$(git -C "$T" rev-parse HEAD)"
+  sg_set --arg s "$sha" '.pr = null | .stop_blocks = 0 | .seen_fix_iterations = 0 | .local_sha = $s | del(.wait_until, .wait_reason) | .reviews = {"k":{"code":{"verdict":"pass","sha":$s,"at":"t"},"security":{"verdict":"pass","sha":$s,"at":"t"}}}'
+  fp="$(jq -c -S '.reviews // {}' "$(lw_goal_file)")"
+  sg_set --arg fp "$fp" '.reviews_fp = $fp'
+  sg_stop "$gate" >"$FX/stop.out"
+  check "stop-gate ($gl) after both verdicts: says push the branch" grep -q 'push the branch' "$FX/stop.out"
+  check "stop-gate ($gl) after both verdicts: does not say finish local review" bash -c '! grep -q "finish local review" "$1"' _ "$FX/stop.out"
+
+  sg_prep
+  sg_pin
+  sg_set '.stop_blocks = 4'
+  hold='{"background_tasks":[{"status":"running","type":"shell"}],"subagents":[{"status":"running","type":"code-reviewer"}]}'
+  outs=""
+  for _ in 1 2 3 4 5 6; do outs="$outs$(sg_stop "$gate" "$hold")"; done
+  check "stop-gate ($gl) running background work: stops are allowed" test -z "$outs"
+  check "stop-gate ($gl) running background work: stop_blocks unchanged" test "$(sg_goal .stop_blocks)" = 4
+  check "stop-gate ($gl) running background work: stays active" test "$(sg_goal .status)" = active
+  sg_stop "$gate" '{"background_tasks":[{"status":"completed","type":"shell"}],"subagents":[{"status":"idle","type":"code-reviewer"}]}' >/dev/null
+  check "stop-gate ($gl) finished background work counts again" test "$(sg_goal .status)" = escalated
+
+  sg_prep
+  sg_pin
+  sg_set '.stop_blocks = 4'
+  sleep 120 &
+  live=$!
+  sg_stop "$gate" "$(jq -nc --argjson p "$live" '{background_pids:[$p]}')" >/dev/null
+  check "stop-gate ($gl) live background pid is not counted" test "$(sg_goal .stop_blocks)|$(sg_goal .status)" = "4|active"
+  kill "$live" 2>/dev/null || true
+  wait "$live" 2>/dev/null || true
+  dead=4194303
+  while kill -0 "$dead" 2>/dev/null; do dead=$((dead - 1)); done
+  sg_stop "$gate" "$(jq -nc --argjson p "$dead" '{background_pids:[$p]}')" >/dev/null
+  check "stop-gate ($gl) dead background pid counts" test "$(sg_goal .status)" = escalated
+
+  sg_prep
+  sg_pin
+  sg_set '.stop_blocks = 4'
+  rm -rf "$TMP/notify"
+  mkdir -p "$TMP/notify/sess-gate/inflight"
+  touch "$TMP/notify/sess-gate/inflight/marker"
+  outs=""
+  for _ in 1 2 3 4 5 6; do outs="$outs$(sg_stop "$gate" '{"session_id":"sess-gate"}')"; done
+  check "stop-gate ($gl) in-flight subagent marker: stops are allowed" test -z "$outs"
+  check "stop-gate ($gl) in-flight subagent marker: stop_blocks unchanged" test "$(sg_goal .stop_blocks)" = 4
+  touch -d '30 minutes ago' "$TMP/notify/sess-gate/inflight/marker"
+  sg_stop "$gate" '{"session_id":"sess-gate"}' >/dev/null
+  check "stop-gate ($gl) stale subagent marker counts" test "$(sg_goal .status)" = escalated
+  rm -rf "$TMP/notify"
+
+  if [ -d /proc ]; then
+    sg_prep
+    sg_pin
+    sg_set '.stop_blocks = 4'
+    ( cd "$T" && exec -a "npm test" sleep 120 ) &
+    live=$!
+    sleep 0.2
+    sg_stop "$gate" >/dev/null
+    check "stop-gate ($gl) live npm test in the worktree is not counted" test "$(sg_goal .stop_blocks)|$(sg_goal .status)" = "4|active"
+    kill "$live" 2>/dev/null || true
+    wait "$live" 2>/dev/null || true
+  fi
+done
+LCWD=""
+check "stop-gate cursor copy is the portable claude hook" python3 - "$HOOKS/ship-stop-gate.sh" "$HERE/plugins/fmflurry-harness/hooks/scripts/ship-stop-gate.sh" <<'PY'
+import sys
+from pathlib import Path
+src = Path(sys.argv[1]).read_text()
+dst = Path(sys.argv[2]).read_text().replace(
+    "${TMPDIR:-/tmp}/fmflurry-harness/state/notify",
+    "$HOME/.claude/state/notify",
+).replace(
+    "${CURSOR_PLUGIN_ROOT:-/nonexistent}/scripts/agent-harness",
+    "$HOME/.claude/scripts/agent-harness",
+)
+sys.exit(0 if src == dst else 1)
+PY
+check "cursor adapter source matches the plugin copy" cmp -s "$HERE/scripts/cursor-plugin/cursor-adapter.sh" "$HERE/plugins/fmflurry-harness/hooks/scripts/cursor-adapter.sh"
+sg_prep
+sg_pin
+sg_set '.stop_blocks = 4'
+out="$(cd "$LM" && jq -nc '{conversation_id:"c",loop_count:0,background_tasks:[{status:"running",type:"shell",command:"npm test SECRET"}]}' | env -u AGENT_STATE_DIR CLAUDE_PROJECT_DIR="$LM" NOTIFY_STATE_DIR="$TMP/notify" PATH="$TMP/lsleep:$TMP/lbin:$PATH" bash "$HERE/scripts/cursor-plugin/cursor-adapter.sh" "$HOOKS/ship-stop-gate.sh" stop)"
+check "cursor adapter: a running background task allows the stop" test "$(jq -c . <<<"$out")" = '{}'
+check "cursor adapter: that stop is not counted" test "$(sg_goal .stop_blocks)|$(sg_goal .status)" = "4|active"
+check "cursor adapter: task text is not stored on the goal" bash -c '! grep -q SECRET "$1"' _ "$(lw_goal_file)"
 
 # 0.4.12: a merged PR does not excuse an unsafe worktree on an escalated goal
 lw_td git; lw_set_reg '.status = "escalated"'; echo x >>"$T/b"

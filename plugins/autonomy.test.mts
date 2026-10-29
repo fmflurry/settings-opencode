@@ -185,6 +185,47 @@ test("bash tool rejects a pull request body without a visual report", async () =
   await plugin["tool.execute.before"]({ tool: "bash" }, { args: { command: "git status" } });
 });
 
+test("idle stop gate sees running OpenCode child sessions", async () => {
+  const { root } = setup();
+  const directory = path.join(root, "proj");
+  const hooks = path.join(directory, ".claude", "hooks");
+  const state = path.join(directory, ".claude", "state");
+  fs.mkdirSync(hooks, { recursive: true });
+  fs.mkdirSync(state, { recursive: true });
+  fs.writeFileSync(path.join(state, "autonomy.on"), "");
+  const seen = path.join(root, "seen.json");
+  fs.writeFileSync(
+    path.join(hooks, "ship-stop-gate.sh"),
+    `cat > ${JSON.stringify(seen)}\nprintf '%s\\n' '{"decision":"block","reason":"hold"}'\n`,
+  );
+  const prompts: string[] = [];
+  const plugin = await AutonomyPlugin({
+    directory,
+    client: {
+      session: {
+        get: async () => ({ data: {} }),
+        list: async () => ({
+          data: [
+            { id: "root", parentID: null, status: { type: "idle" }, agent: "conductor" },
+            { id: "other", parentID: null, status: { type: "busy" }, agent: "coder" },
+            { id: "child", parentID: "root", status: { type: "busy" }, agent: "code-reviewer" },
+            { id: "done", parentID: "root", status: { type: "idle" }, agent: "security-reviewer" },
+          ],
+        }),
+        promptAsync: async (args: { body?: { parts?: Array<{ text?: string }> } }) => {
+          prompts.push(args.body?.parts?.[0]?.text ?? "");
+        },
+      },
+    } as never,
+    $: (() => ({ cwd: () => ({ quiet: () => ({ nothrow: () => Promise.resolve() }) }) })) as never,
+  });
+  await plugin.event({ type: "session.idle", properties: { sessionID: "root" } });
+  const body = JSON.parse(fs.readFileSync(seen, "utf8"));
+  assert.equal(body.session_id, "root");
+  assert.deepEqual(body.subagents, [{ status: "running", type: "code-reviewer" }]);
+  assert.deepEqual(prompts, ["hold"]);
+});
+
 test("bash tool throws when the checkout git guard asks", async () => {
   const { root } = setup();
   const directory = path.join(root, "proj");

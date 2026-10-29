@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ship stop gate progress</title>
+<style>
+  :root { color-scheme: light; --ink: #1c1917; --muted: #57534e; --line: #d6d3d1; --paper: #fafaf9; --card: #ffffff; --accent: #9a3412; --ok: #3f6212; --bad: #9f1239; --hold: #1d4ed8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.45 "Segoe UI", system-ui, sans-serif; color: var(--ink); background: var(--paper); }
+  main { max-width: 1080px; margin: 0 auto; padding: 28px 22px 40px; }
+  h1 { font-size: 32px; line-height: 1.15; margin: 0 0 8px; }
+  h2 { font-size: 18px; margin: 28px 0 10px; }
+  p { margin: 0 0 12px; }
+  .lede { color: var(--muted); max-width: 78ch; }
+  .tag { display: inline-block; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .card strong { display: block; margin-bottom: 4px; }
+  .ok { color: var(--ok); font-weight: 700; }
+  .bad { color: var(--bad); font-weight: 700; }
+  .hold { color: var(--hold); font-weight: 700; }
+  code { font-family: ui-monospace, "Cascadia Code", monospace; font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; background: var(--card); }
+  th, td { text-align: left; border-bottom: 1px solid var(--line); padding: 8px 10px; vertical-align: top; }
+  th { font-size: 13px; color: var(--muted); font-weight: 650; }
+  .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .step { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 140px; }
+  .arrow { color: var(--muted); font-weight: 700; }
+  .note { font-size: 14px; color: var(--muted); }
+  @media (max-width: 800px) {
+    h1 { font-size: 26px; }
+    .grid { grid-template-columns: 1fr; }
+    main { padding: 18px 14px 28px; }
+    .flow { flex-direction: column; align-items: stretch; }
+    .arrow { transform: rotate(90deg); align-self: center; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <p class="tag">fmflurry-harness 0.4.30 · fix/ship-stop-gate-progress</p>
+  <h1>A stop during tests or review is not “no progress”</h1>
+  <p class="lede"><code>ship-stop-gate.sh</code> escalated a healthy autonomous run because, before a PR existed, every stop looked empty. The same hook now runs for Claude, Cursor, OpenCode, Conductor, and Monolith.</p>
+
+  <h2>What a stop does now</h2>
+  <div class="flow">
+    <div class="step"><strong>1. Hold</strong><br>Active <code>goal wait</code>, or a live test, review, or subagent.</div>
+    <span class="arrow">▶</span>
+    <div class="step"><strong>Allow</strong><br><span class="hold">Do not count.</span> <code>stop_blocks</code> and <code>total_blocks</code> stay put.</div>
+    <span class="arrow">▶</span>
+    <div class="step"><strong>2. Progress</strong><br>Worktree tip, <code>.reviews</code>, <code>fix_iterations</code>, or PR head changed.</div>
+    <span class="arrow">▶</span>
+    <div class="step"><strong>Reset</strong><br><span class="ok"><code>stop_blocks = 0</code></span><br><code>total_blocks + 1</code></div>
+    <span class="arrow">▶</span>
+    <div class="step"><strong>3. Empty</strong><br>Nothing moved and nothing is running.</div>
+    <span class="arrow">▶</span>
+    <div class="step"><strong>Count</strong><br><span class="bad"><code>stop_blocks + 1</code></span><br>Escalate at 5 consecutive, or 30 total.</div>
+  </div>
+
+  <h2>Before and after</h2>
+  <table>
+    <thead><tr><th>Signal</th><th>0.4.28</th><th>0.4.30</th></tr></thead>
+    <tbody>
+      <tr><td>No PR yet. Local commit, review verdict, or <code>goal bump</code>.</td><td class="bad">Head from <code>gh pr view</code> is empty. Every stop is no progress.</td><td class="ok">Compare <code>git rev-parse</code> in the registered worktree with <code>local_sha</code>. A changed <code>.reviews</code> entry or a higher <code>fix_iterations</code> also counts.</td></tr>
+      <tr><td>Progress after four empty stops.</td><td class="bad"><code>stop_blocks</code> kept climbing across the whole run.</td><td class="ok">Progress sets <code>stop_blocks</code> back to 0. <code>total_blocks</code> still climbs and still escalates at 30.</td></tr>
+      <tr><td>Turn ends while <code>npm test</code> or <code>code-reviewer</code> is running.</td><td class="bad">Stdin was discarded (<code>cat &gt;/dev/null</code>). The stop was counted.</td><td class="ok">Hook input, live pids, inflight markers, and a matching process in the worktree are a hold.</td></tr>
+      <tr><td>Block text before both verdicts pass.</td><td class="bad">Said “push the branch, open a PR”. The push guard still denies that push.</td><td class="ok">Says “finish local review”. After both verdicts match the local tip, it says to push.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>How to wait</h2>
+  <div class="grid">
+    <section class="card">
+      <span class="tag">Explicit</span>
+      <strong><code>agent-harness goal wait "&lt;reason&gt;" --ttl 30m</code></strong>
+      <p><code>--ttl</code> is required: <code>45s</code>, <code>30m</code>, or <code>2h</code>, from 1 second through 24 hours. Stops inside the TTL are allowed and not counted. When it expires, the next empty stop counts again.</p>
+    </section>
+    <section class="card">
+      <span class="tag">Detected</span>
+      <strong>Background work the host can see</strong>
+      <p>A running background task or subagent in the hook input, a live <code>background_pids</code> entry, a notify inflight marker newer than 15 minutes, or a known test or review command whose cwd is the registered worktree. Cursor forwards status, type, and pids only. OpenCode passes running child sessions.</p>
+    </section>
+  </div>
+
+  <h2>Where it ships</h2>
+  <table>
+    <thead><tr><th>Target</th><th>File</th></tr></thead>
+    <tbody>
+      <tr><td>Claude, Conductor, Monolith</td><td><code>.claude/hooks/ship-stop-gate.sh</code> and <code>scripts/agent-harness/goal.sh</code> <code>wait</code></td></tr>
+      <tr><td>Cursor</td><td><code>plugins/fmflurry-harness/hooks/scripts/ship-stop-gate.sh</code> and <code>cursor-adapter.sh</code></td></tr>
+      <tr><td>OpenCode</td><td><code>plugins/autonomy.ts</code> passes <code>session_id</code> and running children into the same hook</td></tr>
+      <tr><td>Skill and rules</td><td><code>skills/ship/SKILL.md</code>, autonomy rule, <code>instructions/autonomy.md</code></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Checks on this branch</h2>
+  <table>
+    <thead><tr><th>Command</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td><code>node scripts/cursor-plugin/check.mjs</code></td><td class="ok">cursor-plugin check OK</td></tr>
+      <tr><td><code>npm test</code></td><td class="ok">252 passed, 0 failed, 2 skipped</td></tr>
+      <tr><td><code>bash scripts/agent-harness/test/run.sh</code></td><td class="ok">2188 passed, 0 failed</td></tr>
+      <tr><td><code>node scripts/agent-harness/test/guard-differential.mjs</code></td><td class="ok">1356 comparisons, 0 differences, 4 intended relaxations</td></tr>
+    </tbody>
+  </table>
+  <p class="note">Regression coverage: a pre-PR local commit is progress, progress resets <code>stop_blocks</code>, the total ceiling of 30 still escalates, <code>goal wait</code> is honored and then expires, and the block text says “finish local review” until both verdicts pass.</p>
+
+  <h2>Risk</h2>
+  <p>An empty stored <code>local_sha</code> is only a baseline, so the first look does not reset the counter. A hold does not update baselines. When the wait expires or the process exits, the next empty stop counts. <code>total_blocks</code> still ends a run that stops 30 times even when each stop showed progress.</p>
+
+<section id="kpi-metrics" style="margin-top:28px">
+<h2 style="font-size:18px;margin:0 0 8px">Metrics</h2>
+<p style="margin:0 0 10px;color:#57534e">fmflurry/settings-opencode  fix/ship-stop-gate-progress  pr n/a. Status: complete.</p>
+<table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #d6d3d1"><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Wall</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">2m56s</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Active</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">2m56s (gaps over 5m excluded)</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Sessions</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">cursor 0, claude 0, opencode 0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tokens</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">n/a</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tool failures</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Guard blocks</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">3</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Review rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Fix rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr></table>
+<p style="margin:10px 0 0">Tools: none</p>
+<p style="margin:4px 0 0">Skills: none</p>
+<p style="margin:4px 0 0">Agents: main 0</p>
+<p style="margin:4px 0 0">Failure tools: none. Durations: n/a.</p>
+</section>
+</main>
+</body>
+</html>

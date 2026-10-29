@@ -36,12 +36,17 @@ unresolved threads, a `ship-merge` refusal) and loop. Escalate only a human-only
 - `agent-harness teardown-merged-worktree <pr>` (run by `agent-harness ship-merge` for a registered goal), only after the PR is MERGED:
   removes the registered goal worktree of that PR, then its remote and local head branch, then its registry file. It runs
   only when every check in the worktree destruction rule passes, and it never touches the main checkout. Nothing else.
+- `agent-harness worktree-rm <path> --confirmed`, when the worktree is clean and its branch is merged into the default
+  branch, or its upstream or pull request is merged. A squash merge counts: `gh pr view <branch> --json state` is
+  `MERGED` and HEAD is that pull request's head, or the branch tip is reachable from the default branch, or the trees
+  are equal. It refuses a dirty worktree, unmerged work, the main checkout, and a path that is not a worktree of the
+  repo. Raw `git worktree remove` stays denied.
 
 These stay forbidden in every mode:
 
 - any push to the base branch, with or without force
 - `git push --mirror` and `git push --all`
-- worktree removal in any form, including `agent-harness worktree-rm` (it refuses while the flag is on). The one exception is the teardown in rule (d).
+- raw worktree removal: `git worktree remove|prune|move`, `orca worktree rm`, and recursive deletion of a worktree directory. `agent-harness worktree-rm <path> --confirmed` is allowed only under the checks in rule (d).
 - raw branch deletion: `git branch -D`, `git push --delete` or `git push origin :<ref>`, `gh api -X DELETE .../git/refs/heads/...`.
   Only `agent-harness cleanup` deletes branches.
 - commands on the deny list, and any merge other than `agent-harness ship-merge`

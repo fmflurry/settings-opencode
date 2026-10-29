@@ -65,10 +65,14 @@ the run back to fix, then local review again, then push, CI and the merge retry.
 one of two states: the goal is `done` (PR merged), or it is escalated. Escalate only when a human-only blocker stops
 it, or when a full loop iteration makes no progress (the same blocker and the same failure as the one before). Record
 the reason with `agent-harness goal escalate "<reason>"`. The Stop hook (`ship-stop-gate`) blocks an early stop while
-the goal is active and the PR is unmerged. It escalates after five no-progress blocks or 30 blocks in total, and it
-fails open when the host cannot be read. The review/fix loop stops when the same findings repeat (fingerprint piped to
+the goal is active and the PR is unmerged. Five consecutive empty stops escalate. A local commit, a review verdict, a
+higher fix iteration, or a new PR head resets that count. Thirty counted stops still escalate. A stop is not counted
+during `agent-harness goal wait "<reason>" --ttl 30m` (at most 24h), or while a background test, review, or subagent is
+still running. Before both verdicts pass, the block says to finish local review, not to push. The hook fails open when
+the host cannot be read. The review/fix loop stops when the same findings repeat (fingerprint piped to
 `agent-harness goal bump`, exit 3), with a safety ceiling of 10 rounds. Stop and tell the user the remaining findings.
-Do not start another fix round. Do not work around the loop by ending the turn.
+Do not start another fix round. Do not work around the loop by ending the turn, except while that wait is active or
+while that background work is still running.
 
 ## Scope
 

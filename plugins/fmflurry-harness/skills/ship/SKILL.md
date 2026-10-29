@@ -188,7 +188,9 @@ blocked path in [Stop conditions](#stop-conditions), and stop.
 ## Stop conditions
 
 The run ends in one of two states: **done** (merged and torn down) or **escalated**. Do not stop early while the goal is
-active and the PR is unmerged. Do not end the turn to wait for a fix you can make yourself.
+active and the PR is unmerged. Do not end the turn to wait for a fix you can make yourself. Ending the turn while a
+background test or review is still running, or after `agent-harness goal wait`, is how you wait. See
+[Waiting for tests or reviews](#waiting-for-tests-or-reviews).
 
 - **Done.** The PR is merged, `agent-harness teardown-merged-worktree` has run (stage 13), and `agent-harness notify done`
   has been sent. The worktree, branch and registry are gone, unless teardown printed a partial result, which is kept
@@ -201,9 +203,49 @@ active and the PR is unmerged. Do not end the turn to wait for a fix you can mak
 - **Repeated findings.** `agent-harness goal bump` exits 3 when the same findings (fingerprint of the stdin lines)
   repeat after a fix round, or when fix rounds reach the safety ceiling of 10. Stop. Tell the user the remaining
   confirmed Important findings. Do not start another fix round. The no-progress rule above can still escalate earlier.
-- **Safety stop.** The Stop gate escalates after 5 NO-PROGRESS blocks or 30 blocks in total. Treat it as escalated, then
-  the blocked path. A `goal bump` exit 3 is the same kind of stop: the Important findings that remain go to the user, and the loop ends.
+- **Safety stop.** The Stop gate escalates after 5 consecutive no-progress blocks, or 30 counted blocks in total. A local
+  commit, a recorded review, a higher `fix_iterations`, or a new PR head resets the consecutive count. Treat an
+  escalation as escalated, then the blocked path. A `goal bump` exit 3 is the same kind of stop: the Important findings
+  that remain go to the user, and the loop ends.
 - **Security.** A gitleaks finding or a secret exposure: stop, run `security-reviewer`, rotate. Never allowlist.
+
+### Waiting for tests or reviews
+
+The stop gate counts a stop only when the goal made no progress and nothing is still running. A run waiting on tests
+or reviews must not be stopped as no progress.
+
+Before you end the turn for work this session cannot see (a long test, a review that has not returned), record a wait:
+
+```bash
+agent-harness goal wait "<reason>" --ttl 30m
+```
+
+`--ttl` is required. The value is a positive number plus `s`, `m`, or `h` (`45s`, `30m`, `2h`), from 1 second through
+24 hours. Until that time, stops are allowed and neither `stop_blocks` nor `total_blocks` increases. When the TTL
+expires, the next empty stop counts again. A counted stop clears the wait.
+
+The gate also skips the count, with no `goal wait`, while it can see live work:
+
+- the hook input lists a background task or subagent that is not finished
+- a pid in `background_pids` is still alive
+- this session has a notify inflight marker newer than 15 minutes
+- a known test or review command (`npm test`, `pytest`, `cargo test`, `code-reviewer`, `security-reviewer`, and the
+  other commands the hook names) is running with its cwd in the registered worktree
+
+Ending the turn in those cases is what the harness expects. Claude resumes when the task notification arrives.
+OpenCode re-prompts only when the gate blocks.
+
+Progress since the last counted stop is any of: the PR head, the branch tip in the registered worktree, a change to
+`.reviews`, or a higher `fix_iterations`. Progress sets `stop_blocks` to 0. `total_blocks` still increases on every
+counted stop, including one that showed progress, and 30 total blocks still escalate. The first stored look at the
+local tip is a baseline, not progress.
+
+The block text matches the stage. Before both code and security verdicts pass for the current local tip, it says to
+finish local review and record both verdicts. It does not say to push: the push guard still denies `git push` and
+`gh pr create` until both pass. After both pass and there is no PR, it says to push the branch, open the PR, and
+record it with `goal.sh pr <n>`. With a PR, it says to wait for checks and then run `agent-harness ship-merge`.
+
+Claude, Cursor, OpenCode, Conductor, and Monolith run this same hook.
 
 ### Blocked path
 

@@ -62,7 +62,9 @@ the run back to fix, then local review again, then push, CI and the merge retry.
 one of two states: the goal is `done` (PR merged), or it is escalated. Escalate only when a human-only blocker stops
 it, or when a full loop iteration makes no progress (the same blocker and the same failure as the one before). Record
 the reason with `agent-harness goal escalate "<reason>"`. Do not end the turn early while the goal is active and the
-PR is unmerged. The review/fix loop stops when the same findings repeat (fingerprint piped to
+PR is unmerged, except to wait on background tests or reviews: record `agent-harness goal wait "<reason>" --ttl 30m`
+(at most 24h), or end the turn while a background test, review, or subagent is still running. Those stops are not
+counted. The review/fix loop stops when the same findings repeat (fingerprint piped to
 `agent-harness goal bump`, exit 3), with a safety ceiling of 10 rounds. Stop and tell the user the remaining findings.
 Do not start another fix round.
 
@@ -73,7 +75,7 @@ Do not start another fix round.
 - Blocks the `question` tool while the flag is on (rules a and c).
 - Injects autonomy context into the system prompt through `experimental.chat.system.transform`, using the shared `autonomy-context.sh` hook.
 - Runs `autonomy-git-guard.sh` before each bash call and denies forbidden git commands (rule d).
-- On `session.idle` of a root session, runs `ship-stop-gate.sh`. If the gate blocks, the plugin re-prompts the session with the gate's reason. OpenCode has no stop hook, so the turn ends and a new one starts. The gate's caps escalate after 5 no-progress blocks or 30 in total.
+- On `session.idle` of a root session, runs `ship-stop-gate.sh` and passes the session id plus running child sessions. If the gate blocks, the plugin re-prompts the session with the gate's reason. OpenCode has no stop hook, so the turn ends and a new one starts. A stop during `goal wait` or a live child review is not counted. Consecutive empty stops escalate at 5. A local commit, a review verdict, a higher fix iteration, or a new PR head resets that count. Thirty counted stops still escalate. Before both verdicts pass, the reason says to finish local review, not to push.
 
 `install.sh` deploys the three hooks to `~/.config/opencode/scripts/agent-harness/hooks/`. OpenCode-only installs also get the `~/.local/bin/agent-harness` wrapper.
 

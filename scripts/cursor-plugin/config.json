@@ -2,7 +2,7 @@
   "name": "fmflurry-harness",
   "displayName": "fmflurry Harness",
   "description": "Monolith harness for Cursor. The primary agent writes, skills load in this session, and review subagents stay isolated.",
-  "version": "0.4.29",
+  "version": "0.4.30",
   "homepage": "https://github.com/fmflurry/settings-opencode/tree/master/plugins/fmflurry-harness",
   "repository": "https://github.com/fmflurry/settings-opencode",
   "keywords": ["agents", "conductor", "subagents", "skills", "rules", "hooks", "mcp", "code-memory"],

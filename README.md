@@ -926,12 +926,17 @@ set a safety ceiling of `max_fix_iterations` 10. Empty stdin exits 2. The same b
   finding, or a green check counts as progress. The agent then runs `agent-harness goal escalate`. For review
   findings `goal bump` also compares a fingerprint of the findings between rounds.
 - `.claude/hooks/ship-stop-gate.sh` (Cursor copy: `plugins/fmflurry-harness/hooks/scripts/ship-stop-gate.sh`)
-  increments `stop_blocks` when the PR head SHA is unchanged. At 5 it escalates with
-  `no progress after 5 stop blocks`. A changed head increments `total_blocks` only. At 30 total blocks it
-  escalates. While the goal is active and the PR is unmerged, the hook blocks an early stop. If GitHub cannot
-  be read and those caps are not hit, the hook exits 0. OpenCode has no Stop hook. `plugins/autonomy.ts` runs
-  the same script on `session.idle` of a root session and re-prompts with the reason
-  (`instructions/autonomy.md`).
+  counts a stop as no progress only when nothing moved: the PR head, the registered worktree branch tip,
+  `.reviews`, and `fix_iterations`. Five consecutive empty stops escalate with
+  `no progress after 5 stop blocks`. Any of those changes resets `stop_blocks` to 0. Every counted stop
+  increments `total_blocks`, and 30 total blocks escalate even when the last stop was progress. Stops are not
+  counted during `agent-harness goal wait "<reason>" --ttl 30m` (max 24h), or while the hook input, a live pid,
+  an inflight marker, or a test or review process in the worktree shows background work. Before both verdicts
+  pass for the current local tip, the block says to finish local review. After both pass and there is no PR, it
+  says to push and open the PR. While the goal is active and the PR is unmerged, the hook blocks an early stop.
+  If GitHub cannot be read, the hook exits 0 and does not count the stop. OpenCode has no Stop hook.
+  `plugins/autonomy.ts` runs the same script on `session.idle` of a root session, passes running child
+  sessions, and re-prompts with the reason (`instructions/autonomy.md`). Conductor and Monolith use this hook.
 
 **When it escalates.** `skills/ship/SKILL.md` (Human-only) stops for missing credentials, account limits or
 billing, an external outage, a product decision the repo cannot answer, or an action on the forbidden list.
@@ -1355,7 +1360,7 @@ Le run est une boucle, tenue par `skills/ship/SKILL.md` : implémenter, vérifie
 **Règle d'absence de progrès.** Deux contrôles portent ce nom. Ce n'est pas le même test.
 
 - `skills/ship/SKILL.md` (Stop conditions) traite une itération complète comme sans progrès quand le même finding Important et le même échec restent, ou quand le même blocage hors revue échoue de la même façon. Un nouvel échec, un nouveau finding, ou un check vert compte comme un progrès. L'agent lance alors `agent-harness goal escalate`. Pour les findings de revue, `goal bump` compare aussi une empreinte des findings entre deux tours.
-- `.claude/hooks/ship-stop-gate.sh` (copie Cursor : `plugins/fmflurry-harness/hooks/scripts/ship-stop-gate.sh`) incrémente `stop_blocks` quand le SHA de tête de la PR est inchangé. À 5, il escalade avec `no progress after 5 stop blocks`. Une tête changée n'incrémente que `total_blocks`. À 30 blocs au total, il escalade. Tant que le goal est actif et que la PR n'est pas fusionnée, le hook bloque un arrêt anticipé. Si GitHub est illisible et que ces plafonds ne sont pas atteints, le hook sort 0. OpenCode n'a pas de hook Stop. `plugins/autonomy.ts` lance le même script sur `session.idle` d'une session racine et relance avec la raison (`instructions/autonomy.md`).
+- `.claude/hooks/ship-stop-gate.sh` (copie Cursor : `plugins/fmflurry-harness/hooks/scripts/ship-stop-gate.sh`) compte un arrêt comme sans progrès seulement quand rien n'a bougé : la tête de la PR, la pointe de branche du worktree enregistré, `.reviews`, et `fix_iterations`. Cinq arrêts vides consécutifs escaladent avec `no progress after 5 stop blocks`. Un de ces changements remet `stop_blocks` à 0. Chaque arrêt compté incrémente `total_blocks`, et 30 blocs au total escaladent même si le dernier arrêt était un progrès. Les arrêts ne sont pas comptés pendant `agent-harness goal wait "<reason>" --ttl 30m` (24 h maximum), ni tant que l'entrée du hook, un pid vivant, un marqueur inflight, ou un processus de test ou de revue dans le worktree montre un travail en arrière-plan. Avant que les deux verdicts passent pour la pointe locale, le blocage dit de finir la revue locale. Après les deux verdicts, sans PR, il dit de pousser et d'ouvrir la PR. Tant que le goal est actif et que la PR n'est pas fusionnée, le hook bloque un arrêt anticipé. Si GitHub est illisible, le hook sort 0 et ne compte pas l'arrêt. OpenCode n'a pas de hook Stop. `plugins/autonomy.ts` lance le même script sur `session.idle` d'une session racine, transmet les sessions enfants en cours, et relance avec la raison (`instructions/autonomy.md`). Conductor et Monolith utilisent ce hook.
 
 **Quand ça escalade.** `skills/ship/SKILL.md` (Human-only) s'arrête pour des identifiants manquants, des limites de compte ou de facturation, une panne externe, une décision produit que le dépôt ne peut pas trancher, ou une action de la liste interdite. Il s'arrête aussi sur la règle d'absence de progrès du skill, sur la sortie 3 de `goal bump`, et sur les plafonds du stop gate ci-dessus. Un finding gitleaks ou une exposition de secret arrête le run pour `security-reviewer` et une rotation. Un résultat `Wait or cancel` du contrôle des PR ouvertes escalade (`skills/open-pr-check/SKILL.md`). Le chemin bloqué conserve le worktree, la branche et le registre (`skills/ship/SKILL.md`, Blocked path).
 

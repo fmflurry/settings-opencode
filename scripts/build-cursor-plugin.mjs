@@ -145,6 +145,7 @@ write('hooks/scripts/cursor-adapter.sh', read(path.join(repoDir, 'scripts/cursor
 for (const script of hooks.scripts) {
   write(`hooks/scripts/${script}`, portableHookScript(read(path.join(claudeDir, 'hooks', script))), 0o755);
 }
+write('hooks/scripts/goal-state.sh', portableHookScript(read(path.join(claudeDir, 'hooks', 'goal-state.sh'))), 0o755);
 write('hooks/scripts/codememory-mode.sh', portableHookScript(read(path.join(claudeDir, 'hooks', 'codememory-mode.sh'))), 0o755);
 
 write('mcp.json', JSON.stringify(buildMcp(opencodeCfg), null, 2) + '\n');

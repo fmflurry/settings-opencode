@@ -8,7 +8,8 @@ absent. `<slug>` is a short kebab-case name from the goal. `<wt>` is the goal wo
 `<type>/<scope>-<short-description>` is the branch convention from the git-workflow skill (Branch Convention).
 
 Keep the orchestrator's shell in the main checkout. Pass `<wt>` to every subagent brief and use `git -C <wt> ...` or
-absolute paths. Never `cd` into the worktree in the persistent shell.
+absolute paths. Never `cd` into the worktree in the persistent shell. Goal commands are the exception: run them in a
+subshell whose cwd is `<wt>`, `( cd <wt> && agent-harness goal … )`. They follow that checkout, not the main checkout.
 
 ## 0. Init
 
@@ -26,11 +27,12 @@ agent-harness ship-init --adopt <pr>                                  # resume a
   via, pr, head_oid, status, reason, report, created_at}`. The file is local only, never tracked, one per goal, and
   survives the worktree. `slug` is the registry file name: `ship-init` prints `slug=<slug>` on stderr (the worktree path
   is the only thing on stdout), and `agent-harness report` accepts the slug or the branch.
-- It writes `branch` and `slug` into `goal.json` (created or merged). The state lives in one place, the main checkout:
-  `<main>/.claude/state/{goal.json,autonomy.on}`. Scripts and hooks resolve it from the first entry of
-  `git worktree list --porcelain`, so `goal pr|sha|escalate` and `ship-merge` behave the same from the main checkout
-  and from inside the worktree. The registry mirror is keyed on the `slug` in `goal.json`, not on the cwd's HEAD. One
-  `goal.json` tracks one goal at a time: a second `ship-init` repoints it and prints a note.
+- It writes a fresh goal file for that worktree and branch under `<main>/.claude/state/goals/<hash>.json`. The hash is
+  the git common directory, the worktree path, and the branch (`detached` when HEAD is detached). `autonomy.on` stays
+  at `<main>/.claude/state/autonomy.on`. `goal pr|sha|review|wait|escalate|reset` follow the checkout they run in, so
+  run them in `<wt>`. `ship-merge` and `cleanup` take a PR and update the registered worktree's file. A second
+  `ship-init` writes the new checkout's file and leaves the first goal's file alone. An old unkeyed `goal.json` is
+  renamed to `goal.shared.quarantine.json` and is not applied to the current branch.
 - The stop gate mirrors `status` and `reason` (escalated or done) into the registry as well.
 - Read the registry for `path` before dispatching any subagent. Do not infer the path from the branch name.
 - Never reuse a branch that already has an open PR you did not create. Use `--adopt` for an existing PR of this goal. After `--adopt` on a draft PR, run `gh pr ready <pr>` before `ship-merge`.

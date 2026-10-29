@@ -2,6 +2,11 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.31] - 2026-10-29
+
+- Goal state is one file per repository, branch, and worktree: `<main>/.claude/state/goals/<hash>.json`. The hash is the git common directory, the worktree path, and the branch (`detached` when HEAD is detached). Switching branches or using two worktrees no longer shares stop counters, the stop gate, or a wait. An old unkeyed `.claude/state/goal.json` is renamed to `goal.shared.quarantine.json` and is not applied to the current branch. `autonomy.on` stays in the main checkout. CLI and hooks use the same key.
+- `agent-harness goal reset [--field stop_blocks|total_blocks|gate|wait|all]` clears those fields for the current checkout only, prints what it cleared, and exits 2 on an unknown field or when no goal file exists. `gate` clears the stored stop-gate block and a stop-gate escalation, not a human escalation. The command is allowed while autonomous.
+
 ## [0.4.30] - 2026-10-29
 
 - The ship stop gate counts local progress before a PR exists. A change to the registered worktree branch tip, to `.reviews`, or to a higher `fix_iterations` is progress, the same as a new PR head. Progress resets `stop_blocks` to 0. `total_blocks` still increases on every counted stop and still escalates at 30.

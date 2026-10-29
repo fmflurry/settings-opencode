@@ -66,7 +66,8 @@ gh_pr_merge "$pr" "$method" "$head" || merge_rc=$?
 state="$(gh_pr_view "$pr" state | jq -r .state)" || state=unknown
 [ "$state" = MERGED ] || refuse "merge failed (exit $merge_rc); PR state is $state"
 
-goal_update '.status = "done"'
+goal_bind_registered_pr "$pr" || true
+goal_update '.status = "done" | del(.gate, .gate_reason)'
 kpi_emit ship outcome=merged "pr=$pr"
 bash -p "$NOTIFY" "done" "PR #$pr merged" "$pr"
 if slug="$(reg_find_by_pr "$pr" 2>/dev/null)"; then

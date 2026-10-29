@@ -11,10 +11,14 @@ description: >-
 `/ship <goal>` drives one goal from init to a merged PR (method per repo) on the base branch. Each goal gets its own
 worktree and branch. The goal registry is local and untracked: `<git-common-dir>/agent-harness/goals/<slug>.json`, one
 file per goal, and it survives the worktree. `<slug>` is the registry file name that `ship-init` prints as `slug=<slug>`.
-There is one state location: the main checkout (`<main>/.claude/state`, holding `goal.json` and `autonomy.on`). Every
-script and hook resolves it from the first entry of `git worktree list`, so running from the main checkout or from inside
-the worktree gives the same result. `goal.json` carries `branch` and `slug`, and the registry mirror is keyed on them. In Claude Code, the Stop hook keeps the session working until the PR is
-merged or the goal escalates.
+`autonomy.on` stays in the main checkout (`<main>/.claude/state/autonomy.on`). Goal state is one file per repository,
+branch, and worktree: `<main>/.claude/state/goals/<hash>.json`. The hash covers the git common directory, the worktree
+path, and the branch name (`detached` when HEAD is detached). `goal set`, `pr`, `sha`, `review`, `bump`, `wait`,
+`escalate`, `reset`, `clear`, and `status` read and write the checkout they run in. Run them in the goal worktree,
+`( cd <wt> && agent-harness goal pr <n> )`. `ship-merge` and `cleanup` take a PR and update that PR's registered
+worktree. An old unkeyed `<main>/.claude/state/goal.json` is renamed to `goal.shared.quarantine.json` and is not applied
+to the current branch. In Claude Code, the Stop hook keeps the session working until the PR is merged or the goal
+escalates. The hook sees the checkout it runs in, so the session for a goal has to be that worktree.
 
 The goal text is `$ARGUMENTS`.
 
@@ -24,7 +28,7 @@ The main checkout is never used for goal work.
 
 1. **Init (first action).** `agent-harness ship-init <type> <scope> <desc> --goal "<text>"` creates a dedicated
    worktree and branch from the latest `origin/<base>`, then registers `{v, goal, slug, branch, path, base, via, pr, head_oid, status,
-   reason, report, created_at}` and writes `branch`, `slug` and `base` into `goal.json`. It prints the worktree path on stdout and
+   reason, report, created_at}` and writes a fresh goal file for that worktree and branch. It prints the worktree path on stdout and
    `slug=<slug>` on stderr. Resume an existing PR with `agent-harness ship-init --adopt <pr>`; if that PR is still a
    draft, run `gh pr ready <pr>` before `ship-merge`, which refuses drafts.
 2. **Cycle.** Implement, verify, local review, local fix loop, push and open the PR, CI, merge.
@@ -239,6 +243,24 @@ Progress since the last counted stop is any of: the PR head, the branch tip in t
 `.reviews`, or a higher `fix_iterations`. Progress sets `stop_blocks` to 0. `total_blocks` still increases on every
 counted stop, including one that showed progress, and 30 total blocks still escalate. The first stored look at the
 local tip is a baseline, not progress.
+
+`agent-harness goal clear` deletes the whole goal file for the current checkout. It does not clear one counter. To clear
+stop-gate state without deleting the goal, run this in the goal worktree:
+
+```bash
+agent-harness goal reset
+agent-harness goal reset --field stop_blocks
+agent-harness goal reset --field total_blocks
+agent-harness goal reset --field gate
+agent-harness goal reset --field wait
+agent-harness goal reset --field all
+```
+
+It changes only that checkout's file, prints each field it cleared, and exits 2 for an unknown field or when no goal
+file exists. `stop_blocks` and `total_blocks` go back to 0. `wait` removes `wait_until` and `wait_reason`. `gate`
+removes the stored stop-gate block. If the status is `escalated` or `blocked` because of the stop gate (`stop blocks`
+or `total stop blocks` in the reason), `gate` sets the status back to `active` and clears that reason. A human
+escalation such as `needs a human` stays. The command is allowed while autonomous.
 
 The block text matches the stage. Before both code and security verdicts pass for the current local tip, it says to
 finish local review and record both verdicts. It does not say to push: the push guard still denies `git push` and

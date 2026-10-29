@@ -142,6 +142,10 @@ STATE_DIR="$ROOT/.claude/state"
 [ "${AGENT_HARNESS_TEST:-}" = 1 ] && STATE_DIR="${AGENT_STATE_DIR:-${TLTB_STATE_DIR:-$STATE_DIR}}"
 AUTO=0
 [ -f "$STATE_DIR/autonomy.on" ] && AUTO=1
+# shellcheck source=goal-state.sh
+. "${BASH_SOURCE[0]%/*}/goal-state.sh"
+goal_scope_select "${CLAUDE_PROJECT_DIR:-$cwd}" "$cwd"
+goal_bind_file "$STATE_DIR"
 
 CONFIG_FILE="$ROOT/.claude/agent-harness.json"
 cfg() { [ -f "$CONFIG_FILE" ] || return 0; jqr "$1" "$CONFIG_FILE" 2>/dev/null || true; }
@@ -339,7 +343,7 @@ gate_git() {
 # Gated while autonomy is on and the goal is active; an unreadable goal.json fails closed.
 # Sets GATE_BASE from goal.json.
 gate_on() {
-  local goal="$STATE_DIR/goal.json" st=""
+  local goal="$GOAL_FILE" st=""
   [ "$AUTO" = 1 ] && [ -f "$goal" ] || return 1
   { read -r st; read -r GATE_BASE; } < <(jqr '(.status // ""), (.base // "")' "$goal" 2>/dev/null)
   [ "$st" = active ] || [ -z "$st" ]
@@ -364,7 +368,7 @@ gate_key() {
 
 # $1 = directory the command runs in ("?" when unknown); the rest = pushed source revs ("HEAD" when none).
 review_gate() {
-  local goal="$STATE_DIR/goal.json" src ok
+  local goal="$GOAL_FILE" src ok
   GATE_DIR="$1"; shift
   [ "$#" -gt 0 ] || set -- HEAD
   for src in "$@"; do

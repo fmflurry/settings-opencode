@@ -101,14 +101,14 @@ jq -n --arg goal "${goal:-$branch}" --arg branch "$branch" --arg slug "$slug" --
 mv "$tmp" "$reg"
 
 mkdir -p "$STATE_DIR"
+goal_scope_resolve "$path"
+[ "$GS_KIND" != none ] || die "cannot key goal state for $path"
+goal_bind_file "$STATE_DIR"
 if [ -f "$GOAL_FILE" ] && [ "$(jq -r '.status // empty' "$GOAL_FILE" 2>/dev/null)" = active ]; then
-  prev="$(jq -r '.slug // empty' "$GOAL_FILE")"
-  [ -z "$prev" ] || [ "$prev" = "$slug" ] || echo "ship-init: goal.json now tracks $slug (was $prev; $prev stays in the registry)" >&2
-  goal_update --arg b "$branch" --arg s "$slug" --argjson pr "$pr" --arg base "$base" '.branch = $b | .slug = $s | .pr = $pr | .base = $base'
-else
-  jq -n --arg goal "${goal:-$branch}" --arg branch "$branch" --arg slug "$slug" --argjson pr "$pr" --arg base "$base" \
-    '{goal:$goal, criteria:[], branch:$branch, slug:$slug, pr:$pr, base:$base, head_sha:"",
-      fix_iterations:0, max_fix_iterations:10, last_fingerprint:"", reviews:{}, stop_blocks:0, total_blocks:0, status:"active", reason:"", backup_branches:[]}' >"$GOAL_FILE"
+  die "goal state for $branch at $path is already active"
 fi
+jq -n --arg goal "${goal:-$branch}" --arg branch "$branch" --arg slug "$slug" --argjson pr "$pr" --arg base "$base" \
+  '{goal:$goal, criteria:[], branch:$branch, slug:$slug, pr:$pr, base:$base, head_sha:"",
+    fix_iterations:0, max_fix_iterations:10, last_fingerprint:"", reviews:{}, stop_blocks:0, total_blocks:0, status:"active", reason:"", backup_branches:[]}' >"$GOAL_FILE"
 echo "$path"
 echo "slug=$slug" >&2

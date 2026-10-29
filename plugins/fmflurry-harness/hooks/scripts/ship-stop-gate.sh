@@ -10,7 +10,6 @@ ROOT="$(git -C "${CLAUDE_PROJECT_DIR:-$PWD}" worktree list --porcelain 2>/dev/nu
 STATE_DIR="$ROOT/.claude/state"
 [ "${AGENT_HARNESS_TEST:-}" = 1 ] && STATE_DIR="${AGENT_STATE_DIR:-${TLTB_STATE_DIR:-$STATE_DIR}}"
 HARNESS_HOME="${CURSOR_PLUGIN_ROOT:-/nonexistent}/scripts/agent-harness"
-GOAL_FILE="$STATE_DIR/goal.json"
 GH=gh
 [ "${AGENT_HARNESS_TEST:-}" = 1 ] && GH="${GH_BIN:-gh}"
 # Hooks must not source lib.sh, so this repeats its gh_cmd: .envrc selects the gh account, not the personal token.
@@ -29,6 +28,10 @@ WT_PATH=""
 LOCAL_SHA=""
 
 [ -f "$STATE_DIR/autonomy.on" ] || exit 0
+# shellcheck source=goal-state.sh
+. "${BASH_SOURCE[0]%/*}/goal-state.sh"
+goal_scope_select "${CLAUDE_PROJECT_DIR:-$PWD}" "$PWD"
+goal_bind_file "$STATE_DIR"
 notify() {
   local dir="$HARNESS_HOME" ah
   [ "${AGENT_HARNESS_TEST:-}" != 1 ] || dir="${AGENT_HARNESS_DIR:-$dir}"
@@ -60,7 +63,7 @@ kpi_ship() {
   "$k" ship "$@" >/dev/null 2>&1 || true
 }
 escalate() {
-  goal_update --arg r "$1" '.status = "escalated" | .reason = $r'
+  goal_update --arg r "$1" '.status = "escalated" | .reason = $r | .gate = "escalated" | .gate_reason = $r'
   reg_mirror --arg r "$1" '.status = "escalated" | .reason = $r'
   kpi_ship outcome=escalated ${pr:+pr=$pr}
   notify failure "$1: $(goal_get '.goal')" "$(goal_get '.pr // empty')" || true
@@ -189,7 +192,7 @@ if [ -n "$pr" ]; then
   fi
 fi
 if [ "$state" = MERGED ]; then
-  goal_update '.status = "done"'
+  goal_update '.status = "done" | del(.gate, .gate_reason)'
   reg_mirror '.status = "done"'
   kpi_ship outcome=merged ${pr:+pr=$pr}
   notify "done" "PR #$pr merged" "$pr" || true
@@ -198,6 +201,7 @@ fi
 
 read_worktree_tip
 if holding; then
+  goal_update 'del(.gate, .gate_reason)' || true
   exit 0
 fi
 
@@ -246,5 +250,6 @@ if [ "$(goal_get '.stop_blocks')" -ge "$MAX_BLOCKS" ]; then
 fi
 
 kpi_ship outcome=blocked ${pr:+pr=$pr}
+goal_update --arg r "$reason" '.gate = "block" | .gate_reason = $r' || true
 jq -n --arg r "Goal not done. $reason" '{decision:"block",reason:$r}'
 exit 0

@@ -1,6 +1,6 @@
 #!/bin/bash -p
 # shellcheck disable=SC2016
-# Usage: goal.sh set "<goal>" [criteria...] | pr <n> | backup-add <branch> | sha <headsha> | review <code|security> <pass|fail> | bump (findings on stdin) | wait "<reason>" --ttl <N><s|m|h> | escalate "<reason>" | status | clear
+# Usage: goal.sh set "<goal>" [criteria...] | pr <n> | backup-add <branch> | sha <headsha> | review <code|security> <pass|fail> | bump (findings on stdin) | wait "<reason>" --ttl <N><s|m|h> | escalate "<reason>" | reset [--field stop_blocks|total_blocks|gate|wait|all] | status | clear
 set -euo pipefail
 # shellcheck source=scripts/agent-harness/lib.sh
 . "${BASH_SOURCE[0]%/*}/lib.sh"
@@ -15,13 +15,16 @@ case "$cmd" in
   set)
     goal="${1:?goal text}"
     [ $# -eq 0 ] || shift
-    keep_branch="" keep_slug="" keep_pr=null
-    # Only ship-init may bind goal.json to a branch: the cwd's HEAD here is often the main checkout's.
+    keep_slug="" keep_pr=null
     if [ -f "$GOAL_FILE" ] && [ -n "$(goal_get '.slug // empty')" ]; then
-      keep_branch="$(goal_get '.branch // empty')" keep_slug="$(goal_get '.slug')"
+      keep_slug="$(goal_get '.slug')"
       [ "$(goal_get '.status // empty')" = done ] || keep_pr="$(goal_get '.pr // null')"
     fi
-    branch="${keep_branch:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")}"
+    if [ "${GS_KIND:-none}" = none ]; then
+      branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+    else
+      branch="$GS_BRANCH"
+    fi
     jq -n --arg goal "$goal" --arg branch "$branch" --arg slug "${keep_slug:-$(reg_slug "$branch")}" --argjson pr "$keep_pr" \
       '{goal:$goal, criteria:$ARGS.positional, branch:$branch, slug:$slug, pr:$pr, head_sha:"",
         fix_iterations:0, max_fix_iterations:10, last_fingerprint:"", reviews:{}, stop_blocks:0, total_blocks:0, status:"active", reason:"", backup_branches:[]}' \
@@ -135,7 +138,57 @@ case "$cmd" in
     escalate_goal "$reason"
     bash -p "$NOTIFY" failure "$reason: $(goal_get '.goal')" "$(goal_get '.pr // empty')"
     ;;
+  reset)
+    field=all
+    if [ $# -gt 0 ]; then
+      case "$1" in
+        --field)
+          [ $# -eq 2 ] || { echo 'usage: goal.sh reset [--field stop_blocks|total_blocks|gate|wait|all]' >&2; exit 2; }
+          field="$2" ;;
+        stop_blocks|total_blocks|gate|wait|all)
+          [ $# -eq 1 ] || { echo 'usage: goal.sh reset [--field stop_blocks|total_blocks|gate|wait|all]' >&2; exit 2; }
+          field="$1" ;;
+        *) echo "goal reset: unknown field '$1'" >&2; exit 2 ;;
+      esac
+    fi
+    case "$field" in
+      stop_blocks|total_blocks|gate|wait|all) ;;
+      *) echo "goal reset: unknown field '$field'" >&2; exit 2 ;;
+    esac
+    [ -f "$GOAL_FILE" ] || { echo "goal reset: no goal" >&2; exit 2; }
+    reset_stop() {
+      local was
+      was="$(goal_get '.stop_blocks // 0')"
+      goal_update '.stop_blocks = 0'
+      echo "goal reset: cleared stop_blocks (was ${was:-0})"
+    }
+    reset_total() {
+      local was
+      was="$(goal_get '.total_blocks // 0')"
+      goal_update '.total_blocks = 0'
+      echo "goal reset: cleared total_blocks (was ${was:-0})"
+    }
+    reset_wait() {
+      local was
+      was="$(jq -c '{wait_until:(.wait_until // null), wait_reason:(.wait_reason // null)}' "$GOAL_FILE")"
+      goal_update 'del(.wait_until, .wait_reason)'
+      echo "goal reset: cleared wait ($was)"
+    }
+    reset_gate() {
+      local was
+      was="$(jq -c '{gate:(.gate // null), gate_reason:(.gate_reason // null), status:(.status // null), reason:(.reason // "")}' "$GOAL_FILE")"
+      goal_update 'del(.gate, .gate_reason) | if ((.status == "escalated") or (.status == "blocked")) and ((.reason // "") | test("stop blocks|total stop blocks")) then .status = "active" | .reason = "" else . end'
+      echo "goal reset: cleared gate ($was)"
+    }
+    case "$field" in
+      stop_blocks) reset_stop ;;
+      total_blocks) reset_total ;;
+      wait) reset_wait ;;
+      gate) reset_gate ;;
+      all) reset_stop; reset_total; reset_gate; reset_wait ;;
+    esac
+    ;;
   status) if [ -f "$GOAL_FILE" ]; then jq -c . "$GOAL_FILE"; else echo "no goal"; fi ;;
   clear) rm -f "$GOAL_FILE" ;;
-  *) echo "usage: goal.sh set|pr|backup-add|sha|review|bump|wait|escalate|status|clear" >&2; exit 2 ;;
+  *) echo "usage: goal.sh set|pr|backup-add|sha|review|bump|wait|escalate|reset|status|clear" >&2; exit 2 ;;
 esac

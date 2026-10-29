@@ -130,7 +130,7 @@ test('bootstrap is a no-op when not remote, when the harness is vendored, or whe
     const plugin = path.join(root, 'plugin');
     const marker = path.join(plugin, 'plugins/fmflurry-harness/.cursor-plugin');
     fs.mkdirSync(marker, { recursive: true });
-    fs.writeFileSync(path.join(marker, 'plugin.json'), '{"name":"fmflurry-harness","version":"0.4.28"}\n');
+    fs.writeFileSync(path.join(marker, 'plugin.json'), '{"name":"fmflurry-harness","version":"0.4.29"}\n');
     const marked = runHook(plugin, { CLAUDE_CODE_REMOTE: 'true', PATH: pathEnv });
     assert.equal(marked.status, 0);
     assert.equal(fs.existsSync(gitLog), false);

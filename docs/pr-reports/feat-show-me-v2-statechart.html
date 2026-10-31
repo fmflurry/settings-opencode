@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>show-me v2 statechart</title>
+<!--
+MIT License — Copyright (c) 2026 Lauren Tan
+Permission notice from https://github.com/backnotprop/pstack/blob/main/LICENSE
+must accompany substantial portions of the Software (including the mark/phase
+color system adapted from skills/statechart/references/render.md).
+-->
+<style>
+  :root {
+    --bg: #FAF6EE;
+    --bg-soft: #F3EDE0;
+    --card: #FFFcf6;
+    --text: #3A342C;
+    --muted: #7A7164;
+    --line: #D9CFC0;
+    --accent: #8B6F47;
+    --shadow: 0 8px 28px rgba(58, 52, 44, 0.07);
+    --radius: 16px;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif;
+    --sans: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --teal: #D7E6DF;
+    --blue: #D9E4F0;
+    --yellow: #F2E8CC;
+    --tan: #E8DFD4;
+    --orange: #F0E0D0;
+    --breaks-fill: #F7E4E4;
+    --breaks-stroke: #B85C5C;
+    --breaks-text: #8A3A3A;
+    --may-fill: #F7ECDD;
+    --may-stroke: #C4873A;
+    --may-text: #8A5A20;
+    --bugpath: #5B7FA6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto;
+    max-width: 1080px;
+    padding: 2rem 1.3rem 3rem;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--serif);
+    line-height: 1.55;
+  }
+  h1 { font-size: 1.85rem; font-weight: 600; margin: 0 0 0.3rem; }
+  h2 { margin: 0 0 0.75rem; font-family: var(--sans); font-size: 0.78rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); }
+  .kicker { font-family: var(--sans); font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); margin: 0 0 0.4rem; }
+  .sub { color: var(--muted); margin: 0 0 0.35rem; max-width: 42rem; }
+  .credit { font-family: var(--sans); font-size: 0.78rem; color: var(--muted); margin: 0 0 1.15rem; }
+  .legend { display: flex; flex-wrap: wrap; gap: 0.4rem 0.65rem; margin: 0 0 1.1rem; font-family: var(--sans); font-size: 0.76rem; }
+  .pill { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.25rem 0.6rem; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
+  .swatch { width: 11px; height: 11px; border-radius: 3px; border: 1.5px solid transparent; }
+  .swatch.tan { background: var(--tan); }
+  .swatch.blue { background: var(--blue); }
+  .swatch.teal { background: var(--teal); }
+  .swatch.yellow { background: var(--yellow); }
+  .swatch.orange { background: var(--orange); }
+  .swatch.breaks { background: var(--breaks-fill); border-color: var(--breaks-stroke); }
+  .swatch.bugPath { background: var(--card); border-color: var(--bugpath); border-width: 2px; }
+  .layout { display: grid; grid-template-columns: 1.35fr 0.85fr; gap: 1rem; align-items: start; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1.1rem 1.2rem 1.2rem;
+  }
+  .stack { display: flex; flex-direction: column; gap: 0.85rem; }
+  .flow { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; }
+  .fork { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; width: 100%; margin-top: 0.25rem; }
+  .branch { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; }
+  .state {
+    width: min(100%, 15.5rem);
+    text-align: center;
+    padding: 0.65rem 0.75rem;
+    border-radius: 12px;
+    border: 1.2px solid #C9BDAA;
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+  .state.tan { background: var(--tan); }
+  .state.blue { background: var(--blue); }
+  .state.teal { background: var(--teal); }
+  .state.yellow { background: var(--yellow); }
+  .state.orange { background: var(--orange); }
+  .state.breaks { background: var(--breaks-fill) !important; border-color: var(--breaks-stroke) !important; color: var(--breaks-text) !important; }
+  .state.bugPath { border-color: var(--bugpath) !important; border-width: 2.5px !important; }
+  .arrow { color: var(--muted); font-family: var(--sans); font-size: 0.76rem; text-align: center; }
+  .arrow.bug { color: #4A6A8A; font-weight: 600; }
+  .bug { border-left: 3px solid var(--bugpath); }
+  .rule { font-family: var(--sans); font-weight: 600; color: var(--breaks-text); margin: 0 0 0.4rem; }
+  .path { font-family: var(--mono); font-size: 0.74rem; background: var(--bg-soft); border-radius: 10px; padding: 0.65rem 0.8rem; white-space: pre-wrap; margin: 0; }
+  p, li { margin: 0; color: var(--text); }
+  .muted { color: var(--muted); }
+  ul { margin: 0.35rem 0 0; padding-left: 1.1rem; }
+  li + li { margin-top: 0.35rem; }
+  code { font-family: var(--mono); font-size: 0.82em; }
+  table { width: 100%; border-collapse: collapse; font-family: var(--sans); font-size: 0.86rem; }
+  th, td { text-align: left; padding: 0.4rem 0.2rem; vertical-align: top; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; }
+  .ok { color: #3F6B45; font-weight: 650; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin-top: 0.95rem; }
+  @media (max-width: 800px) {
+    .layout, .grid2, .fork { grid-template-columns: 1fr; }
+    body { padding: 1.3rem 1rem 2.4rem; }
+    h1 { font-size: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <p class="kicker">fmflurry-harness 0.4.32 · feat/show-me-v2-statechart</p>
+  <h1>show-me learns a statechart</h1>
+  <p class="sub">A lifecycle, workflow, or protocol is drawn as reader-facing states on a cream page. Conductor and Monolith still share one skill. The plugin build copies it.</p>
+  <p class="credit">Visual vocabulary adapted from @poteto's /statechart in backnotprop/pstack (MIT · Lauren Tan).</p>
+  <div class="legend">
+    <span class="pill"><span class="swatch tan"></span> ask</span>
+    <span class="pill"><span class="swatch blue"></span> choose the form</span>
+    <span class="pill"><span class="swatch teal"></span> write the page</span>
+    <span class="pill"><span class="swatch yellow"></span> copies agree</span>
+    <span class="pill"><span class="swatch orange"></span> checks</span>
+    <span class="pill"><span class="swatch bugPath"></span> bug path</span>
+    <span class="pill"><span class="swatch breaks"></span> breaks a rule</span>
+  </div>
+  <div class="layout">
+    <section class="card">
+      <h2>How this change ships</h2>
+      <div class="flow">
+        <div class="state tan">topic is a lifecycle</div>
+        <div class="arrow">the question is how it moves ▼</div>
+        <div class="state blue bugPath">statechart form</div>
+        <div class="arrow">cream page, offline, no Pele ▼</div>
+        <div class="state teal">HTML plus screenshot.sh</div>
+        <div class="fork">
+          <div class="branch">
+            <div class="arrow">root skills/ wins, then the plugin build ▼</div>
+            <div class="state yellow">three copies agree</div>
+            <div class="arrow">check, npm test, harness suite, guard differential ▼</div>
+            <div class="state orange">0.4.32 ready for review</div>
+          </div>
+          <div class="branch">
+            <div class="arrow bug">edit one copy and skip the build ▼</div>
+            <div class="state teal breaks bugPath">plugin copy drifts</div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <div class="stack">
+      <section class="card bug">
+        <h2>Bug path</h2>
+        <p class="rule">The installed plugin must match the skill that Conductor and Monolith share.</p>
+        <pre class="path">1. topic is a lifecycle
+2. statechart form
+3. plugin copy drifts</pre>
+        <p class="muted" style="margin-top:0.65rem">Left out: which file was edited. The chart only shows that skipping <code>node scripts/build-cursor-plugin.mjs</code> leaves <code>plugins/fmflurry-harness</code> behind.</p>
+      </section>
+      <section class="card">
+        <h2>What stayed</h2>
+        <p class="muted">Output is still <code>/tmp/show-me-{slug}.html</code>, or <code>~/OpenBot/Shared/show-me/</code> when the host attaches files. PNGs still come from <code>scripts/screenshot.sh</code>.</p>
+      </section>
+    </div>
+  </div>
+  <div class="grid2">
+    <section class="card">
+      <h2>Before and after</h2>
+      <table>
+        <thead><tr><th></th><th>0.4.31</th><th>0.4.32</th></tr></thead>
+        <tbody>
+          <tr><td>Forms</td><td>diagram, infographic, slides</td><td>those, plus a statechart</td></tr>
+          <tr><td>Look</td><td>match the product</td><td>cream <code>#FAF6EE</code> unless the topic is that product</td></tr>
+          <tr><td>Marks</td><td>none</td><td><code>breaks</code>, <code>mayBreak</code>, <code>bugPath</code></td></tr>
+          <tr><td>Checking</td><td>offline only</td><td>still offline. TLC stays with pstack</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card">
+      <h2>Files</h2>
+      <ul>
+        <li><code>skills/show-me/SKILL.md</code> and the <code>.claude</code> mirror</li>
+        <li><code>plugins/fmflurry-harness/skills/show-me/</code> from the monolith build</li>
+        <li><code>references/statechart-example.html</code> under each of those</li>
+        <li><code>commands/show-me.md</code>, the Claude command, and <code>opencode.jsonc</code></li>
+        <li><code>skills/pr-visual-report</code> names the cream default</li>
+      </ul>
+    </section>
+    <section class="card">
+      <h2>Checks</h2>
+      <ul>
+        <li><code>node scripts/cursor-plugin/check.mjs</code> <span class="ok">OK</span></li>
+        <li><code>npm test</code> <span class="ok">253 passed, 0 failed, 2 skipped</span></li>
+        <li><code>scripts/agent-harness/test/run.sh</code> <span class="ok">2290 passed, 0 failed</span></li>
+        <li>guard differential <span class="ok">1356 comparisons, 0 differences</span></li>
+      </ul>
+    </section>
+    <section class="card">
+      <h2>Risk</h2>
+      <p class="muted">A machine-checked TLA+ model is still pstack <code>/statechart</code>, not this skill. Any page that copies the phase colors or marks keeps the MIT notice. This pull request stays open.</p>
+    </section>
+  </div>
+
+<section id="kpi-metrics" style="margin-top:28px">
+<h2 style="font-size:18px;margin:0 0 8px">Metrics</h2>
+<p style="margin:0 0 10px;color:#57534e">fmflurry/settings-opencode  feat/show-me-v2-statechart  pr n/a. Status: complete.</p>
+<table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #d6d3d1"><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Wall</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">10m41s</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Active</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0s (gaps over 5m excluded)</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Sessions</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">cursor 0, claude 0, opencode 0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tokens</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">n/a</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tool failures</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Guard blocks</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">2</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Review rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Fix rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr></table>
+<p style="margin:10px 0 0">Tools: none</p>
+<p style="margin:4px 0 0">Skills: none</p>
+<p style="margin:4px 0 0">Agents: main 0</p>
+<p style="margin:4px 0 0">Failure tools: none. Durations: n/a.</p>
+</section>
+</main>
+</body>
+</html>

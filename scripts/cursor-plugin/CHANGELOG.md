@@ -2,6 +2,12 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.32] - 2026-10-31
+
+- show-me draws a Statechart when the topic is a lifecycle, workflow, or protocol. States use reader-facing labels. Phase fills and the `breaks`, `mayBreak`, and `bugPath` marks are the cream-adapted vocabulary from @poteto's `/statechart` in backnotprop/pstack (MIT, Copyright 2026 Lauren Tan). The skill does not run TLC or Pele. A small offline example lives at `skills/show-me/references/statechart-example.html`.
+- The default page is cream `#FAF6EE`, soft cards, and a system serif stack. Product colors still apply when the topic is that product. A dark theme is only for an explicit ask.
+- Conductor and Monolith share `skills/show-me`. The `/show-me` command names the statechart form. `pr-visual-report` follows the same cream default.
+
 ## [0.4.31] - 2026-10-29
 
 - Goal state is one file per repository, branch, and worktree: `<main>/.claude/state/goals/<hash>.json`. The hash is the git common directory, the worktree path, and the branch (`detached` when HEAD is detached). Switching branches or using two worktrees no longer shares stop counters, the stop gate, or a wait. An old unkeyed `.claude/state/goal.json` is renamed to `goal.shared.quarantine.json` and is not applied to the current branch. `autonomy.on` stays in the main checkout. CLI and hooks use the same key.

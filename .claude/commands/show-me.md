@@ -1,5 +1,5 @@
 ---
-description: Explain a topic visually by producing a self-contained HTML artifact (diagram, infographic, or short slide deck), opening it, and showing PNG screenshots of it. Usage: /show-me <topic>
+description: Explain a topic visually by producing a self-contained HTML artifact (diagram, infographic, short slide deck, or statechart), opening it, and showing PNG screenshots of it. Usage: /show-me <topic>
 ---
 
 # Show Me Command

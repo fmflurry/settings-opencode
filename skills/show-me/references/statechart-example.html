@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>show-me delivery — statechart example</title>
+<!--
+MIT License — Copyright (c) 2026 Lauren Tan
+Permission notice from https://github.com/backnotprop/pstack/blob/main/LICENSE
+must accompany substantial portions of the Software (including the mark/phase
+color system adapted from skills/statechart/references/render.md).
+-->
+<style>
+  :root {
+    --bg: #FAF6EE;
+    --bg-soft: #F3EDE0;
+    --card: #FFFcf6;
+    --text: #3A342C;
+    --muted: #7A7164;
+    --line: #D9CFC0;
+    --accent: #8B6F47;
+    --shadow: 0 8px 28px rgba(58, 52, 44, 0.07);
+    --radius: 16px;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif;
+    --sans: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --teal: #D7E6DF;
+    --blue: #D9E4F0;
+    --yellow: #F2E8CC;
+    --tan: #E8DFD4;
+    --breaks-fill: #F7E4E4;
+    --breaks-stroke: #B85C5C;
+    --breaks-text: #8A3A3A;
+    --may-fill: #F7ECDD;
+    --may-stroke: #C4873A;
+    --may-text: #8A5A20;
+    --bugpath: #5B7FA6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto;
+    padding: 2rem 1.25rem 3rem;
+    max-width: 1040px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--serif);
+    line-height: 1.55;
+  }
+  h1 { font-size: 1.7rem; font-weight: 600; margin: 0 0 0.35rem; }
+  .sub { color: var(--muted); margin: 0 0 0.4rem; max-width: 40rem; }
+  .credit { font-family: var(--sans); font-size: 0.78rem; color: var(--muted); margin: 0 0 1.2rem; }
+  .legend { display: flex; flex-wrap: wrap; gap: 0.45rem 0.7rem; margin: 0 0 1.2rem; font-family: var(--sans); font-size: 0.78rem; }
+  .pill { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.28rem 0.65rem; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
+  .swatch { width: 12px; height: 12px; border-radius: 4px; border: 1.5px solid transparent; }
+  .swatch.tan { background: var(--tan); }
+  .swatch.teal { background: var(--teal); }
+  .swatch.blue { background: var(--blue); }
+  .swatch.yellow { background: var(--yellow); }
+  .swatch.breaks { background: var(--breaks-fill); border-color: var(--breaks-stroke); }
+  .swatch.mayBreak { background: var(--may-fill); border-color: var(--may-stroke); }
+  .swatch.bugPath { background: var(--card); border-color: var(--bugpath); border-width: 2px; }
+  .layout { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 1rem; align-items: start; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1.15rem 1.25rem;
+  }
+  .card h2 { margin: 0 0 0.8rem; font-family: var(--sans); font-size: 0.82rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); }
+  .flow { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }
+  .fork { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.65rem; width: 100%; margin-top: 0.3rem; }
+  .branch { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }
+  .state {
+    width: min(100%, 16rem);
+    text-align: center;
+    padding: 0.7rem 0.8rem;
+    border-radius: 12px;
+    border: 1.2px solid #C9BDAA;
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 0.92rem;
+  }
+  .state.tan { background: var(--tan); }
+  .state.teal { background: var(--teal); }
+  .state.blue { background: var(--blue); }
+  .state.yellow { background: var(--yellow); }
+  .state.breaks { background: var(--breaks-fill) !important; border-color: var(--breaks-stroke) !important; color: var(--breaks-text) !important; }
+  .state.mayBreak { background: var(--may-fill) !important; border-color: var(--may-stroke) !important; color: var(--may-text) !important; }
+  .state.bugPath { border-color: var(--bugpath) !important; border-width: 2.5px !important; }
+  .arrow { color: var(--muted); font-family: var(--sans); font-size: 0.78rem; text-align: center; }
+  .arrow.bug { color: #4A6A8A; font-weight: 600; }
+  .side { display: flex; flex-direction: column; gap: 0.85rem; }
+  .bug { border-left: 3px solid var(--bugpath); }
+  .rule { font-family: var(--sans); font-weight: 600; color: var(--breaks-text); margin: 0 0 0.45rem; }
+  .path {
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    background: var(--bg-soft);
+    border-radius: 10px;
+    padding: 0.7rem 0.85rem;
+    white-space: pre-wrap;
+    margin: 0;
+  }
+  .card p { margin: 0; color: var(--muted); font-size: 0.92rem; }
+  .license { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); white-space: pre-wrap; margin: 1.4rem 0 0; }
+  @media (max-width: 800px) {
+    .layout { grid-template-columns: 1fr; }
+    body { padding: 1.4rem 1rem 2.4rem; }
+    .fork { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+  <h1>How a show-me page reaches the reader</h1>
+  <p class="sub">Offline example of the statechart form. Labels are what the reader can see, not script names.</p>
+  <p class="credit">Visual vocabulary adapted from @poteto's /statechart in backnotprop/pstack (MIT · Lauren Tan).</p>
+  <div class="legend">
+    <span class="pill"><span class="swatch tan"></span> waiting</span>
+    <span class="pill"><span class="swatch teal"></span> file on disk</span>
+    <span class="pill"><span class="swatch blue"></span> image ready</span>
+    <span class="pill"><span class="swatch yellow"></span> reader has it</span>
+    <span class="pill"><span class="swatch bugPath"></span> bug path</span>
+    <span class="pill"><span class="swatch mayBreak"></span> may break</span>
+    <span class="pill"><span class="swatch breaks"></span> breaks a rule</span>
+  </div>
+  <div class="layout">
+    <section class="card">
+      <h2>Chart</h2>
+      <div class="flow">
+        <div class="state tan">still prose</div>
+        <div class="arrow">topic is too dense for a paragraph ▼</div>
+        <div class="state teal bugPath">HTML file written</div>
+        <div class="fork">
+          <div class="branch">
+            <div class="arrow">a browser is available ▼</div>
+            <div class="state blue">PNG beside the HTML</div>
+            <div class="arrow">host attaches it, or a display opens the file ▼</div>
+            <div class="state yellow">reader sees the page</div>
+          </div>
+          <div class="branch">
+            <div class="arrow">no browser on this host ▼</div>
+            <div class="state blue mayBreak">HTML only</div>
+          </div>
+          <div class="branch">
+            <div class="arrow bug">the file points at the network ▼</div>
+            <div class="state teal breaks bugPath">blank offline page</div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <div class="side">
+      <section class="card bug">
+        <h2>Bug path</h2>
+        <p class="rule">The page has to render with the network off.</p>
+        <pre class="path">1. still prose
+2. HTML file written
+3. blank offline page</pre>
+        <p style="margin-top:0.7rem">Left out: which tag carried the external URL. The chart only shows that an external src or href makes the page blank.</p>
+      </section>
+      <section class="card">
+        <h2>May break</h2>
+        <p>HTML only is allowed. Say in one line that no browser was found, and still hand over the file.</p>
+      </section>
+    </div>
+  </div>
+  <pre class="license">MIT License — Copyright (c) 2026 Lauren Tan
+Permission notice from https://github.com/backnotprop/pstack/blob/main/LICENSE
+must accompany substantial portions of the Software (including the mark/phase
+color system adapted from skills/statechart/references/render.md).</pre>
+</body>
+</html>

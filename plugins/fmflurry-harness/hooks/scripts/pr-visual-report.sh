@@ -4,6 +4,7 @@
 # Hook mode reads the PreToolUse JSON on stdin. Allow prints nothing. Deny prints hook JSON.
 # A docs typo or a version bump only may pass with a checked Skip line and a reason.
 set -f
+VISUAL_ALLOW_RELATIVE=0
 
 say() { REASON="$1"; printf '%s\n' "$1" >&2; }
 
@@ -17,6 +18,13 @@ visual_ok() {
   ')"
   if ! printf '%s\n' "$body" | grep -Eq '^## Visual report[[:space:]]*$'; then
     say "pr-visual-report: PR body is missing a ## Visual report section"
+    return 1
+  fi
+  # GitHub resolves a relative link in a PR body against /pull/<n> or /compare/, so it opens a compare page.
+  # Azure DevOps PRs (inspect sets VISUAL_ALLOW_RELATIVE=1) keep relative links: pr-report-links only knows GitHub URLs.
+  if [ "${VISUAL_ALLOW_RELATIVE:-0}" != 1 ] \
+    && printf '%s\n' "$section" | grep -Eq "(\]\(<?|(src|href)=[\"']?)[[:space:]]*(\.{0,2}/)?docs/pr-reports/"; then
+    say "pr-visual-report: report links must be absolute URLs pinned to a commit (relative links open GitHub's compare page). Run agent-harness pr-report-links after committing the report."
     return 1
   fi
   if printf '%s\n' "$section" | grep -Eq '^[[:space:]]*[-*] \[[xX]\][[:space:]]+Report([^[:alnum:]]|$)' \
@@ -250,7 +258,8 @@ inspect() {
       if [ "$base" = "command" ] || [ "$base" = "env" ] || [ "$base" = "time" ]; then
         i=$((i + 1)); continue
       fi
-      if [ "$base" = "gh" ]; then
+      # gh-* covers token wrappers such as gh-isag that exec gh.
+      if [ "$base" = "gh" ] || [[ "$base" == gh-* ]]; then
         skip_flags $((i + 1))
         if [ "${TOKENS[$SKIP_AT]:-}" = "pr" ]; then
           case "${TOKENS[$((SKIP_AT + 1))]:-}" in
@@ -265,6 +274,7 @@ inspect() {
           esac
         fi
       elif [ "$base" = "az" ]; then
+        VISUAL_ALLOW_RELATIVE=1
         skip_flags $((i + 1))
         if [ "${TOKENS[$SKIP_AT]:-}" = "repos" ] && [ "${TOKENS[$((SKIP_AT + 1))]:-}" = "pr" ]; then
           case "${TOKENS[$((SKIP_AT + 2))]:-}" in
@@ -289,7 +299,7 @@ inspect() {
 looks_like_pr() {
   local skeleton
   skeleton="$(printf '%s\n' "$1" | sed -e "s/'[^']*'//g" -e 's/"[^"]*"//g')"
-  printf '%s\n' "$skeleton" | grep -Eq '(^|[^[:alnum:]_./-])(gh[[:space:]]+pr[[:space:]]+(create|edit|new)|az[[:space:]]+repos[[:space:]]+pr[[:space:]]+(create|update))([^[:alnum:]_]|$)'
+  printf '%s\n' "$skeleton" | grep -Eq '(^|[^[:alnum:]_.-])(gh(-[[:alnum:]_-]+)?[[:space:]]+pr[[:space:]]+(create|edit|new)|az[[:space:]]+repos[[:space:]]+pr[[:space:]]+(create|update))([^[:alnum:]_]|$)'
 }
 
 emit_deny() {

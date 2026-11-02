@@ -2,6 +2,12 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.33] - 2026-11-02
+
+- PR report links are absolute. A relative `docs/pr-reports/...` link in a PR body opened GitHub's compare page, so the PNG and HTML were unreachable. The new `agent-harness pr-report-links` prints the `## Visual report` section with `https://<host>/<owner>/<repo>/blob/<sha>/...` URLs pinned to the commit that holds the report (the PNG gets `?raw=true`). It refuses files that are not committed yet. `pr-report` no longer prints a relative section; it points to `pr-report-links`.
+- `pr-visual-report.sh` rejects relative `docs/pr-reports/` links in the section for `gh` commands and `pr-report-check`. Azure DevOps PRs keep relative links. `pr-report-links` refuses an SSH alias host unless `PR_REPORT_HOST` is set, warns when the commit is not pushed, and adds the cloud artifact `<img>` when present.
+- The hook also inspects `gh-*` wrappers (such as `gh-isag`, which runs `gh` with another token) and wrappers called by path. Before, `gh-isag pr create` slipped past the check.
+
 ## [0.4.32] - 2026-10-31
 
 - show-me draws a Statechart when the topic is a lifecycle, workflow, or protocol. States use reader-facing labels. Phase fills and the `breaks`, `mayBreak`, and `bugPath` marks are the cream-adapted vocabulary from @poteto's `/statechart` in backnotprop/pstack (MIT, Copyright 2026 Lauren Tan). The skill does not run TLC or Pele. A small offline example lives at `skills/show-me/references/statechart-example.html`.

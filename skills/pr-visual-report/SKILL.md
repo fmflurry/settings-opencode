@@ -15,16 +15,16 @@ Every pull request the harness opens or updates includes one show-me report, unl
 2. Write one self-contained HTML file. Follow the `show-me` skill: no network assets, the cream default (`#FAF6EE`, soft cards, system serif) unless the change is about that product's own colors, real names from this change, at least one `@media` breakpoint, and the smallest diagram, infographic, or statechart that explains the change. Cover the before/after or the flow, the main files, the test results, and the risks.
 3. Run `agent-harness pr-report <html>`. It reads the metrics file when present, inserts a Metrics panel into the HTML, and writes `docs/pr-reports/<branch-slug>.html`, `.png`, and `.metrics.json`, replacing `/` in the branch name with `-`. When `/opt/cursor/artifacts` is writable, or `PR_REPORT_ARTIFACT_DIR` is set, it also copies the files to `<artifacts>/pr-reports/`.
 4. Commit the HTML, the PNG, and the metrics JSON on the PR branch before opening or updating the PR. Commit them before the local review when a review gate is on: `docs/pr-reports/` is part of the reviewed diff. The outcome PNG under `docs/agent-reports/` is a different file and stays exempt.
-5. Put `## Visual report` in the body. Check the report line. Embed the PNG and link the HTML. The link must contain `docs/pr-reports/<branch-slug>.html`. On a cloud agent, also embed `<img alt="Visual report" src="/opt/cursor/artifacts/pr-reports/<branch-slug>.png">` so the host uploads the artifact. Under that section, or as `## Metrics`, paste the small table `pr-report` prints.
+5. Push that commit, then run `agent-harness pr-report-links` (add `--slug` when the report is not for the current branch; set `PR_REPORT_HOST` when origin uses an SSH alias such as `github-work`). It prints the `## Visual report` section with absolute URLs pinned to the commit: `https://<host>/<owner>/<repo>/blob/<sha>/docs/pr-reports/<branch-slug>.png?raw=true` and `.html`. Paste that section into the body. Never write a relative `docs/pr-reports/...` link: GitHub resolves it against the PR or compare page, so it opens "There isn't anything to compare" and the image is broken. The hook rejects it for `gh` and `gh-*` commands. Azure DevOps (`az repos pr`) is the exception: `pr-report-links` refuses Azure remotes, so keep the relative links there. A commit SHA stays reachable after a squash merge through the PR ref, so the links keep working. On a cloud agent, also embed `<img alt="Visual report" src="/opt/cursor/artifacts/pr-reports/<branch-slug>.png">` so the host uploads the artifact. Under that section, or as `## Metrics`, paste the small table `pr-report-links` prints.
 
 ```markdown
 ## Visual report
 
 - [x] Report: HTML and PNG committed, PNG embedded, HTML linked.
 
-![Visual report](docs/pr-reports/feat-example.png)
+![Visual report](https://github.com/acme/app/blob/4f2c9e1d0b7a8c6e5f3d2a1b0c9e8d7f6a5b4c3d/docs/pr-reports/feat-example.png?raw=true)
 
-[HTML report](docs/pr-reports/feat-example.html)
+[HTML report](https://github.com/acme/app/blob/4f2c9e1d0b7a8c6e5f3d2a1b0c9e8d7f6a5b4c3d/docs/pr-reports/feat-example.html)
 
 ## Metrics
 

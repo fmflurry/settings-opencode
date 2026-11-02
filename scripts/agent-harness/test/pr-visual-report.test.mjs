@@ -10,9 +10,23 @@ const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.
 const hook = path.join(repo, '.claude/hooks/pr-visual-report.sh');
 const report = path.join(repo, 'scripts/agent-harness/pr-report.sh');
 const check = path.join(repo, 'scripts/agent-harness/pr-report-check.sh');
+const links = path.join(repo, 'scripts/agent-harness/pr-report-links.sh');
 const dispatcher = path.join(repo, 'scripts/agent-harness/agent-harness.sh');
 
+const blob = 'https://github.com/acme/app/blob/0123456789abcdef0123456789abcdef01234567';
+
 const good = [
+  '## Visual report',
+  '',
+  '- [x] Report: HTML and PNG committed, PNG embedded, HTML linked.',
+  '',
+  `![Visual report](${blob}/docs/pr-reports/feat-x.png?raw=true)`,
+  '',
+  `[HTML report](${blob}/docs/pr-reports/feat-x.html)`,
+  '',
+].join('\n');
+
+const relative = [
   '## Visual report',
   '',
   '- [x] Report: HTML and PNG committed, PNG embedded, HTML linked.',
@@ -145,6 +159,74 @@ test('hook blocks az repos pr create without a description section', () => {
   assert.equal(decision(result), 'deny');
 });
 
+test('check rejects relative report links', () => {
+  const result = bash(hook, ['--check'], { input: relative });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /absolute/);
+});
+
+test('check rejects a relative html link next to an absolute image', () => {
+  const result = bash(hook, ['--check'], {
+    input: good.replace(`${blob}/docs/pr-reports/feat-x.html`, './docs/pr-reports/feat-x.html'),
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /absolute/);
+});
+
+test('hook blocks a gh wrapper that opens a pull request', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-body-'));
+  const body = path.join(dir, 'body.md');
+  fs.writeFileSync(body, '## Summary\n\nNothing to see.\n');
+  const result = hookRun(`/opt/agent/bin/gh-isag pr create -R acme/app --base main --body-file ${body}`, dir);
+  assert.equal(decision(result), 'deny');
+  assert.match(result.stdout, /Visual report/);
+});
+
+test('hook allows a gh wrapper when the body file has the report', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-body-'));
+  const body = path.join(dir, 'body.md');
+  fs.writeFileSync(body, good);
+  const result = hookRun(`gh-work pr create --body-file ${body}`, dir);
+  assert.equal(decision(result), null, result.stderr + result.stdout);
+});
+
+test('hook blocks a substituted body passed to a gh wrapper by path', () => {
+  const result = hookRun('/opt/agent/bin/gh-isag pr create --body "$(cat body.md)"');
+  assert.equal(decision(result), 'deny');
+  assert.match(result.stdout, /substitution/);
+});
+
+test('hook blocks a substituted body passed to a multi-hyphen gh wrapper', () => {
+  const result = hookRun('gh-isag-prod pr create --body "$(cat x)"');
+  assert.equal(decision(result), 'deny');
+});
+
+for (const [name, body] of [
+  ['a leading slash', '![v](/docs/pr-reports/a.png)\n\n[h](/docs/pr-reports/a.html)'],
+  ['an angle-bracket destination', '![v](<docs/pr-reports/a.png>)\n\n[h](<docs/pr-reports/a.html>)'],
+  ['an unquoted img src', '<img src=docs/pr-reports/a.png>\n\n[h](https://x.test/docs/pr-reports/a.html)'],
+]) {
+  test(`check rejects a relative link with ${name}`, () => {
+    const input = `## Visual report\n\n- [x] Report: HTML and PNG committed, PNG embedded, HTML linked.\n\n${body}\n`;
+    const result = bash(hook, ['--check'], { input });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /absolute/);
+  });
+}
+
+test('hook keeps relative links for an Azure DevOps pull request', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-body-'));
+  const body = path.join(dir, 'body.md');
+  fs.writeFileSync(body, relative);
+  const result = hookRun(`az repos pr create --source-branch feat --target-branch main --title "feat: x" --description-file ${body}`, dir);
+  assert.equal(decision(result), null, result.stderr + result.stdout);
+});
+
+test('hook leaves a non-gh tool named like a pr command alone', () => {
+  const result = hookRun('ghost pr create --body "x"');
+  assert.equal(decision(result), null, result.stdout);
+});
+
 test('hook allows az repos pr update without a description', () => {
   const result = hookRun('az repos pr update --id 4 --title "feat: x"');
   assert.equal(decision(result), null, result.stdout);
@@ -194,7 +276,105 @@ test('pr-report writes the html and png for the branch slug', () => {
   assert.equal(fs.readFileSync(path.join(dir, 'docs/pr-reports/feat-demo-report.png'), 'utf8'), 'png');
   assert.equal(fs.existsSync(path.join(art, 'pr-reports/feat-demo-report.png')), true);
   assert.match(result.stdout, /docs\/pr-reports\/feat-demo-report\.html/);
-  assert.match(result.stdout, /## Visual report/);
+  assert.match(result.stdout, /pr-report-links/);
+  assert.doesNotMatch(result.stdout, /\]\(docs\/pr-reports\//);
+});
+
+function linksRepo(remote) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-links-'));
+  const git = (...args) => {
+    const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  git('init', '-q', '-b', 'fix/demo-links');
+  git('config', 'user.email', 't@t');
+  git('config', 'user.name', 't');
+  if (remote) git('remote', 'add', 'origin', remote);
+  fs.mkdirSync(path.join(dir, 'docs/pr-reports'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'docs/pr-reports/fix-demo-links.html'), '<p>r</p>');
+  fs.writeFileSync(path.join(dir, 'docs/pr-reports/fix-demo-links.png'), 'png');
+  return { dir, git };
+}
+
+test('pr-report-links prints absolute links pinned to the commit', () => {
+  const { dir, git } = linksRepo('git@github.com:acme/app.git');
+  git('add', '.');
+  git('commit', '-q', '-m', 'report');
+  const sha = git('rev-parse', 'HEAD');
+  const result = bash(links, [], { cwd: dir });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, new RegExp(`\\(https://github\\.com/acme/app/blob/${sha}/docs/pr-reports/fix-demo-links\\.png\\?raw=true\\)`));
+  assert.match(result.stdout, new RegExp(`\\(https://github\\.com/acme/app/blob/${sha}/docs/pr-reports/fix-demo-links\\.html\\)`));
+  const check = bash(hook, ['--check'], { input: result.stdout });
+  assert.equal(check.status, 0, check.stderr);
+});
+
+test('pr-report-links reads an https remote with credentials and no .git', () => {
+  const { dir, git } = linksRepo('https://x-access-token:secret@github.example.com/acme/app');
+  git('add', '.');
+  git('commit', '-q', '-m', 'report');
+  const result = bash(links, [], { cwd: dir });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /\(https:\/\/github\.example\.com\/acme\/app\/blob\//);
+  assert.doesNotMatch(result.stdout, /secret/);
+});
+
+test('pr-report-links refuses report files that are not committed', () => {
+  const { dir, git } = linksRepo('git@github.com:acme/app.git');
+  fs.writeFileSync(path.join(dir, 'README.md'), 'x');
+  git('add', 'README.md');
+  git('commit', '-q', '-m', 'init');
+  const result = bash(links, [], { cwd: dir });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /commit/);
+});
+
+test('pr-report-links refuses a repository without a GitHub remote', () => {
+  const { dir, git } = linksRepo(null);
+  git('add', '.');
+  git('commit', '-q', '-m', 'report');
+  const result = bash(links, [], { cwd: dir });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /origin/);
+});
+
+test('pr-report-links refuses an SSH alias host unless PR_REPORT_HOST names it', () => {
+  const { dir, git } = linksRepo('git@github-work:acme/app.git');
+  git('add', '.');
+  git('commit', '-q', '-m', 'report');
+  const refused = bash(links, [], { cwd: dir });
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /PR_REPORT_HOST/);
+  const ok = bash(links, [], { cwd: dir, env: { ...process.env, PR_REPORT_HOST: 'github.com' } });
+  assert.equal(ok.status, 0, ok.stderr);
+  assert.match(ok.stdout, /\(https:\/\/github\.com\/acme\/app\/blob\//);
+});
+
+test('pr-report-links warns when the commit is not pushed', () => {
+  const { dir, git } = linksRepo('git@github.com:acme/app.git');
+  git('add', '.');
+  git('commit', '-q', '-m', 'report');
+  const result = bash(links, [], { cwd: dir });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /push/);
+});
+
+test('pr-report-links adds the artifact image for a cloud agent', () => {
+  const { dir, git } = linksRepo('git@github.com:acme/app.git');
+  git('add', '.');
+  git('commit', '-q', '-m', 'report');
+  const art = path.join(dir, 'art');
+  fs.mkdirSync(path.join(art, 'pr-reports'), { recursive: true });
+  fs.writeFileSync(path.join(art, 'pr-reports/fix-demo-links.png'), 'png');
+  const result = bash(links, [], { cwd: dir, env: { ...process.env, PR_REPORT_ARTIFACT_DIR: art } });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /<img alt="Visual report" src="[^"]*art\/pr-reports\/fix-demo-links\.png" \/>/);
+});
+
+test('dispatcher lists pr-report-links', () => {
+  const result = bash(dispatcher, []);
+  assert.match(result.stderr, /pr-report-links/);
 });
 
 test('pr-report rejects html without a media query', () => {

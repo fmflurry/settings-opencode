@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fix(harness): absolute PR report links, gh-* wrappers checked</title>
+<style>
+  :root { --bg:#FAF6EE; --card:#FFFDF8; --ink:#2B2620; --muted:#6B6257; --line:#E6DDCF; --bad:#B4483C; --good:#3F7D4E; --accent:#8A5A2B; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif; line-height:1.45; }
+  main { max-width:1180px; margin:0 auto; padding:36px 28px 44px; }
+  h1 { font-size:28px; margin:0 0 6px; }
+  .sub { color:var(--muted); margin:0 0 26px; font-size:16px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; box-shadow:0 1px 0 rgba(0,0,0,.03); }
+  .card h2 { font-size:18px; margin:0 0 10px; }
+  .tag { display:inline-block; font:600 12px/1 ui-sans-serif, system-ui, sans-serif; padding:5px 9px; border-radius:999px; margin-bottom:10px; }
+  .before .tag { background:#F6E2DE; color:var(--bad); }
+  .after .tag { background:#E1EEE3; color:var(--good); }
+  code { font-family: ui-monospace, Menlo, monospace; font-size:13px; background:#F2EADC; padding:1px 5px; border-radius:5px; }
+  ol, ul { margin:6px 0 0 20px; padding:0; }
+  li { margin:4px 0; }
+  .flow { display:flex; gap:10px; align-items:stretch; margin:22px 0; flex-wrap:wrap; }
+  .step { flex:1 1 150px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; font-size:14px; }
+  .step b { display:block; font-size:13px; color:var(--accent); margin-bottom:4px; font-family: ui-sans-serif, system-ui, sans-serif; }
+  .arrow { align-self:center; color:var(--muted); font-size:20px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-family: ui-sans-serif, system-ui, sans-serif; font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+  .ok { color:var(--good); font-weight:600; }
+  .no { color:var(--bad); font-weight:600; }
+  .full { grid-column:1 / -1; }
+  @media (max-width: 760px) { .grid { grid-template-columns:1fr; } .arrow { display:none; } main { padding:22px 16px; } h1 { font-size:22px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>PR reports that open, and a hook a wrapper can't skip</h1>
+  <p class="sub">fmflurry-harness 0.4.33 · branch <code>fix/pr-report-links</code></p>
+
+  <div class="grid">
+    <section class="card before">
+      <span class="tag">Before</span>
+      <h2>Two gaps seen on SAIsagri/gc.platform</h2>
+      <ol>
+        <li>Report links were relative: <code>[HTML report](docs/pr-reports/x.html)</code>. GitHub resolves them against <code>/pull/N</code> or <code>/compare/</code>, so a click opened <em>"There isn't anything to compare"</em>, and the PNG was broken.</li>
+        <li>The hook matched only the word <code>gh</code>. After a <code>$(…)</code> block, an agent wrote <code>bin/gh-isag</code> and ran <code>gh-isag pr create</code>. PR #345 shipped with no <code>## Visual report</code>.</li>
+      </ol>
+    </section>
+    <section class="card after">
+      <span class="tag">After</span>
+      <h2>Absolute, commit-pinned links; wrappers inspected</h2>
+      <ol>
+        <li>New <code>agent-harness pr-report-links</code> prints the section with <code>https://&lt;host&gt;/&lt;owner&gt;/&lt;repo&gt;/blob/&lt;sha&gt;/docs/pr-reports/&lt;slug&gt;.png?raw=true</code> and <code>.html</code>.</li>
+        <li>The hook rejects relative <code>docs/pr-reports/</code> links for <code>gh</code>; Azure keeps them.</li>
+        <li><code>gh-*</code> wrappers, by name or path, get the same body check as <code>gh</code>.</li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="flow" aria-label="Report flow">
+    <div class="step"><b>1 · kpi feature</b>metrics JSON</div><div class="arrow">→</div>
+    <div class="step"><b>2 · pr-report &lt;html&gt;</b>HTML + PNG in docs/pr-reports</div><div class="arrow">→</div>
+    <div class="step"><b>3 · commit + push</b>files exist at a SHA</div><div class="arrow">→</div>
+    <div class="step"><b>4 · pr-report-links</b>section with absolute URLs</div><div class="arrow">→</div>
+    <div class="step"><b>5 · gh pr create</b>hook checks section + links</div>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Hook decisions (from the tests)</h2>
+      <table>
+        <tr><th>Command or body</th><th>Result</th></tr>
+        <tr><td><code>gh-isag pr create --body-file</code> without section</td><td class="no">deny</td></tr>
+        <tr><td><code>/opt/x/bin/gh-isag-prod pr create --body "$(…)"</code></td><td class="no">deny</td></tr>
+        <tr><td>section with <code>](docs/pr-reports/…)</code>, <code>(/docs/…)</code>, <code>(&lt;docs/…&gt;)</code></td><td class="no">deny</td></tr>
+        <tr><td>section from <code>pr-report-links</code></td><td class="ok">allow</td></tr>
+        <tr><td><code>az repos pr create</code> with relative links</td><td class="ok">allow</td></tr>
+        <tr><td><code>ghost pr create</code>, <code>echo "gh-foo pr create"</code></td><td class="ok">ignored</td></tr>
+      </table>
+    </section>
+    <section class="card">
+      <h2>Files and checks</h2>
+      <ul>
+        <li><code>.claude/hooks/pr-visual-report.sh</code> + plugin copy (identical)</li>
+        <li><code>scripts/agent-harness/pr-report-links.sh</code> (new), dispatcher, <code>pr-report.sh</code></li>
+        <li>Skills <code>pr-visual-report</code>, <code>ship</code> lifecycle; <code>/pr</code>, <code>/create-pull-request</code>, git-specialist; README; 0.4.33</li>
+        <li><code>pr-visual-report.test.mjs</code>: 43/43 pass</li>
+        <li><code>npm test</code>: 270 pass, 1 fail (<code>kpi-emit vendored</code>, also fails on master)</li>
+      </ul>
+      <p style="margin:10px 0 0;color:var(--muted);font-size:14px">Risk: a GHE host without a dot needs <code>PR_REPORT_HOST</code>. Links 404 until the commit is pushed (warned).</p>
+    </section>
+  </div>
+
+<section id="kpi-metrics" style="margin-top:28px">
+<h2 style="font-size:18px;margin:0 0 8px">Metrics</h2>
+<p style="margin:0 0 10px;color:#57534e">fmflurry/settings-opencode  fix/pr-report-links  pr n/a. Status: complete.</p>
+<table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #d6d3d1"><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Wall</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">8m22s</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Active</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">8m22s (gaps over 5m excluded)</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Sessions</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">cursor 0, claude 0, opencode 0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tokens</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">n/a</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tool failures</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Guard blocks</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">23</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Review rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Fix rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr></table>
+<p style="margin:10px 0 0">Tools: none</p>
+<p style="margin:4px 0 0">Skills: none</p>
+<p style="margin:4px 0 0">Agents: main 0</p>
+<p style="margin:4px 0 0">Failure tools: none. Durations: n/a.</p>
+</section>
+</main>
+</body>
+</html>

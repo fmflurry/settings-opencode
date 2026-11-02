@@ -41,6 +41,8 @@ if [ -z "$slug" ]; then
   slug="${branch//\//-}"
 fi
 [[ "$slug" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { printf '%s\n' "pr-report: bad slug '$slug'" >&2; exit 1; }
+links_args=""
+[ -n "${branch:-}" ] || links_args=" --slug $slug"
 
 dest="$root/docs/pr-reports"
 mkdir -p "$dest"
@@ -146,9 +148,9 @@ printf '%s\n' "html=$rel_html" "png=$rel_png"
 if [ -n "$art" ] && [ -s "$out_metrics" ]; then
   cp -- "$out_metrics" "$art/pr-reports/$slug.metrics.json"
 fi
-printf '\n## Visual report\n\n- [x] Report: HTML and PNG committed, PNG embedded, HTML linked.\n\n![Visual report](%s)\n\n[HTML report](%s)\n' "$rel_png" "$rel_html"
+printf '\nnext: commit and push the report files, then run agent-harness pr-report-links%s and paste its output as the ## Visual report section.\n' "$links_args"
 if [ -n "$art_png" ]; then
-  printf '<img alt="Visual report" src="%s" />\n' "$art_png"
+  printf 'cloud agent: also add <img alt="Visual report" src="%s" /> under that section.\n' "$art_png"
 fi
 if [ -s "$out_metrics" ] && [ -n "$node" ]; then
   md="$("$node" "$here/kpi-feature.mjs" --markdown --metrics "$out_metrics" 2>/dev/null || true)"

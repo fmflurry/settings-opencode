@@ -127,7 +127,8 @@ gh pr create --base <base> --title "<type>: <description>" --body-file <body-fil
 The PR is created ready, not draft. `gh pr create --head` and `-H` are denied while a goal is active.
 
 The body file has those sections plus `## Visual report`. The visual report files are already committed at
-`docs/pr-reports/<branch-slug>.html` and `.png` (see the `pr-visual-report` skill). Run
+`docs/pr-reports/<branch-slug>.html` and `.png` (see the `pr-visual-report` skill). Paste the section that
+`agent-harness pr-report-links` prints: its links are absolute and pinned to the report commit. Run
 `agent-harness pr-report-check --body-file <body-file>` before `gh pr create`. Write `None.` under any section that
 is empty:
 
@@ -147,9 +148,9 @@ is empty:
 ## Visual report
 - [x] Report: HTML and PNG committed, PNG embedded, HTML linked.
 
-![Visual report](docs/pr-reports/<branch-slug>.png)
+![Visual report](https://github.com/<owner>/<repo>/blob/<sha>/docs/pr-reports/<branch-slug>.png?raw=true)
 
-[HTML report](docs/pr-reports/<branch-slug>.html)
+[HTML report](https://github.com/<owner>/<repo>/blob/<sha>/docs/pr-reports/<branch-slug>.html)
 ```
 
 Then record the PR and the head: `agent-harness goal pr <n>`, `agent-harness goal sha <sha>`.

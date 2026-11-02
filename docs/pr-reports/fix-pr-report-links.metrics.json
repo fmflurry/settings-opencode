@@ -1,0 +1,39 @@
+{
+  "feature": {
+    "repo": "fmflurry/settings-opencode",
+    "branch": "fix/pr-report-links",
+    "pr": null
+  },
+  "prs": [],
+  "wall_ms": 502000,
+  "active_ms": 502000,
+  "idle_gap_min": 5,
+  "sessions": {
+    "cursor": 0,
+    "claude": 0,
+    "opencode": 0
+  },
+  "tools": [],
+  "skills": [],
+  "agents": [
+    {
+      "name": "main",
+      "calls": 0
+    }
+  ],
+  "tool_failures": 0,
+  "failure_tools": [],
+  "duration_ms": null,
+  "guard_blocks": 23,
+  "guards": {
+    "pr-visual-report": 23
+  },
+  "review_rounds": 0,
+  "fix_rounds": 0,
+  "tokens": null,
+  "tokens_known": 0,
+  "events": 23,
+  "first_ts": "2026-11-02T14:31:15Z",
+  "last_ts": "2026-11-02T14:39:37Z",
+  "partial": false
+}

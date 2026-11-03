@@ -639,6 +639,12 @@
       "template": "{file:commands/eval.md}\n\n$ARGUMENTS",
       "agent": "conductor",
     },
+    "memory-init": {
+      "description": "Scaffold split project memory (short AGENTS.md, docs/memory index, contexts, ADRs, glossary)",
+      "template": "{file:commands/memory-init.md}\n\n$ARGUMENTS",
+      "agent": "writer",
+      "subtask": true,
+    },
     "update-docs": {
       "description": "Update documentation",
       "template": "{file:commands/update-docs.md}\n\n$ARGUMENTS",

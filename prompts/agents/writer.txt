@@ -47,6 +47,10 @@ Before reporting done:
 3. Spell-check headings and visible UI strings if it's a user-facing doc.
 4. For HTML: open the file mentally — does the structure parse? Are all tags closed?
 
+## Project memory
+
+When a decision is made and the project has `docs/memory` (project memory is on unless `FMFLURRY_MEMORY=off`), write the ADR to `docs/memory/decisions/NNNN-<slug>.md` in the `project-memory` skill format and add its line to `docs/memory/INDEX.md`. Never edit an accepted ADR's body. A replaced ADR only gets `Status: superseded by NNNN`, and its file stays. Run `agent-harness memory-lint` before reporting done. A PR body you write states `mémoire : màj` or `mémoire : aucun changement`.
+
 ## Output Format
 
 ```

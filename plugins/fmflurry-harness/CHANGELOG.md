@@ -2,6 +2,12 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.34] - 2026-11-03
+
+- Split project memory, on by default. The `project-memory` skill and `/memory-init` scaffold a short root `AGENTS.md` and `docs/memory/` (`INDEX.md`, `contexts/<bounded-context>.md`, immutable ADRs in `decisions/`, `glossary.md`), each doc with `owner`, `reviewed`, and `refs` frontmatter. The `project-memory` rule loads a context file only when the task touches that bounded context.
+- `memory-lint.sh` (also `agent-harness memory-lint`) fails on a missing `owner` or `reviewed`, a `reviewed` date older than 90 days, or a dead ref path or symbol. The ship stop gate adds its findings to the block reason. `pr-visual-report.sh` runs it on `gh pr create` and `pr-report-check`, and requires `mémoire : màj` or `mémoire : aucun changement` in the PR body when `docs/memory` exists. `FMFLURRY_MEMORY=off` turns it off.
+- architect and writer emit an ADR when a decision is made. doc-updater updates the touched bounded-context file.
+
 ## [0.4.33] - 2026-11-02
 
 - PR report links are absolute. A relative `docs/pr-reports/...` link in a PR body opened GitHub's compare page, so the PNG and HTML were unreachable. The new `agent-harness pr-report-links` prints the `## Visual report` section with `https://<host>/<owner>/<repo>/blob/<sha>/...` URLs pinned to the commit that holds the report (the PNG gets `?raw=true`). It refuses files that are not committed yet. `pr-report` no longer prints a relative section; it points to `pr-report-links`.

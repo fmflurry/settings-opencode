@@ -1360,7 +1360,7 @@ install_agent_harness_scripts() {
     if [ "$OPENCODE_TARGET_READY" = "1" ] && [ "$OPENCODE_TARGET_IS_SOURCE" != "1" ]; then
         local hook_dest="$TARGET_OPENCODE/scripts/agent-harness/hooks" hook
         mkdir -p "$hook_dest"
-        for hook in autonomy-context autonomy-git-guard pr-visual-report ship-stop-gate kpi-emit; do
+        for hook in autonomy-context autonomy-git-guard pr-visual-report ship-stop-gate kpi-emit memory-lint; do
             cp "$REPO_DIR/.claude/hooks/$hook.sh" "$hook_dest/$hook.sh"
             chmod +x "$hook_dest/$hook.sh"
         done

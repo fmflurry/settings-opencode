@@ -1306,6 +1306,7 @@ test("OpenCode local install syncs the repository config payload exactly", () =>
           "agent-harness/hooks/pr-visual-report.sh",
           "agent-harness/hooks/ship-stop-gate.sh",
           "agent-harness/hooks/kpi-emit.sh",
+          "agent-harness/hooks/memory-lint.sh",
         ]) {
           delete installed[extra];
         }
@@ -1316,7 +1317,7 @@ test("OpenCode local install syncs the repository config payload exactly", () =>
         `${payloadPath} must match the repository payload exactly`,
       );
     }
-    for (const hook of ["autonomy-context.sh", "autonomy-git-guard.sh", "pr-visual-report.sh", "ship-stop-gate.sh", "kpi-emit.sh"]) {
+    for (const hook of ["autonomy-context.sh", "autonomy-git-guard.sh", "pr-visual-report.sh", "ship-stop-gate.sh", "kpi-emit.sh", "memory-lint.sh"]) {
       assert.equal(
         readFileSync(join(installedRoot, "scripts/agent-harness/hooks", hook), "utf8"),
         readFileSync(join(repoRoot, ".claude/hooks", hook), "utf8"),

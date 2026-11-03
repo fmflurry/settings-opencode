@@ -3312,6 +3312,150 @@ check "quarantine is not copied onto a branch" test -z "$(grep -lE '"stop_blocks
 rm -f "$GS/main/.claude/state/autonomy.on"
 check "goal-state.sh plugin copy matches the hook" cmp -s "$HOOKS/goal-state.sh" "$HERE/plugins/fmflurry-harness/hooks/scripts/goal-state.sh"
 
+# ---- memory-lint
+ML="$HOOKS/memory-lint.sh"
+MR="$TMP/mem"
+ml_doc() {
+  local rel="$1" owner="$2" reviewed="$3"; shift 3
+  mkdir -p "$(dirname "$MR/docs/memory/$rel")"
+  {
+    echo '---'
+    [ -z "$owner" ] || echo "owner: $owner"
+    [ -z "$reviewed" ] || echo "reviewed: $reviewed"
+    echo 'refs:'
+    for r in "$@"; do echo "  - $r"; done
+    echo '---'
+    echo "# $rel"
+  } >"$MR/docs/memory/$rel"
+}
+ml_fixture() {
+  rm -rf "$MR"; mkdir -p "$MR/src"; git init -q "$MR"
+  printf 'export class InvoiceService {}\n' >"$MR/src/billing.ts"
+  ml_doc INDEX.md team 2026-10-01
+  ml_doc glossary.md team 2026-10-01
+  ml_doc contexts/billing.md billing 2026-10-01 src/billing.ts 'src/billing.ts#InvoiceService'
+  ml_doc decisions/0001-use-adr.md billing 2026-10-01
+}
+ml() { ( cd "$MR" && MEMORY_LINT_TODAY=2026-11-03 bash "$ML" "$@" ); }
+
+ml_fixture
+ml >"$FX/out" 2>"$FX/err"; rc=$?
+check "memory-lint: a clean memory passes" test $rc -eq 0
+check "memory-lint: a clean memory prints nothing" test ! -s "$FX/err"
+
+ml_fixture; rm -rf "$MR/docs"
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: a project without docs/memory passes" test $rc -eq 0
+
+ml_fixture; ml_doc contexts/billing.md billing 2026-10-01 src/gone.ts
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: a dead ref path fails" test $rc -eq 1
+check "memory-lint: a dead ref path names the doc and the ref" grep -q 'docs/memory/contexts/billing.md: dead ref src/gone.ts' "$FX/err"
+
+ml_fixture; ml_doc contexts/billing.md billing 2026-10-01 'src/billing.ts#PaymentService'
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: a dead ref symbol fails" test $rc -eq 1
+check "memory-lint: a dead ref symbol is named" grep -q 'dead ref src/billing.ts#PaymentService' "$FX/err"
+
+ml_fixture; ml_doc contexts/billing.md billing 2026-10-01 'src/billing.ts#Invoice'
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: a symbol must match a whole word" test $rc -eq 1
+
+ml_fixture; ml_doc contexts/billing.md billing 2026-10-01 ../outside.ts
+: >"$TMP/outside.ts"
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: a ref outside the project is dead" test $rc -eq 1
+
+ml_fixture; ml_doc glossary.md '' 2026-10-01
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: a missing owner fails" test $rc -eq 1
+check "memory-lint: a missing owner is named" grep -q 'docs/memory/glossary.md: missing owner' "$FX/err"
+
+ml_fixture; ml_doc glossary.md team ''
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: a missing reviewed fails" test $rc -eq 1
+check "memory-lint: a missing reviewed is named" grep -q 'docs/memory/glossary.md: missing reviewed' "$FX/err"
+
+ml_fixture; ml_doc glossary.md team 'last week'
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: a reviewed that is not a date fails" test $rc -eq 1
+
+ml_fixture; printf '# no frontmatter\n' >"$MR/docs/memory/INDEX.md"
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: a doc without frontmatter fails" test $rc -eq 1
+check "memory-lint: a doc without frontmatter is named" grep -q 'docs/memory/INDEX.md: missing frontmatter' "$FX/err"
+
+ml_fixture; ml_doc glossary.md team 2026-08-05
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: reviewed 90 days ago still passes" test $rc -eq 0
+ml_fixture; ml_doc glossary.md team 2026-08-04
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: reviewed 91 days ago fails" test $rc -eq 1
+check "memory-lint: a stale review is named" grep -q 'docs/memory/glossary.md: reviewed 2026-08-04 is older than 90 days' "$FX/err"
+
+ml_fixture; ml_doc glossary.md team 2026-08-04
+( cd "$MR" && FMFLURRY_MEMORY=' OFF ' MEMORY_LINT_TODAY=2026-11-03 bash "$ML" ) >/dev/null 2>&1; rc=$?
+check "memory-lint: FMFLURRY_MEMORY=off skips the lint" test $rc -eq 0
+( cd "$MR" && FMFLURRY_MEMORY=on MEMORY_LINT_TODAY=2026-11-03 bash "$ML" ) >/dev/null 2>&1; rc=$?
+check "memory-lint: FMFLURRY_MEMORY=on still lints" test $rc -eq 1
+
+ml_fixture
+mkdir -p "$MR/sub"
+( cd "$MR/sub" && MEMORY_LINT_TODAY=2026-11-03 bash "$ML" ) >/dev/null 2>&1; rc=$?
+check "memory-lint: runs from a subdirectory against the repo root" test $rc -eq 0
+ml_doc glossary.md team 2026-08-04
+( cd "$TMP" && MEMORY_LINT_TODAY=2026-11-03 bash "$ML" "$MR" ) >/dev/null 2>&1; rc=$?
+check "memory-lint: takes the project root as an argument" test $rc -eq 1
+( cd "$MR" && env -u AGENT_HARNESS_TEST MEMORY_LINT_TODAY=2000-01-01 bash "$ML" ) >/dev/null 2>&1; rc=$?
+check "memory-lint: MEMORY_LINT_TODAY is ignored outside tests" test $rc -eq 1
+
+ml_fixture; ml_doc glossary.md '' 2026-10-01
+( cd "$MR" && bash "$H/agent-harness.sh" memory-lint ) >/dev/null 2>"$FX/err"; rc=$?
+check "agent-harness memory-lint forwards to the hook" test $rc -eq 1
+check "agent-harness memory-lint prints the finding" grep -q 'missing owner' "$FX/err"
+
+ml_fixture
+printf '## Content\nmémoire : màj\n' | ml --body - >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint --body: mémoire : màj passes" test $rc -eq 0
+printf -- '- Mémoire : aucun changement\n' | ml --body - >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint --body: mémoire : aucun changement passes" test $rc -eq 0
+printf '## Content\nnothing\n' | ml --body - >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint --body: a body without the memory line fails" test $rc -eq 1
+check "memory-lint --body: says which line is missing" grep -q 'mémoire : màj' "$FX/err"
+rm -rf "$MR/docs"
+printf '## Content\nnothing\n' | ml --body - >/dev/null 2>&1; rc=$?
+check "memory-lint --body: no docs/memory, no memory line needed" test $rc -eq 0
+
+ml_fixture; ml_doc glossary.md '' 2026-10-01
+printf '## Visual report\n\n- [x] Skip: version bump. Reason: version bump only here\n\nmémoire : aucun changement\n' >"$MR/body.md"
+( cd "$MR" && MEMORY_LINT_TODAY=2026-11-03 bash "$HOOKS/pr-visual-report.sh" --check --body-file body.md ) >/dev/null 2>"$FX/err"; rc=$?
+check "pr-visual-report --check: a memory-lint failure fails the body check" test $rc -eq 1
+check "pr-visual-report --check: the memory-lint failure is shown" grep -q 'missing owner' "$FX/err"
+ml_fixture
+printf '## Visual report\n\n- [x] Skip: version bump. Reason: version bump only here\n' >"$MR/body.md"
+( cd "$MR" && MEMORY_LINT_TODAY=2026-11-03 bash "$HOOKS/pr-visual-report.sh" --check --body-file body.md ) >/dev/null 2>"$FX/err"; rc=$?
+check "pr-visual-report --check: a body without the memory line fails" test $rc -eq 1
+printf '## Visual report\n\n- [x] Skip: version bump. Reason: version bump only here\n\nmémoire : màj\n' >"$MR/body.md"
+( cd "$MR" && MEMORY_LINT_TODAY=2026-11-03 bash "$HOOKS/pr-visual-report.sh" --check --body-file body.md ) >/dev/null 2>"$FX/err"; rc=$?
+check "pr-visual-report --check: a clean memory and the memory line pass" test $rc -eq 0
+jqn -nc --arg c "gh pr create --title t --body-file body.md" --arg d "$MR" '{tool_input:{command:$c},cwd:$d}' >"$FX/in"
+printf '## Visual report\n\n- [x] Skip: version bump. Reason: version bump only here\n' >"$MR/body.md"
+out="$(MEMORY_LINT_TODAY=2026-11-03 bash "$HOOKS/pr-visual-report.sh" <"$FX/in" 2>/dev/null)"
+check "pr-visual-report hook: gh pr create without the memory line is denied" grep -q '"permissionDecision":"deny"' <<<"$(jq -c . <<<"$out")"
+
+for gate in "${STOP_COPIES[@]}"; do
+  gl="${gate#"$HERE"/}"
+  sg_prep
+  mkdir -p "$T/docs/memory"
+  printf -- '---\nreviewed: 2026-10-01\n---\n' >"$T/docs/memory/INDEX.md"
+  out="$(sg_stop "$gate" 2>/dev/null)"
+  check "stop-gate ($gl): a memory-lint failure is in the block reason" grep -q 'memory-lint' <<<"$out"
+  check "stop-gate ($gl): the memory-lint finding is named" grep -q 'missing owner' <<<"$out"
+  out="$(FMFLURRY_MEMORY=off sg_stop "$gate" 2>/dev/null)"
+  check "stop-gate ($gl): FMFLURRY_MEMORY=off leaves memory out of the reason" test -z "$(grep 'memory-lint' <<<"$out")"
+done
+LCWD=""
+
 check "verify-this picks up the generated override and runs its commands" \
   node --test "$HERE/scripts/agent-harness/test/verify-override.test.mjs"
 

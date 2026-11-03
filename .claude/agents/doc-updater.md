@@ -90,6 +90,10 @@ Links to other codemaps
 2. **Update** — README.md, docs/GUIDES/\*.md, package.json, API docs
 3. **Validate** — Verify files exist, links work, examples run, snippets compile
 
+## Project memory
+
+When the project has `docs/memory` (project memory is on unless `FMFLURRY_MEMORY=off`), find the bounded contexts the change touches and update each `docs/memory/contexts/<bounded-context>.md` so it matches the code. Fix its `refs`, set `reviewed` to today, and keep `docs/memory/INDEX.md` at one line per doc. Do not edit an accepted ADR. Run `agent-harness memory-lint` and fix every finding.
+
 ## Key Principles
 
 1. **Single Source of Truth** — Generate from code, don't manually write

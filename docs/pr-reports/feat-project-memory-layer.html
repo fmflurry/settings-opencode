@@ -88,8 +88,8 @@ docs/memory/
     <section class="card">
       <h2>Tests</h2>
       <table>
-        <tr><td>run.sh memory-lint + gate + hook checks</td><td class="ok">44 new, all pass</td></tr>
-        <tr><td>run.sh total (branch / master)</td><td>2325 / 2283 pass, same 4 local-env failures on both</td></tr>
+        <tr><td>run.sh memory-lint + gate + hook checks</td><td class="ok">55 new, all pass</td></tr>
+        <tr><td>run.sh total (branch / master)</td><td>2336 / 2283 pass, same 4 local-env failures on both</td></tr>
         <tr><td>npm test</td><td>270 pass, 1 fails on master too</td></tr>
         <tr><td>tsc strict · cursor check · parity</td><td class="ok">clean</td></tr>
       </table>
@@ -98,7 +98,7 @@ docs/memory/
       <h2>Risks</h2>
       <ul>
         <li>The PR body check applies only to repos that have <code>docs/memory</code>.</li>
-        <li>Symbol refs are matched by text with <code>grep -w</code>, not by AST lookup.</li>
+        <li>Symbol refs are matched by text with <code>grep -w</code>, not by AST lookup. Refs that resolve outside the repo, including through a symlink, are dead.</li><li>ADRs in <code>decisions/</code> skip the age and ref checks, because they are immutable.</li>
         <li>The date math is pure bash, so GNU and BSD <code>date</code> both work.</li>
       </ul>
     </section>

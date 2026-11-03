@@ -44,7 +44,7 @@ A ref is a path relative to the project root. `path#symbol` also needs the symbo
 - a `reviewed` date older than 90 days
 - a dead ref: a missing path, a path outside the project, or a symbol not found in its file
 
-It warns when `AGENTS.md` is longer than 80 lines. A project without `docs/memory` passes.
+ADRs under `decisions/` still need `owner` and a valid `reviewed`, but skip the age and ref checks: they are immutable records. A ref that resolves outside the project, including through a symlink, is dead. It warns when `AGENTS.md` is longer than 80 lines. A project without `docs/memory` passes. The PR hook lints the project of the session's working directory, so open the PR from the project it targets.
 The ship stop gate puts lint findings in its block reason. `agent-harness pr-report-check` and the
 `gh pr create` hook run it too. When `docs/memory` exists, they also require the PR body line below.
 

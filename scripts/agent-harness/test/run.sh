@@ -3366,6 +3366,42 @@ ml_fixture; ml_doc contexts/billing.md billing 2026-10-01 ../outside.ts
 ml >/dev/null 2>"$FX/err"; rc=$?
 check "memory-lint: a ref outside the project is dead" test $rc -eq 1
 
+ml_fixture; ml_doc decisions/0001-use-adr.md billing 2025-01-01 src/removed.ts
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: an old ADR with a historical ref still passes" test $rc -eq 0
+ml_fixture; ml_doc decisions/0001-use-adr.md '' 2025-01-01
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: an ADR still needs an owner" test $rc -eq 1
+
+ml_fixture; printf -- '---\nowner: billing\nreviewed: 2026-10-01\nrefs:\n- src/gone.ts\n---\n' >"$MR/docs/memory/contexts/billing.md"
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: an unindented refs list is still checked" grep -q 'dead ref src/gone.ts' "$FX/err"
+ml_fixture; printf -- '---\nowner: billing # team\nreviewed: 2026-10-01 # checked\nrefs: [src/billing.ts#InvoiceService]\n---\n' >"$MR/docs/memory/contexts/billing.md"
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: inline comments and an inline refs list pass" test $rc -eq 0
+ml_fixture; printf -- '---\nreviewed: 2026-10-01\n\nowner: body\n' >"$MR/docs/memory/glossary.md"
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: an unterminated frontmatter fails" grep -q 'docs/memory/glossary.md: unterminated frontmatter' "$FX/err"
+ml_fixture; ml_doc glossary.md team 2026-13-45
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: an impossible date fails" grep -q "reviewed '2026-13-45' is not a YYYY-MM-DD date" "$FX/err"
+ml_fixture; ml_doc glossary.md team 2099-01-01
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: a reviewed date in the future fails" grep -q 'reviewed 2099-01-01 is in the future' "$FX/err"
+ml_fixture; ml_doc glossary.md team 2026-11-04
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: tomorrow is tolerated for time zones" test $rc -eq 0
+ml_fixture; printf 'secret word\n' >"$TMP/outside-secret.txt"; ln -s "$TMP/outside-secret.txt" "$MR/src/link.txt"
+ml_doc contexts/billing.md billing 2026-10-01 'src/link.txt#secret'
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: a ref through a symlink out of the repo is dead" grep -q 'dead ref src/link.txt#secret' "$FX/err"
+ml_fixture; ln -s "$TMP" "$MR/out"; ml_doc contexts/billing.md billing 2026-10-01 'out/outside-secret.txt'
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: a ref through a symlinked directory out of the repo is dead" test $rc -eq 1
+ml_fixture; ml_doc contexts/billing.md billing 2026-10-01 "src/$(printf 'x%.0s' $(seq 1 400)).ts"
+ml >/dev/null 2>"$FX/err"; rc=$?
+check "memory-lint: a long finding is cut to 200 characters" test "$(awk '{ if (length($0) > m) m = length($0) } END { print m }' "$FX/err")" -le 200
+
 ml_fixture; ml_doc glossary.md '' 2026-10-01
 ml >/dev/null 2>"$FX/err"; rc=$?
 check "memory-lint: a missing owner fails" test $rc -eq 1

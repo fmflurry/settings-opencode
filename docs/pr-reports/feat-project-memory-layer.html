@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Split project memory</title>
+<style>
+  :root { --bg:#FAF6EE; --card:#FFFDF8; --ink:#2B2620; --muted:#6B6257; --line:#E6DCCB; --accent:#8A5A2B; --ok:#3F7A4A; --bad:#A33A2C; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; line-height:1.45; }
+  main { max-width:1180px; margin:0 auto; padding:32px 28px 40px; }
+  h1 { font-size:30px; margin:0 0 6px; }
+  .sub { color:var(--muted); margin:0 0 24px; }
+  .grid { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:18px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 18px; box-shadow:0 1px 2px rgba(60,40,20,.05); }
+  .card h2 { font-size:17px; margin:0 0 10px; color:var(--accent); }
+  ul { margin:0; padding-left:18px; } li { margin:3px 0; }
+  code { font-family: ui-monospace, Menlo, monospace; font-size:12.5px; background:#F3EADB; padding:1px 4px; border-radius:4px; }
+  .tree { font-family: ui-monospace, Menlo, monospace; font-size:13px; white-space:pre; background:#F6EFE2; border-radius:10px; padding:12px; margin:0; }
+  .flow { display:flex; gap:10px; align-items:stretch; flex-wrap:wrap; margin:18px 0; }
+  .step { flex:1 1 150px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 12px; font-size:14px; }
+  .step b { display:block; color:var(--accent); }
+  .arrow { align-self:center; color:var(--muted); font-size:20px; }
+  .ok { color:var(--ok); font-weight:bold; } .bad { color:var(--bad); font-weight:bold; }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  td, th { border-bottom:1px solid var(--line); padding:5px 6px; text-align:left; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } .arrow { display:none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Split project memory (“mémoire découpée”)</h1>
+  <p class="sub">On by default. Turn it off with <code>FMFLURRY_MEMORY=off</code>. Each session loads a short <code>AGENTS.md</code>, then only the memory the task touches. CodeMemory is not involved.</p>
+
+  <div class="grid">
+    <section class="card">
+      <h2>What /memory-init scaffolds</h2>
+<pre class="tree">AGENTS.md            ≤ ~80 lines, rules + pointers
+docs/memory/
+  INDEX.md           one line per doc
+  glossary.md
+  contexts/
+    billing.md       read only if task touches BC
+  decisions/
+    0001-….md        ADR, immutable
+    0002-….md        supersedes 0001 (kept)</pre>
+      <p style="font-size:13px;color:var(--muted);margin:8px 0 0">Every doc has <code>owner</code>, <code>reviewed</code>, and <code>refs</code> frontmatter.</p>
+    </section>
+    <section class="card">
+      <h2>memory-lint.sh fails on</h2>
+      <ul>
+        <li>no frontmatter, a missing <code>owner</code>, or a missing <code>reviewed</code></li>
+        <li><code>reviewed</code> older than 90 days (day 90 passes, day 91 fails)</li>
+        <li>dead <code>refs</code>: a missing path, a path outside the repo, or <code>path#Symbol</code> with no whole-word match</li>
+        <li>with <code>--body</code>: no <code>mémoire : màj</code> / <code>mémoire : aucun changement</code> line</li>
+      </ul>
+      <p style="font-size:13px;color:var(--muted);margin:8px 0 0">It passes without checking when there is no <code>docs/memory</code> or when <code>FMFLURRY_MEMORY=off</code>. An <code>AGENTS.md</code> over 80 lines only warns.</p>
+    </section>
+    <section class="card">
+      <h2>Who keeps it true</h2>
+      <ul>
+        <li><b>architect</b> returns an ADR when a decision is made</li>
+        <li><b>writer</b> writes the ADR and its INDEX line</li>
+        <li><b>doc-updater</b> updates the touched BC's context file and sets <code>reviewed</code></li>
+        <li><b>/pr</b> body states the memory line</li>
+      </ul>
+    </section>
+  </div>
+
+  <div class="flow">
+    <div class="step"><b>Edit</b>code + docs/memory</div><div class="arrow">→</div>
+    <div class="step"><b>agent-harness memory-lint</b>new CLI wrapper</div><div class="arrow">→</div>
+    <div class="step"><b>pr-report-check / gh pr create hook</b>pr-visual-report.sh calls memory-lint --body</div><div class="arrow">→</div>
+    <div class="step"><b>ship stop gate</b>findings are prefixed to the block reason</div><div class="arrow">→</div>
+    <div class="step"><b>merge</b></div>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Harness parity</h2>
+      <ul>
+        <li>Skill: <code>skills/project-memory</code> (one root, synced to both)</li>
+        <li>Command: <code>commands/</code> + <code>.claude/commands/</code> + <code>opencode.jsonc</code></li>
+        <li>Rule: <code>instructions/</code> + <code>.claude/rules/common/</code> (paths-bound)</li>
+        <li>Cursor plugin 0.4.34, rebuilt; installer copies the hook for OpenCode</li>
+      </ul>
+    </section>
+    <section class="card">
+      <h2>Tests</h2>
+      <table>
+        <tr><td>run.sh memory-lint + gate + hook checks</td><td class="ok">44 new, all pass</td></tr>
+        <tr><td>run.sh total (branch / master)</td><td>2325 / 2283 pass, same 4 local-env failures on both</td></tr>
+        <tr><td>npm test</td><td>270 pass, 1 fails on master too</td></tr>
+        <tr><td>tsc strict · cursor check · parity</td><td class="ok">clean</td></tr>
+      </table>
+    </section>
+    <section class="card">
+      <h2>Risks</h2>
+      <ul>
+        <li>The PR body check applies only to repos that have <code>docs/memory</code>.</li>
+        <li>Symbol refs are matched by text with <code>grep -w</code>, not by AST lookup.</li>
+        <li>The date math is pure bash, so GNU and BSD <code>date</code> both work.</li>
+      </ul>
+    </section>
+  </div>
+
+<section id="kpi-metrics" style="margin-top:28px">
+<h2 style="font-size:18px;margin:0 0 8px">Metrics</h2>
+<p style="margin:0 0 10px;color:#57534e">fmflurry/settings-opencode  feat/project-memory-layer  pr n/a. Status: complete.</p>
+<table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #d6d3d1"><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Wall</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">6m56s</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Active</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">6m56s (gaps over 5m excluded)</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Sessions</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">cursor 1, claude 0, opencode 0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tokens</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">n/a</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tool failures</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Guard blocks</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">20</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Review rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Fix rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr></table>
+<p style="margin:10px 0 0">Tools: Bash 2</p>
+<p style="margin:4px 0 0">Skills: none</p>
+<p style="margin:4px 0 0">Agents: main 0, generalPurpose 2</p>
+<p style="margin:4px 0 0">Failure tools: none. Durations: n/a.</p>
+</section>
+</main>
+</body>
+</html>

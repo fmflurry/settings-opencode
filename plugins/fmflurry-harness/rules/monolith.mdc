@@ -14,7 +14,7 @@ Load a skill when its description matches, and do that work here:
 - tests: `tdd`, `testing`
 - git and pull requests: `git-workflow`
 - plans and design: `planner`, `architect`, `socratic-design`
-- prose: `writer`, `doc-updater`
+- prose: `writer`, `doc-updater`, `project-memory`
 - HTTP specs: `api-spec-openapi` (SmartBear stays in the project's own MCP config)
 - privacy: `gdpr-compliance`
 - live Postgres: `postgres-health-check`, `postgres-backup-restore`, `postgres-container-ops`, `postgres-performance-tuning`

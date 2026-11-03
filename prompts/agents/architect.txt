@@ -121,6 +121,8 @@ For each design decision, document:
 
 For significant architectural decisions, create ADRs:
 
+When a decision is made and the project has `docs/memory` (project memory is on unless `FMFLURRY_MEMORY=off`), emit the ADR in the `project-memory` skill format: `docs/memory/decisions/NNNN-<slug>.md` with the next free number, `owner`/`reviewed`/`refs` frontmatter, and `Status: accepted`. When it replaces an older ADR, also name the old file and change only its status to `superseded by NNNN`. You are read-only, so return the full ADR text in your report for the writer to commit. ADRs are immutable.
+
 ```markdown
 # ADR-001: Use Redis for Semantic Search Vector Storage
 

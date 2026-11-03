@@ -29,4 +29,6 @@ Tier is T1 (low), T2, or T3 (sensitive). It comes from blast radius, protected p
 
 `## Visual report` follows the `pr-visual-report` skill. Run `agent-harness kpi feature` before rendering the HTML (Conductor and Monolith). Commit `docs/pr-reports/<branch-slug>.html`, `.png`, and `.metrics.json`, then paste the section `agent-harness pr-report-links` prints (absolute links pinned to that commit, plus the metrics table). A docs typo or a version bump only may check Skip and state the reason. Run `agent-harness pr-report-check --body-file` on the body before creating or updating the PR. Pass the body with `--body-file` or one quoted `--body`. The hook blocks a body that fails the visual check. A missing or partial metrics table is a warning.
 
+When the project has `docs/memory` (project memory is on unless `FMFLURRY_MEMORY=off`), run `agent-harness memory-lint` and fix every finding before opening the PR. State `mémoire : màj` in the body when memory docs changed, or `mémoire : aucun changement` when they did not. `pr-report-check` and the hook refuse a body without that line, or a dead or stale memory doc.
+
 When the template file is absent, still include those sections. If a pull request already exists for the branch, update its body instead of opening a second one.

@@ -14,9 +14,9 @@ This build is Monolith. `./install-cursor.sh --variant conductor` (or `HARNESS_V
 | Component | Contents |
 | --- | --- |
 | Agents (9) | Review and noisy-output subagents. Folded roles load as skills. The primary agent writes |
-| Skills (82) | Reusable skills, including the `threejs` and `openspec` umbrellas and an optional `conductor` skill for `/orchestrate` |
-| Commands (65) | Slash commands for review, git, planning and verification |
-| Rules (17) | Always-on Monolith baseline. The primary agent may write. There is no first-tool gate. TypeScript rules apply on matching files |
+| Skills (83) | Reusable skills, including the `threejs` and `openspec` umbrellas and an optional `conductor` skill for `/orchestrate` |
+| Commands (66) | Slash commands for review, git, planning and verification |
+| Rules (18) | Always-on Monolith baseline. The primary agent may write. There is no first-tool gate. TypeScript rules apply on matching files |
 | Hooks | Pre-tool-use guards, command rewriting, code-memory preference, tool budget, stop checks |
 | MCP | `code-memory` |
 
@@ -48,7 +48,7 @@ After install, run `/setup-harness`. It writes `~/.cursor/rules/fmflurry-harness
 
 ## Versioning
 
-Manifest version 0.4.33. The build reads it from `scripts/cursor-plugin/config.json` and writes `.cursor-plugin/plugin.json`. History is in `CHANGELOG.md`.
+Manifest version 0.4.34. The build reads it from `scripts/cursor-plugin/config.json` and writes `.cursor-plugin/plugin.json`. History is in `CHANGELOG.md`.
 
 bump the plugin version + changelog in any PR touching plugin sources.
 

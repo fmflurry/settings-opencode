@@ -239,6 +239,10 @@ if [ -z "$pr" ]; then
 else
   reason="PR #$pr is not merged: wait for checks to pass, then run agent-harness ship-merge $pr"
 fi
+memory_lint="${BASH_SOURCE[0]%/*}/memory-lint.sh"
+if [ -f "$memory_lint" ] && ! memory_out="$(bash "$memory_lint" "${WT_PATH:-${CLAUDE_PROJECT_DIR:-$PWD}}" 2>&1 >/dev/null)"; then
+  reason="memory-lint failed, fix docs/memory before the merge: $(printf '%s\n' "$memory_out" | grep -v 'warning:' | head -n 5 | tr '\n' ' ')| $reason"
+fi
 
 if [ "$(goal_get '.total_blocks')" -ge "$MAX_TOTAL_BLOCKS" ]; then
   escalate "total stop blocks reached $MAX_TOTAL_BLOCKS: $reason"

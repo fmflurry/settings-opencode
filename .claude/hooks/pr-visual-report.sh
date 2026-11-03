@@ -52,6 +52,14 @@ visual_ok() {
   return 1
 }
 
+memory_ok() {
+  local lint="${BASH_SOURCE[0]%/*}/memory-lint.sh" out
+  [ -f "$lint" ] || return 0
+  out="$(printf '%s\n' "$1" | bash "$lint" --body - "$2" 2>&1 >/dev/null)" && return 0
+  say "$(printf '%s\n' "$out" | grep -v 'warning:' | head -n 5)"
+  return 1
+}
+
 section_between() {
   local heading="$1"
   printf '%s\n' "$2" | awk -v heading="$heading" '
@@ -217,6 +225,7 @@ take_body_flags() {
     BODY="$PAYLOAD"
   fi
   visual_ok "$BODY" || return 1
+  memory_ok "$BODY" "$HOOK_CWD" || return 1
   metrics_warn "$BODY"
 }
 
@@ -332,7 +341,7 @@ if [ "${1:-}" = "--check" ]; then
       exit 2
       ;;
   esac
-  if visual_ok "$BODY"; then
+  if visual_ok "$BODY" && memory_ok "$BODY" "$HOOK_CWD"; then
     metrics_warn "$BODY"
     exit 0
   fi

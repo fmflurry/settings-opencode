@@ -41,7 +41,7 @@ if ! autonomy_on && [ "$confirmed" != "--confirmed" ]; then
   refuse "autonomy is off and --confirmed was not given"
 fi
 
-view="$(gh_pr_view "$pr" state,baseRefName,isDraft,headRefOid,headRefName,isCrossRepository,files)" || refuse "cannot read PR #$pr"
+view="$(gh_pr_view "$pr" state,baseRefName,isDraft,headRefOid,headRefName,isCrossRepository,files,body)" || refuse "cannot read PR #$pr"
 base="$(base_branch)" || refuse "cannot resolve the base branch"
 head="$(jq -r .headRefOid <<<"$view")"
 branch="$(jq -r .headRefName <<<"$view")"
@@ -66,6 +66,7 @@ gh_pr_merge "$pr" "$method" "$head" || merge_rc=$?
 state="$(gh_pr_view "$pr" state | jq -r .state)" || state=unknown
 [ "$state" = MERGED ] || refuse "merge failed (exit $merge_rc); PR state is $state"
 
+bash -p "$HARNESS_DIR/ado-state.sh" merged "$branch" "$(jq -r '.body // ""' <<<"$view")" || true
 goal_bind_registered_pr "$pr" || true
 goal_update '.status = "done" | del(.gate, .gate_reason)'
 kpi_emit ship outcome=merged "pr=$pr"

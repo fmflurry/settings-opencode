@@ -2,6 +2,10 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.35] - 2026-11-05
+
+- Sync eligible Azure DevOps work items to Active at work start and Resolved after merge, without changing board columns or moving backwards.
+
 ## [0.4.34] - 2026-11-03
 
 - Split project memory, on by default. The `project-memory` skill and `/memory-init` scaffold a short root `AGENTS.md` and `docs/memory/` (`INDEX.md`, `contexts/<bounded-context>.md`, immutable ADRs in `decisions/`, `glossary.md`), each doc with `owner`, `reviewed`, and `refs` frontmatter. The `project-memory` rule loads a context file only when the task touches that bounded context.

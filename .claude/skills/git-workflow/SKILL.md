@@ -105,6 +105,10 @@ If the `git-specialist` agent is installed, it must follow this list. Otherwise 
 - detect the host from `git remote get-url origin` and use the matching CLI for PR work: `gh` for GitHub, `az repos pr` for Azure DevOps
 - preserve repository history hygiene
 
+## Azure DevOps work item lifecycle
+
+For Isagri_Dev_GC_GestionCommerciale Feature, User Story, Enabler, and Enabler Story work, run `agent-harness ado-state start "$(git branch --show-current)" "$ARGUMENTS"` when work starts. Pass the request or PR text containing an `AB#<id>` reference when the branch does not carry the ID. If references disagree, the helper skips the update. Include the `AB#<id>` in the PR body when the branch has no ID. At PR creation keep the item Active; after confirming a merge, run `agent-harness ado-state merged "<head-branch>" "<PR body>"`. `/ship` runs the start and merge updates through its CLI. For other workflows the agent runs these commands explicitly. The helper only runs for the SAIsagri/gc.platform GitHub repository or a repository in the named Azure DevOps project. It only advances New → Active and Active → Resolved, checks the project and work item type, uses a revision check, and never modifies board columns. Missing IDs are silent; an unavailable Azure CLI or failed update warns without blocking work. It skips Bugs, security-tagged items, and security-named branches; do not use it for other security-specific flows.
+
 ## Pull Request Rules
 
 When the task includes PR creation or inspection:

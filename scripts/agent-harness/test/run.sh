@@ -2347,7 +2347,7 @@ lw_td() {
   ( cd "$T" && echo c >c && git add c && git commit -qm C && git push -q origin HEAD ) >/dev/null 2>&1
   TN="$(cd "$T" && pwd -P)"
   TD_HEAD="$(git -C "$T" rev-parse HEAD)"
-  jq -n --arg h "$TD_HEAD" '{state:"MERGED",baseRefName:"master",isDraft:false,headRefOid:$h,headRefName:"feat/td-x",isCrossRepository:false,files:[]}' >"$FX/view.json"
+  jq -n --arg h "$TD_HEAD" --arg b "$(git -C "$LM" rev-parse master)" '{state:"MERGED",baseRefName:"master",baseRefOid:$b,body:"",isDraft:false,headRefOid:$h,headRefName:"feat/td-x",isCrossRepository:false,files:[]}' >"$FX/view.json"
   local saved="${LCWD:-}"
   LCWD="$T" LH goal pr 5 >/dev/null 2>&1
   LCWD="$saved"
@@ -2473,7 +2473,7 @@ check "ship-merge with an escalated goal: registry removed" test ! -e "$(lreg_fi
 lw_fixture git
 ( cd "$LM" && git checkout -q -b feat/plain && echo p >p && git add p && git commit -qm P && git push -q origin HEAD && git checkout -q master ) >/dev/null 2>&1
 PLAIN_HEAD="$(git -C "$LM" rev-parse feat/plain)"
-jq -n --arg h "$PLAIN_HEAD" '{state:"OPEN",baseRefName:"master",isDraft:false,headRefOid:$h,headRefName:"feat/plain",isCrossRepository:false,files:[{path:"client/a.gd"}]}' >"$FX/view.json"
+jq -n --arg h "$PLAIN_HEAD" --arg b "$(git -C "$LM" rev-parse master)" '{state:"OPEN",baseRefName:"master",baseRefOid:$b,body:"",isDraft:false,headRefOid:$h,headRefName:"feat/plain",isCrossRepository:false,files:[{path:"client/a.gd"}]}' >"$FX/view.json"
 echo '[{"name":"gate","status":"completed","conclusion":"success","app":{"slug":"github-actions"}}]' >"$FX/checks.json"
 LH ship-merge 5 --confirmed >"$FX/out" 2>&1; rc=$?
 check "ship-merge unregistered: exits 0" test $rc -eq 0

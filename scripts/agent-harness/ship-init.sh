@@ -110,5 +110,6 @@ fi
 jq -n --arg goal "${goal:-$branch}" --arg branch "$branch" --arg slug "$slug" --argjson pr "$pr" --arg base "$base" \
   '{goal:$goal, criteria:[], branch:$branch, slug:$slug, pr:$pr, base:$base, head_sha:"",
     fix_iterations:0, max_fix_iterations:10, last_fingerprint:"", reviews:{}, stop_blocks:0, total_blocks:0, status:"active", reason:"", backup_branches:[]}' >"$GOAL_FILE"
+bash -p "$HARNESS_DIR/ado-state.sh" start "$branch" "$goal" || true
 echo "$path"
 echo "slug=$slug" >&2

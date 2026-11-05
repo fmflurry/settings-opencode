@@ -1,0 +1,39 @@
+{
+  "feature": {
+    "repo": "fmflurry/settings-opencode",
+    "branch": "feat/ado-work-item-lifecycle",
+    "pr": null
+  },
+  "prs": [],
+  "wall_ms": 94000,
+  "active_ms": 94000,
+  "idle_gap_min": 5,
+  "sessions": {
+    "cursor": 0,
+    "claude": 0,
+    "opencode": 0
+  },
+  "tools": [],
+  "skills": [],
+  "agents": [
+    {
+      "name": "main",
+      "calls": 0
+    }
+  ],
+  "tool_failures": 0,
+  "failure_tools": [],
+  "duration_ms": null,
+  "guard_blocks": 7,
+  "guards": {
+    "pr-visual-report": 7
+  },
+  "review_rounds": 0,
+  "fix_rounds": 0,
+  "tokens": null,
+  "tokens_known": 0,
+  "events": 7,
+  "first_ts": "2026-11-05T10:04:34Z",
+  "last_ts": "2026-11-05T10:06:08Z",
+  "partial": false
+}

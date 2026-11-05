@@ -26,6 +26,14 @@ When git work is needed: if the `git-specialist` agent is installed, delegate to
 - Keep non-git implementation work in the main agent. If `git-specialist` is installed, switch to `/git` for repository operations. Otherwise stay in this session and follow this skill.
 - If you are already the `git-specialist` agent, execute the git task directly and do not re-delegate it. Follow the Canonical spec section below.
 
+## Commit provenance
+
+Claude Code and OpenCode agent-shell Git commits receive `Harness`, `Harness-SHA`, and `Session-Id` trailers from the installed session hooks. The SHA identifies the installed source checkout; `-dirty` means the source was dirty, the prior installation or overlay could not be proven clean, or installed managed files changed since capture. Do not remove or invent these trailers. Human shells outside agent sessions are unaffected.
+
+Before creating or updating a PR, run `agent-harness pr-provenance list origin/<base> HEAD` and paste its output into the PR body. Run it again after new commits. The PR body check rejects missing records. Use `agent-harness ship-merge` for squash merges: it copies the checked PR body into the squash message. Direct agent-shell `gh pr merge` requires `--rebase` or `--merge` and the current `--match-head-commit`.
+
+Known limits: GitHub website/API merges, Git hook overrides such as `core.hooksPath`, agent commits made with the guard bypassed, and OpenCode builds without `shell.env` are outside this best-effort guarantee. Human commits are not blocked.
+
 ## Commit Convention
 
 Every commit message must follow this format:

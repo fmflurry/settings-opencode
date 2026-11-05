@@ -19,7 +19,7 @@ echo "$*" >>"$FX/gh.log"
 jq_arg() { while [ $# -gt 0 ]; do case "$1" in -q | --jq) echo "$2"; return ;; esac; shift; done; }
 rest_gate() { [ -e "$FX/rest.fail" ] && { echo "HTTP 500: Internal Server Error" >&2; exit 1; }; return 0; }
 rest_pull() {
-  jq -c '{state:(if .state=="OPEN" then "open" else "closed" end),merged:(.state=="MERGED"),draft:.isDraft,base:{ref:.baseRefName,repo:{full_name:"o/r"}},head:{ref:.headRefName,sha:.headRefOid,repo:{full_name:(if .isCrossRepository then "fork/r" else "o/r" end)}},changed_files:((.files // [])|length),updated_at:"2026-10-24T00:00:00Z"}' "$FX/view.json" || exit 1
+  jq -c '{state:(if .state=="OPEN" then "open" else "closed" end),merged:(.state=="MERGED"),draft:.isDraft,base:{ref:.baseRefName,sha:.baseRefOid,repo:{full_name:"o/r"}},body:(.body // ""),head:{ref:.headRefName,sha:.headRefOid,repo:{full_name:(if .isCrossRepository then "fork/r" else "o/r" end)}},changed_files:((.files // [])|length),updated_at:"2026-10-24T00:00:00Z"}' "$FX/view.json" || exit 1
 }
 case "$*" in
   "pr view"* | "pr list"* | "pr merge"* | "repo view"* | "api graphql"*)
@@ -116,7 +116,7 @@ git clone -q "$TMP/origin.git" "$TMP/work" 2>/dev/null
 HEAD_SHA="$(git -C "$TMP/work" rev-parse HEAD)"
 
 green_fixtures() {
-  jq -n --arg h "$HEAD_SHA" '{state:"OPEN",baseRefName:"master",isDraft:false,headRefOid:$h,headRefName:"feat",isCrossRepository:false,files:[{path:"client/a.gd"},{path:"docs/notes.md"}]}' >"$FX/view.json"
+  jq -n --arg h "$HEAD_SHA" --arg b "$(git -C "$TMP/work" rev-parse origin/master)" '{state:"OPEN",baseRefName:"master",baseRefOid:$b,body:"",isDraft:false,headRefOid:$h,headRefName:"feat",isCrossRepository:false,files:[{path:"client/a.gd"},{path:"docs/notes.md"}]}' >"$FX/view.json"
   echo '[{"name":"gate","status":"completed","conclusion":"success","app":{"slug":"github-actions"}},{"name":"export","status":"completed","conclusion":"success","app":{"slug":"github-actions"}},{"name":"lint","status":"completed","conclusion":"skipped","app":{"slug":"github-actions"}}]' >"$FX/checks.json"
   echo '[{"id":2,"context":"tltb-review","state":"success","creator":{"login":"github-actions[bot]"}},{"id":1,"context":"tltb-review","state":"failure","creator":{"login":"github-actions[bot]"}}]' >"$FX/statuses.json"
   echo '{"data":{"repository":{"pullRequest":{"reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[{"isResolved":true}]}}}}}' >"$FX/threads.json"
@@ -453,6 +453,18 @@ fresh; rm -f "$TMP/state/autonomy.on"; refuses "flag off w/o --confirmed" 5
 fresh; mutate '.baseRefName="develop"' view.json; refuses "PR base differs from configured base" 5
 fresh; touch "$FX/merge.noop"; echo 1 >"$FX/merge.rc"; merge 5; rc=$?
 check "ship-merge refuses when merge fails and PR stays open" test $rc -ne 0
+
+fresh
+( cd "$TMP/work" && node "$H/commit-provenance.mjs" run test-session 0.4.36 1234567890abcdef1234567890abcdef12345678 'git commit --allow-empty -qm "feat: attributed"' )
+HEAD_SHA="$(git -C "$TMP/work" rev-parse HEAD)"
+mutate ".headRefOid=\"$HEAD_SHA\"" view.json
+merge 5; rc=$?
+check "ship-merge refuses agent squash when PR provenance is missing" test $rc -ne 0
+provenance_body="$(cd "$TMP/work" && node "$H/pr-provenance.mjs" list origin/master HEAD)"
+jq --arg body "$provenance_body" '.body=$body' "$FX/view.json" >"$FX/t" && mv "$FX/t" "$FX/view.json"
+merge 5; rc=$?
+check "ship-merge accepts a complete provenance body" test $rc -eq 0
+check "ship-merge passes provenance into the squash message" grep -q 'Session-Id: test-session' "$FX/gh.log"
 
 fresh; bash "$H/goal.sh" set g; bash "$H/goal.sh" pr 5
 merge 5; rc=$?
@@ -917,7 +929,7 @@ nocfg; merge 5; rc=$?
 check "graphql down: normal path no config merges" test $rc -eq 0
 check "graphql down: normal path no config asks gh for the default branch" grep -q 'defaultBranchRef' "$FX/gh.log"
 check "graphql down: normal path no config never uses the REST repo placeholder" no_rest_placeholder
-check "graphql down: normal path no config never reads the REST PR" bash -c '! grep -q "api repos/o/r/pulls" "$1"' _ "$FX/gh.log"
+check "graphql down: normal path reads REST PR for provenance" grep -qx "api repos/o/r/pulls/5" "$FX/gh.log"
 cfresh; cleanup 5; rc=$?
 check "graphql down: normal path cleanup exits 0" test $rc -eq 0
 check "graphql down: normal path cleanup deletes remote feat" remote_deleted

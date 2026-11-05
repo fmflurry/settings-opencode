@@ -32,3 +32,5 @@ Tier is T1 (low), T2, or T3 (sensitive). It comes from blast radius, protected p
 When the project has `docs/memory` (project memory is on unless `FMFLURRY_MEMORY=off`), run `agent-harness memory-lint` and fix every finding before opening the PR. State `mémoire : màj` in the body when memory docs changed, or `mémoire : aucun changement` when they did not. `pr-report-check` and the hook refuse a body without that line, or a dead or stale memory doc.
 
 When the template file is absent, still include those sections. If a pull request already exists for the branch, update its body instead of opening a second one.
+
+For agent commits, include `## Commit provenance` in the PR body: list each commit SHA and its `Harness`, `Harness-SHA`, and `Session-Id` trailers, and update it after new commits so squash merges retain each origin. See `git-workflow` for the extraction command.

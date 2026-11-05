@@ -220,6 +220,14 @@
             "command": "bash ~/.claude/hooks/kpi-emit.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/commit-provenance.sh"
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [

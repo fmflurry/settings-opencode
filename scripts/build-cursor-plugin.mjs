@@ -148,6 +148,7 @@ for (const script of hooks.scripts) {
 write('hooks/scripts/goal-state.sh', portableHookScript(read(path.join(claudeDir, 'hooks', 'goal-state.sh'))), 0o755);
 write('hooks/scripts/codememory-mode.sh', portableHookScript(read(path.join(claudeDir, 'hooks', 'codememory-mode.sh'))), 0o755);
 write('hooks/scripts/memory-lint.sh', portableHookScript(read(path.join(claudeDir, 'hooks', 'memory-lint.sh'))), 0o755);
+write('scripts/agent-harness/pr-provenance.mjs', read(path.join(repoDir, 'scripts/agent-harness/pr-provenance.mjs')));
 
 write('mcp.json', JSON.stringify(buildMcp(opencodeCfg), null, 2) + '\n');
 

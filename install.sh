@@ -1422,6 +1422,7 @@ merge_agent_harness_settings() {
                 (if $m == "" then {} else {matcher: $m} end) + {hooks: [{type: "command", command: $cmd}]}
             ]) end;
         .hooks = ((.hooks // {}) | with_entries(.value |= (if type == "array" then map(if (.hooks | type) == "array" then .hooks |= map(bashify) else . end) else . end)))
+        | addhook("SessionStart"; ""; "bash " + $h + "/commit-provenance.sh")
         | addhook("SessionStart"; ""; "bash " + $h + "/cloud-session-bootstrap.sh")
         | addhook("SessionStart"; ""; "bash " + $h + "/autonomy-context.sh")
         | addhook("SessionStart"; ""; "bash " + $h + "/kpi-emit.sh")
@@ -1819,6 +1820,23 @@ check_environment
 info "target:  $([ "$SKIP_OPENCODE" = "1" ] && echo "skipped" || echo "$TARGET_OPENCODE")"
 info "claude:  $([ "$SKIP_CLAUDE" = "1" ] && echo "skipped" || echo "$TARGET_CLAUDE")"
 
+# Existing or project-local customizations have no provable clean source baseline.
+preinstall_is_customized() {
+    local target="$1" helper="$1/scripts/agent-harness/commit-provenance.mjs" result
+    [ -e "$target" ] || return 1
+    [ -f "$target/.harness-provenance.json" ] && [ -f "$helper" ] || return 0
+    result="$(node "$helper" resolve "$target" 2>/dev/null)" || return 0
+    [[ "$result" == *-dirty* ]]
+}
+CLAUDE_PREINSTALL_CUSTOM=0
+OPENCODE_PREINSTALL_CUSTOM=0
+preinstall_is_customized "$TARGET_CLAUDE" && CLAUDE_PREINSTALL_CUSTOM=1
+preinstall_is_customized "$TARGET_OPENCODE" && OPENCODE_PREINSTALL_CUSTOM=1
+if [ -d "$INVOKE_DIR/.harness-local" ] && [ -n "$(find "$INVOKE_DIR/.harness-local" -type f -print -quit 2>/dev/null)" ]; then
+    CLAUDE_PREINSTALL_CUSTOM=1
+    OPENCODE_PREINSTALL_CUSTOM=1
+fi
+
 if [ "$SKIP_OPENCODE" != "1" ]; then
     install_repo_link
     [ "$OPENCODE_TARGET_IS_SOURCE" = "1" ] || prune_stale_opencode_plugin_helpers
@@ -1858,6 +1876,36 @@ sync_skills
 apply_harness_variant
 vendor_project_surfaces
 apply_project_local
+
+# Record the installed snapshot after variants and project overlays have been applied.
+record_commit_provenance() {
+    local version target script asset_root customized
+    version="$(node -p "JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).version" "$REPO_DIR/scripts/cursor-plugin/config.json")"
+    for target in "$TARGET_CLAUDE" "$TARGET_OPENCODE"; do
+        if [ "$target" = "$TARGET_CLAUDE" ]; then
+            [ "$CLAUDE_TARGET_READY" = "1" ] || continue
+            customized="$CLAUDE_PREINSTALL_CUSTOM"
+        else
+            [ "$OPENCODE_TARGET_READY" = "1" ] || continue
+            customized="$OPENCODE_PREINSTALL_CUSTOM"
+        fi
+        asset_root="$target"
+        if [ "$target" = "$TARGET_OPENCODE" ] && [ "$OPENCODE_TARGET_IS_SOURCE" = "1" ]; then
+            target="$HOME/.agent-harness/opencode-source"
+            install_agent_harness_tree "$target/scripts/agent-harness"
+        fi
+        script="$target/scripts/agent-harness/commit-provenance.mjs"
+        [ -f "$script" ] || { err "commit provenance script missing from $target"; exit 1; }
+        chmod +x "$script"
+        node "$script" setup "$target" || { err "cannot install commit provenance hooks in $target"; exit 1; }
+        node "$script" capture "$REPO_DIR" "$target" "$version" "$asset_root" "$customized" || {
+            printf '{}\n' > "$target/.harness-provenance.json"
+            warn "cannot record commit provenance for $target; agent commits will be blocked until reinstalled from a Git checkout"
+        }
+    done
+}
+record_commit_provenance
+
 if [ "$SKIP_OPENCODE" != "1" ] && [ "$OPENCODE_TARGET_READY" != "1" ]; then
     err "OpenCode target runtime is absent; refusing a successful install"
     exit 1

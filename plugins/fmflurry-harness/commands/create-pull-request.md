@@ -126,3 +126,5 @@ Next step: watch checks with `loop-on-ci`.
 - If a PR already exists for the current branch, return its URL instead of creating a duplicate:
   - github: `gh pr list --head "$(git branch --show-current)" --json number,url`
   - azure:  `az repos pr list --source-branch "$(git branch --show-current)" --status active --output json`
+
+For agent commits, include `## Commit provenance` in the PR body: list each commit SHA and its `Harness`, `Harness-SHA`, and `Session-Id` trailers, and update it after new commits so squash merges retain each origin. See `git-workflow` for the extraction command.

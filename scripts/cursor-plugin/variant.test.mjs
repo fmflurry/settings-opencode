@@ -76,7 +76,8 @@ test('default cursor plugin build is monolith', () => {
     assert.match(orchestrate, /optional/i);
     assert.match(orchestrate, /monolith/i);
     const plugin = JSON.parse(fs.readFileSync(path.join(out, '.cursor-plugin/plugin.json'), 'utf8'));
-    assert.equal(plugin.version, '0.4.35');
+    assert.equal(plugin.version, '0.4.36');
+    assert.equal(fs.readFileSync(path.join(out, 'scripts/agent-harness/pr-provenance.mjs'), 'utf8'), fs.readFileSync(path.join(repo, 'scripts/agent-harness/pr-provenance.mjs'), 'utf8'));
     assertAttackRefs(out);
     assert.match(plugin.description, /primary agent writes/i);
     const setup = fs.readFileSync(path.join(out, 'skills/setup-harness/SKILL.md'), 'utf8');

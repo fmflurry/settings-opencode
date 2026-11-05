@@ -2,6 +2,10 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.36] - 2026-11-05
+
+- Agent shell commits carry the installed harness version, source revision, and per-session identifier. Existing Git hooks continue to run; human shells are unaffected. PR guidance retains each commit's provenance when squash merging.
+
 ## [0.4.35] - 2026-11-05
 
 - Sync eligible Azure DevOps work items to Active at work start and Resolved after merge, without changing board columns or moving backwards.

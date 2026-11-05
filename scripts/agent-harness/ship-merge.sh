@@ -62,7 +62,15 @@ problems="$(pr_problems "$pr" "$head" "$base")" || refuse "cannot query GitHub f
 
 merge_rc=0
 method="$(resolve_merge_method "${method:-$(cfg_get '.mergeMethod // empty')}")" || exit 1
-gh_pr_merge "$pr" "$method" "$head" || merge_rc=$?
+provenance_repo="$(gh_repo_name)" || refuse "cannot resolve PR repository"
+provenance_view="$(gh_cmd api "repos/$provenance_repo/pulls/$pr" | jq -ce '{baseRefOid:.base.sha,headRefOid:.head.sha,body:(.body // "")}')" || refuse "cannot read PR provenance"
+printf '%s\n' "$provenance_view" | node "$HARNESS_DIR/pr-provenance.mjs" merge-json "$pr" "$head" || refuse "commit provenance check failed"
+if [ "$method" = squash ] && jq -e '.body | contains("## Commit provenance")' <<<"$provenance_view" >/dev/null; then
+  squash_body="$(jq -r .body <<<"$provenance_view")"
+  gh_pr_merge "$pr" "$method" "$head" "$squash_body" || merge_rc=$?
+else
+  gh_pr_merge "$pr" "$method" "$head" || merge_rc=$?
+fi
 state="$(gh_pr_view "$pr" state | jq -r .state)" || state=unknown
 [ "$state" = MERGED ] || refuse "merge failed (exit $merge_rc); PR state is $state"
 

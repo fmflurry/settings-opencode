@@ -60,6 +60,58 @@ memory_ok() {
   return 1
 }
 
+provenance_helper() {
+  local candidate
+  for candidate in "${BASH_SOURCE[0]%/*}/../../scripts/agent-harness/pr-provenance.mjs" "${BASH_SOURCE[0]%/*}/../scripts/agent-harness/pr-provenance.mjs" "${HOME:-}/.config/opencode/scripts/agent-harness/pr-provenance.mjs" "${HOME:-}/.local/share/fmflurry-harness/pr-provenance.mjs"; do
+    if [ -f "$candidate" ]; then printf '%s' "$candidate"; return; fi
+  done
+}
+
+provenance_merge_ok() {
+  local helper ref="" a output expected="" next=0 method=""
+  helper="$(provenance_helper)"
+  [ -n "$helper" ] || { say "pr-provenance: helper missing; reinstall the harness"; return 1; }
+  for a in "$@"; do
+    if [ "$next" = 1 ]; then expected="$a"; next=0; continue; fi
+    case "$a" in
+      --squash) say "pr-provenance: use agent-harness ship-merge for squash merges"; return 1 ;;
+      --rebase|--merge) method="$a" ;;
+      --match-head-commit) next=1 ;;
+      --match-head-commit=*) expected="${a#*=}" ;;
+      [0-9]*|https://github.com/*/pull/[0-9]*) [ -z "$ref" ] || { say "pr-provenance: ambiguous PR reference"; return 1; }; ref="$a" ;;
+      --subject|--body|--body-file|-s|-b|-F|--repo|-R|--repo=*|-R*) say "pr-provenance: merge from the target checkout with a PR number or URL and standard flags"; return 1 ;;
+      -*) ;;
+      *) say "pr-provenance: merge with a PR number or GitHub URL"; return 1 ;;
+    esac
+  done
+  [ -n "$method" ] || { say "pr-provenance: choose --rebase or --merge, or use agent-harness ship-merge for squash"; return 1; }
+  [ "$next" = 0 ] && [[ "$expected" =~ ^[a-f0-9]{40,64}$ ]] || { say "pr-provenance: merge requires --match-head-commit with the current PR head SHA"; return 1; }
+  output="$(cd "$HOOK_CWD" && HARNESS_GH_COMMAND="$PROVENANCE_GH" node "$helper" merge "$ref" "$expected" 2>&1)" && return 0
+  say "$output"
+  return 1
+}
+
+provenance_ok() {
+  local body="$1" dir="$2" base="${PR_PROVENANCE_BASE:-}" helper candidate output
+  git -C "$dir" remote get-url origin >/dev/null 2>&1 || return 0
+  if [ -n "$base" ]; then
+    base="origin/${base#origin/}"
+  else
+    base="$(git -C "$dir" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+    if [ -z "$base" ]; then
+      for candidate in origin/main origin/master; do
+        if git -C "$dir" rev-parse --verify "$candidate^{commit}" >/dev/null 2>&1; then base="$candidate"; break; fi
+      done
+    fi
+  fi
+  [ -n "$base" ] || { say "pr-provenance: fetch the origin base branch before checking the PR body"; return 1; }
+  helper="$(provenance_helper)"
+  [ -n "$helper" ] || { say "pr-provenance: helper missing; reinstall the harness"; return 1; }
+  output="$(cd "$dir" && printf '%s\n' "$body" | node "$helper" check "$base" HEAD - 2>&1)" && return 0
+  say "$output"
+  return 1
+}
+
 section_between() {
   local heading="$1"
   printf '%s\n' "$2" | awk -v heading="$heading" '
@@ -184,11 +236,15 @@ is_sep() {
 take_body_flags() {
   local mode="$1" i=0 a
   shift
+  PR_PROVENANCE_BASE=""
   KIND=""
   PAYLOAD=""
   while [ "$i" -lt "$#" ]; do
     a="${*:$((i + 1)):1}"
     case "$a" in
+      --base|-B)
+        i=$((i + 1)); PR_PROVENANCE_BASE="${*:$((i + 1)):1}" ;;
+      --base=*) PR_PROVENANCE_BASE="${a#*=}" ;;
       --body-file|-F|--description-file)
         i=$((i + 1))
         a="${*:$((i + 1)):1}"
@@ -226,6 +282,7 @@ take_body_flags() {
   fi
   visual_ok "$BODY" || return 1
   memory_ok "$BODY" "$HOOK_CWD" || return 1
+  provenance_ok "$BODY" "$HOOK_CWD" || return 1
   metrics_warn "$BODY"
 }
 
@@ -269,6 +326,7 @@ inspect() {
       fi
       # gh-* covers token wrappers such as gh-isag that exec gh.
       if [ "$base" = "gh" ] || [[ "$base" == gh-* ]]; then
+        PROVENANCE_GH="$t"
         skip_flags $((i + 1))
         if [ "${TOKENS[$SKIP_AT]:-}" = "pr" ]; then
           case "${TOKENS[$((SKIP_AT + 1))]:-}" in
@@ -279,6 +337,13 @@ inspect() {
             edit)
               args_until_sep $((SKIP_AT + 2))
               take_body_flags optional ${ARGS[@]+"${ARGS[@]}"} || return 1
+              ;;
+            merge)
+              for ((k=i+1; k<SKIP_AT; k++)); do
+                case "${TOKENS[$k]}" in --repo|-R|--repo=*|-R*) say "pr-provenance: run merge from the target checkout without --repo"; return 1 ;; esac
+              done
+              args_until_sep $((SKIP_AT + 2))
+              provenance_merge_ok ${ARGS[@]+"${ARGS[@]}"} || return 1
               ;;
           esac
         fi
@@ -308,7 +373,7 @@ inspect() {
 looks_like_pr() {
   local skeleton
   skeleton="$(printf '%s\n' "$1" | sed -e "s/'[^']*'//g" -e 's/"[^"]*"//g')"
-  printf '%s\n' "$skeleton" | grep -Eq '(^|[^[:alnum:]_.-])(gh(-[[:alnum:]_-]+)?[[:space:]]+pr[[:space:]]+(create|edit|new)|az[[:space:]]+repos[[:space:]]+pr[[:space:]]+(create|update))([^[:alnum:]_]|$)'
+  printf '%s\n' "$skeleton" | grep -Eq '(^|[^[:alnum:]_.-])(gh(-[[:alnum:]_-]+)?[[:space:]]+pr[[:space:]]+(create|edit|new|merge)|az[[:space:]]+repos[[:space:]]+pr[[:space:]]+(create|update))([^[:alnum:]_]|$)'
 }
 
 emit_deny() {
@@ -341,7 +406,7 @@ if [ "${1:-}" = "--check" ]; then
       exit 2
       ;;
   esac
-  if visual_ok "$BODY" && memory_ok "$BODY" "$HOOK_CWD"; then
+  if visual_ok "$BODY" && memory_ok "$BODY" "$HOOK_CWD" && provenance_ok "$BODY" "$HOOK_CWD"; then
     metrics_warn "$BODY"
     exit 0
   fi

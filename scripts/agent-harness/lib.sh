@@ -144,9 +144,19 @@ gh_rest_pr_merge() {
   case "$2" in squash | rebase | merge) ;; *) return 1 ;; esac
   [ -n "$3" ] || return 1
   repo="$(gh_rest_repo_name)" || return 1
-  gh_cmd api -X PUT "repos/$repo/pulls/$1/merge" -f merge_method="$2" -f sha="$3" >/dev/null
+  if [ "${4+x}" ]; then
+    gh_cmd api -X PUT "repos/$repo/pulls/$1/merge" -f merge_method="$2" -f sha="$3" -f "commit_message=$4" >/dev/null
+  else
+    gh_cmd api -X PUT "repos/$repo/pulls/$1/merge" -f merge_method="$2" -f sha="$3" >/dev/null
+  fi
 }
-gh_pr_merge() { gh_or_rest gh_rest_pr_merge "$1" "$2" "$3" -- pr merge "$1" --"$2" --match-head-commit "$3"; }
+gh_pr_merge() {
+  if [ "${4+x}" ]; then
+    gh_or_rest gh_rest_pr_merge "$1" "$2" "$3" "$4" -- pr merge "$1" --"$2" --match-head-commit "$3" --body "$4"
+  else
+    gh_or_rest gh_rest_pr_merge "$1" "$2" "$3" -- pr merge "$1" --"$2" --match-head-commit "$3"
+  fi
+}
 
 # REST cannot tell whether a review thread is resolved, so report the comment count; pr_problems refuses unless it is 0.
 gh_rest_review_threads() {

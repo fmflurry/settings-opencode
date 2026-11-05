@@ -6,6 +6,7 @@ builtin set -euo pipefail
 dir="$(builtin cd -P "${BASH_SOURCE[0]%/*}" && builtin pwd -P)"
 [ ! -f "$dir/.installed" ] || PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 case "${1:-}" in
+  pr-provenance) shift; builtin exec node "$dir/pr-provenance.mjs" "$@" ;;
   autonomy | goal | notify | ship-init | ship-merge | cleanup | teardown-merged-worktree | worktree-rm | report | pr-report | pr-report-check | pr-report-links | memory-lint | ado-state | kpi | eval)
     sub="$1"; shift
     builtin exec /bin/bash -p "$dir/$sub.sh" "$@" ;;

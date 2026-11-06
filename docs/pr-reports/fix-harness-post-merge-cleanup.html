@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>fix(harness): autonomous post-merge cleanup and clear guard denials</title>
+<style>
+body{background:#FAF6EE;color:#2b2622;font-family:Georgia,"Times New Roman",serif;margin:0;padding:32px;line-height:1.45}
+h1{font-size:26px;margin:0 0 6px}h2{font-size:18px;margin:0 0 10px}
+.sub{color:#6b6058;margin-bottom:24px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.card{background:#fff;border-radius:14px;padding:18px 20px;box-shadow:0 1px 4px rgba(60,40,20,.08)}
+.flow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:14px}
+.step{background:#F3EBDD;border-radius:10px;padding:8px 10px}
+.bad{background:#F6D9D2}.good{background:#D9EBD7}
+.arrow{color:#9b8f84}
+code{font-family:Menlo,monospace;font-size:12.5px;background:#F3EBDD;padding:1px 4px;border-radius:4px}
+ul{margin:6px 0 0 18px;padding:0}li{margin:3px 0;font-size:14px}
+table{border-collapse:collapse;font-size:14px;width:100%}td{padding:4px 6px;border-bottom:1px solid #eee}
+.full{grid-column:1/-1}
+@media (max-width:820px){.grid{grid-template-columns:1fr}body{padding:16px}}
+</style></head><body>
+<h1>Autonomous post-merge cleanup works after teardown; guard denials say why</h1>
+<div class="sub">branch <code>fix/harness-post-merge-cleanup</code> · 6 files · cleanup.sh, lib.sh, autonomy-git-guard.sh (2 copies), run.sh, README</div>
+<div class="grid">
+<div class="card full"><h2>Before</h2>
+<div class="flow"><span class="step">ship-merge</span><span class="arrow">→</span><span class="step">teardown removes worktree</span><span class="arrow">→</span><span class="step">cleanup.sh: bind needs <code>-d path</code></span><span class="arrow">→</span><span class="step bad">reads main goal: no PR → refused</span><span class="arrow">→</span><span class="step bad">"branch cleanup incomplete"</span></div>
+<h2 style="margin-top:16px">After</h2>
+<div class="flow"><span class="step">ship-merge</span><span class="arrow">→</span><span class="step">teardown removes worktree</span><span class="arrow">→</span><span class="step">bind fails</span><span class="arrow">→</span><span class="step good"><code>reg_proves_gone_goal</code></span><span class="arrow">→</span><span class="step good">branches deleted, registry removed</span></div>
+</div>
+<div class="card"><h2>Proof condition (all must hold)</h2><ul>
+<li>autonomy on, normal goal binding failed, PR is <b>MERGED</b> (checked earlier)</li>
+<li>exactly <b>one</b> registry entry has <code>.pr == N</code></li>
+<li>entry file slug equals <code>reg_slug(headRefName)</code> and <code>.branch == headRefName</code></li>
+<li><code>.status</code> is merged, done or active (never escalated or blocked)</li>
+<li><code>.path</code> is absolute and no longer exists (not even as a symlink)</li>
+</ul>Otherwise the old refusal stays, including for unregistered PRs.</div>
+<div class="card"><h2>Guard denials</h2><table>
+<tr><td><code>cleanup 15 --confirmed</code>, <code>cleanup --help</code></td><td>now: "cleanup takes exactly <code>agent-harness cleanup &lt;pr&gt; [--keep-branch]</code>"</td></tr>
+<tr><td><code>cd repo &amp;&amp; agent-harness ship-init …</code></td><td>now: "must run alone, not after a cd prefix or in a chain … from a session whose working directory is the target repo"</td></tr>
+<tr><td><code>GH_BIN=x agent-harness cleanup 5</code></td><td>now: the env-override message</td></tr>
+</table>Decisions unchanged: guard differential 2712 comparisons, 0 differences.</div>
+<div class="card"><h2>Tests</h2><ul>
+<li>run.sh: 2302 pass; 75 failures also fail on master 4b62e46 in this env (graphql-down, Chrome, stale marker)</li>
+<li>new: autonomous teardown end to end; gone-worktree cleanup; unregistered PR refused; branch mismatch refused; escalated refused; duplicate entries refused</li>
+<li>RED on old code: 6 positive checks failed</li>
+<li>RUN_ONLY=guard: 985/0, with /bin/bash 988/0; cursor test-hooks 0 FAIL</li>
+</ul></div>
+<div class="card"><h2>Risks</h2><ul>
+<li>Registry files are local, untracked; anyone who can write <code>.git/</code> can forge one. That is the existing trust level of teardown.</li>
+<li>Backup branches are not cleaned on the registry-proof path (the goal file is not bound).</li>
+<li>Problem 3 (<code>--repo</code>) ships in a follow-up PR.</li>
+</ul></div>
+</div>
+<section id="kpi-metrics" style="margin-top:28px">
+<h2 style="font-size:18px;margin:0 0 8px">Metrics</h2>
+<p style="margin:0 0 10px;color:#57534e">fmflurry/settings-opencode  fix/harness-post-merge-cleanup  pr n/a. Status: complete.</p>
+<table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #d6d3d1"><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Wall</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">3m14s</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Active</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">3m14s (gaps over 5m excluded)</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Sessions</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">cursor 1, claude 0, opencode 0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tokens</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">n/a</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tool failures</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Guard blocks</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">2</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Review rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Fix rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr></table>
+<p style="margin:10px 0 0">Tools: Bash 4</p>
+<p style="margin:4px 0 0">Skills: none</p>
+<p style="margin:4px 0 0">Agents: main 0, generalPurpose 4</p>
+<p style="margin:4px 0 0">Failure tools: none. Durations: n/a.</p>
+</section>
+</body></html>

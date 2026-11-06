@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>README — harness-manifesto home</title>
+<style>
+:root {
+  --bg: #FAF6EE;
+  --bg-soft: #F3EDE0;
+  --card: #FFFcf6;
+  --text: #3A342C;
+  --muted: #7A7164;
+  --line: #D9CFC0;
+  --shadow: 0 8px 28px rgba(58, 52, 44, 0.07);
+  --radius: 16px;
+  --serif: "Iowan Old Style", Palatino, Georgia, serif;
+  --sans: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, Menlo, Consolas, monospace;
+  --teal: #D7E6DF;
+  --blue: #D9E4F0;
+  --yellow: #F2E8CC;
+  --pink: #F0DDE4;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--serif);
+  line-height: 1.55;
+  margin: 0;
+  padding: 2rem 1.25rem 3.5rem;
+}
+.wrap { max-width: 980px; margin-inline: auto; }
+.lede { max-width: 42rem; margin: 0 auto 1.6rem; }
+h1 { font-size: 2rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 0.5rem; }
+.sub { color: var(--muted); margin: 0; }
+.eyebrow {
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8B6F47;
+  margin: 0 0 0.35rem;
+}
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.1rem 1.2rem;
+}
+h2 { font-family: var(--sans); font-size: 1.05rem; margin: 0 0 0.6rem; }
+.before { background: var(--pink); }
+.after { background: var(--teal); }
+ul { margin: 0.3rem 0 0; padding-left: 1.1rem; }
+li { margin: 0.28rem 0; }
+code { font-family: var(--mono); font-size: 0.86em; }
+.files { margin-top: 1rem; background: var(--yellow); }
+.note { margin-top: 1rem; background: var(--blue); }
+footer { margin-top: 1.4rem; color: var(--muted); font-size: 0.9rem; }
+@media (max-width: 800px) {
+  .grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="lede">
+    <p class="eyebrow">docs/readme-harness-overview</p>
+    <h1>The README is the harness home</h1>
+    <p class="sub">fmflurry/harness-manifesto, formerly settings-opencode. One page for three hosts and two variants. Docs only. The Cursor plugin stays at 0.4.36.</p>
+  </header>
+
+  <div class="grid">
+    <article class="card before">
+      <h2>Before</h2>
+      <ul>
+        <li>Title read as an OpenCode + Claude Code setup.</li>
+        <li>Conductor led the opening. Monolith, the install default, showed up later.</li>
+        <li>Cursor was a version note, not a host beside the other two.</li>
+        <li>Skill and command counts were the 2026-10-02 snapshot.</li>
+      </ul>
+    </article>
+    <article class="card after">
+      <h2>After</h2>
+      <ul>
+        <li>Title is harness-manifesto. Clone, badge, and bootstrap URLs use that name.</li>
+        <li>Monolith vs Conductor, then the request flow, then install.</li>
+        <li>English and Français share two offline diagrams.</li>
+        <li>Counts recounted 2026-11-06 from this tree.</li>
+      </ul>
+    </article>
+  </div>
+
+  <article class="card files">
+    <h2>What landed</h2>
+    <ul>
+      <li><code>README.md</code> — lede, comparison, statechart, install contract, catalogs, autonomy rules.</li>
+      <li><code>docs/harness/monolith-vs-conductor.html</code> + <code>.png</code> — three hosts, the diff, shared rails.</li>
+      <li><code>docs/harness/request-lifecycle.html</code> + <code>.png</code> — Conductor vs Monolith, verification, review, PR, escalate.</li>
+      <li>Statechart credit kept: visual vocabulary adapted from @poteto's /statechart in backnotprop/pstack (MIT · Lauren Tan).</li>
+    </ul>
+  </article>
+
+  <article class="card note">
+    <h2>Checked, and what can still drift</h2>
+    <ul>
+      <li>Install default is Monolith: <code>install.sh --yes</code>, <code>--local</code>, <code>bootstrap.ps1</code>, <code>install-cursor.sh</code>. Conductor is <code>./install.sh conductor</code> or <code>./install-cursor.sh --variant conductor</code>. <code>orchestration</code> is an alias.</li>
+      <li><code>variants/conductor/manifest.json</code> <code>"default": true</code> marks the repo root as the Conductor source. Installers still pick Monolith when the variant is omitted.</li>
+      <li>Agents: 9 on Monolith, 26 on Conductor (1 + 25). Skills: 80. Commands: 53 templates, 37 pinned. Hooks: 21. Rules: 17. Plugin version: 0.4.36.</li>
+      <li>Docs change. No build. No plugin bump.</li>
+      <li>Open PR #69 also edits the README cleanup paragraph. This branch starts from master and does not include that sentence.</li>
+      <li><code>bootstrap.sh</code> still clones into <code>~/.local/share/settings-opencode</code> and the shell fence is still <code>settings-opencode</code>. The README says so.</li>
+    </ul>
+  </article>
+
+  <footer>Comparison and lifecycle pages stay offline: no CDN, no Mermaid.</footer>
+</div>
+
+<section id="kpi-metrics" style="margin-top:28px">
+<h2 style="font-size:18px;margin:0 0 8px">Metrics</h2>
+<p style="margin:0 0 10px;color:#57534e">fmflurry/settings-opencode  docs/readme-harness-overview  pr n/a. Status: partial.</p>
+<table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #d6d3d1"><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Wall</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">n/a</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Active</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">n/a</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Sessions</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">cursor 0, claude 0, opencode 0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tokens</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">n/a</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tool failures</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Guard blocks</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Review rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Fix rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr></table>
+<p style="margin:10px 0 0">Tools: none</p>
+<p style="margin:4px 0 0">Skills: none</p>
+<p style="margin:4px 0 0">Agents: main 0</p>
+<p style="margin:4px 0 0">Failure tools: none. Durations: n/a.</p>
+</section>
+</body>
+</html>

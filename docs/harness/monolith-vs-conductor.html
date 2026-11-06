@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monolith vs Conductor — fmflurry harness</title>
+<style>
+:root {
+  --bg: #FAF6EE;
+  --bg-soft: #F3EDE0;
+  --card: #FFFcf6;
+  --text: #3A342C;
+  --muted: #7A7164;
+  --line: #D9CFC0;
+  --accent: #8B6F47;
+  --accent-2: #6B8F71;
+  --accent-3: #C4A35A;
+  --accent-4: #9B6B6B;
+  --shadow: 0 8px 28px rgba(58, 52, 44, 0.07);
+  --radius: 16px;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif;
+  --sans: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --teal: #D7E6DF;
+  --blue: #D9E4F0;
+  --orange: #F0E0D0;
+  --yellow: #F2E8CC;
+  --purple: #E6DDF0;
+  --tan: #E8DFD4;
+  --pink: #F0DDE4;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--serif);
+  line-height: 1.55;
+  margin: 0;
+  padding: 2rem 1.25rem 3.5rem;
+}
+.wrap { max-width: 1100px; margin-inline: auto; }
+.lede {
+  max-width: 42rem;
+  margin: 0 auto 2rem;
+}
+h1 {
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.6rem;
+}
+.sub { color: var(--muted); margin: 0; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.15rem 1.25rem;
+}
+h2 {
+  font-family: var(--sans);
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+}
+.eyebrow {
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 0.35rem;
+}
+.grid-3, .grid-2 { display: grid; gap: 1rem; }
+.grid-3 { grid-template-columns: repeat(3, 1fr); }
+.grid-2 { grid-template-columns: 1fr 1fr; }
+.host { background: var(--teal); border: 1px solid var(--line); }
+.mono-card { background: #EAF3EC; }
+.cond-card { background: var(--blue); }
+ul { margin: 0.4rem 0 0; padding-left: 1.15rem; }
+li { margin: 0.25rem 0; }
+code, .mono {
+  font-family: var(--mono);
+  font-size: 0.86em;
+}
+pre {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  background: var(--bg-soft);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  margin: 0.75rem 0 0;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--sans);
+  font-size: 0.92rem;
+}
+th, td {
+  text-align: left;
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+th { color: var(--muted); font-weight: 600; }
+.pill {
+  display: inline-block;
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--accent-3);
+  color: var(--text);
+}
+.section { margin: 1.4rem 0; }
+.shared { background: var(--bg-soft); }
+footer {
+  margin-top: 2rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  max-width: 42rem;
+}
+@media (max-width: 800px) {
+  .grid-3, .grid-2 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="lede">
+    <p class="eyebrow">fmflurry/harness-manifesto</p>
+    <h1>One harness, two variants, three hosts</h1>
+    <p class="sub">Formerly settings-opencode. The same harness installs on <strong>OpenCode</strong>, <strong>Claude Code</strong>, and <strong>Cursor</strong>. You pick a variant: <strong>Monolith</strong> (the default) or <strong>Conductor</strong>.</p>
+  </header>
+
+  <section class="section">
+    <div class="grid-3">
+      <article class="card host">
+        <p class="eyebrow">Host</p>
+        <h2>OpenCode</h2>
+        <p>Merges into <code>~/.config/opencode/</code>. Entry: <code>install.sh</code> or <code>bootstrap.sh</code>. Config hub: <code>opencode.jsonc</code>.</p>
+      </article>
+      <article class="card host">
+        <p class="eyebrow">Host</p>
+        <h2>Claude Code</h2>
+        <p>Optional <code>~/.claude/</code> mirror: settings, hooks, rules, agents, and synced skills. Same variant as OpenCode when you install both.</p>
+      </article>
+      <article class="card host">
+        <p class="eyebrow">Host</p>
+        <h2>Cursor</h2>
+        <p>Plugin <code>fmflurry-harness</code> via <code>install-cursor.sh</code> (default Monolith). Version <code>0.4.36</code> in <code>scripts/cursor-plugin/config.json</code>. Same skills and ship loop; no per-agent write allowlist — agents are <code>readonly</code> or not.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="grid-2">
+      <article class="card mono-card">
+        <p class="eyebrow">Default install</p>
+        <h2>Monolith</h2>
+        <p>The primary agent <strong>writes</strong>, plans, and implements in the same session. Nothing has to run before the first edit.</p>
+        <ul>
+          <li><strong>9 agents</strong> for review and noisy work: <code>code-reviewer</code>, <code>security-reviewer</code>, <code>database-reviewer</code>, <code>ecosystem-auditor</code>, <code>e2e-runner</code>, <code>why-investigator</code>, <code>build-error-resolver</code>, <code>cop</code>, <code>comment-judge</code>.</li>
+          <li>Folded roles are <strong>skills</strong>, not agents: <code>planner</code>, <code>coder</code>, <code>tdd</code>, <code>git-workflow</code>, <code>writer</code>, and the rest listed in <code>variants/monolith/AGENTS.md</code>.</li>
+          <li><code>/orchestrate</code> is optional — it loads the <code>conductor</code> skill.</li>
+          <li>No first-tool gate. Live Postgres goes to <code>database-reviewer</code> or the main agent (<code>postgres-dba</code> is not installed).</li>
+        </ul>
+      </article>
+      <article class="card cond-card">
+        <p class="eyebrow">Opt-in</p>
+        <h2>Conductor</h2>
+        <p>A read-only <code>conductor</code> routes every change. It <strong>cannot write</strong> — permissions deny <code>write</code>/<code>edit</code>. Delegation is mechanical, not just prose.</p>
+        <ul>
+          <li><strong>26 agents</strong>: 1 conductor + 25 specialists, including <code>planner</code>, <code>coder</code>, <code>writer</code>, <code>tdd-guide</code>, <code>git-specialist</code>, <code>scout</code>, and <code>postgres-dba</code>.</li>
+          <li>First-tool gate: if a specialist matches, the first tool call must be that Task dispatch.</li>
+          <li>Before <code>coder</code>, <code>writer</code>, or <code>tdd-guide</code>, the conductor emits a 6-field brief (<code>brief-contract</code>).</li>
+          <li>Canonical flow: <code>planner → (tdd-guide → coder) or coder → code-reviewer → verify → git-specialist</code>.</li>
+        </ul>
+      </article>
+    </div>
+  </section>
+
+  <section class="section card">
+    <h2>What actually changes</h2>
+    <table>
+      <thead>
+        <tr><th></th><th>Monolith</th><th>Conductor</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Who writes application code</td><td>The primary agent (skills: <code>coder</code>, <code>tdd</code>, …)</td><td>Only writable specialists (<code>coder</code>, <code>writer</code>, <code>tdd-guide</code>, …)</td></tr>
+        <tr><td>Who coordinates</td><td>The primary agent; <code>/orchestrate</code> optional</td><td>The <code>conductor</code> agent, always</td></tr>
+        <tr><td>Installed agents</td><td>9 review / noisy-output agents</td><td>26 (conductor + 25)</td></tr>
+        <tr><td>Skills tree</td><td colspan="2">Shared. A variant does not get a second copy of a skill.</td></tr>
+        <tr><td>Source in this repo</td><td>Overlay in <code>variants/monolith/</code> applied onto an install copy</td><td>The repository root (<code>.claude/</code>, <code>opencode.jsonc</code>, <code>prompts/agents/</code>). The manifest marks this tree as the Conductor source — that is not the install default.</td></tr>
+        <tr><td>How to install</td><td><code>./install.sh --yes</code>, <code>./install.sh --local</code>, <code>./install-cursor.sh</code></td><td><code>./install.sh conductor</code>, <code>./install-cursor.sh --variant conductor</code>. <code>orchestration</code> is an alias.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="section card shared">
+    <h2>Shared rails (both variants, all three hosts)</h2>
+    <ul>
+      <li>Verification gate — no “done” without fresh build/test evidence.</li>
+      <li>Tool budget — verification is uncapped; exploratory shell is budgeted.</li>
+      <li>Secret-file guard, autonomy / <code>/ship</code>, worktree destruction safety, PR visual reports (<code>docs/pr-reports/</code>).</li>
+      <li>KPI journal at <code>~/.agent-harness/kpi/events.jsonl</code> (OpenCode, Claude Code, and Cursor).</li>
+      <li>CodeMemory when on; cloud and remote sessions skip it unless <code>FMFLURRY_CODEMEMORY=on</code>.</li>
+    </ul>
+    <pre>./install.sh                         # interactive; default Monolith
+./install.sh conductor               # Conductor on OpenCode + Claude Code
+./install.sh monolith
+./install-cursor.sh                  # Cursor plugin, default Monolith
+./install-cursor.sh --variant conductor</pre>
+  </section>
+
+  <footer>Labels match <code>variants/README.md</code>, <code>variants/monolith/AGENTS.md</code>, <code>variants/monolith/manifest.json</code>, and the root README. Switching variants removes the other variant’s agents, commands, and rules.</footer>
+</div>
+</body>
+</html>

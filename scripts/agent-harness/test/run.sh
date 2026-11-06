@@ -104,6 +104,8 @@ scoped_goal_file() {
 CFG="$TMP/proj/.claude/agent-harness.json"
 export FX GH_BIN="$TMP/gh" ORCA_BIN="$TMP/orca" AGENT_STATE_DIR="$TMP/state" CLAUDE_PROJECT_DIR="$TMP/proj" AGENT_HARNESS_DIR="$H" AGENT_HARNESS_TEST=1 AGENT_HARNESS_KPI=0
 unset ORCA_WORKTREE_ID GITHUB_ACTIONS TLTB_STATE_DIR
+# lib.sh falls back to $PWD when CLAUDE_PROJECT_DIR is not a repo; never let that be the caller's checkout.
+cd "$TMP" || exit 1
 reset() { rm -rf "$TMP/state/goals"; rm -f "$FX"/*.log "$FX"/merge.* "$FX"/merge_settings.txt "$FX"/open_prs.json "$FX"/branch.json "$FX"/branch.gone "$FX"/branch.err "$FX"/list.fail "$FX"/default_branch "$FX"/graphql.off "$FX"/graphql.502 "$FX"/rest.fail "$FX"/pull.patch "$FX"/pull2.patch "$FX"/pull.reads "$FX"/graphql.transport "$FX"/graphql.getrest "$FX"/pulls.malformed "$FX"/pulls.fail "$FX"/files.3000 "$FX"/files.2999 "$FX"/comments.json "$TMP/state"/* "$CFG"; }
 flag_on() { : >"$TMP/state/autonomy.on"; }
 cfg_ci() { echo '{"base":"master","requiredChecks":["gate","export"],"reviewStatus":"tltb-review","reviewStatusCreator":"github-actions[bot]"}' >"$CFG"; }
@@ -2807,7 +2809,7 @@ check "autonomous teardown: exits 0" test $rc -eq 0
 check "autonomous teardown: cleanup not refused" bash -c '! grep -q "cleanup refused" "$1"' _ "$FX/out"
 check "autonomous teardown: remote branch deleted" grep -q 'DELETE repos/o/r/git/refs/heads/feat/td-x' "$FX/gh.log"
 check "autonomous teardown: registry removed" test ! -e "$(lreg_file feat-td-x)"
-lw_gone() { lw_td git; touch "$LM/.claude/state/autonomy.on"; lw_set_reg ".path = \"$LROOT/gone/feat-td-x\" | .status = \"merged\" | $1"; git -C "$T" switch -q --detach; rm -f "$FX/gh.log"; }
+lw_gone() { lw_td git; touch "$LM/.claude/state/autonomy.on"; lw_set_reg ".path = \"$LROOT/gone/feat-td-x\" | .status = \"merged\" | $1"; git -C "${T:?}" switch -q --detach; rm -f "$FX/gh.log"; }
 lw_gone '.'; LH cleanup 5 --no-checkout >"$FX/out" 2>&1; rc=$?
 check "autonomous cleanup, registered merged PR with its worktree gone: exits 0" test $rc -eq 0
 check "autonomous cleanup, registered merged PR with its worktree gone: remote deleted" grep -q 'DELETE repos/o/r/git/refs/heads/feat/td-x' "$FX/gh.log"

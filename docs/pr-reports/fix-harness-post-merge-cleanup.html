@@ -31,6 +31,7 @@ table{border-collapse:collapse;font-size:14px;width:100%}td{padding:4px 6px;bord
 <li>entry file slug equals <code>reg_slug(headRefName)</code> and <code>.branch == headRefName</code></li>
 <li><code>.status</code> is merged, done or active (never escalated or blocked)</li>
 <li><code>.path</code> is absolute and no longer exists (not even as a symlink)</li>
+<li>no worktree of the repo still has the head branch checked out</li>
 </ul>Otherwise the old refusal stays, including for unregistered PRs.</div>
 <div class="card"><h2>Guard denials</h2><table>
 <tr><td><code>cleanup 15 --confirmed</code>, <code>cleanup --help</code></td><td>now: "cleanup takes exactly <code>agent-harness cleanup &lt;pr&gt; [--keep-branch]</code>"</td></tr>
@@ -38,8 +39,8 @@ table{border-collapse:collapse;font-size:14px;width:100%}td{padding:4px 6px;bord
 <tr><td><code>GH_BIN=x agent-harness cleanup 5</code></td><td>now: the env-override message</td></tr>
 </table>Decisions unchanged: guard differential 2712 comparisons, 0 differences.</div>
 <div class="card"><h2>Tests</h2><ul>
-<li>run.sh: 2302 pass; 75 failures also fail on master 4b62e46 in this env (graphql-down, Chrome, stale marker)</li>
-<li>new: autonomous teardown end to end; gone-worktree cleanup; unregistered PR refused; branch mismatch refused; escalated refused; duplicate entries refused</li>
+<li>run.sh: 2309 pass; 75 failures also fail on master 4b62e46 in this env (graphql-down, Chrome, stale marker)</li>
+<li>new: autonomous teardown end to end; gone-worktree cleanup; unregistered PR refused; branch mismatch refused; escalated, relative path, dangling symlink, branch held elsewhere, duplicate entries refused</li>
 <li>RED on old code: 6 positive checks failed</li>
 <li>RUN_ONLY=guard: 985/0, with /bin/bash 988/0; cursor test-hooks 0 FAIL</li>
 </ul></div>
@@ -52,7 +53,7 @@ table{border-collapse:collapse;font-size:14px;width:100%}td{padding:4px 6px;bord
 <section id="kpi-metrics" style="margin-top:28px">
 <h2 style="font-size:18px;margin:0 0 8px">Metrics</h2>
 <p style="margin:0 0 10px;color:#57534e">fmflurry/settings-opencode  fix/harness-post-merge-cleanup  pr n/a. Status: complete.</p>
-<table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #d6d3d1"><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Wall</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">3m14s</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Active</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">3m14s (gaps over 5m excluded)</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Sessions</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">cursor 1, claude 0, opencode 0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tokens</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">n/a</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tool failures</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Guard blocks</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">2</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Review rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Fix rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr></table>
+<table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #d6d3d1"><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Wall</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">7m56s</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Active</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">7m56s (gaps over 5m excluded)</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Sessions</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">cursor 1, claude 0, opencode 0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tokens</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">n/a</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tool failures</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Guard blocks</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">3</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Review rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Fix rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr></table>
 <p style="margin:10px 0 0">Tools: Bash 4</p>
 <p style="margin:4px 0 0">Skills: none</p>
 <p style="margin:4px 0 0">Agents: main 0, generalPurpose 4</p>

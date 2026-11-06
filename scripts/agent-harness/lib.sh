@@ -259,7 +259,8 @@ reg_proves_gone_goal() {
   jq -e --arg b "$2" '.branch == $b and (.status | IN("merged", "done", "active"))' "$f" >/dev/null 2>&1 || return 1
   path="$(jq -r '.path // empty' "$f")"
   [[ "$path" == /* ]] || return 1
-  [ ! -e "$path" ] && [ ! -L "$path" ]
+  { [ ! -e "$path" ] && [ ! -L "$path" ]; } || return 1
+  ! git -C "$(main_checkout)" worktree list --porcelain | grep -qxF "branch refs/heads/$2"
 }
 
 # reg_find_by_pr <pr>: prints the slug of the registered goal bound to the PR, else the goal.json goal when it tracks that PR.

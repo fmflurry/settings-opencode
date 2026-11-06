@@ -2807,7 +2807,7 @@ check "autonomous teardown: exits 0" test $rc -eq 0
 check "autonomous teardown: cleanup not refused" bash -c '! grep -q "cleanup refused" "$1"' _ "$FX/out"
 check "autonomous teardown: remote branch deleted" grep -q 'DELETE repos/o/r/git/refs/heads/feat/td-x' "$FX/gh.log"
 check "autonomous teardown: registry removed" test ! -e "$(lreg_file feat-td-x)"
-lw_gone() { lw_td git; touch "$LM/.claude/state/autonomy.on"; lw_set_reg ".path = \"$LROOT/gone/feat-td-x\" | .status = \"merged\" | $1"; rm -f "$FX/gh.log"; }
+lw_gone() { lw_td git; touch "$LM/.claude/state/autonomy.on"; lw_set_reg ".path = \"$LROOT/gone/feat-td-x\" | .status = \"merged\" | $1"; git -C "$T" switch -q --detach; rm -f "$FX/gh.log"; }
 lw_gone '.'; LH cleanup 5 --no-checkout >"$FX/out" 2>&1; rc=$?
 check "autonomous cleanup, registered merged PR with its worktree gone: exits 0" test $rc -eq 0
 check "autonomous cleanup, registered merged PR with its worktree gone: remote deleted" grep -q 'DELETE repos/o/r/git/refs/heads/feat/td-x' "$FX/gh.log"
@@ -2819,8 +2819,20 @@ check "autonomous cleanup with a registered branch that is not the PR head: refu
 check "autonomous cleanup with a registered branch that is not the PR head: nothing deleted" bash -c '! grep -q DELETE "$1"' _ "$FX/gh.log"
 lw_gone '.status = "escalated"'; LH cleanup 5 --no-checkout >"$FX/out" 2>&1; rc=$?
 check "autonomous cleanup of an escalated registry entry: refused" test $rc -eq 1
+check "autonomous cleanup of an escalated registry entry: nothing deleted" bash -c '! grep -q DELETE "$1"' _ "$FX/gh.log"
+lw_gone '.status = "done"'; LH cleanup 5 --no-checkout >"$FX/out" 2>&1; rc=$?
+check "autonomous cleanup of a done registry entry with its worktree gone: exits 0" test $rc -eq 0
 lw_gone '.'; cp "$(lreg_file feat-td-x)" "$(lreg_file feat-td-y)"; LH cleanup 5 --no-checkout >"$FX/out" 2>&1; rc=$?
 check "autonomous cleanup with two registry entries for the PR: refused" test $rc -eq 1
+check "autonomous cleanup with two registry entries for the PR: nothing deleted" bash -c '! grep -q DELETE "$1"' _ "$FX/gh.log"
+lw_gone '.path = "rel/feat-td-x"'; LH cleanup 5 --no-checkout >"$FX/out" 2>&1; rc=$?
+check "autonomous cleanup with a relative registered path: refused" test $rc -eq 1
+lw_gone '.'; mkdir -p "$LROOT/gone"; ln -s "$LROOT/nowhere" "$LROOT/gone/feat-td-x"; LH cleanup 5 --no-checkout >"$FX/out" 2>&1; rc=$?
+check "autonomous cleanup with a dangling symlink at the registered path: refused" test $rc -eq 1
+lw_gone '.'; git -C "$LM" worktree add -q "$LROOT/other" feat/td-x >/dev/null 2>&1
+LH cleanup 5 --no-checkout >"$FX/out" 2>&1; rc=$?
+check "autonomous cleanup while another worktree holds the branch: refused" test $rc -eq 1
+check "autonomous cleanup while another worktree holds the branch: nothing deleted" bash -c '! grep -q DELETE "$1"' _ "$FX/gh.log"
 
 # H3: ship-init refuses an orca worktree that belongs to another repo
 lw_fixture orca

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>French README — docs/readme-fr</title>
+<style>
+:root {
+  --bg: #FAF6EE;
+  --bg-soft: #F3EDE0;
+  --card: #FFFcf6;
+  --text: #3A342C;
+  --muted: #7A7164;
+  --line: #D9CFC0;
+  --shadow: 0 8px 28px rgba(58, 52, 44, 0.07);
+  --radius: 16px;
+  --serif: "Iowan Old Style", Palatino, Georgia, serif;
+  --sans: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, Menlo, Consolas, monospace;
+  --teal: #D7E6DF;
+  --blue: #D9E4F0;
+  --yellow: #F2E8CC;
+  --pink: #F0DDE4;
+  --orange: #F0E0D0;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--serif);
+  line-height: 1.55;
+  margin: 0;
+  padding: 2rem 1.25rem 3.5rem;
+}
+.wrap { max-width: 980px; margin-inline: auto; }
+.lede { max-width: 42rem; margin: 0 auto 1.6rem; }
+h1 { font-size: 2rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 0.5rem; }
+.sub { color: var(--muted); margin: 0; }
+.eyebrow {
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8B6F47;
+  margin: 0 0 0.35rem;
+}
+.switch {
+  font-family: var(--sans);
+  display: inline-flex;
+  gap: 0.4rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.35rem 0.8rem;
+  margin: 0.9rem 0 0;
+}
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.1rem 1.2rem;
+}
+h2 { font-family: var(--sans); font-size: 1.05rem; margin: 0 0 0.6rem; }
+.before { background: var(--pink); }
+.after { background: var(--teal); }
+ul { margin: 0.3rem 0 0; padding-left: 1.1rem; }
+li { margin: 0.28rem 0; }
+code { font-family: var(--mono); font-size: 0.86em; }
+.files { margin-top: 1rem; background: var(--yellow); }
+.note { margin-top: 1rem; background: var(--blue); }
+.flow { margin-top: 1rem; background: var(--orange); }
+.cols { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0.6rem; align-items: center; }
+.box {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.7rem 0.8rem;
+}
+.arrow { font-family: var(--sans); color: #8B6F47; text-align: center; }
+footer { margin-top: 1.4rem; color: var(--muted); font-size: 0.9rem; }
+@media (max-width: 800px) {
+  .grid, .cols { grid-template-columns: 1fr; }
+  .arrow { transform: rotate(90deg); }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="lede">
+    <p class="eyebrow">docs/readme-fr</p>
+    <h1>The README now has a French twin</h1>
+    <p class="sub">fmflurry/harness-manifesto. English stays the source of truth. The French page matches its structure, counts, and shared diagrams. Docs only. Cursor plugin stays at 0.4.36.</p>
+    <p class="switch"><strong>English</strong> | Français</p>
+  </header>
+
+  <div class="grid">
+    <article class="card before">
+      <h2>Before</h2>
+      <ul>
+        <li><code>README.md</code> is one bilingual page. French readers jump to <code>#francais</code>.</li>
+        <li>The French half is a shorter parallel catalog, not a full translation of the English half.</li>
+        <li>No language switch at the top.</li>
+      </ul>
+    </article>
+    <article class="card after">
+      <h2>After</h2>
+      <ul>
+        <li>Switcher at the top of <code>README.md</code>: English | Français.</li>
+        <li><code>docs/README.fr.md</code> translates the whole page, same section order, and links back.</li>
+        <li>Existing French subsections such as <code>#variantes-fr</code> stay in the English file.</li>
+      </ul>
+    </article>
+  </div>
+
+  <article class="card flow">
+    <h2>Where the diagrams go</h2>
+    <div class="cols">
+      <div class="box">
+        <strong>README.md</strong>
+        <div><code>docs/harness/*.png</code></div>
+        <div>English alt text</div>
+      </div>
+      <div class="arrow">▶</div>
+      <div class="box">
+        <strong>docs/README.fr.md</strong>
+        <div><code>harness/*.png</code></div>
+        <div>French alt text, same files</div>
+      </div>
+    </div>
+  </article>
+
+  <article class="card files">
+    <h2>What landed</h2>
+    <ul>
+      <li><code>README.md</code> — one switcher line. No rewrite of the English body.</li>
+      <li><code>docs/README.fr.md</code> — full translation: variants, diff table, three hosts, install, catalogs, autonomy.</li>
+      <li>Reused <code>docs/harness/monolith-vs-conductor.png</code> and <code>request-lifecycle.png</code>. No new diagram.</li>
+      <li>87 headings, 44 anchors, and 102 command lines line up with the English file.</li>
+    </ul>
+  </article>
+
+  <article class="card note">
+    <h2>Counts copied, not recounted</h2>
+    <ul>
+      <li>Recount date stays <strong>2026-11-06</strong>. Monolith agents 9. Conductor agents 26 (1 + 25). Skills 80. Commands 53, 37 pinned. Hooks 21. Rules 17. Plugin <strong>0.4.36</strong>.</li>
+      <li><code>"default": true</code> in <code>variants/conductor/manifest.json</code> marks the repo root as the Conductor source. The installer default is still Monolith.</li>
+      <li><code>bootstrap.sh</code> still clones <code>github.com/fmflurry/settings-opencode.git</code> (that URL redirects) into <code>~/.local/share/settings-opencode</code>.</li>
+      <li>Open PR #69 also edits <code>README.md</code> (small cleanup). This branch starts from master after #70 and does not rebase onto #69.</li>
+      <li>Docs and images only. Review-weight: 0 files, 0 lines. No install script or plugin source change.</li>
+    </ul>
+  </article>
+
+  <footer>Shared HTML pages stay offline. French captions point at the existing assets.</footer>
+</div>
+
+<section id="kpi-metrics" style="margin-top:28px">
+<h2 style="font-size:18px;margin:0 0 8px">Metrics</h2>
+<p style="margin:0 0 10px;color:#57534e">fmflurry/harness-manifesto  docs/readme-fr  pr n/a. Status: partial.</p>
+<table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #d6d3d1"><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Wall</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">n/a</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Active</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">n/a</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Sessions</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">cursor 0, claude 0, opencode 0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tokens</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">n/a</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tool failures</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Guard blocks</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Review rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Fix rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr></table>
+<p style="margin:10px 0 0">Tools: none</p>
+<p style="margin:4px 0 0">Skills: none</p>
+<p style="margin:4px 0 0">Agents: main 0</p>
+<p style="margin:4px 0 0">Failure tools: none. Durations: n/a.</p>
+</section>
+</body>
+</html>

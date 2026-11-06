@@ -17,7 +17,8 @@ while [ $# -gt 0 ]; do
   shift
 done
 [ -n "$pr" ] || { echo "$usage" >&2; exit 2; }
-goal_bind_registered_pr "$pr" || true
+bound=""
+goal_bind_registered_pr "$pr" && bound=1
 
 refuse() { echo "cleanup refused: $1" >&2; exit 1; }
 say() { echo "cleanup: $*"; }
@@ -31,7 +32,9 @@ oid="$(jq -r .headRefOid <<<"$view")"
 cross="$(jq -r .isCrossRepository <<<"$view")"
 [ "$(jq -r .state <<<"$view")" = MERGED ] || refuse "PR #$pr is not MERGED"
 { [ -n "$branch" ] && [ "$branch" != null ] && [ "$branch" != "$base" ]; } || refuse "PR #$pr head branch is empty or the base branch"
-if autonomy_on; then
+if autonomy_on && [ -z "$bound" ] && reg_proves_gone_goal "$pr" "$branch"; then
+  say "goal registry entry for PR #$pr proves the merged goal (worktree gone)"
+elif autonomy_on; then
   gpr="$(goal_get '.pr // empty' || true)"
   [ -n "$gpr" ] || refuse "goal does not track a PR; autonomous cleanup needs goal pr #$pr"
   [ "$gpr" = "$pr" ] || refuse "goal tracks PR #$gpr, not #$pr"

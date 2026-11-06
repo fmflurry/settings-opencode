@@ -2,6 +2,10 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.37] - 2026-11-06
+
+- Autonomous post-merge cleanup now succeeds after teardown removes the goal worktree, using the goal registry entry as proof under strict, fail-closed checks. Guard denials for a bad cleanup shape or a chained or cd-prefixed ship-init now say what is wrong; no guard decision changed.
+
 ## [0.4.36] - 2026-11-05
 
 - Agent shell commits carry the installed harness version, source revision, and per-session identifier. Existing Git hooks continue to run; human shells are unaffected. PR guidance retains each commit's provenance when squash merging.

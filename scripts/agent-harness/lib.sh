@@ -243,6 +243,28 @@ goal_bind_registered_pr() {
   goal_bind_file "$STATE_DIR"
 }
 
+# reg_proves_gone_goal <pr> <head-branch>: the caller has seen the PR MERGED. True only when exactly one registry entry
+# tracks the PR, it records that head branch under that branch's slug, and its absolute worktree path no longer exists.
+reg_proves_gone_goal() {
+  local d f hits=() path main wts
+  [[ "$1" =~ ^[0-9]+$ ]] || return 1
+  d="$(reg_dir)" || return 1
+  for f in "$d"/*.json; do
+    [ -f "$f" ] || continue
+    jq -e --argjson n "$1" '.pr == $n' "$f" >/dev/null 2>&1 && hits+=("$f")
+  done
+  [ "${#hits[@]}" = 1 ] || return 1
+  f="${hits[0]}"
+  [ "$(basename "$f" .json)" = "$(reg_slug "$2")" ] || return 1
+  jq -e --arg b "$2" '.branch == $b and (.status | IN("merged", "done", "active"))' "$f" >/dev/null 2>&1 || return 1
+  path="$(jq -r '.path // empty' "$f")"
+  [[ "$path" == /* ]] || return 1
+  { [ ! -e "$path" ] && [ ! -L "$path" ]; } || return 1
+  main="$(main_checkout)" || return 1
+  wts="$(git -C "$main" worktree list --porcelain)" || return 1
+  ! grep -qxF "branch refs/heads/$2" <<<"$wts"
+}
+
 # reg_find_by_pr <pr>: prints the slug of the registered goal bound to the PR, else the goal.json goal when it tracks that PR.
 reg_find_by_pr() {
   local d f s

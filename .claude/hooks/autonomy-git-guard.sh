@@ -177,6 +177,8 @@ deny() { emit deny "Blocked by git-guard: merge via agent-harness ship-merge, pu
 deny_worktree() { emit deny "Blocked by git-guard: remove worktrees only via \`agent-harness worktree-rm <path> --confirmed\`."; }
 deny_harness_env() { emit deny "Blocked by git-guard: run agent-harness as one plain command; no env overrides, exported functions or shell startup files."; }
 deny_harness_cmd() { emit deny "Blocked by git-guard: agent-harness ship-init and teardown-merged-worktree take exactly their documented arguments as one plain command."; }
+deny_harness_chain() { emit deny "Blocked by git-guard: agent-harness ship-init and teardown-merged-worktree must run alone, not after a cd prefix or in a && ; | chain. They act on the session's working directory: run ship-init from a session whose working directory is the target repo."; }
+deny_cleanup_shape() { emit deny "Blocked by git-guard: cleanup takes exactly \`agent-harness cleanup <pr> [--keep-branch]\`: a PR number, then optionally --keep-branch, and no other flag (no --confirmed, no --help)."; }
 deny_alias() { emit deny "Blocked by git-guard: git aliases can smuggle worktree removal; do not define or pass alias.* settings."; }
 deny_branch_delete() { emit deny "Blocked by git-guard: branch deletion only via agent-harness cleanup <pr> after merge."; }
 deny_config() { emit deny "Blocked by git-guard: git config injection (-c, --config-env, GIT_CONFIG_*) is not allowed."; }
@@ -957,10 +959,10 @@ check_cleanup() {
     cleanup.sh) [[ "$RAW0" == */scripts/agent-harness/cleanup.sh ]] || deny; rest=("$@") ;;
     *) return 1 ;;
   esac
-  [ "$has_assign" = 0 ] || deny
-  [[ "${rest[0]:-}" =~ ^[0-9]+$ ]] || deny
-  [ "${#rest[@]}" -le 2 ] || deny
-  [ "${#rest[@]}" -lt 2 ] || [ "${rest[1]}" = --keep-branch ] || deny
+  [ "$has_assign" = 0 ] || deny_harness_env
+  [[ "${rest[0]:-}" =~ ^[0-9]+$ ]] || deny_cleanup_shape
+  [ "${#rest[@]}" -le 2 ] || deny_cleanup_shape
+  [ "${#rest[@]}" -lt 2 ] || [ "${rest[1]}" = --keep-branch ] || deny_cleanup_shape
   return 0
 }
 
@@ -2183,7 +2185,7 @@ while [ "$LI" -lt "$nlines" ]; do
     python | python[0-9]* | perl | node | ruby) interpreter_inline_hits_protected "${ct[@]:1}" && deny ;;
   esac
 done
-[ "$life" = 1 ] && { [ "$segs" -gt 1 ] || [ "${ncmd_all:-0}" -gt 1 ]; } && deny_harness_cmd
+[ "$life" = 1 ] && { [ "$segs" -gt 1 ] || [ "${ncmd_all:-0}" -gt 1 ]; } && deny_harness_chain
 [ "$seg_ended" = 1 ] || deny_unparsed
 gg_mark legacy_loop
 

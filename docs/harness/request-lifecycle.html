@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harness statechart — fmflurry harness</title>
+<style>
+
+:root {
+  --bg: #FAF6EE;
+  --bg-soft: #F3EDE0;
+  --card: #FFFcf6;
+  --text: #3A342C;
+  --muted: #7A7164;
+  --line: #D9CFC0;
+  --accent: #8B6F47;
+  --accent-2: #6B8F71;
+  --accent-3: #C4A35A;
+  --accent-4: #9B6B6B;
+  --shadow: 0 8px 28px rgba(58, 52, 44, 0.07);
+  --radius: 16px;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif;
+  --sans: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --teal: #D7E6DF;
+  --blue: #D9E4F0;
+  --orange: #F0E0D0;
+  --yellow: #F2E8CC;
+  --purple: #E6DDF0;
+  --tan: #E8DFD4;
+  --pink: #F0DDE4;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--serif);
+  line-height: 1.55;
+  margin: 0;
+  padding: 2rem 1.25rem 3.5rem;
+}
+.wrap { max-width: 1100px; margin-inline: auto; }
+.lede {
+  max-width: 42rem;
+  margin: 0 auto 2rem;
+}
+h1 {
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.6rem;
+}
+.sub { color: var(--muted); margin: 0; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.15rem 1.25rem;
+}
+h2 {
+  font-family: var(--sans);
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+}
+.eyebrow {
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 0.35rem;
+}
+.grid-3, .grid-2 { display: grid; gap: 1rem; }
+.grid-3 { grid-template-columns: repeat(3, 1fr); }
+.grid-2 { grid-template-columns: 1fr 1fr; }
+.host { background: var(--teal); border: 1px solid var(--line); }
+.mono-card { background: #EAF3EC; }
+.cond-card { background: var(--blue); }
+ul { margin: 0.4rem 0 0; padding-left: 1.15rem; }
+li { margin: 0.25rem 0; }
+code, .mono {
+  font-family: var(--mono);
+  font-size: 0.86em;
+}
+pre {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  background: var(--bg-soft);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  margin: 0.75rem 0 0;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--sans);
+  font-size: 0.92rem;
+}
+th, td {
+  text-align: left;
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+th { color: var(--muted); font-weight: 600; }
+.pill {
+  display: inline-block;
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--accent-3);
+  color: var(--text);
+}
+.section { margin: 1.4rem 0; }
+.shared { background: var(--bg-soft); }
+footer {
+  margin-top: 2rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  max-width: 42rem;
+}
+@media (max-width: 800px) {
+  .grid-3, .grid-2 { grid-template-columns: 1fr; }
+}
+
+.state {
+  border-radius: 12px;
+  border: 1.5px solid var(--line);
+  padding: 0.7rem 0.9rem;
+  font-family: var(--sans);
+  font-size: 0.95rem;
+}
+.state strong { display: block; font-size: 1rem; }
+.state small { display: block; color: var(--muted); margin-top: 0.2rem; }
+.arrow {
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  color: var(--muted);
+  padding: 0.35rem 0 0.35rem 0.4rem;
+  border-left: 2px solid var(--line);
+  margin: 0 0 0 1.1rem;
+}
+.fork {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin: 0.6rem 0;
+}
+.path {
+  border: 1.5px dashed var(--line);
+  border-radius: 14px;
+  padding: 0.85rem;
+}
+.path .ptitle {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 0.6rem;
+}
+.phase-teal { background: var(--teal); }
+.phase-blue { background: var(--blue); }
+.phase-orange { background: var(--orange); }
+.phase-yellow { background: var(--yellow); }
+.phase-purple { background: var(--purple); }
+.phase-tan { background: var(--tan); }
+.phase-pink { background: var(--pink); }
+.breaks {
+  background: #F7E4E4 !important;
+  border-color: #B85C5C !important;
+  color: #8A3A3A !important;
+}
+.mayBreak {
+  background: #F7ECDD !important;
+  border-color: #C4873A !important;
+  color: #8A5A20 !important;
+}
+.bugPath {
+  border-color: #5B7FA6 !important;
+  border-width: 2.5px !important;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.9rem;
+  font-family: var(--sans);
+  font-size: 0.82rem;
+  margin: 0 0 1rem;
+}
+.swatch {
+  display: inline-block;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  vertical-align: -0.1rem;
+  margin-right: 0.3rem;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(16rem, 0.9fr);
+  gap: 1.2rem;
+  align-items: start;
+}
+.bug {
+  font-size: 0.92rem;
+}
+.bug ol { margin: 0.4rem 0 0; padding-left: 1.2rem; }
+@media (max-width: 800px) {
+  .fork, .layout { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="lede">
+    <p class="eyebrow">Lifecycle</p>
+    <h1>How a request moves through the harness</h1>
+    <p class="sub">Same rails on OpenCode, Claude Code, and Cursor. The fork is the variant: Conductor must delegate; Monolith writes in the main session.</p>
+  </header>
+
+  <div class="legend">
+    <span><i class="swatch phase-teal"></i>Host</span>
+    <span><i class="swatch phase-blue"></i>Routing</span>
+    <span><i class="swatch phase-orange"></i>Writing</span>
+    <span><i class="swatch phase-purple"></i>Verify</span>
+    <span><i class="swatch phase-yellow"></i>Review</span>
+    <span><i class="swatch phase-tan"></i>Ship</span>
+    <span><i class="swatch phase-pink"></i>Human</span>
+    <span><i class="swatch breaks"></i>breaks</span>
+    <span><i class="swatch mayBreak"></i>may break</span>
+  </div>
+
+  <div class="layout">
+    <div>
+      <div class="state phase-teal bugPath" id="request"><strong>Request arrives</strong><small>You type a goal in OpenCode, Claude Code, or Cursor.</small></div>
+      <div class="arrow">the host starts a session</div>
+      <div class="state phase-teal" id="load"><strong>Harness loads on the host</strong><small>OpenCode reads <code>opencode.jsonc</code>. Claude Code reads <code>~/.claude/</code>. Cursor loads the <code>fmflurry-harness</code> plugin. Skills, hooks, and the installed variant come with it.</small></div>
+      <div class="arrow">variant recorded in <code>.harness-variant</code></div>
+
+      <div class="fork">
+        <div class="path">
+          <p class="ptitle">Conductor</p>
+          <div class="state phase-blue bugPath" id="route"><strong>Conductor routes</strong><small>No write or edit permission. If a specialist matches, the first tool call must be that Task.</small></div>
+          <div class="arrow">Task to a writable specialist</div>
+          <div class="state phase-orange" id="specialist"><strong>Specialist writes</strong><small><code>coder</code>, <code>writer</code>, <code>tdd-guide</code>, <code>git-specialist</code>, and the others on the Conductor roster.</small></div>
+          <div class="arrow">or the conductor tries to edit itself</div>
+          <div class="state breaks" id="denied"><strong>Write denied</strong><small>OpenCode denies <code>write</code> and <code>edit</code> and allowlists Task targets. Claude Code disables Write and Edit. Cursor marks the agent <code>readonly</code> and has no per-agent tool allowlist.</small></div>
+        </div>
+        <div class="path">
+          <p class="ptitle">Monolith (default)</p>
+          <div class="state phase-orange" id="main-writes"><strong>Main agent writes</strong><small>Plans and implements here. Folded roles load as skills (<code>planner</code>, <code>coder</code>, <code>tdd</code>, <code>git-workflow</code>). <code>/orchestrate</code> is optional.</small></div>
+          <div class="arrow">spawn only for review, parallel fan-out, or noisy output</div>
+          <div class="state phase-blue" id="optional"><strong>Optional specialist</strong><small>Nine installed agents, including <code>build-error-resolver</code>, <code>e2e-runner</code>, <code>why-investigator</code>, <code>code-reviewer</code>, <code>security-reviewer</code>, <code>database-reviewer</code>, <code>ecosystem-auditor</code>, <code>cop</code>, and <code>comment-judge</code>.</small></div>
+        </div>
+      </div>
+
+      <div class="arrow">after any source edit</div>
+      <div class="state phase-purple" id="verify"><strong>Verification gate</strong><small>The agent runs the project build, lint, and covering tests itself and pastes real output. Subagent self-reports are not proof.</small></div>
+      <div class="arrow">evidence is fresh [ok] · or a fix pass [if the command failed]</div>
+      <div class="state mayBreak" id="fix"><strong>Fix pass</strong><small>Retry the same error at most twice, then stop.</small></div>
+      <div class="arrow">two failed passes on the same error</div>
+      <div class="state phase-yellow" id="review"><strong>Independent review</strong><small><code>code-reviewer</code> and <code>security-reviewer</code> (plus <code>cop</code> / stack review when it applies). Only a confirmed Important finding blocks. Nit and Pre-existing do not.</small></div>
+      <div class="arrow">no open Important finding</div>
+      <div class="state phase-tan" id="pr"><strong>Open the PR</strong><small>Visual report at <code>docs/pr-reports/</code>, Conventional Commits, no force-push, no merge to the base branch from here unless <code>/ship</code> and <code>ship-merge</code> allow it.</small></div>
+      <div class="arrow">interactive run stops here · <code>/ship</code> continues through CI</div>
+      <div class="state phase-tan" id="done"><strong>Done</strong><small>PR opened (or, in autonomous mode, merged through <code>agent-harness ship-merge</code> only).</small></div>
+      <div class="arrow">credentials missing, product decision, secret exposure, or no progress</div>
+      <div class="state phase-pink" id="human"><strong>Escalate to you</strong><small>The worktree, branch, and goal registry stay in place on the blocked path.</small></div>
+    </div>
+
+    <aside class="card bug">
+      <h2>Paths that break the rules</h2>
+      <p><strong>1. Conductor tries to write</strong></p>
+      <p>On OpenCode and Claude Code the conductor has no file-mutation tool. On Cursor the conductor agent is marked <code>readonly</code>. That host has no per-agent write allowlist.</p>
+      <ol>
+        <li>Request arrives</li>
+        <li>Harness loads on the host</li>
+        <li>Conductor routes</li>
+        <li>Write denied</li>
+      </ol>
+      <p style="margin-top:1rem"><strong>2. “Done” without evidence</strong></p>
+      <p>The verification gate forbids announcing done on hope or on a subagent’s word. Two failed fix passes on the same error leave the chart at Escalate to you — they do not loop forever.</p>
+      <ol>
+        <li>Main agent writes <em>or</em> Specialist writes</li>
+        <li>Verification gate</li>
+        <li>Fix pass</li>
+        <li>Escalate to you</li>
+      </ol>
+      <p style="margin-top:1rem;color:var(--muted)">The diagram leaves out hook internals (secret-file guard, KPI lines, stop-gate counters) and the full <code>/ship</code> CI retry loop. Those are the same on both variants once review has passed.</p>
+    </aside>
+  </div>
+
+  <footer>Visual vocabulary adapted from @poteto's /statechart in backnotprop/pstack (MIT · Lauren Tan).</footer>
+</div>
+<!--
+MIT License — Copyright (c) 2026 Lauren Tan
+Permission notice from https://github.com/backnotprop/pstack/blob/main/LICENSE
+must accompany substantial portions of the Software (including the mark/phase
+color system adapted from skills/statechart/references/render.md).
+-->
+</body>
+</html>

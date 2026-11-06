@@ -1,187 +1,124 @@
 <p align="center">
-  <img src="assets/opencode-harness.png" alt="opencode harness — conductor-routed multi-agent setup overview" width="100%" />
-</p>
-
-<p align="center">
   <a href="https://github.com/fmflurry/code-memory"><img src="https://img.shields.io/badge/MCP-CodeMemory-7c3aed?logo=github" alt="CodeMemory MCP" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
   <a href="https://opencode.ai"><img src="https://img.shields.io/badge/OpenCode-CLI-000" alt="OpenCode" /></a>
   <a href="https://claude.com/claude-code"><img src="https://img.shields.io/badge/Claude%20Code-mirror-d97757" alt="Claude Code mirror" /></a>
+  <a href="https://cursor.com"><img src="https://img.shields.io/badge/Cursor-plugin-000" alt="Cursor plugin" /></a>
 </p>
 
-> ### Powered by [**CodeMemory**](https://github.com/fmflurry/code-memory)
->
-> The semantic backbone of this harness. CodeMemory indexes the whole repo into a queryable memory of files, symbols, and episodes — so every agent walks into a session **already knowing the codebase** instead of grepping it back into existence on every turn.
->
-> - **Orientation, not scanning.** One `code-memory_codememory_retrieve` call surfaces the right paths, symbols, and prior decisions; `grep`/`read` only run afterwards for exact verification.
-> - **Cross-session memory.** Episodes and findings persist — agents pick up where the last session left off instead of re-discovering the repo from scratch.
-> - **Wired in by default.** the `codebase-exploration` skill is loaded at session start, and `code-memory_*` tools are pre-allowlisted for the conductor and every specialist subagent. Cloud and remote agents skip CodeMemory (`docs/codememory-cloud.md`). `FMFLURRY_CODEMEMORY=on` keeps it on.
+# harness-manifesto
 
-# OpenCode + Claude Code Setup
+One harness for **Claude Code**, **OpenCode**, and **Cursor**. Formerly [settings-opencode](https://github.com/fmflurry/settings-opencode); that URL redirects here. You install one variant. **Monolith** is the default. **Conductor** is opt-in. Skills are one shared tree either way.
 
-> My personal **OpenCode** and **Claude Code** configuration, kept public so I can sync it across machines — and so anyone curious can borrow what's useful. MIT licensed, fork freely. It evolves with my workflow, so treat it as a living reference rather than a stable distribution.
+MIT licensed. Fork it. The tree moves with the workflow, so treat it as a living reference.
 
-### Choisir sa variante
+Un harness pour **Claude Code**, **OpenCode** et **Cursor**. Anciennement settings-opencode. **Monolith** est le défaut, **Conductor** est opt-in. Les schémas sont en anglais et partagés. [Choisir une variante](#variantes-fr) et [Comment une demande avance](#parcours-fr) reprennent le même choix en français. L'installation est dans [Public install](#public-install).
 
-Monolith est le défaut (`./install.sh --yes`, `settings-sync`, `bootstrap.ps1`, le plugin Cursor, et `./install.sh --local`) : l'agent principal écrit, et `/orchestrate` est optionnel. Conductor reste disponible avec `conductor` : le conducteur route, et l'agent principal n'écrit pas. `orchestration` reste un alias de Conductor. Un changement de variante retire les agents, commandes et règles de l'autre.
+<a id="variants"></a>
+
+## One harness, two variants, three hosts
+
+<p align="center">
+  <a href="docs/harness/monolith-vs-conductor.html"><img src="docs/harness/monolith-vs-conductor.png" alt="One harness, two variants, three hosts. Monolith is the default install. Conductor is opt-in." width="100%" /></a>
+</p>
+
+[Open the comparison](docs/harness/monolith-vs-conductor.html) (one HTML file, no network). [La même page en français, plus bas](#variantes-fr).
+
+Three hosts, one install tree:
+
+| Host | Where it lands |
+| --- | --- |
+| OpenCode | `~/.config/opencode/`. Hub file: `opencode.jsonc`. Entry: `install.sh` or `bootstrap.sh`. |
+| Claude Code | Optional `~/.claude/` mirror: settings, hooks, rules, agents, synced skills. Same variant as OpenCode when you install both. |
+| Cursor | Plugin `fmflurry-harness` via `install-cursor.sh`. Version **0.4.36** in `scripts/cursor-plugin/config.json`. Agents are marked `readonly` or not. This host has no per-agent write allowlist. |
+
+**Monolith** is `variants/monolith/`. These install it when you omit the variant: `./install.sh --yes`, `./install.sh --local`, `bootstrap.ps1`, `settings-sync`, and `./install-cursor.sh`. `install.sh` copies the Conductor tree, then `scripts/variants/apply-monolith.mjs` overlays the lean roster onto that copy. The source checkout stays as it is.
+
+The primary agent writes, plans, and implements in the same session. Nothing has to run before the first edit. `/orchestrate` loads the `conductor` skill and stays optional.
+
+Nine agents are installed, for review and noisy output: `code-reviewer`, `security-reviewer`, `database-reviewer`, `ecosystem-auditor`, `e2e-runner`, `why-investigator`, `build-error-resolver`, `cop`, `comment-judge`. Folded roles are skills (`planner`, `coder`, `tdd`, `git-workflow`, `writer`, and the rest named in `variants/monolith/AGENTS.md`). Live Postgres goes to `database-reviewer` or the main agent. The installed roster leaves out `postgres-dba`.
+
+**Conductor** is the repository root: `.claude/`, `opencode.jsonc`, `prompts/agents/`, `instructions/`. `variants/conductor/manifest.json` sets `"default": true` because that root is the Conductor source. Installers still select Monolith when the variant is omitted. Choose Conductor with `./install.sh conductor`, `./install-cursor.sh --variant conductor`, or the alias `orchestration`.
+
+A read-only `conductor` routes every change. In `opencode.jsonc` its `write` and `edit` tools are off, and the Task allowlist names every legal specialist. `instructions/subagent-routing.md` is the first-tool gate: when a specialist matches, the first tool call is that Task. Before `coder`, `writer`, or `tdd-guide`, the conductor emits the 6-field brief (`brief-contract`). The roster is 1 conductor plus 25 specialists: 26 files in `prompts/agents/` and 26 in `.claude/agents/`.
+
+```
+planner → (tdd-guide → coder) or coder → code-reviewer → verify → git-specialist
+```
+
+On Cursor, the same conductor agent is marked `readonly` (`scripts/cursor-plugin/lib.mjs`). Delegation on that host is the readonly mark plus the prompt.
+
+Switching variants removes the other variant's agents, commands, and rules. Returning to Conductor runs `scripts/variants/prune-foreign.mjs`.
+
+| | Monolith | Conductor |
+| --- | --- | --- |
+| Who writes application code | The primary agent, through skills such as `coder` and `tdd` | Writable specialists (`coder`, `writer`, `tdd-guide`, and the other writable names in `instructions/subagent-routing.md`) |
+| Who coordinates | The primary agent. `/orchestrate` is optional | The `conductor` agent |
+| Installed agents | 9 | 26 (conductor + 25) |
+| Skills | Shared `skills/` tree | Shared `skills/` tree |
+| Source in this repo | Overlay `variants/monolith/` on the install copy | Repository root. `"default": true` marks that source |
+| Install | `./install.sh --yes`, `./install.sh --local`, `./install-cursor.sh` | `./install.sh conductor`, `./install-cursor.sh --variant conductor`. `orchestration` is an alias |
 
 ```bash
-./install.sh                         # menu interactif ; variante par défaut Monolith
-./install.sh conductor               # Conductor : OpenCode et Claude Code, scope global
+./install.sh                         # interactive; default Monolith
+./install.sh --yes                   # Monolith on OpenCode + Claude Code
+./install.sh conductor               # Conductor on OpenCode + Claude Code
 ./install.sh monolith
-./install.sh --local                 # projet : AGENTS.md, .cursor, .agents, défaut Monolith
-./install.sh --local --variant conductor
-./install.sh --status                # variante installée, sans réinstaller
-./install.sh --variant orchestration # alias de conductor
-HARNESS_VARIANT=monolith ./install.sh --yes
-./install-cursor.sh                  # plugin Cursor, défaut Monolith
+./install.sh --local                 # project files; default Monolith
+./install.sh --variant orchestration # alias of Conductor
+./install-cursor.sh                  # Cursor plugin, default Monolith
 ./install-cursor.sh --variant conductor
-./install-cursor.sh --status
 ```
 
-Windows : `bootstrap.ps1` sans variante est Monolith, `bootstrap.ps1 conductor`, `bootstrap.ps1 monolith`, `bootstrap.ps1 -Local`, `bootstrap.ps1 -Status`.
+Windows: `bootstrap.ps1` with no variant is Monolith. `bootstrap.ps1 conductor` selects Conductor. `orchestration` is the same alias.
 
-Sur une session Claude Code distante (`CLAUDE_CODE_REMOTE=true`), `SessionStart` lance `.claude/hooks/cloud-session-bootstrap.sh` quand le projet ne vendore pas déjà le harness. Le hook fait un clone superficiel de ce dépôt et lance `install.sh --yes monolith`. Il ne fait rien en local, ni quand `.claude` est le harness, ni quand un `plugin.json` porte un champ `version`. Un échec de clone ou d'install écrit un avertissement et sort 0.
+<a id="variantes-fr"></a>
 
-### Mesurer les variantes
+### Choisir une variante
 
-Conductor et Monolith s'observent avec un journal local, distinct du moniteur tok/s d'OpenCode (`llm-metrics`). Le même journal vaut pour OpenCode, Claude Code et Cursor.
+Monolith est le défaut : `./install.sh --yes`, `./install.sh --local`, `bootstrap.ps1`, `settings-sync`, `./install-cursor.sh`. L'agent principal écrit, planifie et implémente. Neuf agents restent pour la revue et la sortie bruyante. Les rôles repliés sont des skills, listés dans `variants/monolith/AGENTS.md`. `/orchestrate` charge le skill `conductor` et reste optionnel. Postgres en direct va à `database-reviewer` ou à l'agent principal.
 
-Les hooks de session, d'arrêt, de sous-agent, les gardes PreToolUse, `PostToolUse`, `ship-stop-gate` et le verdict de revue ajoutent une ligne JSON dans `~/.agent-harness/kpi/events.jsonl`. `AGENT_HARNESS_KPI_LOG` change le chemin. `AGENT_HARNESS_KPI=0` coupe l'écriture. Chaque ligne porte la variante lue dans `.harness-variant` (`orchestration` compte comme Conductor), la version du harness, l'outil (`opencode`, `claude` ou `cursor`), le dépôt, la branche, la session et l'heure. Un outil Skill ajoute `skill`. Un outil Task ou Agent, et l'arrêt d'un sous-agent, ajoutent `agent`. `tool_result` porte `tool_name`, `duration_ms` et `ok`. Les jetons viennent de `message.updated` (OpenCode) ou du transcript à l'arrêt (Claude) ; Cursor les laisse à `null`. La liste des champs est dans `docs/kpi-events.md`. Le journal ne contient ni prompt, ni secret, ni chemin absolu.
+Conductor se choisit avec `./install.sh conductor` ou `./install-cursor.sh --variant conductor`. `orchestration` est un alias. Le conducteur route chaque changement. Le roster fait 1 conducteur + 25 spécialistes. `variants/conductor/manifest.json` porte `"default": true` parce que la racine du dépôt est l'arbre source Conductor. Les installeurs choisissent Monolith quand la variante est omise.
 
-```bash
-agent-harness kpi report --since 30d --by variant
-agent-harness kpi report --json
-agent-harness kpi report --html > /tmp/kpi.html
-agent-harness kpi feature
-agent-harness kpi feature --pr 53 --json
-```
+Le schéma au-dessus et la [page HTML](docs/harness/monolith-vs-conductor.html) montrent les trois hôtes et le tableau des différences. Changer de variante retire les agents, commandes et règles de l'autre.
 
-`agent-harness kpi feature` résume une branche (dépôt + branche, et le numéro de PR dès qu'un événement le porte). Le rapport donne la durée murale, le temps actif hors pauses de plus de 5 minutes, les sessions par hôte, les outils et skills, les appels par agent (`main` et chaque sous-agent), les échecs et durées, les gardes, les tours de revue et de correctif, et les jetons quand l'hôte les a envoyés (`n/a` sinon). La commande écrit `docs/pr-reports/<slug>.metrics.json` sans prompt, argument, ni chemin absolu. Conductor et Monolith lancent cette commande avant le HTML du rapport de PR. `pr-report` insère le panneau Metrics dans le HTML et un tableau `## Metrics` dans le corps. `pr-report-check` avertit si les métriques manquent ou sont partielles, sans faire échouer le contrôle visuel.
+<a id="request-flow"></a>
 
-Le tableau met Conductor à côté de Monolith : tâches, jetons par tâche quand ils sont connus, durée, appels d'outils, tours de revue par PR, premier passage CI, findings Important par PR, blocages des gardes, taux de revert sur 7 jours, temps de merge. Les effectifs sont affichés. Sous 5 tâches ou sous 3 PR, le rapport dit que l'échantillon est trop petit pour conclure. Les colonnes de PR viennent de `git` et `gh` en lecture seule. Si `gh` ne répond pas, ces colonnes restent vides (`--no-live` saute l'appel).
+## How a request moves
 
-```bash
-agent-harness eval
-agent-harness eval --run-model
-```
+<p align="center">
+  <a href="docs/harness/request-lifecycle.html"><img src="docs/harness/request-lifecycle.png" alt="How a request moves: Conductor routes and Monolith writes, then verification, review, a pull request, or an escalation." width="100%" /></a>
+</p>
 
-`agent-harness eval` rejoue `evals/tasks/*.yaml` (correctif, feature, refactor, ajout de test, CI, docs, et le déclencheur du skill `fix-ci` pour le prompt « fix CI ») dans un worktree et un HOME isolés, une fois par variante. Le mode par défaut n'appelle aucun modèle : il vérifie les checkers et le routage de skill, sans coût de jeton. `--run-model` exige `AGENT_HARNESS_EVAL_CMD` et lance un agent Cursor par tâche et par variante (modèle `grok-4.7-medium`, ou `AGENT_HARNESS_EVAL_MODEL`). La suite livrée fait 10 tâches × 2 variantes, donc 20 sessions. Les résultats (réussite, jetons si l'hôte les donne, durée, appels d'outils) rejoignent le même journal.
+[Open the statechart](docs/harness/request-lifecycle.html). Visual vocabulary adapted from @poteto's /statechart in backnotprop/pstack (MIT · Lauren Tan).
 
-### Want to try it? Jump to **[Public install](#public-install)** — it takes about five minutes.
+The rails are the same on OpenCode, Claude Code, and Cursor. The fork is the variant. Conductor routes, and a writable specialist edits. Monolith writes in the main session and spawns a specialist for review, parallel fan-out, or noisy output. After a source edit, the verification gate wants the project build, lint, and the tests that cover the change, with the real output pasted. Two failed fix passes on the same error stop. Independent review is `code-reviewer` and `security-reviewer`, plus `cop` or the stack reviewer when it applies. A confirmed Important finding blocks. Nit and Pre-existing do not. An interactive run stops when the PR is open. `/ship` continues through CI and merges only with `agent-harness ship-merge`.
 
----
+The chart leaves out hook internals and the full `/ship` retry loop. Those are shared once review has passed. The contract is [Autonomous mode](#autonomy-en) and [Mode autonome](#autonomy-fr).
 
-## What's inside
+Shared on both variants and all three hosts:
 
-Two variants share this repo. The counts below are the **Conductor** tree at the repo root, counted fresh on **2026-10-02**.
+- Verification gate. "Done" waits on fresh command output.
+- Tool budget. Verification commands are uncapped. Exploratory shell is budgeted.
+- Secret-file guard, autonomy and `/ship`, worktree destruction safety, and a PR visual report under `docs/pr-reports/`.
+- KPI journal at `~/.agent-harness/kpi/events.jsonl`.
+- CodeMemory when it is on. Cloud and remote sessions skip it unless `FMFLURRY_CODEMEMORY=on`.
 
-**Monolith** is the default (`./install.sh --yes`, `settings-sync`, `bootstrap.ps1`, the Cursor plugin, and `./install.sh --local`). It keeps **9 agents** (review and noisy output). The main agent coordinates and may write. `/orchestrate` loads the `conductor` skill and stays optional. Folded roles, including `postgres-dba`, are not installed. Live Postgres work goes to `database-reviewer` or the main agent.
+<a id="parcours-fr"></a>
 
-**Conductor** is selected with `./install.sh conductor`. A read-only `conductor` routes every change. It cannot write. The roster is 1 conductor plus 25 specialists, including `postgres-dba`.
+### Comment une demande avance
 
-A default install follows Monolith. On a remote Claude Code session (`CLAUDE_CODE_REMOTE=true`), `SessionStart` runs `.claude/hooks/cloud-session-bootstrap.sh` when the project does not already vendor the harness. The hook shallow-clones this repo and runs `install.sh --yes monolith`. It does nothing locally, it does nothing when `.claude` is the harness or a plugin `version` marker is present, and a clone or install failure logs a warning and exits 0.
+Mêmes rails sur OpenCode, Claude Code et Cursor. Conductor délègue. Monolith écrit dans la session principale. Le schéma et la [page HTML](docs/harness/request-lifecycle.html) suivent la demande : routage ou écriture, porte de vérification, revue, PR, ou escalade vers vous. Le vocabulaire visuel est adapté de `/statechart` de @poteto dans backnotprop/pstack (MIT, Lauren Tan).
 
-| Thing                        | Count | Notes                                                                                  |
-| ---------------------------- | ----- | -------------------------------------------------------------------------------------- |
-| Agents                       | 26    | 1 `conductor` + 25 specialists (`build` / `plan` overrides ship disabled)              |
-| Skills                       | 69    | canonical set in `skills/*/SKILL.md`; `skill-creator` is runtime-only and git-ignored  |
-| Command templates            | 37    | `commands/*.md`; **21** pinned in `opencode.jsonc`                                      |
-| Session-start instructions   | 12    | loaded from `instructions/` (`caveman-ultra.md` is not loaded)                          |
-| `.claude` rule packs         | 15    | 6 always-on under `rules/common/`, 4 path-scoped, 5 under `rules/typescript/`           |
-| Hooks                        | 7     | `.claude/hooks/*.sh`                                                                    |
-| MCP servers                  | 6     | 1 enabled (`code-memory`), 5 disabled by default                                        |
-| Custom tool files            | 4     | `run-tests`, `check-coverage`, `security-audit`, plus the `index.ts` barrel             |
-| TUI plugins                  | 2     | `llm-metrics` sidebar + `panda-banner`                                                  |
+## On this page
 
-**Highlighted subagents** — full roster in [Agents](#agents-en).
-
-| Name                | What it does                                | Why it's good                                                                     |
-| ------------------- | ------------------------------------------- | --------------------------------------------------------------------------------- |
-| `conductor`         | Primary orchestrator; `write`/`edit` denied | Even literal models must delegate — routing is enforced by permissions, not prose |
-| `planner`           | Turns requests into phased plans            | Surfaces dependencies and risks before code is written                            |
-| `coder`             | Writes and edits source code                | Only writer for application code, scoped to a brief                               |
-| `tdd-guide`         | Drives test-first cycles                    | RED-GREEN-REFACTOR with coverage; delegates implementation to `coder`             |
-| `code-reviewer`     | Reviews diffs before merge                  | Catches regressions and convention drift early                                    |
-| `security-reviewer` | Audits auth, secrets, and input             | Read-only findings; fixes routed to `coder`                                       |
-| `git-specialist`    | Sequences atomic commits and PRs            | Cohesion-first splits, Conventional Commits, no force-push                        |
-| `scout`             | Maps the repo before a dispatch             | Produces file manifests so briefs stay precise                                    |
-| `comment-judge`     | Judges added comments by rubric             | Flags false, stale, and noisy comments                                            |
-| `postgres-dba`      | Runs live PostgreSQL diagnostics            | Read-only advisory; mutating commands left for humans                             |
-
-**Highlighted skills** — full catalog in [Skills](#skills-en).
-
-| Name                               | What it does                                | Why it's good                                                   |
-| ---------------------------------- | ------------------------------------------- | --------------------------------------------------------------- |
-| `socratic-design`                  | Spikes a short question, otherwise asks one | Gates decisions before plans; no chained interrogation          |
-| `caveman`                          | Ultra-terse replies (~75% fewer tokens)     | Keeps full technical accuracy at a fraction of the context cost |
-| `verify-this`                      | Falsifiable verification of a claim         | Green means fresh evidence, not optimism                        |
-| `blast-radius`                     | Traces what a change can break              | Proves safety with real code, beyond the diff                   |
-| `why`                              | Cites design rationale from history         | Searches source control and evidence MCPs in parallel           |
-| `chimera`                          | Runs parallel candidates, grafts the best   | Avoids locking in the wrong shape early                         |
-| `humanizer`                        | Strips AI tells from prose                  | Keeps writing sounding like a person wrote it                   |
-| `test-behavior-not-implementation` | Detects tests that cannot fail              | Catches mock-only and self-referential assertions               |
-| `show-your-work`                   | Keeps a per-decision log                    | Gives reviewers a trail for unattended runs                     |
-| `fix-ci`                           | Finds failing checks and fixes them         | Routes by failure type: build, test, or security                |
-| `config-sync`                      | Propagates harness config changes           | Keeps repo and live directories in step                         |
-| `openspec`                         | OpenSpec workflow, one skill                | Propose, apply, archive, and the rest live under `references/`  |
-
-**Highlighted commands** — full list in [Slash commands](#commands-en).
-
-| Name           | What it does                      | Why it's good                                      |
-| -------------- | --------------------------------- | -------------------------------------------------- |
-| `/plan`        | Delegates to `planner` for a plan | Forces routing before any code is written          |
-| `/tdd`         | Test-first cycle, or `/tdd refactor` to pin behavior | Characterization tests pass immediately and stay frozen |
-| `/cop-review`  | Pre-merge review of the branch    | Applies stack-specific checklists and runs lint    |
-| `/security`    | Security audit of the change      | Read-only findings; fixes routed to `coder`        |
-| `/git`         | Branch and commit operations      | Keeps git work in the specialist's hands           |
-| `/build-fix`   | Resolves build and type errors    | Focused loop until the build is green              |
-| `/orchestrate` | Multi-agent coordination          | Plans dependency order across specialists          |
-| `/verify`      | Verification loop                 | Checks the goal against concrete criteria          |
-| `/db-health`   | Read-only PostgreSQL health check | Surfaces vacuum, wraparound, and connection issues |
-| `/api-spec`    | Generates OpenAPI 3.1 specs       | One spec per bounded context, Zalando-style        |
-
-The two halves stand alone. Use the OpenCode side, the Claude Code mirror, or both — whichever you'd find useful.
-
-## Table of contents
-
+- [Variants](#variants) · [Choisir une variante](#variantes-fr)
+- [How a request moves](#request-flow) · [Comment une demande avance](#parcours-fr)
 - [Public install](#public-install)
-- [English](#english)
-  - [Recent changes](#recent-en)
-  - [Goals](#goals-en)
-  - [Repository layout](#layout-en)
-  - [Configuration](#config-en)
-  - [How the harness works today](#harness-en)
-  - [Agents](#agents-en)
-  - [Slash commands](#commands-en)
-  - [Skills](#skills-en)
-  - [Instructions & rules](#instructions-en)
-  - [Plugins & hooks](#plugins-en)
-  - [Custom tools](#tools-en)
-  - [TUI plugins](#tui-en)
-  - [Claude Code mirror](#claude-en)
-  - [Sync & update](#sync-en)
-  - [How it fits together](#flow-en)
-  - [Autonomous mode](#autonomy-en)
-- [Français](#francais)
-  - [Changements récents](#recent-fr)
-  - [Objectif](#objectif-fr)
-  - [Structure du repo](#structure-fr)
-  - [Configuration](#config-fr)
-  - [Agents](#agents-fr)
-  - [Comment marche le harness](#harness-fr)
-  - [Commandes slash](#commands-fr)
-  - [Skills](#skills-fr)
-  - [Instructions & règles](#instructions-fr)
-  - [Plugins & hooks](#plugins-fr)
-  - [Outils custom](#tools-fr)
-  - [TUI plugins](#tui-fr)
-  - [Mirror Claude Code](#claude-fr)
-  - [Sync & mise a jour](#sync-fr)
-  - [Comment tout s'emboite](#flow-fr)
-  - [Mode autonome](#autonomy-fr)
-
----
+- [Measure the variants](#measure) · [Mesurer les variantes](#mesurer-fr)
+- [What's inside](#whats-inside)
+- [English](#english) — recent changes, layout, Conductor mechanics, catalogs, [autonomous mode](#autonomy-en)
+- [Français](#francais) — [mode autonome](#autonomy-fr)
 
 <a id="public-install"></a>
 
@@ -191,39 +128,39 @@ The repo is designed to merge into `~/.config/opencode/`, plus an optional `~/.c
 
 ### One-line install
 
-You don't need to clone anything first. The bootstrap fetches the repo into `~/.local/share/settings-opencode` (override with `SETTINGS_OPENCODE_SRC`), then runs the installer. **Re-running the exact same command is also how you update** — it pulls the latest and re-applies it.
+You don't need to clone anything first. The command below downloads [harness-manifesto](https://github.com/fmflurry/harness-manifesto). `bootstrap.sh` still clones `https://github.com/fmflurry/settings-opencode.git` (that URL redirects here) into `~/.local/share/settings-opencode` (override with `SETTINGS_OPENCODE_SRC`), then runs the installer. That directory name, and the shell-rc fence `# >>> settings-opencode >>>`, are still what `bootstrap.sh` and `install.sh` write. **Re-running the exact same command is also how you update** — it pulls the latest and re-applies it.
 
 **macOS / Linux / WSL** (bash):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/fmflurry/harness-manifesto/master/bootstrap.sh | bash
 ```
 
 On WSL it installs to the **Windows** side (`/mnt/c/Users/<you>/.config/opencode`), matching `install.sh`'s WSL behaviour. Pass installer flags through after `-s --`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash -s -- --local
-curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash -s -- --no-claude
-curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/fmflurry/harness-manifesto/master/bootstrap.sh | bash -s -- --local
+curl -fsSL https://raw.githubusercontent.com/fmflurry/harness-manifesto/master/bootstrap.sh | bash -s -- --no-claude
+curl -fsSL https://raw.githubusercontent.com/fmflurry/harness-manifesto/master/bootstrap.sh | bash -s -- --uninstall
 ```
 
 **Native Windows** (PowerShell — no WSL):
 
 ```powershell
-irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1 | iex
+irm https://raw.githubusercontent.com/fmflurry/harness-manifesto/master/bootstrap.ps1 | iex
 ```
 
 Merges into `%USERPROFILE%\.config\opencode` and `\.claude`, runs `npm install` (or `bun install`), and writes the `OPENCODE_*` defaults as **persistent User environment variables**. Open a new terminal afterwards so they take effect. Variants:
 
 ```powershell
 # project-scoped install
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -Local
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/harness-manifesto/master/bootstrap.ps1))) -Local
 # skip the Claude mirror
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -NoClaude
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/harness-manifesto/master/bootstrap.ps1))) -NoClaude
 # skip OpenCode (install Claude only)
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -NoOpencode
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/harness-manifesto/master/bootstrap.ps1))) -NoOpencode
 # uninstall (removes the OPENCODE_* env vars; leaves copied config in place)
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1))) -Uninstall
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/fmflurry/harness-manifesto/master/bootstrap.ps1))) -Uninstall
 ```
 
 ### Prerequisites
@@ -247,8 +184,8 @@ Other providers (Anthropic, OpenAI, GitHub Copilot, OpenCode Go) need their own 
 Already have the repo cloned? Run the installer directly:
 
 ```bash
-git clone https://github.com/fmflurry/settings-opencode.git ~/Workspace/settings-opencode
-cd ~/Workspace/settings-opencode
+git clone https://github.com/fmflurry/harness-manifesto.git ~/Workspace/harness-manifesto
+cd ~/Workspace/harness-manifesto
 ./install.sh
 ```
 
@@ -337,9 +274,9 @@ OpenCode loads `~/.config/opencode/opencode.jsonc` at startup. Keep the repo whe
 
 ```bash
 # Clone
-git clone https://github.com/fmflurry/settings-opencode.git ~/Workspace/settings-opencode
+git clone https://github.com/fmflurry/harness-manifesto.git ~/Workspace/harness-manifesto
 mkdir -p ~/.config/opencode
-rsync -a --exclude node_modules --exclude .git ~/Workspace/settings-opencode/ ~/.config/opencode/
+rsync -a --exclude node_modules --exclude .git ~/Workspace/harness-manifesto/ ~/.config/opencode/
 cd ~/.config/opencode
 ```
 
@@ -422,7 +359,7 @@ Then drop a slash command:
 /plan add a TODO list to my homepage
 ```
 
-It should route to the `planner` sub-agent and return a structured plan without writing code.
+On Conductor it dispatches the `planner` subagent and returns a plan. On Monolith, the install default, the same command loads the `planner` skill in the main session.
 
 ### Changing models
 
@@ -438,12 +375,12 @@ If you installed via the one-liner, **re-run the exact same command** — it pul
 
 ```bash
 # macOS / Linux / WSL
-curl -fsSL https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/fmflurry/harness-manifesto/master/bootstrap.sh | bash
 ```
 
 ```powershell
 # native Windows
-irm https://raw.githubusercontent.com/fmflurry/settings-opencode/master/bootstrap.ps1 | iex
+irm https://raw.githubusercontent.com/fmflurry/harness-manifesto/master/bootstrap.ps1 | iex
 ```
 
 If you cloned the repo by hand instead:
@@ -460,11 +397,116 @@ If a new plugin shows up, OpenCode picks it up on the next restart. If an env va
 
 ---
 
+<a id="measure"></a>
+
+## Measure the variants
+
+Conductor and Monolith share one local journal, separate from OpenCode's tok/s monitor (`llm-metrics`). OpenCode, Claude Code, and Cursor write the same events.
+
+Session, stop, and subagent hooks, PreToolUse guards, `PostToolUse`, `ship-stop-gate`, and the review verdict append one JSON line to `~/.agent-harness/kpi/events.jsonl`. `AGENT_HARNESS_KPI_LOG` changes the path. `AGENT_HARNESS_KPI=0` turns writing off. Each line carries the variant from `.harness-variant` (`orchestration` counts as Conductor), the harness version, the host (`opencode`, `claude`, or `cursor`), the repo, the branch, the session, and the time. A Skill tool adds `skill`. A Task or Agent tool, and a subagent stop, add `agent`. `tool_result` carries `tool_name`, `duration_ms`, and `ok`. Tokens come from `message.updated` (OpenCode) or the stop transcript (Claude). Cursor leaves them null. The field list is `docs/kpi-events.md`. The journal has no prompt, no secret, and no absolute path.
+
+```bash
+agent-harness kpi report --since 30d --by variant
+agent-harness kpi report --json
+agent-harness kpi report --html > /tmp/kpi.html
+agent-harness kpi feature
+agent-harness kpi feature --pr 53 --json
+```
+
+`agent-harness kpi feature` summarizes one branch (repo, branch, and the PR number once an event carries it): wall time, active time with gaps over 5 minutes removed, sessions per host, tools and skills, calls per agent (`main` and each subagent), failures and durations, guard blocks, review and fix rounds, and tokens when the host sent them (`n/a` otherwise). It writes `docs/pr-reports/<slug>.metrics.json` with no prompt, argument, or absolute path. Both variants run this before the PR report HTML. `pr-report` inserts a Metrics panel. `pr-report-check` warns when the metrics are missing or partial, and the visual check still passes.
+
+The comparison table puts Conductor next to Monolith: tasks, tokens per task when known, duration, tool calls, review rounds per PR, first-pass CI, Important findings per PR, guard blocks, 7-day revert rate, time to merge. Counts are shown. Under 5 tasks or under 3 PRs the report says the sample is too small to conclude. PR columns come from read-only `git` and `gh`. If `gh` does not answer, those columns stay empty (`--no-live` skips the call).
+
+```bash
+agent-harness eval
+agent-harness eval --run-model
+```
+
+`agent-harness eval` replays `evals/tasks/*.yaml` (bugfix, feature, refactor, test add, CI, docs, and the `fix-ci` skill trigger) in an isolated worktree and HOME, once per variant. The default mode calls no model: it checks the checkers and skill routing. `--run-model` requires `AGENT_HARNESS_EVAL_CMD` and runs one Cursor agent per task per variant (`grok-4.7-medium`, or `AGENT_HARNESS_EVAL_MODEL`). The shipped suite is 10 tasks × 2 variants, 20 sessions. Results join the same journal.
+
+<a id="mesurer-fr"></a>
+
+### Mesurer les variantes
+
+Conductor et Monolith s'observent avec le même journal, distinct du moniteur tok/s d'OpenCode (`llm-metrics`). Le détail des champs est ci-dessus et dans `docs/kpi-events.md`. Les commandes sont les mêmes : `agent-harness kpi report`, `agent-harness kpi feature`, `agent-harness eval`.
+
+<a id="whats-inside"></a>
+
+## What's inside
+
+Counts below were recounted from this tree on **2026-11-06**. The agent, command, and skill catalogs further down are the **Conductor** source. Monolith installs 9 agents and the same `skills/` tree.
+
+> ### Powered by [**CodeMemory**](https://github.com/fmflurry/code-memory)
+>
+> CodeMemory indexes the repo into files, symbols, and episodes. One `code-memory_codememory_retrieve` call surfaces paths, symbols, and prior decisions. `grep` and `read` run afterwards for the exact lines.
+>
+> Episodes persist across sessions. The `codebase-exploration` skill is the rule. `code-memory_*` tools are pre-allowlisted for the conductor and the specialist subagents in the Conductor tree. On Monolith the main agent and the installed reviewers use the same tools when CodeMemory is on. Cloud and remote agents skip it (`docs/codememory-cloud.md`). `FMFLURRY_CODEMEMORY=on` keeps it on.
+
+| Thing | Count | Notes |
+| --- | --- | --- |
+| Agents (Conductor source) | 26 | 1 `conductor` + 25 specialists. `build` and `plan` overrides ship with `"disable": true` |
+| Agents (Monolith install) | 9 | Review and noisy output. See [Variants](#variants) |
+| Skills | 80 | `skills/*/SKILL.md`. `skill-creator/` is git-ignored and outside this count |
+| Command templates | 53 | `commands/*.md`. **37** pinned in the `opencode.jsonc` `command` block |
+| Instructions loaded | 6 | The `instructions` array in `opencode.jsonc`. 13 files sit in `instructions/`. `caveman-ultra.md` is not in the array |
+| `.claude` rule files | 17 | 6 pathless under `rules/common/`, 6 path-scoped under `rules/common/`, 5 under `rules/typescript/` |
+| Hook scripts | 21 | `.claude/hooks/*.sh` |
+| MCP servers | 6 | 1 enabled (`code-memory`), 5 disabled by default |
+| Custom tool files | 4 | `run-tests`, `check-coverage`, `security-audit`, plus the `index.ts` barrel |
+| TUI plugins | 3 | Enabled in `tui.json`: `llm-metrics`, `panda-banner`, `autonomy-status`. `caveman.tsx.disabled` is not loaded |
+
+**Highlighted subagents.** Full Conductor roster in [Agents](#agents-en). On Monolith, names other than the nine installed agents are skills.
+
+| Name | What it does | Why it's good |
+| --- | --- | --- |
+| `conductor` | Primary orchestrator. `write` and `edit` denied on OpenCode | Routing is in the permission block, and on Cursor the agent is `readonly` |
+| `planner` | Turns requests into phased plans | Surfaces dependencies and risks before code is written |
+| `coder` | Writes and edits source code | Application code stays inside a brief |
+| `tdd-guide` | Drives test-first cycles | RED-GREEN-REFACTOR. Implementation goes to `coder` |
+| `code-reviewer` | Reviews diffs before merge | Catches regressions and convention drift |
+| `security-reviewer` | Audits auth, secrets, and input | Read-only findings. Fixes go to `coder` on Conductor, or to the main agent on Monolith |
+| `git-specialist` | Sequences atomic commits and PRs | Cohesion-first splits, Conventional Commits |
+| `scout` | Maps the repo before a dispatch | File manifests so briefs stay precise |
+| `comment-judge` | Judges added comments by rubric | Flags false, stale, and noisy comments |
+| `postgres-dba` | Live PostgreSQL diagnostics | Read-only advisory. Conductor only. Monolith uses `database-reviewer` or the main agent |
+
+**Highlighted skills.** Full catalog in [Skills](#skills-en).
+
+| Name | What it does | Why it's good |
+| --- | --- | --- |
+| `socratic-design` | Spikes a short question, otherwise asks one | Gates a decision before a plan |
+| `caveman` | Ultra-terse replies | Keeps the technical content and spends fewer tokens |
+| `verify-this` | Falsifiable verification of a claim | Green means fresh evidence |
+| `blast-radius` | Traces what a change can break | Proves safety with real code |
+| `why` | Cites design rationale from history | Searches source control and evidence MCPs in parallel |
+| `chimera` | Runs parallel candidates, grafts the best | Avoids locking in the wrong shape early |
+| `humanizer` | Strips AI tells from prose | Keeps writing sounding like a person wrote it |
+| `test-behavior-not-implementation` | Detects tests that cannot fail | Catches mock-only and self-referential assertions |
+| `show-your-work` | Keeps a per-decision log | Gives reviewers a trail for unattended runs |
+| `fix-ci` | Finds failing checks and fixes them | Routes by failure type: build, test, or security |
+| `config-sync` | Propagates harness config changes | Keeps the repo and the live directories in step |
+| `openspec` | OpenSpec workflow, one skill | Propose, apply, archive, and the rest live under `references/` |
+
+**Highlighted commands.** Full list in [Slash commands](#commands-en). On Monolith a folded agent name in a command is remapped: `postgres-dba` becomes `database-reviewer`, and every other folded name becomes `main`, which loads the matching skill (`scripts/variants/dangling-agents.mjs`).
+
+| Name | What it does | Why it's good |
+| --- | --- | --- |
+| `/plan` | Plan before code | On Conductor this dispatches `planner`. On Monolith it loads the `planner` skill |
+| `/tdd` | Test-first cycle, or `/tdd refactor` to pin behavior | Characterization tests pass immediately and stay frozen |
+| `/cop-review` | Pre-merge review of the branch | Stack checklists, then lint |
+| `/security` | Security audit of the change | Read-only findings |
+| `/git` | Branch and commit operations | Keeps git work on the git rules |
+| `/build-fix` | Resolves build and type errors | Loop until the build is green |
+| `/orchestrate` | Multi-agent coordination | On Monolith this loads the `conductor` skill. It is optional |
+| `/verify` | Verification loop | Checks the goal against concrete criteria |
+| `/db-health` | Read-only PostgreSQL health check | Vacuum, wraparound, and connections. Conductor routes it to `postgres-dba` |
+| `/api-spec` | Generates OpenAPI 3.1 specs | One spec per bounded context, Zalando-style |
+
 <a id="english"></a>
 
 ## English
 
-Dotfiles for OpenCode + the stable parts of `~/.claude`. Ships a hardened primary `conductor` agent (no write/edit perms — must delegate), **25 specialist sub-agents**, always-on instructions, slash commands, OpenCode plugins (secret-file guard, notifications, llm-metrics, tool-budget, autonomy), custom tools, and a Claude Code mirror.
+These catalogs describe the **Conductor** source tree at the repo root, unless a line says Monolith. The install default is Monolith. The cross-host picture is [One harness, two variants, three hosts](#variants) and [How a request moves](#request-flow). Conductor ships a read-only `conductor` and 25 specialists. Monolith keeps 9 review agents and folds the other roles into skills.
 
 <a id="recent-en"></a>
 
@@ -474,14 +516,14 @@ Shipped on `master` through `fa50d8e` (2026-10-18). The plugin number is `versio
 
 | PR | Plugin | What landed |
 | --- | --- | --- |
-| [#25](https://github.com/fmflurry/settings-opencode/pull/25) | 0.2.0 | Semver guard in `scripts/cursor-plugin/check.mjs`. A plugin-source change must carry a version strictly above the base. |
-| [#27](https://github.com/fmflurry/settings-opencode/pull/27) | 0.3.0 | CodeMemory stays off in cloud and remote sessions unless overridden. Ship review/fix rounds stop at 3. |
-| [#28](https://github.com/fmflurry/settings-opencode/pull/28) | 0.4.0 | Review findings are Important, Nit, or Pre-existing. Only Important blocks. The verdict is Approve or Block. |
-| [#29](https://github.com/fmflurry/settings-opencode/pull/29) | 0.4.1 | Enforcement ladder: code, then lint, tests, or static analysis, then a prose rule, then human review. |
-| [#30](https://github.com/fmflurry/settings-opencode/pull/30) | 0.4.2 | A project's `REVIEW.md` is the tag reference when it exists. The PR template adds Risk, How to revert, and Tier. |
-| [#32](https://github.com/fmflurry/settings-opencode/pull/32) | 0.4.3 | Always-applied Cursor rules drop from 21 files (1438 lines) to 7 files (502 lines). The rest load by path glob or by skill. |
-| [#33](https://github.com/fmflurry/settings-opencode/pull/33) | 0.4.4 | `create-verification-skill` writes a project `verify-this` override from the repository's build, test, and e2e commands. |
-| [#35](https://github.com/fmflurry/settings-opencode/pull/35) | 0.4.6 | `socratic-design` spikes a question a prototype under 30 minutes can settle, and presents that result. An L-sized task is restated in the agent's own words before planning. |
+| [#25](https://github.com/fmflurry/harness-manifesto/pull/25) | 0.2.0 | Semver guard in `scripts/cursor-plugin/check.mjs`. A plugin-source change must carry a version strictly above the base. |
+| [#27](https://github.com/fmflurry/harness-manifesto/pull/27) | 0.3.0 | CodeMemory stays off in cloud and remote sessions unless overridden. Ship review/fix rounds stop at 3. |
+| [#28](https://github.com/fmflurry/harness-manifesto/pull/28) | 0.4.0 | Review findings are Important, Nit, or Pre-existing. Only Important blocks. The verdict is Approve or Block. |
+| [#29](https://github.com/fmflurry/harness-manifesto/pull/29) | 0.4.1 | Enforcement ladder: code, then lint, tests, or static analysis, then a prose rule, then human review. |
+| [#30](https://github.com/fmflurry/harness-manifesto/pull/30) | 0.4.2 | A project's `REVIEW.md` is the tag reference when it exists. The PR template adds Risk, How to revert, and Tier. |
+| [#32](https://github.com/fmflurry/harness-manifesto/pull/32) | 0.4.3 | Always-applied Cursor rules drop from 21 files (1438 lines) to 7 files (502 lines). The rest load by path glob or by skill. |
+| [#33](https://github.com/fmflurry/harness-manifesto/pull/33) | 0.4.4 | `create-verification-skill` writes a project `verify-this` override from the repository's build, test, and e2e commands. |
+| [#35](https://github.com/fmflurry/harness-manifesto/pull/35) | 0.4.6 | `socratic-design` spikes a question a prototype under 30 minutes can settle, and presents that result. An L-sized task is restated in the agent's own words before planning. |
 
 **Semver (#25, policy note in #29).** `scripts/cursor-plugin/check.mjs` diffs plugin sources against the merge-base with the base branch (`origin/master`, `origin/$GITHUB_BASE_REF` in GitHub Actions, or `CURSOR_PLUGIN_BASE`). The version must be `MAJOR.MINOR.PATCH` and strictly greater, and the changelog needs a heading for it. The build copies `scripts/cursor-plugin/config.json` into `plugins/fmflurry-harness/.cursor-plugin/plugin.json`. A root `README.md` edit is not a plugin source. `#25` shipped that guard at 0.2.0, with patch, minor, and major as the suggested bumps. From 0.4.1, `scripts/cursor-plugin/CHANGELOG.md` says later plugin changes bump the patch only. The guard does not enforce that: it still accepts a minor or major bump, and it still prints those suggestions.
 
@@ -521,7 +563,7 @@ Hooks and the OpenCode code-memory plugins no-op when the decision is off. `FMFL
 - Profiles: `profiles/<name>/` (per-profile overrides + `AGENTS.md`).
 - Skills: `skills/*/SKILL.md` (plus auxiliary docs) — **canonical set, shared with Claude Code via** `sync-skills.sh`.
 - Agent prompts: `prompts/agents/*.txt` (26 files).
-- Slash commands: `commands/*.md` (37 templates).
+- Slash commands: `commands/*.md` (53 templates; 37 pinned in `opencode.jsonc`, recounted 2026-11-06).
 - OpenCode plugins: `plugins/*.{ts,js}` + `plugins/kdco-primitives/` + `plugins/llm-metrics-lib/` + `plugins/code-memory-lib/` + `plugins/lib/`.
 - TUI plugins: `tui-plugins/*.tsx` (registered in `tui.json`; `autonomy-status.tsx` is the autonomy sidebar panel).
 - Custom tools: `tools/*.ts`.
@@ -551,7 +593,7 @@ Six concerns wired in one file:
 3. `agent`: 26 definitions (model + reasoning effort + prompt + tool allowlist). All models are env-driven (`OPENCODE_MODEL_*`, `OPENCODE_REASONING_*`) — see [Public install](#public-install).
 4. `command`: maps `/<name>` -> template + sub-agent + `subtask`; **21** entries are pinned here.
 5. `mcp`: six servers — `code-memory` enabled; `context7`, `blender`, `wallaby`, `Figma`, `smartbear-swagger` disabled by default. `code-memory_*` perms are pre-allowlisted for every subagent.
-6. `plugin`: npm + local plugins — `opencode-skill-creator` (npm) plus five local files (which OpenCode also auto-loads from the plugin directory).
+6. `plugin`: npm + local plugins — `opencode-skill-creator` (npm) plus eight local files (`kpi`, `notification`, `mistral-affinity`, `llm-metrics`, `secret-file-guard`, `tool-budget`, `autonomy`, `domain-rules`), which OpenCode also auto-loads from the plugin directory.
 
 `dcp.jsonc` is the config stub for the optional external Dynamic Context Pruning plugin.
 
@@ -559,7 +601,7 @@ Six concerns wired in one file:
 
 ### How the harness works today
 
-This section describes **Conductor**. On Monolith the main agent may write, there is no first-tool gate, and `/orchestrate` loads the `conductor` skill. The interesting part of Conductor is the machinery that keeps a literal model on rails. Each rule lives in an `instructions/` file loaded at startup.
+This section describes **Conductor**. On Monolith the primary agent may write on the first edit, and `/orchestrate` loads the `conductor` skill. The picture for all three hosts is [How a request moves](#request-flow). The interesting part of Conductor is the machinery that keeps a literal model on rails. Each rule lives in an `instructions/` file loaded at startup.
 
 #### 1. The conductor cannot write
 
@@ -698,9 +740,9 @@ This table is the **Conductor** roster, defined in `opencode.jsonc` under `agent
 
 ### Slash commands
 
-**37 templates** live in `commands/`. Most run as `subtask: true` (delegated to a specialist). **21 are pinned** in the `opencode.jsonc` `command` block — those are the guaranteed set. OpenCode reads the pinned block; whether it additionally auto-discovers `commands/` is something I can't verify from this repo, so treat unpinned entries as Claude-side or discovery-dependent.
+**53 templates** live in `commands/` (recounted 2026-11-06). **37 are pinned** in the `opencode.jsonc` `command` block. That block is the Conductor set. Monolith remaps a folded `agent`: `postgres-dba` becomes `database-reviewer`, and every other folded name becomes `main`, which loads the matching skill (`scripts/variants/dangling-agents.mjs`). Many pinned commands set `subtask: true`. OpenCode reads the pinned block; whether it additionally auto-discovers `commands/` is something this repo cannot prove, so treat unpinned entries as Claude-side or discovery-dependent.
 
-Pinned (21):
+Pinned (37):
 
 | Command            | Sub-agent            | Purpose                              |
 | ------------------ | -------------------- | ------------------------------------ |
@@ -721,10 +763,26 @@ Pinned (21):
 | `/update-docs`     | doc-updater          | Doc updates.                         |
 | `/update-codemaps` | doc-updater          | Generates `docs/CODEMAPS/`.          |
 | `/test-coverage`   | tdd-guide            | Coverage analysis.                   |
-| `/skill-create`    | (conductor)          | Generate a skill from git history.   |
+| `/skill-create`    | no `agent` key       | Generate a skill from git history. Runs as the default agent. |
 | `/db-health`       | postgres-dba         | Read-only PostgreSQL health battery. |
 | `/dependabot-friday`| git-specialist      | Dependabot PR triage (report-only).  |
 | `/db-backup-check` | postgres-dba         | Backup/PITR posture audit.           |
+| `/ship`            | conductor            | One goal from clarify through merge. |
+| `/autonomous`      | conductor            | Turn autonomous mode on, off, or show status. |
+| `/pr`              | git-specialist       | Open a pull request from the repo template. |
+| `/memory-init`     | writer               | Scaffold split project memory.       |
+| `/show-me`         | writer               | Offline HTML diagram and PNG screenshots. |
+| `/show-your-work`  | conductor            | TSV decision trail.                  |
+| `/comment-judge`   | comment-judge        | Rubric verdict on comments.          |
+| `/interfectio-commentarum` | conductor    | Haruspex comment-purge flow.         |
+| `/for-real`        | conductor            | Restate the last message in plain language. |
+| `/why`             | conductor            | Cited design rationale.              |
+| `/blast-radius`    | conductor            | What a change can break, from running code. |
+| `/chimera`         | conductor            | Parallel candidates, then graft.     |
+| `/fix-ci`          | conductor            | Fix failing pull-request checks.     |
+| `/loop-on-ci`      | conductor            | Watch checks and iterate fixes.      |
+| `/get-pr-comments` | git-specialist       | Summarize review comments on the active PR. |
+| `/fix-merge-conflicts` | git-specialist   | Rebase through conflicts.            |
 
 Unpinned templates (16) — available in `commands/`, plus Claude-side/OpenSpec helpers:
 
@@ -736,7 +794,7 @@ Unpinned templates (16) — available in `commands/`, plus Claude-side/OpenSpec 
 
 ### Skills
 
-Grouped below. `scripts/sync-skills.sh` computes the canonical union (root `skills/` ∪ `.claude/skills/`, root wins on conflicts), excludes the runtime dir `skills/skill-creator/`, and copies into both harness targets. Attribution for vendored skills lives in [`skills/THIRD_PARTY_NOTICES.md`](skills/THIRD_PARTY_NOTICES.md). Attack-class references in [`skills/security-review/references/`](skills/security-review/references/) are verbatim copies from [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) at `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8` (MIT, Copyright (c) 2025-2026 Cloudflare, Inc.). The license text is [`LICENSE-cloudflare-security-audit`](skills/security-review/references/LICENSE-cloudflare-security-audit).
+Recounted **2026-11-06**: `skills/*/SKILL.md` is **80** skills. The groups below name that set. Twelve of them sit in the last bullet, outside the older groups. `skill-creator/` is git-ignored and outside the 80. `scripts/sync-skills.sh` computes the canonical union (root `skills/` ∪ `.claude/skills/`, root wins on conflicts), excludes the runtime dir `skills/skill-creator/`, and copies into both harness targets. Attribution for vendored skills lives in [`skills/THIRD_PARTY_NOTICES.md`](skills/THIRD_PARTY_NOTICES.md). Attack-class references in [`skills/security-review/references/`](skills/security-review/references/) are verbatim copies from [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) at `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8` (MIT, Copyright (c) 2025-2026 Cloudflare, Inc.). The license text is [`LICENSE-cloudflare-security-audit`](skills/security-review/references/LICENSE-cloudflare-security-audit).
 
 - **Planning & design (5):** `socratic-design`, `chimera`, `api-spec-openapi`, `why`, `blast-radius`.
 - **Review & quality (6):** `comment-judge`, `interfectio-commentarum`, `verify-this`, `create-verification-skill`, `test-behavior-not-implementation`, `ai-ecosystem-audit`.
@@ -755,6 +813,7 @@ Grouped below. `scripts/sync-skills.sh` computes the canonical union (root `skil
 - **Domain (2):** `flurryx`, `transloco`.
 - **Universal standards (1):** `coding-standards`.
 - **On-demand role skills:** `planner`, `coder`, `writer`, `doc-updater`, `architect`, `refactor-cleaner`, `scout`, `gaudi`, `testing`, `security`, `coding-style`, `code-comments`, `autonomy`, `question-handling`, `enforcement-ladder`, `tool-budget`, `verification-gate`. Monolith loads these in the main loop. Conductor still has the matching agents.
+- **Also in the tree (12):** `agent-roster`, `autonomous`, `brief-contract`, `codebase-exploration`, `hooks`, `open-pr-check`, `patterns`, `performance`, `project-memory`, `pr-visual-report`, `ship`, `worktree-destruction-safety`.
 
 The PostgreSQL and Playwright sets are **gc.platform-specific project playbooks**, not general-purpose skills — read them alongside the `postgres-dba` agent. `/e2e` and `e2e-runner` do not assume that stack. They read `e2e.json` or discover the start command, ports, and runner (`skills/e2e`). Load `playwright-e2e-authoring` and `playwright-e2e-review` only when that override names them. A project sets `"enabled": false` to opt out. Consumers that do not want the playbooks omit those two skills when vendoring.
 
@@ -777,7 +836,7 @@ Two top-level instruction files, distinct jobs:
 
 ### Plugins & hooks
 
-All TypeScript plugins use `@opencode-ai/plugin@1.4.6`. OpenCode auto-loads every `.ts`/`.js` file in `plugins/`; the `plugin` array in `opencode.jsonc` additionally declares the npm plugin and re-references five local files.
+All TypeScript plugins use `@opencode-ai/plugin@1.4.6`. OpenCode auto-loads every `.ts`/`.js` file in `plugins/`; the `plugin` array in `opencode.jsonc` declares the npm plugin and eight local files: `kpi`, `notification`, `mistral-affinity`, `llm-metrics`, `secret-file-guard`, `tool-budget`, `autonomy`, and `domain-rules`.
 
 - `plugins/secret-file-guard.ts` — hard-blocks `read`/`bash` access to secret-bearing `.env` files; `.env.example`/`.sample`/`.template` stay readable.
 - `plugins/notification.ts` — desktop notifications on session completion and question/permission events; optional Bark/iPhone push.
@@ -787,9 +846,12 @@ All TypeScript plugins use `@opencode-ai/plugin@1.4.6`. OpenCode auto-loads ever
 - `plugins/llm-metrics.ts` + `plugins/llm-metrics-lib/` — real-time LLM-behavior monitor: hooks bus events into per-call metrics (tokens, TTFT, duration, cost, model, finish reason, end-to-end + generation tok/s) appended as NDJSONL to `~/data/llm-metrics.jsonl`, backed by a shared pure core (110 unit tests). Local-only, no egress; response-text capture is bounded and opt-out. Full architecture, env knobs, tok/s definitions, subagent aggregation, and privacy boundary in [`LLM_METRICS.md`](LLM_METRICS.md).
 - `plugins/kdco-primitives/` + `plugins/lib/` — shared utilities (mutex, shell, terminal-detect, project-id resolver, notification gate, types).
 - `opencode-skill-creator` _(external npm, declared in `opencode.jsonc › plugin`)_ — skill scaffolding and benchmarking.
+- `plugins/kpi.ts` — OpenCode side of the KPI journal. Independent of `llm-metrics`. Records session boundaries, skill names, subagent types, and tool results.
+- `plugins/autonomy.ts` — OpenCode side of autonomous mode. See [Autonomous mode](#autonomy-en).
+- `plugins/domain-rules.ts` — off unless `.harness-local/domain-rules.json` opts in. Runs before write, edit, patch, and multiedit.
 - _Not loaded:_ `plugins/ecc-hooks.ts.disabled`, `plugins/worktree.disabled`, `plugins/figma-rag.md`, and `tui-plugins/caveman.tsx.disabled` ship disabled and are skipped by the loader.
 
-**Claude-side hooks** (`.claude/hooks/`, 7 scripts): `notification.sh`, `pre-tool-use.sh`, `prefer-code-memory.sh`, `rtk-rewrite.sh`, `stop.sh`, `subagent-stop.sh`, `tool-budget.sh`. `notification.ts` uses the shared `plugins/lib/notification-gate` logic so the two harnesses fire the same alerts.
+**Claude-side hooks** (`.claude/hooks/`, 21 scripts, recounted 2026-11-06): `notification.sh`, `pre-tool-use.sh`, `prefer-code-memory.sh`, `rtk-rewrite.sh`, `stop.sh`, `subagent-stop.sh`, `tool-budget.sh`, `autonomy-ask-guard.sh`, `autonomy-context.sh`, `autonomy-git-guard.sh`, `cache-invalidation.sh`, `cloud-session-bootstrap.sh`, `codememory-mode.sh`, `commit-provenance.sh`, `domain-rules.sh`, `goal-state.sh`, `kpi-emit.sh`, `memory-lint.sh`, `orca-notify.sh`, `pr-visual-report.sh`, `ship-stop-gate.sh`. `notification.ts` uses the shared `plugins/lib/notification-gate` logic so the two harnesses fire the same alerts.
 
 <a id="tools-en"></a>
 
@@ -809,6 +871,7 @@ Reusable OpenCode tools exposed via `tools/index.ts`:
 
 - `tui-plugins/llm-metrics.tsx` — SolidJS sidebar (in the `sidebar_content` slot) showing live per-session LLM metrics: a streaming `~tok/s (est)`, latest-call generation/e2e tok/s, tokens in/out, model, cost, finish reason, TTFT, and a rolling-average tok/s. Aggregates the whole subagent subtree. See [`LLM_METRICS.md`](LLM_METRICS.md).
 - `tui-plugins/panda-banner.tsx` — SolidJS banner that renders a panda ASCII/block-art header.
+- `tui-plugins/autonomy-status.tsx` — sidebar capsule for autonomous mode, registered in `tui.json`. Behaviour is under [Autonomous mode](#autonomy-en).
 
 <a id="claude-en"></a>
 
@@ -816,8 +879,8 @@ Reusable OpenCode tools exposed via `tools/index.ts`:
 
 - `CLAUDE.md` — global user instructions (no `any`, facade != UseCase).
 - `settings.json` — allow/deny permissions, env (`API_TIMEOUT_MS=3000000`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80`), `"model": "opus"` for the Claude Code main agent, and `PreToolUse` / `PostToolUse` / `Stop` hooks. Conductor and Monolith share this file. Seeded on first install into `~/.claude` and into a project's `.claude`. A `model` value already set is preserved on reinstall.
-- `hooks/*.sh` — seven hooks: pre-tool-use warnings, CodeMemory preference, RTK rewrite, tool-budget nudge, notification, stop, and subagent-stop.
-- `rules/common/*.md` + `rules/typescript/*.md` — 15 rule packs. Six are always-on. Code comments, coding style, security, and testing are path-scoped. The five `typescript/` packs stay path-scoped. Patterns, hooks, and the agent roster are skills.
+- `hooks/*.sh` — 21 scripts. The names are under [Plugins & hooks](#plugins-en).
+- `rules/common/*.md` + `rules/typescript/*.md` — 17 files (recounted 2026-11-06). Six under `rules/common/` have no `paths:` key. Six under `rules/common/` are path-scoped (`code-comments`, `coding-style`, `security`, `testing`, `cache-invalidation`, `project-memory`). Five `rules/typescript/` packs stay path-scoped. Patterns, hooks, and the agent roster are skills.
 - `agents/*.md` — 26 agent definitions mirroring the OpenCode roster.
 - `commands/*.md` — Claude commands (`/create-pull-request`, `/update-codemaps`, arena, OpenSpec).
 - `skills/**` — the skill mirror, synced from the canonical set by `scripts/sync-skills.sh` on install. It is **not** guaranteed to equal today's `skills/` (the canonical set grows between syncs), so treat `skills/` as the source of truth and run `settings-sync --skills-only` to catch the mirror up.
@@ -835,13 +898,13 @@ Two directories, one source of truth. The **lab** is wherever you cloned this re
 - The `config-sync` skill is the agent-facing version of the same job: edit an agent/rule/skill here, and it propagates the change across harness dirs.
 - `install-cursor.sh` builds the Cursor plugin (`node scripts/build-cursor-plugin.mjs` -> `plugins/fmflurry-harness/`) and copies it to `~/.cursor/plugins/local/fmflurry-harness`; then run Developer: Reload Window in Cursor. The default build is Monolith: the primary agent may write, there is no first-tool gate, and `/orchestrate` is optional. `./install-cursor.sh --variant conductor` (or `HARNESS_VARIANT=conductor ./install-cursor.sh`) builds Conductor. `./install-cursor.sh --status` prints the variant stored in the plugin's `.harness-variant`. It also installs the `agent-harness` CLI, using the same helper as `install.sh`: scripts go to `~/.local/share/fmflurry-harness/scripts/agent-harness` and the wrapper is `~/.local/bin/agent-harness`. Re-running prints those paths and does not add a second command. Flags: `--yes`, `--link` (symlink instead of copy), `--migrate-legacy` (back up then remove what the old installer copied into `~/.cursor`, keeping your own entries), `--uninstall`, `--no-backup`, `--variant`, `--status`. Limits: no per-agent tool allowlist, delegation by instruction only, Notification hooks unsupported. Tier defaults stay Cursor models: `grok-4.7`, `grok-4.6`, and `composer-2.5`.
 
-**Parity phrasing:** the two harnesses are *synced on install*, not continuously identical. Right now `skills/` holds 69 skills while the shipped `.claude/skills/` mirror holds 52 — the canonical set outgrew the last sync. Run `settings-sync --skills-only` (or `scripts/sync-skills.sh`) to reconcile, and `scripts/skill-drift-check.sh` to confirm.
+**Parity phrasing:** the two harnesses are synced on install. Recounted 2026-11-06, `skills/` holds 80 skills and the shipped `.claude/skills/` mirror holds 41. Run `settings-sync --skills-only` (or `scripts/sync-skills.sh`) to reconcile, and `scripts/skill-drift-check.sh` to confirm.
 
 <a id="cursor-plugin-version-en"></a>
 
 ### Cursor plugin version
 
-The installed manifest version is `version` in `scripts/cursor-plugin/config.json`. `node scripts/build-cursor-plugin.mjs` copies it into `plugins/fmflurry-harness/.cursor-plugin/plugin.json` and copies `scripts/cursor-plugin/CHANGELOG.md` into the plugin. `node scripts/cursor-plugin/check.mjs` fails if those version fields differ or if the changelog has no heading for the current version. The marketplace entry has no version field. Root `package.json` versions the settings repo (GitHub releases), not this plugin.
+The installed manifest version is `version` in `scripts/cursor-plugin/config.json` (**0.4.36** in this tree). `node scripts/build-cursor-plugin.mjs` copies it into `plugins/fmflurry-harness/.cursor-plugin/plugin.json` and copies `scripts/cursor-plugin/CHANGELOG.md` into the plugin. `node scripts/cursor-plugin/check.mjs` fails if those version fields differ or if the changelog has no heading for the current version. The marketplace entry has no version field. Root `package.json` versions the settings repo (GitHub releases), not this plugin.
 
 Bump that version by hand in each PR that changes plugin content or its build inputs:
 
@@ -860,6 +923,8 @@ bump the plugin version + changelog in any PR touching plugin sources.
 <a id="flow-en"></a>
 
 ### How it fits together
+
+The lifecycle for both variants is [How a request moves](#request-flow). The four steps below are the OpenCode startup path when the installed variant is Conductor.
 
 1. Startup: OpenCode loads `opencode.jsonc` -> 6 always-on instructions -> auto-loads every plugin in `plugins/` plus the TUI plugins registered in `tui.json`. Skills load when their description matches.
 2. Dev: `conductor` executes — it cannot write files; it dispatches Task calls to specialists. `secret-file-guard` blocks `.env` access; `tool-budget` nudges verification over exploration.
@@ -1039,9 +1104,9 @@ rail. No GitHub status is created, and `ship-merge` does not trust the comment.
 
 ## Français
 
-Depot "dotfiles" pour OpenCode + la partie stable de `~/.claude`. Embarque un agent principal `conductor` durci (write/edit interdits, delegation obligatoire), **25 sous-agents specialises**, des instructions toujours actives, des commandes slash, des plugins (secret-file guard, notifications, llm-metrics, tool-budget), des outils custom et un mirror Claude Code.
+Ces catalogues décrivent l'arbre **Conductor** à la racine, sauf mention de Monolith. Le défaut d'installation est Monolith. Le schéma partagé est [Choisir une variante](#variantes-fr) et [Comment une demande avance](#parcours-fr). Conductor embarque un `conductor` en lecture seule et 25 spécialistes. Monolith garde 9 agents de revue et replie les autres rôles dans des skills.
 
-Chiffres (au **2026-10-02**) : **26 agents** (1 conductor + 25 specialistes) · **69 skills** · **37 templates de commandes** (dont **21** epinglees dans `opencode.jsonc`) · **12 instructions** chargees au demarrage · **22 rule packs** `.claude` · **7 hooks** · **6 serveurs MCP** · **4 fichiers d'outils custom** · **2 plugins TUI**.
+Chiffres recomptés le **2026-11-06** : **26 agents** (1 conductor + 25 spécialistes) · **80 skills** (`skills/*/SKILL.md`) · **53 modèles de commandes** (dont **37** épinglés dans `opencode.jsonc`) · **6 instructions** chargées au démarrage (13 fichiers dans `instructions/`) · **17 fichiers** `.claude/rules/` · **21 scripts** dans `.claude/hooks/` · **6 serveurs MCP** · **4 fichiers d'outils custom** · **3 plugins TUI** activés dans `tui.json`.
 
 <a id="recent-fr"></a>
 
@@ -1051,14 +1116,14 @@ Livré sur `master` jusqu'à `fa50d8e` (2026-10-18). Le numéro du plugin est `v
 
 | PR | Plugin | Ce qui est livré |
 | --- | --- | --- |
-| [#25](https://github.com/fmflurry/settings-opencode/pull/25) | 0.2.0 | Garde semver dans `scripts/cursor-plugin/check.mjs`. Une modification des sources du plugin doit porter une version strictement supérieure à la base. |
-| [#27](https://github.com/fmflurry/settings-opencode/pull/27) | 0.3.0 | CodeMemory reste éteint dans les sessions cloud et distantes, sauf override. Les tours revue/correctif de ship s'arrêtent à 3. |
-| [#28](https://github.com/fmflurry/settings-opencode/pull/28) | 0.4.0 | Les findings sont Important, Nit ou Pre-existing. Seul Important bloque. Le verdict est Approve ou Block. |
-| [#29](https://github.com/fmflurry/settings-opencode/pull/29) | 0.4.1 | Échelle d'application : code, puis lint, tests ou analyse statique, puis une règle en prose, puis la revue humaine. |
-| [#30](https://github.com/fmflurry/settings-opencode/pull/30) | 0.4.2 | Le `REVIEW.md` d'un projet est la référence des tags quand il existe. Le modèle de PR ajoute Risk, How to revert et Tier. |
-| [#32](https://github.com/fmflurry/settings-opencode/pull/32) | 0.4.3 | Les règles Cursor toujours appliquées passent de 21 fichiers (1438 lignes) à 7 fichiers (502 lignes). Le reste se charge par glob de chemin ou par skill. |
-| [#33](https://github.com/fmflurry/settings-opencode/pull/33) | 0.4.4 | `create-verification-skill` écrit l'override projet de `verify-this` à partir des commandes build, test et e2e du dépôt. |
-| [#35](https://github.com/fmflurry/settings-opencode/pull/35) | 0.4.6 | `socratic-design` fait un spike lorsqu'un essai de moins de 30 minutes peut trancher la question, et présente ce résultat. Une tâche L est reformulée dans les mots de l'agent avant le plan. |
+| [#25](https://github.com/fmflurry/harness-manifesto/pull/25) | 0.2.0 | Garde semver dans `scripts/cursor-plugin/check.mjs`. Une modification des sources du plugin doit porter une version strictement supérieure à la base. |
+| [#27](https://github.com/fmflurry/harness-manifesto/pull/27) | 0.3.0 | CodeMemory reste éteint dans les sessions cloud et distantes, sauf override. Les tours revue/correctif de ship s'arrêtent à 3. |
+| [#28](https://github.com/fmflurry/harness-manifesto/pull/28) | 0.4.0 | Les findings sont Important, Nit ou Pre-existing. Seul Important bloque. Le verdict est Approve ou Block. |
+| [#29](https://github.com/fmflurry/harness-manifesto/pull/29) | 0.4.1 | Échelle d'application : code, puis lint, tests ou analyse statique, puis une règle en prose, puis la revue humaine. |
+| [#30](https://github.com/fmflurry/harness-manifesto/pull/30) | 0.4.2 | Le `REVIEW.md` d'un projet est la référence des tags quand il existe. Le modèle de PR ajoute Risk, How to revert et Tier. |
+| [#32](https://github.com/fmflurry/harness-manifesto/pull/32) | 0.4.3 | Les règles Cursor toujours appliquées passent de 21 fichiers (1438 lignes) à 7 fichiers (502 lignes). Le reste se charge par glob de chemin ou par skill. |
+| [#33](https://github.com/fmflurry/harness-manifesto/pull/33) | 0.4.4 | `create-verification-skill` écrit l'override projet de `verify-this` à partir des commandes build, test et e2e du dépôt. |
+| [#35](https://github.com/fmflurry/harness-manifesto/pull/35) | 0.4.6 | `socratic-design` fait un spike lorsqu'un essai de moins de 30 minutes peut trancher la question, et présente ce résultat. Une tâche L est reformulée dans les mots de l'agent avant le plan. |
 
 **Semver (#25, note de politique dans #29).** `scripts/cursor-plugin/check.mjs` compare les sources du plugin au merge-base avec la branche de base (`origin/master`, `origin/$GITHUB_BASE_REF` en GitHub Actions, ou `CURSOR_PLUGIN_BASE`). La version doit être `MAJOR.MINOR.PATCH`, strictement supérieure, et le changelog doit avoir un titre pour elle. Le build copie `scripts/cursor-plugin/config.json` dans `plugins/fmflurry-harness/.cursor-plugin/plugin.json`. Un edit du `README.md` racine n'est pas une source du plugin. `#25` a livré cette garde en 0.2.0, avec patch, minor et major comme suggestions. Depuis 0.4.1, `scripts/cursor-plugin/CHANGELOG.md` demande un bump de patch pour les changements de plugin suivants. La garde ne l'impose pas : elle accepte encore un bump minor ou major, et elle affiche toujours ces suggestions.
 
@@ -1120,7 +1185,7 @@ Le fichier orchestre six choses:
 3. `agent`: definitions des sous-agents (modele + reasoning effort + prompt + outils autorises). Tous les modeles passent par variables d'environnement (`OPENCODE_MODEL_*`, `OPENCODE_REASONING_*`).
 4. `command`: mappe `/<name>` -> template + sous-agent + `subtask`; **21** entrees epinglees.
 5. `mcp`: six serveurs — `code-memory` actif; `context7`, `blender`, `wallaby`, `Figma`, `smartbear-swagger` desactives par defaut. Perms `code-memory_*` pre-allowlistees pour chaque sous-agent.
-6. `plugin`: plugins npm + locaux — `opencode-skill-creator` (npm) plus cinq fichiers locaux.
+6. `plugin`: plugins npm + locaux — `opencode-skill-creator` (npm) plus huit fichiers locaux (`kpi`, `notification`, `mistral-affinity`, `llm-metrics`, `secret-file-guard`, `tool-budget`, `autonomy`, `domain-rules`).
 
 `dcp.jsonc` est le stub de config du plugin externe optionnel Dynamic Context Pruning.
 
@@ -1167,7 +1232,7 @@ Ce tableau est le roster **Conductor**, defini dans `opencode.jsonc` (champ `age
 
 ### Comment marche le harness
 
-Cette section decrit **Conductor**. Sur Monolith l'agent principal peut ecrire, il n'y a pas de first-tool gate, et `/orchestrate` charge le skill `conductor`.
+Cette section décrit **Conductor**. Sur Monolith l'agent principal peut écrire dès la première édition, et `/orchestrate` charge le skill `conductor`. Le parcours des trois hôtes est [Comment une demande avance](#parcours-fr).
 
 - **Le conductor n'ecrit pas.** `tools.write: false`, `tools.edit: false`, `permission.edit/write: deny`; sa Task allowlist enumere chaque specialiste, `*: deny` bloque le reste. `instructions/subagent-routing.md` impose un Task-first gate.
 - **Flux canonique:** `planner → (tdd-guide → coder) ou coder → code-reviewer → verify → git-specialist`.
@@ -1193,7 +1258,7 @@ Chemins possibles: requete normale (routage via Task), mention `@agent`, command
 
 ### Commandes slash
 
-**37 templates** dans `commands/`; **21 epinglees** dans le bloc `command` de `opencode.jsonc`. La plupart sont `subtask: true` -> elles s'executent dans un sous-agent isolé. Le bloc epingle est l'ensemble garanti; l'auto-decouverte eventuelle de `commands/` n'est pas verifiable ici, donc considerer les autres comme Claude-side ou dependantes de la decouverte.
+**53 modèles** dans `commands/` (recomptés le 2026-11-06) ; **37 épinglés** dans le bloc `command` de `opencode.jsonc`. Ce bloc est le set Conductor. Monolith remap une valeur `agent` repliée : `postgres-dba` devient `database-reviewer`, et tout autre nom replié devient `main`, qui charge le skill correspondant (`scripts/variants/dangling-agents.mjs`). Beaucoup sont `subtask: true`. Le bloc épinglé est l'ensemble garanti ; l'auto-découverte éventuelle de `commands/` n'est pas vérifiable ici, donc considérer les autres comme Claude-side ou dépendantes de la découverte.
 
 | Commande           | Sous-agent           | But                                        |
 | ------------------ | -------------------- | ------------------------------------------ |
@@ -1214,10 +1279,26 @@ Chemins possibles: requete normale (routage via Task), mention `@agent`, command
 | `/update-docs`     | doc-updater          | Mise a jour de la doc.                     |
 | `/update-codemaps` | doc-updater          | Genere `docs/CODEMAPS/`.                   |
 | `/test-coverage`   | tdd-guide            | Analyse coverage.                          |
-| `/skill-create`    | (conductor)          | Genere une skill depuis l'historique git.  |
+| `/skill-create`    | pas de clé `agent`   | Génère une skill depuis l'historique git. Tourne comme l'agent par défaut. |
 | `/db-health`       | postgres-dba         | Bilan sante PostgreSQL read-only.          |
 | `/dependabot-friday`| git-specialist      | Triage PR Dependabot (rapport seulement).  |
 | `/db-backup-check` | postgres-dba         | Audit backup/PITR.                         |
+| `/ship`            | conductor            | Un objectif, de la clarification à la fusion. |
+| `/autonomous`      | conductor            | Active, coupe, ou affiche le mode autonome. |
+| `/pr`              | git-specialist       | Ouvre une PR selon le modèle du dépôt.    |
+| `/memory-init`     | writer               | Échafaude la mémoire projet.              |
+| `/show-me`         | writer               | Schéma HTML hors ligne et captures PNG.   |
+| `/show-your-work`  | conductor            | Journal TSV des décisions.                |
+| `/comment-judge`   | comment-judge        | Verdict de rubric sur les commentaires.   |
+| `/interfectio-commentarum` | conductor    | Purge de commentaires Haruspex.           |
+| `/for-real`        | conductor            | Reformule le dernier message en langage clair. |
+| `/why`             | conductor            | Justification de conception, avec citations. |
+| `/blast-radius`    | conductor            | Ce qu'un changement peut casser, en exécutant le code. |
+| `/chimera`         | conductor            | Candidats parallèles, puis greffe.       |
+| `/fix-ci`          | conductor            | Corrige les checks de PR en échec.       |
+| `/loop-on-ci`      | conductor            | Surveille les checks et itère les correctifs. |
+| `/get-pr-comments` | git-specialist       | Résume les commentaires de revue.        |
+| `/fix-merge-conflicts` | git-specialist   | Rebase à travers les conflits.           |
 
 Non epinglees (16): `/checkpoint`, `/pm2`, `/setup-pm`, `/ecosystem-audit`, `/create-pull-request`, et la famille OpenSpec `/opsx-*`. **Claude-only:** `arena.md`, `arena-new-prompt.md`.
 
@@ -1225,7 +1306,7 @@ Non epinglees (16): `/checkpoint`, `/pm2`, `/setup-pm`, `/ecosystem-audit`, `/cr
 
 ### Skills
 
-Groupes ci-dessous. `scripts/sync-skills.sh` calcule l'union canonique (root `skills/` ∪ `.claude/skills/`, root gagne), exclut le runtime `skills/skill-creator/`, et copie vers chaque cible. Attribution dans [`skills/THIRD_PARTY_NOTICES.md`](skills/THIRD_PARTY_NOTICES.md). Les références de classes d'attaque dans [`skills/security-review/references/`](skills/security-review/references/) sont des copies conformes de [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) au commit `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8` (MIT, Copyright (c) 2025-2026 Cloudflare, Inc.). Le texte de licence est [`LICENSE-cloudflare-security-audit`](skills/security-review/references/LICENSE-cloudflare-security-audit).
+Recomptés le **2026-11-06** : `skills/*/SKILL.md` compte **80** skills. Les groupes ci-dessous nomment cet ensemble. Douze d'entre eux sont dans la dernière puce, hors des groupes plus anciens. `skill-creator/` est git-ignoré et hors des 80. `scripts/sync-skills.sh` calcule l'union canonique (root `skills/` ∪ `.claude/skills/`, root gagne), exclut le runtime `skills/skill-creator/`, et copie vers chaque cible. Attribution dans [`skills/THIRD_PARTY_NOTICES.md`](skills/THIRD_PARTY_NOTICES.md). Les références de classes d'attaque dans [`skills/security-review/references/`](skills/security-review/references/) sont des copies conformes de [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) au commit `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8` (MIT, Copyright (c) 2025-2026 Cloudflare, Inc.). Le texte de licence est [`LICENSE-cloudflare-security-audit`](skills/security-review/references/LICENSE-cloudflare-security-audit).
 
 - **Planification & design (5):** `socratic-design`, `chimera`, `api-spec-openapi`, `why`, `blast-radius`.
 - **Revue & qualite (6):** `comment-judge`, `interfectio-commentarum`, `verify-this`, `create-verification-skill`, `test-behavior-not-implementation`, `ai-ecosystem-audit`.
@@ -1241,6 +1322,7 @@ Groupes ci-dessous. `scripts/sync-skills.sh` calcule l'union canonique (root `sk
 - **Harness & config (5):** `config-sync`, `harness-parity`, `skill-authoring`, `treetopia`, `strategic-compact`.
 - **Securite (1):** `security-review`. **Conformite (1):** `gdpr-compliance`. **Domaine (2):** `flurryx`, `transloco`. **Standards (1):** `coding-standards`.
 - **Skills de role a la demande:** `planner`, `coder`, `writer`, `doc-updater`, `architect`, `refactor-cleaner`, `scout`, `gaudi`, `testing`, `security`, `coding-style`, `code-comments`, `autonomy`, `question-handling`, `enforcement-ladder`, `tool-budget`, `verification-gate`. Monolith les charge dans la boucle principale. Conductor garde les agents correspondants.
+- **Aussi dans l'arbre (12) :** `agent-roster`, `autonomous`, `brief-contract`, `codebase-exploration`, `hooks`, `open-pr-check`, `patterns`, `performance`, `project-memory`, `pr-visual-report`, `ship`, `worktree-destruction-safety`.
 
 Les ensembles PostgreSQL et Playwright sont des **playbooks projet specifiques a gc.platform**. `/e2e` et `e2e-runner` ne supposent pas cette stack : ils lisent `e2e.json` ou decouvrent la commande de demarrage, les ports et le runner (`skills/e2e`). Les playbooks Playwright ne se chargent que si l'override les nomme. `"enabled": false` desactive `/e2e`. Un consommateur qui n'en veut pas omet `playwright-e2e-authoring` et `playwright-e2e-review` au vendoring. `skill-creator` est runtime-only, git-ignore et jamais synchronise.
 
@@ -1258,7 +1340,7 @@ Deux fichiers d'instructions distincts: le **`CLAUDE.md` racine** (guidelines co
 
 ### Plugins & hooks
 
-Tous les plugins TypeScript utilisent `@opencode-ai/plugin@1.4.6`. OpenCode auto-charge chaque fichier `.ts`/`.js` de `plugins/`; le tableau `plugin` de `opencode.jsonc` declare en plus le plugin npm et re-reference cinq fichiers locaux.
+Tous les plugins TypeScript utilisent `@opencode-ai/plugin@1.4.6`. OpenCode auto-charge chaque fichier `.ts`/`.js` de `plugins/`; le tableau `plugin` de `opencode.jsonc` déclare le plugin npm et huit fichiers locaux : `kpi`, `notification`, `mistral-affinity`, `llm-metrics`, `secret-file-guard`, `tool-budget`, `autonomy` et `domain-rules`.
 
 - `plugins/secret-file-guard.ts` — bloque l'acces `read`/`bash` aux `.env` porteurs de secret; `.env.example`/`.sample`/`.template` restent lisibles.
 - `plugins/notification.ts` — notifications desktop sur fin de session et evenements question/permission; push Bark/iPhone optionnel.
@@ -1268,9 +1350,12 @@ Tous les plugins TypeScript utilisent `@opencode-ai/plugin@1.4.6`. OpenCode auto
 - `plugins/llm-metrics.ts` + `plugins/llm-metrics-lib/` — moniteur temps reel du comportement LLM (tokens, TTFT, duree, cout, modele, finish reason, tok/s) en NDJSONL dans `~/data/llm-metrics.jsonl`, coeur pur partage (110 tests). Local uniquement, aucun egress. Voir [`LLM_METRICS.md`](LLM_METRICS.md).
 - `plugins/kdco-primitives/` + `plugins/lib/` — utilities partages.
 - `opencode-skill-creator` _(npm externe)_ — scaffolding et benchmark de skills.
+- `plugins/kpi.ts` — côté OpenCode du journal KPI, distinct de `llm-metrics`.
+- `plugins/autonomy.ts` — côté OpenCode du mode autonome. Voir [Mode autonome](#autonomy-fr).
+- `plugins/domain-rules.ts` — éteint tant que `.harness-local/domain-rules.json` ne l'active pas.
 - _Non charges:_ `plugins/ecc-hooks.ts.disabled`, `plugins/worktree.disabled`, `plugins/figma-rag.md`, `tui-plugins/caveman.tsx.disabled`.
 
-**Hooks Claude** (`.claude/hooks/`, 7): `notification.sh`, `pre-tool-use.sh`, `prefer-code-memory.sh`, `rtk-rewrite.sh`, `stop.sh`, `subagent-stop.sh`, `tool-budget.sh`.
+**Hooks Claude** (`.claude/hooks/`, 21 scripts, recomptés le 2026-11-06) : `notification.sh`, `pre-tool-use.sh`, `prefer-code-memory.sh`, `rtk-rewrite.sh`, `stop.sh`, `subagent-stop.sh`, `tool-budget.sh`, `autonomy-ask-guard.sh`, `autonomy-context.sh`, `autonomy-git-guard.sh`, `cache-invalidation.sh`, `cloud-session-bootstrap.sh`, `codememory-mode.sh`, `commit-provenance.sh`, `domain-rules.sh`, `goal-state.sh`, `kpi-emit.sh`, `memory-lint.sh`, `orca-notify.sh`, `pr-visual-report.sh`, `ship-stop-gate.sh`.
 
 <a id="tools-fr"></a>
 
@@ -1288,6 +1373,7 @@ Outils OpenCode reutilisables exposes via `tools/index.ts`:
 
 - `tui-plugins/llm-metrics.tsx` — sidebar SolidJS (slot `sidebar_content`) affichant les metriques LLM par session en temps reel; agrege tout le sous-arbre des sous-agents. Voir [`LLM_METRICS.md`](LLM_METRICS.md).
 - `tui-plugins/panda-banner.tsx` — banniere SolidJS affichant un en-tete panda en art ASCII/blocs.
+- `tui-plugins/autonomy-status.tsx` — capsule de la barre latérale pour le mode autonome, enregistrée dans `tui.json`. Le comportement est dans [Mode autonome](#autonomy-fr).
 
 <a id="claude-fr"></a>
 
@@ -1295,8 +1381,8 @@ Outils OpenCode reutilisables exposes via `tools/index.ts`:
 
 - `CLAUDE.md` — instructions globales (no `any`, facade != UseCase).
 - `settings.json` — permissions allow/deny, env vars (`API_TIMEOUT_MS=3000000`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80`), `"model": "opus"` pour l'agent principal Claude Code, hooks `PreToolUse` / `PostToolUse` / `Stop`. Conductor et Monolith partagent ce fichier. Initialisé à la première install dans `~/.claude` et dans le `.claude` du projet. Une valeur `model` déjà présente est conservée.
-- `hooks/*.sh` — sept hooks (warnings, CodeMemory, RTK rewrite, tool-budget, notification, stop, subagent-stop).
-- `rules/common/*.md` + `rules/typescript/*.md` — 15 packs. Six toujours charges, quatre bornes par `paths:`, cinq packs `typescript/`.
+- `hooks/*.sh` — 21 scripts. La liste est sous [Plugins & hooks](#plugins-fr).
+- `rules/common/*.md` + `rules/typescript/*.md` — 17 fichiers (recomptés le 2026-11-06). Six sous `rules/common/` n'ont pas de clé `paths:`. Six sous `rules/common/` sont bornés (`code-comments`, `coding-style`, `security`, `testing`, `cache-invalidation`, `project-memory`). Cinq packs `typescript/` restent bornés.
 - `agents/*.md` — 26 agents mirroir du roster OpenCode.
 - `commands/*.md` — commandes Claude (`/create-pull-request`, `/update-codemaps`, arena, OpenSpec).
 - `skills/**` — miroir des skills, synchronisé via `scripts/sync-skills.sh` à l'install. **Pas garanti identique** à `skills/` du jour (le set canonical grandit entre les syncs): `skills/` reste la source de verite; `settings-sync --skills-only` pour reconcilier.
@@ -1314,13 +1400,13 @@ Deux repertoires, une source de verite: le **lab** (ton clone de ce repo) et le 
 - Le skill `config-sync` fait la meme propagation cote agent.
 - `install-cursor.sh` génère un plugin Cursor (`node scripts/build-cursor-plugin.mjs` -> `plugins/fmflurry-harness/`) et le copie dans `~/.cursor/plugins/local/fmflurry-harness`, puis Developer: Reload Window dans Cursor. Le build par défaut est Monolith : l'agent principal peut écrire, il n'y a pas de first-tool gate, et `/orchestrate` est optionnel. `./install-cursor.sh --variant conductor` (ou `HARNESS_VARIANT=conductor ./install-cursor.sh`) construit Conductor. `./install-cursor.sh --status` affiche la variante lue dans `.harness-variant`. Il installe aussi le CLI `agent-harness`, avec le même helper que `install.sh` : scripts dans `~/.local/share/fmflurry-harness/scripts/agent-harness`, wrapper `~/.local/bin/agent-harness`. Un second passage affiche ces chemins et n'ajoute pas une seconde commande. Options : `--yes`, `--link` (symlink au lieu de copie), `--migrate-legacy` (sauvegarde puis supprime ce que l'ancien installeur a copié dans `~/.cursor`, en gardant vos propres entrées), `--uninstall`, `--no-backup`, `--variant`, `--status`. Limites : pas de liste d'outils par agent, délégation par instruction uniquement, hooks Notification non supportés. Les tiers restent des modèles Cursor : `grok-4.7`, `grok-4.6` et `composer-2.5`.
 
-**Parite:** les harnesses sont *synces a l'install*, pas identiques en continu. Aujourd'hui `skills/` = 69 alors que `.claude/skills/` = 52: lancer `settings-sync --skills-only` pour reconcilier.
+**Parité :** les harnesses sont synchronisés à l'install. Recomptés le 2026-11-06, `skills/` = 80 et le miroir `.claude/skills/` = 41. Lancer `settings-sync --skills-only` pour réconcilier.
 
 <a id="cursor-plugin-version-fr"></a>
 
 ### Version du plugin Cursor
 
-Le numero installe est `version` dans `scripts/cursor-plugin/config.json`. `node scripts/build-cursor-plugin.mjs` le copie dans `plugins/fmflurry-harness/.cursor-plugin/plugin.json` et copie `scripts/cursor-plugin/CHANGELOG.md` dans le plugin. `node scripts/cursor-plugin/check.mjs` echoue si ces deux versions divergent ou si le changelog n'a pas de titre pour la version courante. L'entree marketplace n'a pas de version. Le `package.json` racine versionne le depot settings (releases GitHub), pas ce plugin.
+Le numéro installé est `version` dans `scripts/cursor-plugin/config.json` (**0.4.36** dans cet arbre). `node scripts/build-cursor-plugin.mjs` le copie dans `plugins/fmflurry-harness/.cursor-plugin/plugin.json` et copie `scripts/cursor-plugin/CHANGELOG.md` dans le plugin. `node scripts/cursor-plugin/check.mjs` echoue si ces deux versions divergent ou si le changelog n'a pas de titre pour la version courante. L'entree marketplace n'a pas de version. Le `package.json` racine versionne le depot settings (releases GitHub), pas ce plugin.
 
 Monter la version a la main dans chaque PR qui touche le contenu du plugin ou ses entrees de build :
 
@@ -1337,6 +1423,8 @@ bump the plugin version + changelog in any PR touching plugin sources.
 <a id="flow-fr"></a>
 
 ### Comment tout s'emboite
+
+Le parcours des deux variantes est [Comment une demande avance](#parcours-fr). Les quatre étapes ci-dessous sont le démarrage OpenCode quand la variante installée est Conductor.
 
 1. Demarrage: OpenCode charge `opencode.jsonc` -> 6 instructions globales -> auto-charge chaque plugin de `plugins/` plus les plugins TUI enregistres dans `tui.json`. Les skills se chargent selon leur description.
 2. Dev: `conductor` execute — il n'a pas le droit d'ecrire; il dispatche des Task vers les specialistes. `secret-file-guard` bloque l'acces `.env`; `tool-budget` pousse la verification.

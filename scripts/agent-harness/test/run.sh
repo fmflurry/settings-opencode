@@ -2690,6 +2690,19 @@ for mode in off on; do
   fi
 done
 reset; flag_on
+for c in "cd /tmp/x && agent-harness ship-init feat ui x" "agent-harness ship-init feat ui x && echo hi" "true && agent-harness teardown-merged-worktree 5"; do
+  check "lifecycle guard denies a chain: $c" denied "$c"
+  check "lifecycle guard names the cd prefix or chain: $c" grep -q 'not after a cd prefix or in a && ; | chain' <<<"$(gate_reason "$c")"
+  check "lifecycle guard says ship-init runs from the target repo: $c" grep -q 'working directory is the target repo' <<<"$(gate_reason "$c")"
+done
+check "lifecycle guard keeps the argument message for a bad shape" grep -q 'take exactly their documented arguments' <<<"$(gate_reason "agent-harness ship-init feat Ui x")"
+for c in "agent-harness cleanup 15 --confirmed" "agent-harness cleanup --help" "agent-harness cleanup 5 6" "agent-harness cleanup"; do
+  check "cleanup guard denies a bad shape: $c" denied "$c"
+  check "cleanup guard names the documented shape: $c" grep -qF 'cleanup takes exactly `agent-harness cleanup <pr> [--keep-branch]`' <<<"$(gate_reason "$c")"
+  check "cleanup guard drops the generic message: $c" bash -c '! grep -q "push feature branches normally" <<<"$1"' _ "$(gate_reason "$c")"
+done
+check "cleanup guard names env overrides" grep -q 'no env overrides' <<<"$(gate_reason "GH_BIN=/tmp/gh agent-harness cleanup 5")"
+reset; flag_on
 out="$(cd "$TMP/work" && env -u CLAUDE_PROJECT_DIR AGENT_HARNESS_TEST=1 AGENT_STATE_DIR="$TMP/state" bash "$H/worktree-rm.sh" /x --confirmed 2>&1)"; rc=$?
 check "worktree-rm autonomous: a missing path exits 1" test $rc -eq 1
 check "worktree-rm autonomous: a missing path names the reason" grep -q 'path not found' <<<"$out"
@@ -2787,6 +2800,27 @@ done
 lw_td git; lw_set_reg '.status = "blocked"'; view_mut '.state="OPEN"'; lw_td_refuses "a blocked goal"
 check "teardown blocked goal: says blocked" grep -q 'is blocked' "$FX/out"
 lw_td git; lw_set_reg '.status = "escalated"'; view_mut '.state="OPEN"'; lw_td_refuses "an escalated registry entry"
+
+# autonomous cleanup after the goal worktree is gone: the registry entry is the proof
+lw_td git; touch "$LM/.claude/state/autonomy.on"; lw_td_run 5; rc=$?
+check "autonomous teardown: exits 0" test $rc -eq 0
+check "autonomous teardown: cleanup not refused" bash -c '! grep -q "cleanup refused" "$1"' _ "$FX/out"
+check "autonomous teardown: remote branch deleted" grep -q 'DELETE repos/o/r/git/refs/heads/feat/td-x' "$FX/gh.log"
+check "autonomous teardown: registry removed" test ! -e "$(lreg_file feat-td-x)"
+lw_gone() { lw_td git; touch "$LM/.claude/state/autonomy.on"; lw_set_reg ".path = \"$LROOT/gone/feat-td-x\" | .status = \"merged\" | $1"; rm -f "$FX/gh.log"; }
+lw_gone '.'; LH cleanup 5 --no-checkout >"$FX/out" 2>&1; rc=$?
+check "autonomous cleanup, registered merged PR with its worktree gone: exits 0" test $rc -eq 0
+check "autonomous cleanup, registered merged PR with its worktree gone: remote deleted" grep -q 'DELETE repos/o/r/git/refs/heads/feat/td-x' "$FX/gh.log"
+lw_gone '.'; LH cleanup 6 --no-checkout >"$FX/out" 2>&1; rc=$?
+check "autonomous cleanup of an unregistered PR: refused" test $rc -eq 1
+check "autonomous cleanup of an unregistered PR: nothing deleted" bash -c '! grep -q DELETE "$1"' _ "$FX/gh.log"
+lw_gone '.branch = "feat/forged"'; LH cleanup 5 --no-checkout >"$FX/out" 2>&1; rc=$?
+check "autonomous cleanup with a registered branch that is not the PR head: refused" test $rc -eq 1
+check "autonomous cleanup with a registered branch that is not the PR head: nothing deleted" bash -c '! grep -q DELETE "$1"' _ "$FX/gh.log"
+lw_gone '.status = "escalated"'; LH cleanup 5 --no-checkout >"$FX/out" 2>&1; rc=$?
+check "autonomous cleanup of an escalated registry entry: refused" test $rc -eq 1
+lw_gone '.'; cp "$(lreg_file feat-td-x)" "$(lreg_file feat-td-y)"; LH cleanup 5 --no-checkout >"$FX/out" 2>&1; rc=$?
+check "autonomous cleanup with two registry entries for the PR: refused" test $rc -eq 1
 
 # H3: ship-init refuses an orca worktree that belongs to another repo
 lw_fixture orca

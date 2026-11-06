@@ -2833,6 +2833,10 @@ lw_gone '.'; git -C "$LM" worktree add -q "$LROOT/other" feat/td-x >/dev/null 2>
 LH cleanup 5 --no-checkout >"$FX/out" 2>&1; rc=$?
 check "autonomous cleanup while another worktree holds the branch: refused" test $rc -eq 1
 check "autonomous cleanup while another worktree holds the branch: nothing deleted" bash -c '! grep -q DELETE "$1"' _ "$FX/gh.log"
+lw_gone '.'
+check "registry proof holds when the worktree list is readable" bash -c 'cd "$1" && . "$2/lib.sh" && reg_proves_gone_goal 5 feat/td-x' _ "$LM" "$H"
+check "registry proof fails closed when the main checkout is unresolved" bash -c 'cd "$1" && . "$2/lib.sh" && reg_dir() { echo "$1/.git/agent-harness/goals"; } && main_checkout() { return 1; } && ! reg_proves_gone_goal 5 feat/td-x' _ "$LM" "$H"
+check "registry proof fails closed when the worktree list is unreadable" bash -c 'cd "$1" && . "$2/lib.sh" && reg_dir() { echo "$1/.git/agent-harness/goals"; } && main_checkout() { echo /nonexistent; } && ! reg_proves_gone_goal 5 feat/td-x' _ "$LM" "$H"
 
 # H3: ship-init refuses an orca worktree that belongs to another repo
 lw_fixture orca

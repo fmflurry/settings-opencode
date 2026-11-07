@@ -2,6 +2,10 @@
 
 Versions of the fmflurry-harness Cursor plugin. The number lives in `scripts/cursor-plugin/config.json` and is copied into `.cursor-plugin/plugin.json` by `node scripts/build-cursor-plugin.mjs`.
 
+## [0.4.38] - 2026-11-07
+
+- Post-merge teardown consults Orca only for goals created via Orca. A goal created via git no longer stops when the Orca app is not running; it is removed through git.
+
 ## [0.4.37] - 2026-11-06
 
 - Autonomous post-merge cleanup now succeeds after teardown removes the goal worktree, using the goal registry entry as proof under strict, fail-closed checks. Guard denials for a bad cleanup shape or a chained or cd-prefixed ship-init now say what is wrong; no guard decision changed.

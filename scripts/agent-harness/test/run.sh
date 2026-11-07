@@ -2383,6 +2383,14 @@ lw_td git; LCWD="$T" LH goal escalate "stuck" >/dev/null 2>&1; view_mut '.state=
 check "teardown escalated goal: names the reason" grep -q 'escalated' "$FX/out"
 lw_td orca; echo $(( $(date +%s) * 1000 )) >"$FX/orca.activity"; lw_td_refuses "recent orca activity"
 lw_td orca; : >"$FX/orca.noactivity"; lw_td_refuses "unreadable orca activity"
+lw_td orca; : >"$FX/orca.list.fail"; lw_td_refuses "an unreadable orca repo list for a goal created via orca"
+check "teardown via orca, orca repo list unreadable: names the reason" grep -qF 'orca is installed but its repo list is unreadable' "$FX/out"
+lw_td git; printf '%s' "$LM" >"$FX/orca.managed"; : >"$FX/orca.list.fail"; rm -f "$FX/orca.log"; lw_td_run 5; rc=$?
+check "teardown via git, orca repo list unreadable: exits 0" test $rc -eq 0
+check "teardown via git, orca repo list unreadable: directory gone" test ! -e "$T"
+check "teardown via git, orca repo list unreadable: routes through git" grep -qx "teardown: route git" "$FX/out"
+check "teardown via git, orca repo list unreadable: registry removed" test ! -e "$(lreg_file feat-td-x)"
+check "teardown via git: never calls orca" test ! -e "$FX/orca.log"
 lw_td git; lw_td_run 6; rc=$?
 check "teardown with no registered worktree: exits 3" test $rc -eq 3
 check "teardown with no registered worktree: says so" grep -q 'no registered worktree for PR 6' "$FX/out"
@@ -2872,10 +2880,6 @@ T="$OT"; lw_td_run 5; rc=$?
 check "teardown: a target under an Orca workspace of a non-Orca repo is a STOP" test $rc -eq 1
 check "teardown orca workspace + unmanaged: names the reason" grep -q 'not Orca-managed' "$FX/out"
 check "teardown orca workspace + unmanaged: directory kept" test -d "$OT"
-lw_td git; : >"$FX/orca.list.fail"; lw_td_run 5; rc=$?
-check "teardown: orca installed but repo list failing is a STOP" test $rc -eq 1
-check "teardown orca list failure: names the reason" grep -q 'repo list is unreadable' "$FX/out"
-check "teardown orca list failure: directory kept" test -d "$T"
 lw_td orca; ln -s "$LM" "$TMP/lw-main-link"; printf '%s' "$TMP/lw-main-link" >"$FX/orca.managed"; lw_td_run 5; rc=$?
 check "teardown: orca repo path through a symlink is matched by realpath" test "$rc|$(grep -cx 'teardown: route orca' "$FX/out")" = "0|1"
 rm -f "$TMP/lw-main-link"

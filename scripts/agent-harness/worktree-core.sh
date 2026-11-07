@@ -5,8 +5,9 @@
 # wt_autonomy_merged while the flag is on; when origin/<base>..HEAD is non-zero, that function may accept a
 # squash-merged pull request, a reachable tip, or an equal tree.
 # Mode teardown (merged PR): skips the commits-ahead check (a squash merge leaves the branch ahead; the caller proved
-# MERGED and HEAD == merged head instead), reads Orca activity for the main checkout, and never falls back to git when
-# Orca refuses. A caller may define wt_recheck (prints a reason and fails on a stale premise); it runs right before removal.
+# MERGED and HEAD == merged head instead). It consults Orca only when the caller sets WT_VIA=orca (the goal registry's
+# via): then it reads Orca activity for the main checkout and never falls back to git when Orca refuses. Any other
+# WT_VIA never calls Orca and removes through git. A caller may define wt_recheck (prints a reason and fails on a stale premise); it runs right before removal.
 orca_list_all() { "$ORCA" worktree list --json; }
 
 wt_remove() {
@@ -62,7 +63,7 @@ wt_remove() {
     [ "$ostate" != error ] || stop activity "orca state unreadable"
     if [ "$ostate" = managed ]; then orca_list_all >/dev/null 2>&1 || stop activity "orca worktree list unreadable"; fi
   fi
-  if command -v "$ORCA" >/dev/null 2>&1 && { [ "$MODE" != teardown ] || orca_managed; } && olist="$($olist_cmd 2>/dev/null)"; then
+  if command -v "$ORCA" >/dev/null 2>&1 && { [ "$MODE" != teardown ] || { [ "${WT_VIA:-}" = orca ] && orca_managed; }; } && olist="$($olist_cmd 2>/dev/null)"; then
     command -v jq >/dev/null 2>&1 || stop activity "activity unknown (jq missing)"
     last="" unk=""
     while IFS=$'\t' read -r q ts; do
@@ -79,7 +80,7 @@ wt_remove() {
     now_ms=$(( $(date +%s) * 1000 ))
     if [ "$last" -gt $(( now_ms - idle_min * 60000 )) ]; then stop activity "active within ${idle_min} min"; fi
     ok activity "idle over ${idle_min} min"
-  elif [ "$MODE" = teardown ] && orca_managed; then stop activity "orca does not list $T"
+  elif [ "$MODE" = teardown ] && [ "${WT_VIA:-}" = orca ] && orca_managed; then stop activity "orca does not list $T"
   elif [ "$MODE" = rm ]; then echo "$PFX: check activity skipped (not Orca-managed)"; fi
 
   wait_s=60 settle_s=20

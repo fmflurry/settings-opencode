@@ -116,18 +116,20 @@ The teardown runs these checks, and re-runs them right before removal:
 2. The worktree HEAD and the branch equal the PR head commit. This replaces the `origin/<base>..HEAD` count for goal worktrees, because a squash merge rewrites history.
 3. The path is a listed, real (non-symlink) worktree, and not the main checkout.
 4. The tree is clean, including untracked files (check 1 above).
-5. When Orca-managed, there is no Orca activity within `worktreeIdleMinutes` (default 60). Activity that cannot be read is a STOP.
+5. For a goal whose registry `via` is `orca`, there is no Orca activity within `worktreeIdleMinutes` (default 60).
+   Activity that cannot be read is a STOP. A goal created via git never calls Orca and is removed through git.
 6. The ignored files are listed before removal. They are not snapshotted, and they are lost.
 7. The registry file name equals the slug of the PR head branch, and the recorded path has the ship-init layout
    (`<main>-wt/<slug>`, or an Orca workspace path ending in `/<slug>` for an Orca-created goal). A registry status of
    `escalated` or `blocked` is a STOP.
-8. Orca detection fails closed: a target under `*/orca/workspaces/*` in a repo Orca does not list, or an installed
-   `orca` whose repo list cannot be read, is a STOP. Paths are compared after `pwd -P` on both sides.
+8. Orca detection fails closed for a goal created via orca: a target under `*/orca/workspaces/*` in a repo Orca does
+   not list, or an installed `orca` whose repo list cannot be read, is a STOP. For any other `via`, a target under
+   `*/orca/workspaces/*` is a STOP, decided from the path alone. Paths are compared after `pwd -P` on both sides.
 
 The teardown does not touch the main checkout: no fetch, switch or pull, and a dirty main does not block it. The local
 branch is deleted once the worktree is gone because it is then checked out nowhere.
 
-The teardown never passes `--force`. With Orca, a refusal keeps the worktree and there is no git fallback. A partial result keeps the registry (status merged) and prints the rerun command. Rerunning it is the normal fix.
+The teardown never passes `--force`. For a goal created via orca, an Orca refusal keeps the worktree and there is no git fallback. A partial result keeps the registry (status merged) and prints the rerun command. Rerunning it is the normal fix.
 
 A blocked or escalated goal is never torn down: its worktree, branch and registry stay in place.
 ## Escape hatch

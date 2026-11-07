@@ -47,9 +47,12 @@ case "$recorded" in
   */"$slug") [ "$via" = orca ] || stop "recorded path $recorded does not have the layout of a goal worktree for $slug" ;;
   *) stop "recorded path $recorded does not have the layout of a goal worktree for $slug" ;;
 esac
-ostate="$(orca_state)"
-[ "$ostate" != error ] || stop "orca is installed but its repo list is unreadable"
-if [ "$ostate" != managed ] && [[ "$(realp "$recorded")" == */orca/workspaces/* ]]; then stop "$recorded is under an Orca workspace but the repo is not Orca-managed"; fi
+if [ "$via" = orca ]; then
+  ostate="$(orca_state)"
+  [ "$ostate" != error ] || stop "orca is installed but its repo list is unreadable"
+  if [ "$ostate" != managed ] && [[ "$(realp "$recorded")" == */orca/workspaces/* ]]; then stop "$recorded is under an Orca workspace but the repo is not Orca-managed"; fi
+elif [[ "$(realp "$recorded")" == */orca/workspaces/* ]]; then stop "$recorded is under an Orca workspace but the goal was not created via orca"; fi
+WT_VIA="$via"
 
 common="$(git -C "$M" rev-parse --path-format=absolute --git-common-dir)"
 is_listed() {

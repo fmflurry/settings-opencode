@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Teardown consults Orca only for via=orca goals</title>
+<style>
+body{background:#FAF6EE;color:#2b2723;font-family:Georgia,"Iowan Old Style",serif;margin:0;padding:32px}
+h1{font-size:26px;margin:0 0 6px}p.sub{margin:0 0 24px;color:#6b6157}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.card{background:#fff;border-radius:14px;padding:18px 20px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+h2{font-size:18px;margin:0 0 10px}
+.flow{display:flex;flex-direction:column;gap:8px}
+.step{border-radius:10px;padding:8px 12px;background:#F2ECE1;font-size:14px}
+.bad{background:#F6DCD6}.good{background:#DCEBDD}
+code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px}
+ul{margin:0;padding-left:18px;font-size:14px;line-height:1.5}
+@media (max-width:760px){.grid{grid-template-columns:1fr}}
+</style></head><body>
+<h1>teardown-merged-worktree: Orca only when <code>via = orca</code></h1>
+<p class="sub">A goal created by <code>ship-init</code> via git stopped teardown because the Orca app was not running.</p>
+<div class="grid">
+<div class="card"><h2>Before</h2><div class="flow">
+<div class="step">registry via = git, path &lt;main&gt;-wt/&lt;slug&gt;</div>
+<div class="step">teardown: <code>orca_state</code> for every goal</div>
+<div class="step bad">Orca app down → <code>repo list</code> fails → <b>STOP</b> (orca … repo list is unreadable)</div>
+<div class="step bad">worktree, branches, registry left behind after merge</div>
+</div></div>
+<div class="card"><h2>After</h2><div class="flow">
+<div class="step">teardown reads registry <code>via</code>, sets <code>WT_VIA</code></div>
+<div class="step good">via = git: no orca call; path under <code>*/orca/workspaces/*</code> refused from the path alone; route git</div>
+<div class="step good">via = orca: unchanged, fail-closed (unreadable repo list still STOPs, Orca activity, Orca rm, no git fallback)</div>
+<div class="step"><code>worktree-core.sh</code> MODE=teardown checks <code>WT_VIA = orca</code> before <code>orca_managed</code></div>
+</div></div>
+<div class="card"><h2>Files</h2><ul>
+<li><code>scripts/agent-harness/teardown-merged-worktree.sh</code> — gate Orca checks on via</li>
+<li><code>scripts/agent-harness/worktree-core.sh</code> — teardown skips Orca unless <code>WT_VIA=orca</code></li>
+<li><code>scripts/agent-harness/test/run.sh</code> — regression tests; old test that pinned the bug removed</li>
+<li><code>worktree-destruction-safety/SKILL.md</code> ×3 (skills, .claude, plugin) — checks 5 and 8</li>
+</ul></div>
+<div class="card"><h2>Tests and risks</h2><ul>
+<li>New: via=git + failing fake <code>orca repo list</code> → exit 0, route git, registry removed, orca never invoked</li>
+<li>New: via=orca + failing <code>repo list</code> → STOP with the reason</li>
+<li>Local <code>run.sh</code>: 2319 passed; the 75 failures are identical to the base (environment: no GraphQL, Chrome)</li>
+<li>Risk: a via=git goal in an Orca-managed repo now always removes through git (intended)</li>
+</ul></div>
+</div>
+
+<section id="kpi-metrics" style="margin-top:28px">
+<h2 style="font-size:18px;margin:0 0 8px">Metrics</h2>
+<p style="margin:0 0 10px;color:#57534e">fmflurry/settings-opencode  fix/harness-teardown-orca-only-for-orca-via  pr n/a. Status: complete.</p>
+<table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #d6d3d1"><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Wall</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">1m54s</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Active</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">1m54s (gaps over 5m excluded)</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Sessions</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">cursor 0, claude 0, opencode 0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tokens</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">n/a</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Tool failures</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Guard blocks</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">8</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Review rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr><tr><th style="text-align:left;padding:6px 10px;border-bottom:1px solid #d6d3d1">Fix rounds</th><td style="padding:6px 10px;border-bottom:1px solid #d6d3d1">0</td></tr></table>
+<p style="margin:10px 0 0">Tools: none</p>
+<p style="margin:4px 0 0">Skills: none</p>
+<p style="margin:4px 0 0">Agents: main 0</p>
+<p style="margin:4px 0 0">Failure tools: none. Durations: n/a.</p>
+</section>
+</body></html>
